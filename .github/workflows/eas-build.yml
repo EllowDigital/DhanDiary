@@ -29,11 +29,5 @@ jobs:
           EAS_TOKEN: ${{ secrets.EAS_TOKEN }}
         run: eas build -p android --profile production --non-interactive
 
-      - name: Download built APK from Expo
-        run: eas artifact:download --latest --platform android --output ./apk
-
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: apk
-          path: apk/*.apk
+      - name: Show download instructions
+        run: echo "APK build complete! Visit https://expo.dev/accounts/devsarwan/projects/DhanDiary/builds to download the APK."
