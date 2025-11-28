@@ -24,13 +24,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build APK
-        run: eas build -p android --profile production --non-interactive --output-format apk
+      - name: Build APK (only apk, no aab)
         env:
           EAS_TOKEN: ${{ secrets.EAS_TOKEN }}
+        run: eas build -p android --profile production --non-interactive
+
+      - name: Download built APK from Expo
+        run: eas artifact:download --latest --platform android --output ./apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: apk
-          path: builds/**/*.apk
+          path: apk/*.apk
