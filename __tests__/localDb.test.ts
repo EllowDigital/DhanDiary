@@ -4,10 +4,10 @@ import { init } from '../src/db/localDb';
 jest.mock('expo-sqlite', () => ({
   openDatabaseAsync: jest.fn(() =>
     Promise.resolve({
-      execAsync: jest.fn(),
-      runAsync: jest.fn(),
+      execAsync: jest.fn(() => Promise.resolve()),
+      runAsync: jest.fn(() => Promise.resolve()),
       getAllAsync: jest.fn(() => Promise.resolve([])),
-      getFirstAsync: jest.fn(),
+      getFirstAsync: jest.fn(() => Promise.resolve(null)),
     })
   ),
 }));
