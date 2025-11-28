@@ -1,0 +1,207 @@
+import 'react-native-get-random-values';
+import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+
+import SplashScreen from './src/screens/SplashScreen';
+import LoginScreen from './src/screens/LoginScreen';
+import { RootStackParamList, AuthStackParamList, MainStackParamList } from './src/types/navigation';
+
+const RootStack = createNativeStackNavigator<RootStackParamList>();
+const AuthStack = createNativeStackNavigator<AuthStackParamList>();
+const MainStack = createNativeStackNavigator<MainStackParamList>();
+
+const AuthNavigator = () => (
+  <AuthStack.Navigator>
+    <AuthStack.Screen name="Login" component={LoginScreen} />
+    <AuthStack.Screen name="Register" component={require('./src/screens/RegisterScreen').default} />
+  </AuthStack.Navigator>
+);
+
+import { ToastProvider } from './src/context/ToastContext';
+import DrawerNavigator from './src/navigation/DrawerNavigator';
+
+// Development-only diagnostics (captures missing-key warnings with stack)
+if (__DEV__) {
+  // require lazily so production bundles are unaffected
+
+  require('./src/utils/devDiagnostics');
+}
+
+const MainNavigator = () => <DrawerNavigator />;
+
+import { useOfflineSync } from './src/hooks/useOfflineSync';
+import { useAuth } from './src/hooks/useAuth';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+let Sentry: any = null;
+let LogRocket: any = null;
+try {
+  // Use dynamic require so missing native modules do not crash the bundle at module-evaluation time.
+  // This keeps the app from failing to open if a native dependency isn't linked in a build.
+
+  Sentry = require('@sentry/react-native');
+  try {
+    Sentry.init({
+      dsn: 'https://34b47580512858b155c2c4bcc7c88996@o4510441099886592.ingest.us.sentry.io/4510441165553664',
+      sendDefaultPii: true,
+      enableLogs: true,
+      replaysSessionSampleRate: 0.1,
+      replaysOnErrorSampleRate: 1,
+      integrations: [
+        // protect integrations which may not be present in every build
+        ...(Sentry.mobileReplayIntegration ? [Sentry.mobileReplayIntegration()] : []),
+        ...(Sentry.feedbackIntegration ? [Sentry.feedbackIntegration()] : []),
+      ],
+    });
+  } catch (e) {
+    // don't crash app if Sentry init fails
+
+    console.warn('Sentry.init failed', e);
+  }
+} catch (e) {
+  // missing Sentry package or require failed — avoid crashing the app
+
+  console.warn('Sentry not available', e);
+}
+
+try {
+  const _mod = require('@logrocket/react-native');
+  LogRocket = _mod && _mod.default ? _mod.default : _mod;
+} catch (e) {
+  // ignore — LogRocket is optional
+}
+// Initialize LogRocket if configured. Set `LOGROCKET_APPID` in your local env (.env.local)
+const LOGROCKET_APPID = process.env.LOGROCKET_APPID || '';
+if (LogRocket && LOGROCKET_APPID) {
+  try {
+    if (typeof LogRocket.init === 'function') {
+      LogRocket.init(LOGROCKET_APPID);
+    } else {
+      // Some builds may provide a different API shape; avoid crashing
+      console.warn('LogRocket.init not available');
+    }
+  } catch (e) {
+    // don't crash the app if LogRocket init fails
+
+    console.warn('LogRocket init failed', e);
+  }
+}
+
+const AppContent = () => {
+  const { user, loading } = useAuth();
+  // provide user id to offline sync so it only runs when a user is present
+  useOfflineSync(user?.id);
+
+  // Identify user in LogRocket when available so sessions can be searched by name/email
+  React.useEffect(() => {
+    if (!user) return;
+    try {
+      if (LogRocket && user.id && typeof LogRocket.identify === 'function') {
+        LogRocket.identify(user.id, {
+          name: user.name,
+          email: user.email,
+        });
+      }
+    } catch (e) {
+      console.warn('LogRocket identify failed', e);
+    }
+  }, [user]);
+
+  return (
+    <NavigationContainer>
+      <RootStack.Navigator screenOptions={{ headerShown: false }}>
+        <RootStack.Screen name="Splash" component={SplashScreen} />
+        <RootStack.Screen name="Auth" component={AuthNavigator} />
+        <RootStack.Screen name="Main" component={MainNavigator} />
+      </RootStack.Navigator>
+    </NavigationContainer>
+  );
+};
+
+export default Sentry.wrap(function App() {
+  const [dbReady, setDbReady] = React.useState(false);
+  const [dbInitError, setDbInitError] = React.useState<string | null>(null);
+  const queryClient = React.useMemo(() => new QueryClient(), []);
+
+  React.useEffect(() => {
+    const setup = async () => {
+      const { init } = require('./src/db/localDb');
+      let attempts = 0;
+      const maxAttempts = 3;
+      while (attempts < maxAttempts) {
+        try {
+          await init();
+          setDbReady(true);
+          setDbInitError(null);
+          return;
+        } catch (e: any) {
+          attempts += 1;
+          console.error('DB Init Error attempt', attempts, e);
+          if (attempts >= maxAttempts) {
+            setDbInitError(e && e.message ? String(e.message) : 'DB init failed');
+            break;
+          }
+          // wait a bit and retry
+
+          await new Promise((res) => setTimeout(res, 1000));
+        }
+      }
+    };
+
+    setup();
+  }, []);
+
+  if (!dbReady) {
+    // show minimal fallback while DB initializing or failed
+    if (dbInitError) {
+      const { View, Text, Button } = require('react-native');
+      return (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <Text style={{ marginBottom: 12 }}>Database initialization failed:</Text>
+          <Text style={{ marginBottom: 18, color: 'red' }}>{dbInitError}</Text>
+          <Button
+            title="Retry Init"
+            onPress={() => {
+              setDbInitError(null);
+              setDbReady(false);
+              // trigger effect by calling setup again via changing state
+              // simplest: reload the app by requiring init again
+              (async () => {
+                try {
+                  const { init } = require('./src/db/localDb');
+                  await init();
+                  setDbReady(true);
+                  setDbInitError(null);
+                } catch (e: any) {
+                  setDbInitError(String(e && e.message));
+                }
+              })();
+            }}
+          />
+        </View>
+      );
+    }
+    // While DB is starting (no error yet), render a lightweight loading
+    // UI instead of returning null so the emulator doesn't show a black screen.
+    const { View, ActivityIndicator, Text } = require('react-native');
+    return (
+      <View
+        style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}
+      >
+        <ActivityIndicator size="large" color="#2563EB" />
+        <Text style={{ marginTop: 12 }}>Starting app...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ToastProvider>
+        <SafeAreaProvider>
+          <AppContent />
+        </SafeAreaProvider>
+      </ToastProvider>
+    </QueryClientProvider>
+  );
+});
