@@ -24,13 +24,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build APK
-        run: eas build -p android --profile production --non-interactive --output-format apk
+      - name: Build APK (expo.dev will build it)
         env:
           EAS_TOKEN: ${{ secrets.EAS_TOKEN }}
+        run: eas build -p android --profile production --non-interactive
 
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: apk
-          path: builds/**/*.apk
+      - name: Done message
+        run: echo "Build started successfully! Visit your Expo builds page to download the APK."
