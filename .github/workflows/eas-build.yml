@@ -24,10 +24,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build APK (only apk, no aab)
+      - name: Build APK (expo.dev will build it)
         env:
           EAS_TOKEN: ${{ secrets.EAS_TOKEN }}
         run: eas build -p android --profile production --non-interactive
 
-      - name: Show download instructions
-        run: echo "APK build complete! Visit https://expo.dev/accounts/devsarwan/projects/DhanDiary/builds to download the APK."
+      - name: Done message
+        run: echo "Build started successfully! Visit your Expo builds page to download the APK."
