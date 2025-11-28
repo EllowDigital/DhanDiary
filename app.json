@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "owner": "ellowdigital",
+    "name": "DhanDiary",
+    "slug": "dhandiary",
+    "version": "2.0.2",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.ellowdigital.dhandiary",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+         
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-sqlite",
+      [
+        "@sentry/react-native/expo",
+        {
+          "url": "https://sentry.io",
+          "project": "dhandiary",
+          "organization": "ellowdigital"
+        }
+      ]
+    ],
+    "extra": {
+      "NEON_URL": "postgresql://neondb_owner:npg_P9tO0GqmlWKp@ep-shiny-bonus-a9focnqz-pooler.gwc.azure.neon.tech/neondb?sslmode=require&channel_binding=require",
+      "eas": {
+        "projectId": "77c33e0a-8d3a-4f5b-afcf-72967c9af0bf"
+      }
+    }
+  }
+}
