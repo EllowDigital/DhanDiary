@@ -26,8 +26,8 @@ jobs:
 
       - name: Build APK (expo.dev will build it)
         env:
-          EAS_TOKEN: ${{ secrets.EAS_TOKEN }}
+          EXPO_TOKEN: ${{ secrets.EAS_TOKEN }}
         run: eas build -p android --profile production --non-interactive
 
       - name: Done message
-        run: echo "Build started successfully! Visit your Expo builds page to download the APK."
+        run: echo "Build started successfully! Visit https://expo.dev/accounts/devsarwan/projects/DhanDiary/builds to download the APK."
