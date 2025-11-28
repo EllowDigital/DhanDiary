@@ -24,11 +24,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Authenticate with Expo (API Token)
-        run: echo "EXPO_TOKEN=${{ secrets.EXPO_TOKEN }}" >> $GITHUB_ENV
-
       - name: Build APK
-        run: eas build -p android --profile production --non-interactive
+        run: eas build -p android --profile production --non-interactive --output-format apk
+        env:
+          EAS_TOKEN: ${{ secrets.EAS_TOKEN }}
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
