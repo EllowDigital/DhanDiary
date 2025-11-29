@@ -8,6 +8,7 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
+    "prebuild": "npm run lint && npm test && npx tsc --noEmit",
     "test": "jest",
     "migrate": "node ./scripts/migrate.js",
     "format": "prettier --write .",

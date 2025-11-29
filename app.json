@@ -42,11 +42,18 @@
         "expo-build-properties",
         {
           "android": {
-            "enableHermes": true,
-            "enableProguardInReleaseBuilds": true,
-            "minifyEnabled": true,
-            "shrinkResources": true
-          }
+                "enableHermes": true,
+                "enableProguardInReleaseBuilds": true,
+                "minifyEnabled": true,
+                "shrinkResources": true,
+                "gradleProperties": {
+                  "android.enableR8": "true",
+                  "org.gradle.jvmargs": "-Xmx4096m"
+                },
+                "ndk": {
+                  "debugSymbolLevel": "NONE"
+                }
+              }
         }
       ]
     ],
