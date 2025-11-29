@@ -31,7 +31,7 @@ const HistoryScreen = () => {
   const { user } = useAuth();
   const { entries = [], isLoading, updateEntry, deleteEntry } = useEntries(user?.id);
   const navigation = useNavigation<any>();
-  type HistoryRouteParams = { edit_local_id?: string } | undefined;
+  type HistoryRouteParams = { edit_local_id?: string; edit_item?: any } | undefined;
   type HistoryRouteProp = RouteProp<Record<string, HistoryRouteParams>, string>;
   const route = useRoute<HistoryRouteProp>();
 
@@ -129,6 +129,14 @@ const HistoryScreen = () => {
   // If the screen was navigated to with a param to open an editor, do that now.
   React.useEffect(() => {
     try {
+      // If the caller passed the full item, open it immediately (fast overlay)
+      const editItem = (route?.params as any)?.edit_item;
+      if (editItem) {
+        openEdit(editItem);
+        return;
+      }
+
+      // Fallback: if only local id was passed, try to find it in entries
       const editId = route?.params?.edit_local_id;
       if (editId) {
         const found = entries.find((e) => e.local_id === editId);

@@ -44,7 +44,7 @@ const CashOutList = () => {
 
   const handleEdit = (item: any) => {
     // Open edit in the History inline editor for consistency
-    navigation.navigate('History', { edit_local_id: item.local_id });
+    navigation.navigate('History', { edit_item: item });
   };
 
   const handleDelete = async (id: string) => {
