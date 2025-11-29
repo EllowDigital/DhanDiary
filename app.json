@@ -43,11 +43,11 @@
         {
           "android": {
                 "enableHermes": true,
-                "enableProguardInReleaseBuilds": true,
-                "minifyEnabled": true,
+                "enableProguardInReleaseBuilds": false,
+                "minifyEnabled": false,
                 "shrinkResources": true,
                 "gradleProperties": {
-                  "android.enableR8": "true",
+                  "android.enableR8": "false",
                   "org.gradle.jvmargs": "-Xmx4096m"
                 },
                 "ndk": {
