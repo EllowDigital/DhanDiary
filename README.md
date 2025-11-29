@@ -12,6 +12,28 @@ A React Native (Expo) expense tracker with offline-first capabilities and NeonDB
     ```
 4.  Run app: `npx expo start`
 
+## Analytics (Vexo)
+
+This project supports Vexo analytics. Vexo requires native code and therefore works with development builds or bare React Native (not Expo Go).
+
+1. Create an account at Vexo and get an API key.
+2. Install the package:
+
+```bash
+npm install vexo-analytics
+# or
+yarn add vexo-analytics
+```
+
+3. Provide the key to your app using an environment variable or `app.json` extra (recommended for EAS):
+
+```env
+VEXO_API_KEY=your_key_here
+```
+
+4. The app initializes Vexo automatically in production builds if `VEXO_API_KEY` is set.
+
+
 ## Features
 
 - **Authentication**: Online-only (Login/Register).

@@ -35,13 +35,25 @@
           "project": "dhandiary",
           "organization": "ellowdigital"
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableHermes": true,
+            "enableProguardInReleaseBuilds": true,
+            "minifyEnabled": true,
+            "shrinkResources": true
+          }
+        }
       ]
     ],
     "extra": {
       "NEON_URL": "postgresql://neondb_owner:npg_P9tO0GqmlWKp@ep-shiny-bonus-a9focnqz-pooler.gwc.azure.neon.tech/neondb?sslmode=require&channel_binding=require",
       "eas": {
         "projectId": "77c33e0a-8d3a-4f5b-afcf-72967c9af0bf"
-      }
+      },
+      "VEXO_API_KEY": "5d3859ed-a3a5-47cc-8b4e-82396334ada4"
     }
   }
 }

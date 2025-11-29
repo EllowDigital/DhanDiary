@@ -124,6 +124,34 @@ export default Sentry.wrap(function App() {
   const [dbInitError, setDbInitError] = React.useState<string | null>(null);
   const queryClient = React.useMemo(() => new QueryClient(), []);
 
+
+// Initialize Vexo analytics (optional). Requires native code; only run in non-DEV builds.
+try {
+  // Use dynamic require to avoid bundling/throwing during tests or in Expo Go.
+  const _vexo = require('vexo-analytics');
+  const vexo = _vexo && (_vexo.vexo || _vexo.default || _vexo);
+  // Prefer environment variable, then Expo config extra.
+  const VEXO_KEY = process.env.VEXO_API_KEY || (() => {
+    try {
+      const Constants = require('expo-constants');
+      return (Constants && Constants.expoConfig && Constants.expoConfig.extra && Constants.expoConfig.extra.VEXO_API_KEY) || null;
+    } catch (e) {
+      return null;
+    }
+  })();
+
+  if (vexo && VEXO_KEY && !__DEV__) {
+    try {
+      // vexo is a function exported directly by the package
+      vexo(VEXO_KEY);
+    } catch (e) {
+      console.warn('Vexo init failed', e);
+    }
+  }
+} catch (e) {
+  // If package isn't installed or native code missing, skip initialization silently.
+}
+
   React.useEffect(() => {
     const setup = async () => {
       const { init } = require('./src/db/localDb');

@@ -57,6 +57,7 @@
     "tailwindcss": "^4.1.17",
     "uuid": "^13.0.0",
     "zustand": "^5.0.8"
+    ,"vexo-analytics": "^1.0.0"
   },
   "devDependencies": {
     "@react-native-community/cli": "latest",
