@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import Constants from 'expo-constants';
 import {
   View,
   StyleSheet,
@@ -26,6 +27,12 @@ const REMOTE_SHARE_LINK =
   'https://raw.githubusercontent.com/EllowDigital/DhanDiary/dev/shareapp-link.txt';
 
 const pkg = require('../../package.json');
+
+// Build / runtime metadata (set via EAS config or CI env)
+const extra: any = (Constants as any)?.expoConfig?.extra || {};
+const BUILD_TYPE = process.env.BUILD_TYPE || extra.BUILD_TYPE || (pkg.version.includes('-beta') ? 'Beta' : 'Release');
+const BUILD_COMMIT = process.env.BUILD_COMMIT || extra.BUILD_COMMIT || 'local';
+const BUILD_TIMESTAMP = process.env.BUILD_TIMESTAMP || extra.BUILD_TIMESTAMP || null;
 
 const AboutScreen: React.FC = () => {
   const fade = useSharedValue(0);
@@ -86,10 +93,13 @@ const AboutScreen: React.FC = () => {
         {/* MAIN CARD */}
         <View style={styles.card}>
           <InfoRow label="App Version" value={pkg.version} />
+          <InfoRow label="Build Type" value={String(BUILD_TYPE)} />
           <InfoRow
             label="Environment"
             value={process.env.NODE_ENV === 'production' ? 'Production' : 'Development'}
           />
+          <InfoRow label="Commit" value={String(BUILD_COMMIT).slice(0, 12)} />
+          <InfoRow label="Built" value={BUILD_TIMESTAMP ? new Date(BUILD_TIMESTAMP).toLocaleString() : 'local/dev'} />
 
           <Text style={styles.description}>
             DhanDiary helps you manage expenses, income, and personal finances with a powerful

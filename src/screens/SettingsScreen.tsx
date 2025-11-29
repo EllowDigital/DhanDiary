@@ -87,7 +87,8 @@ const SettingsScreen = () => {
 
           <TouchableOpacity
             style={styles.actionRow}
-            onPress={() => navigation.navigate('AccountManagementScreen')}
+            // Drawer registers Account management under the 'Account' route
+            onPress={() => navigation.navigate('Account')}
           >
             <MaterialIcon name="person" size={24} color="#2563EB" />
             <Text style={styles.actionText}>Account Management</Text>
