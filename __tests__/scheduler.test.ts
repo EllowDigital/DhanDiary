@@ -26,7 +26,8 @@ describe('Foreground scheduler', () => {
 
     // Spy on setInterval so we can capture the timer callback and invoke it manually
     const timers: Function[] = [];
-    const setIntervalSpy = jest.spyOn(global, 'setInterval' as any).mockImplementation((fn: Function, _ms: number) => {
+    const setIntervalSpy = jest.spyOn(global, 'setInterval' as any).mockImplementation((...args: any[]) => {
+      const fn = args[0];
       timers.push(fn);
       return 123 as any;
     });

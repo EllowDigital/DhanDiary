@@ -68,7 +68,12 @@ const StatsScreen = () => {
       default:
         startDate = now.subtract(6, 'day').startOf('day');
     }
-    return entries.filter((e: any) => dayjs(e.date || e.created_at).isAfter(startDate));
+
+    // include entries on the start boundary (use isBefore to exclude older entries)
+    return entries.filter((e: any) => {
+      const d = dayjs(e.date || e.created_at);
+      return !d.isBefore(startDate);
+    });
   }, [entries, filter]);
 
   const stats = useMemo(() => {
@@ -115,17 +120,38 @@ const StatsScreen = () => {
 
   const seriesData = useMemo(() => {
     const format = filter === 'This Year' ? 'MMM' : 'DD MMM';
+    const shortFormat = filter === 'This Year' ? 'MMM' : 'DD';
     const labels: string[] = [];
     const inData: number[] = [];
     const outData: number[] = [];
 
     if (filter !== 'This Year') {
       const now = dayjs();
-      const days = filter === '7D' ? 7 : 30;
-      const startDate = now.subtract(days - 1, 'day');
+      let startDate;
+      let days = 0;
+      if (filter === '7D') {
+        days = 7;
+        startDate = now.subtract(6, 'day').startOf('day');
+      } else if (filter === '30D') {
+        days = 30;
+        startDate = now.subtract(29, 'day').startOf('day');
+      } else if (filter === 'This Month') {
+        startDate = now.startOf('month');
+        days = now.diff(startDate, 'day') + 1;
+      } else {
+        days = 7;
+        startDate = now.subtract(6, 'day').startOf('day');
+      }
+
+      // Determine label density to avoid overlap (max ~10 labels shown)
+      const maxLabels = 10;
+      const step = Math.max(1, Math.ceil(days / maxLabels));
+
       for (let i = 0; i < days; i++) {
         const date = startDate.add(i, 'day');
-        labels.push(date.format(format));
+        // show only some labels to prevent clutter
+        const labelText = i % step === 0 ? date.format(format) : '';
+        labels.push(labelText);
         inData.push(0);
         outData.push(0);
       }
@@ -138,7 +164,8 @@ const StatsScreen = () => {
     }
 
     filteredEntries.forEach((e: any) => {
-      const dateKey = dayjs(e.date || e.created_at).format(format);
+      const rawDate = dayjs(e.date || e.created_at);
+      const dateKey = filter === 'This Year' ? rawDate.format('MMM') : rawDate.format(format);
       const amount = Number(e.amount) || 0;
       const index = labels.indexOf(dateKey);
       if (index !== -1) {
