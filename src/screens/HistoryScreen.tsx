@@ -9,7 +9,6 @@ import {
   ScrollView,
   TouchableOpacity,
   LayoutAnimation,
-  ActivityIndicator,
 } from 'react-native';
 import { Text, Button, Input } from '@rneui/themed';
 import SimpleButtonGroup from '../components/SimpleButtonGroup';
@@ -21,6 +20,8 @@ import TransactionCard from '../components/TransactionCard';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useToast } from '../context/ToastContext';
 import runInBackground from '../utils/background';
+import useDelayedLoading from '../hooks/useDelayedLoading';
+import FullScreenSpinner from '../components/FullScreenSpinner';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const scale = SCREEN_WIDTH / 390;
@@ -35,19 +36,7 @@ const HistoryScreen = () => {
   const route = useRoute<HistoryRouteProp>();
 
   // show spinner only if loading lasts more than a short delay
-  const [showLoading, setShowLoading] = useState(false);
-  useEffect(() => {
-    let timer: NodeJS.Timeout | null = null;
-    if (isLoading) {
-      timer = setTimeout(() => setShowLoading(true), 160);
-    } else {
-      if (timer) clearTimeout(timer);
-      setShowLoading(false);
-    }
-    return () => {
-      if (timer) clearTimeout(timer);
-    };
-  }, [isLoading]);
+  const showLoading = useDelayedLoading(Boolean(isLoading));
 
   const [filtersVisible, setFiltersVisible] = useState(false);
   const [typeIndex, setTypeIndex] = useState(0); // all / in / out
@@ -348,9 +337,7 @@ const HistoryScreen = () => {
 
       {/* EMPTY / LOADING STATE */}
       {showLoading ? (
-        <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color="#2563EB" />
-        </View>
+        <FullScreenSpinner visible={true} />
       ) : filtered.length === 0 && !isLoading ? (
         <View style={styles.emptyWrap}>
           <MaterialIcon name="receipt-long" size={80} color="#9CA3AF" />

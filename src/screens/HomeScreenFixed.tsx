@@ -18,6 +18,8 @@ import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../hooks/useAuth';
 import { useEntries } from '../hooks/useEntries';
+import useDelayedLoading from '../hooks/useDelayedLoading';
+import FullScreenSpinner from '../components/FullScreenSpinner';
 
 import Animated, {
   useSharedValue,
@@ -54,6 +56,7 @@ const HomeScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { user } = useAuth();
   const { entries = [], isLoading = false } = useEntries(user?.id);
+  const showLoading = useDelayedLoading(Boolean(isLoading), 200);
   const { width: SCREEN_WIDTH } = useWindowDimensions();
 
   // Dynamic sizing for responsiveness
@@ -241,6 +244,7 @@ const HomeScreen: React.FC = () => {
     <View style={styles.mainContainer}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       <SafeAreaView style={styles.safeArea}>
+        <FullScreenSpinner visible={showLoading} />
         <FlatList
           data={recent}
           keyExtractor={(item) => item.local_id}

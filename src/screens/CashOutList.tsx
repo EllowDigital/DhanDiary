@@ -6,6 +6,8 @@ import { useEntries } from '../hooks/useEntries';
 import { useAuth } from '../hooks/useAuth';
 import TransactionCard from '../components/TransactionCard';
 import { useNavigation } from '@react-navigation/native';
+import useDelayedLoading from '../hooks/useDelayedLoading';
+import FullScreenSpinner from '../components/FullScreenSpinner';
 
 import Animated, {
   useSharedValue,
@@ -21,7 +23,8 @@ const font = (s: number) => Math.round(s * scale);
 const CashOutList = () => {
   const navigation = useNavigation<any>();
   const { user } = useAuth();
-  const { entries, deleteEntry } = useEntries(user?.id);
+  const { entries, deleteEntry, isLoading } = useEntries(user?.id);
+  const showLoading = useDelayedLoading(Boolean(isLoading), 200);
 
   const outEntries = (entries || []).filter((e) => e.type === 'out');
 
@@ -54,6 +57,7 @@ const CashOutList = () => {
 
   return (
     <Animated.View style={[styles.container, animStyle]}>
+      <FullScreenSpinner visible={showLoading} />
       {outEntries.length === 0 ? (
         <View style={styles.emptyWrap}>
           <View style={styles.emptyIconContainer}>
