@@ -3,7 +3,8 @@ import { TouchableOpacity, View, StyleSheet } from 'react-native';
 
 type Props = {
   children: React.ReactNode;
-  onPress?: () => void;
+  // react-navigation may pass an event argument to onPress; accept optional param
+  onPress?: (e?: any) => void;
   accessibilityState?: { selected?: boolean };
 };
 

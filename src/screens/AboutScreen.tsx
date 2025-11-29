@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import Constants from 'expo-constants';
 import {
   View,
   StyleSheet,
@@ -22,10 +23,18 @@ const scale = SCREEN_WIDTH / 390;
 const font = (s: number) => Math.round(s * scale);
 
 const ELLOW_URL = 'https://ellowdigital.netlify.app';
-const REMOTE_SHARE_LINK =
-  'https://raw.githubusercontent.com/EllowDigital/DhanDiary/dev/shareapp-link.txt';
+import getLatestShareLink from '../utils/shareLink';
 
 const pkg = require('../../package.json');
+
+// Build / runtime metadata (set via EAS config or CI env)
+const extra: any = (Constants as any)?.expoConfig?.extra || {};
+const BUILD_TYPE =
+  process.env.BUILD_TYPE ||
+  extra.BUILD_TYPE ||
+  (pkg.version.includes('-beta') ? 'Beta' : 'Release');
+const BUILD_COMMIT = process.env.BUILD_COMMIT || extra.BUILD_COMMIT || 'local';
+const BUILD_TIMESTAMP = process.env.BUILD_TIMESTAMP || extra.BUILD_TIMESTAMP || null;
 
 const AboutScreen: React.FC = () => {
   const fade = useSharedValue(0);
@@ -40,12 +49,11 @@ const AboutScreen: React.FC = () => {
     transform: [{ translateY: (1 - fade.value) * 16 }],
   }));
 
-  /* Fetch latest share link from GitHub */
+  /* Fetch latest share link (normalized) */
   const fetchShareLink = async () => {
     try {
-      const res = await fetch(REMOTE_SHARE_LINK);
-      const text = await res.text();
-      return text.trim();
+      const link = await getLatestShareLink();
+      return link || 'https://ellowdigital.netlify.app';
     } catch (err) {
       console.log('Failed to fetch latest link:', err);
       return 'https://ellowdigital.netlify.app'; // fallback link
@@ -76,19 +84,27 @@ const AboutScreen: React.FC = () => {
   return (
     <Animated.View style={[styles.container, animatedFadeStyle]}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {/* HEADER */}
+        {/* HEADER: horizontal layout - icon left, text right */}
         <View style={styles.headerContainer}>
           <Image source={require('../../assets/icon.png')} style={styles.appIcon} />
-          <Text style={styles.appName}>DhanDiary</Text>
-          <Text style={styles.appSubtitle}>Smart Personal Finance Tracker</Text>
+          <View style={styles.headerText}>
+            <Text style={styles.appName}>DhanDiary</Text>
+            <Text style={styles.appSubtitle}>Smart Personal Finance Tracker</Text>
+          </View>
         </View>
 
         {/* MAIN CARD */}
         <View style={styles.card}>
           <InfoRow label="App Version" value={pkg.version} />
+          <InfoRow label="Build Type" value={String(BUILD_TYPE)} />
           <InfoRow
             label="Environment"
             value={process.env.NODE_ENV === 'production' ? 'Production' : 'Development'}
+          />
+          <InfoRow label="Commit" value={String(BUILD_COMMIT).slice(0, 12)} />
+          <InfoRow
+            label="Built"
+            value={BUILD_TIMESTAMP ? new Date(BUILD_TIMESTAMP).toLocaleString() : 'local/dev'}
           />
 
           <Text style={styles.description}>
@@ -131,7 +147,7 @@ const AboutScreen: React.FC = () => {
 };
 
 // Re-import MaterialIcon if it's not already imported
-import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
+import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 
 export default AboutScreen;
 
@@ -146,29 +162,35 @@ const styles = StyleSheet.create({
     paddingTop: 30,
   },
   headerContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 32,
   },
   appIcon: {
-    width: SCREEN_WIDTH * 0.2,
-    height: SCREEN_WIDTH * 0.2,
-    borderRadius: 24,
-    marginBottom: 16,
+    width: 84,
+    height: 84,
+    borderRadius: 16,
+    marginRight: 16,
     backgroundColor: '#fff',
     elevation: 4,
     shadowColor: '#000',
     shadowOpacity: 0.1,
     shadowRadius: 10,
   },
+  headerText: {
+    flex: 1,
+    justifyContent: 'center',
+  },
   appName: {
-    fontSize: font(28),
-    fontWeight: 'bold',
-    color: '#1E293B',
+    fontSize: font(22),
+    fontWeight: '800',
+    color: '#0F172A',
   },
   appSubtitle: {
-    fontSize: font(16),
+    fontSize: font(14),
     color: '#475569',
-    marginTop: 4,
+    marginTop: 6,
+    fontWeight: '600',
   },
 
   card: {

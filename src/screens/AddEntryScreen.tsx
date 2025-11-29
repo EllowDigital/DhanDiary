@@ -13,7 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Input, Button, Text } from '@rneui/themed';
 import SimpleButtonGroup from '../components/SimpleButtonGroup';
-import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
+import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useEntries } from '../hooks/useEntries';
@@ -50,7 +50,7 @@ const AddEntryScreen: React.FC = () => {
   const [date, setDate] = useState<Date>(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
 
-  const types = ['out', 'in'];
+  const types: ('out' | 'in')[] = ['out', 'in'];
 
   useEffect(() => {
     if (editingParamId && entries) {

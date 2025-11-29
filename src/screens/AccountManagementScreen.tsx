@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, StyleSheet, TouchableOpacity, Alert, ScrollView } from 'react-native';
 import { Text, Input, Button } from '@rneui/themed';
-import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
+import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 
 import Animated, {
   useSharedValue,

@@ -1,11 +1,13 @@
 import React, { useEffect } from 'react';
 import { View, StyleSheet, FlatList, Dimensions } from 'react-native';
 import { Text, Button } from '@rneui/themed';
-import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
+import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useEntries } from '../hooks/useEntries';
 import { useAuth } from '../hooks/useAuth';
 import TransactionCard from '../components/TransactionCard';
 import { useNavigation } from '@react-navigation/native';
+import useDelayedLoading from '../hooks/useDelayedLoading';
+import FullScreenSpinner from '../components/FullScreenSpinner';
 
 import Animated, {
   useSharedValue,
@@ -21,7 +23,8 @@ const font = (s: number) => Math.round(s * scale);
 const CashInList = () => {
   const navigation = useNavigation<any>();
   const { user } = useAuth();
-  const { entries, deleteEntry } = useEntries(user?.id);
+  const { entries, deleteEntry, isLoading } = useEntries(user?.id);
+  const showLoading = useDelayedLoading(Boolean(isLoading), 200);
 
   const inEntries = (entries || []).filter((e) => e.type === 'in');
 
@@ -40,7 +43,8 @@ const CashInList = () => {
   }));
 
   const handleEdit = (item: any) => {
-    navigation.navigate('AddEntry', { local_id: item.local_id });
+    // Open edit in the History inline editor for consistency
+    navigation.navigate('History', { edit_item: item });
   };
 
   const handleDelete = async (id: string) => {
@@ -53,6 +57,7 @@ const CashInList = () => {
 
   return (
     <Animated.View style={[styles.container, animatedWrap]}>
+      <FullScreenSpinner visible={showLoading} />
       {inEntries.length === 0 ? (
         <View style={styles.emptyWrap}>
           <View style={styles.emptyIconContainer}>

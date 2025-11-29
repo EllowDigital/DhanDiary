@@ -10,6 +10,7 @@ export type LocalEntry = {
   category: string;
   note?: string | null;
   currency?: string;
+  server_version?: number;
   created_at: string;
   updated_at: string;
   is_synced?: number;
@@ -54,8 +55,8 @@ export const addLocalEntry = async (entry: Omit<LocalEntry, 'is_synced' | 'is_de
   const created = normalizeDate((entry as any).created_at) || now;
   const updated = normalizeDate((entry as any).updated_at) || created;
   await db.run(
-    `INSERT INTO local_entries (local_id, remote_id, user_id, type, amount, category, note, date, currency, created_at, updated_at, is_synced, need_sync, is_deleted)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1, 0)`,
+    `INSERT INTO local_entries (local_id, remote_id, user_id, type, amount, category, note, date, currency, server_version, created_at, updated_at, is_synced, need_sync, is_deleted)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1, 0)`,
     [
       entry.local_id,
       (entry as any).remote_id || null,
@@ -66,6 +67,7 @@ export const addLocalEntry = async (entry: Omit<LocalEntry, 'is_synced' | 'is_de
       entry.note || null,
       normalizeDate((entry as any).date) || created,
       entry.currency || 'INR',
+      (entry as any).server_version || 0,
       created,
       updated,
     ]
@@ -125,14 +127,25 @@ export const markEntryDeleted = async (localId: string) => {
   } catch (e) {}
 };
 
-export const markEntrySynced = async (localId: string, remoteId?: string) => {
+export const markEntrySynced = async (
+  localId: string,
+  remoteId?: string,
+  serverVersion?: number
+) => {
   const db = await sqlite.open();
   const now = new Date().toISOString();
   if (remoteId) {
-    await db.run(
-      'UPDATE local_entries SET is_synced = 1, need_sync = 0, remote_id = ?, updated_at = ? WHERE local_id = ?',
-      [remoteId, now, localId]
-    );
+    if (typeof serverVersion === 'number') {
+      await db.run(
+        'UPDATE local_entries SET is_synced = 1, need_sync = 0, remote_id = ?, server_version = ?, updated_at = ? WHERE local_id = ?',
+        [remoteId, serverVersion, now, localId]
+      );
+    } else {
+      await db.run(
+        'UPDATE local_entries SET is_synced = 1, need_sync = 0, remote_id = ?, updated_at = ? WHERE local_id = ?',
+        [remoteId, now, localId]
+      );
+    }
   } else {
     await db.run(
       'UPDATE local_entries SET is_synced = 1, need_sync = 0, updated_at = ? WHERE local_id = ?',
@@ -181,7 +194,7 @@ export const upsertLocalFromRemote = async (remote: any) => {
   if (existing && existing.local_id) {
     const preserved = existing.created_at || remote.created_at || now;
     await db.run(
-      `UPDATE local_entries SET user_id = ?, type = ?, amount = ?, category = ?, note = ?, currency = ?, created_at = ?, updated_at = ?, is_synced = 1, is_deleted = ? WHERE local_id = ?`,
+      `UPDATE local_entries SET user_id = ?, type = ?, amount = ?, category = ?, note = ?, currency = ?, server_version = ?, created_at = ?, updated_at = ?, is_synced = 1, is_deleted = ? WHERE local_id = ?`,
       [
         remote.user_id,
         remote.type,
@@ -189,6 +202,7 @@ export const upsertLocalFromRemote = async (remote: any) => {
         remote.category || 'General',
         remote.note || null,
         remote.currency || 'INR',
+        typeof remote.server_version === 'number' ? remote.server_version : 0,
         preserved,
         remote.updated_at || now,
         remote.deleted ? 1 : 0,
@@ -203,7 +217,7 @@ export const upsertLocalFromRemote = async (remote: any) => {
   const localId =
     remote.client_id && remote.client_id.length ? String(remote.client_id) : `remote_${remote.id}`;
   await db.run(
-    `INSERT OR REPLACE INTO local_entries (local_id, remote_id, user_id, type, amount, category, note, date, currency, created_at, updated_at, is_synced, is_deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+    `INSERT OR REPLACE INTO local_entries (local_id, remote_id, user_id, type, amount, category, note, date, currency, server_version, created_at, updated_at, is_synced, is_deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
     [
       localId,
       String(remote.id),
@@ -216,6 +230,7 @@ export const upsertLocalFromRemote = async (remote: any) => {
         ? remote.created_at || now
         : remote.created_at || now,
       remote.currency || 'INR',
+      typeof remote.server_version === 'number' ? remote.server_version : 0,
       remote.created_at || now,
       remote.updated_at || now,
       remote.deleted ? 1 : 0,

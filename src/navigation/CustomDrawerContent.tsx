@@ -68,13 +68,13 @@ const CustomDrawerContent = React.memo((props: DrawerContentComponentProps) => {
     <DrawerContentScrollView {...props} contentContainerStyle={styles.container}>
       {/* HEADER */}
       <Animated.View style={[styles.headerCard, aStyle]}>
-        <Image
-          source={require('../../assets/icon.png')}
-          style={[styles.logo, { width: iconSize, height: iconSize }]}
-        />
-
-        <Text style={styles.appName}>DhanDiary</Text>
-        <Text style={styles.username}>{user?.name || 'Guest Profile'}</Text>
+        <View style={styles.headerHeadingWrap}>
+          <Image source={require('../../assets/icon.png')} style={styles.drawerIcon} />
+          <View style={styles.headerHeadingText}>
+            <Text style={styles.appHeading}>DhanDiary</Text>
+            <Text style={styles.appSub}>Smart Personal Finance</Text>
+          </View>
+        </View>
       </Animated.View>
 
       {/* DRAWER ITEM LIST */}
@@ -99,7 +99,8 @@ const CustomDrawerContent = React.memo((props: DrawerContentComponentProps) => {
                   activeOpacity={0.7}
                   onPress={() => props.navigation.navigate(route.name)}
                 >
-                  {drawerIcon && drawerIcon({ color: focused ? '#1E293B' : '#64748B', size: 26 })}
+                  {drawerIcon &&
+                    drawerIcon({ color: focused ? '#1E293B' : '#64748B', size: 26, focused })}
                   <Text
                     style={{
                       marginLeft: 14,
@@ -108,7 +109,9 @@ const CustomDrawerContent = React.memo((props: DrawerContentComponentProps) => {
                       color: focused ? '#1E293B' : '#64748B',
                     }}
                   >
-                    {drawerLabel || route.name}
+                    {typeof drawerLabel === 'function'
+                      ? drawerLabel({ color: focused ? '#1E293B' : '#64748B', focused })
+                      : drawerLabel || route.name}
                   </Text>
                 </TouchableOpacity>
               );
@@ -146,13 +149,46 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     paddingVertical: 32,
     paddingHorizontal: 20,
-    alignItems: 'center',
+    alignItems: 'flex-start',
     margin: 16,
     marginBottom: 20,
     shadowColor: '#000',
     shadowOpacity: 0.12,
     shadowRadius: 14,
     elevation: 4,
+  },
+
+  headerHeadingWrap: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    width: '100%',
+  },
+
+  appHeading: {
+    fontSize: font(20),
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+
+  appSub: {
+    fontSize: font(12),
+    color: '#475569',
+    marginTop: 6,
+    fontWeight: '600',
+  },
+
+  drawerIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    marginRight: 12,
+    backgroundColor: '#fff',
+    elevation: 3,
+  },
+
+  headerHeadingText: {
+    flexDirection: 'column',
+    justifyContent: 'center',
   },
 
   logo: {

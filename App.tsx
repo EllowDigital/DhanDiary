@@ -22,6 +22,50 @@ import { ToastProvider } from './src/context/ToastContext';
 import DrawerNavigator from './src/navigation/DrawerNavigator';
 
 // Development-only diagnostics (captures missing-key warnings with stack)
+import vexoService from './src/services/vexo';
+// Initialize Vexo at module load if a key is available (safe - wrapper handles missing native module)
+try {
+  // Prefer environment variable, then Expo config extra. Only require the
+  // native `vexo-analytics` package when running a non-DEV build so that
+  // requiring the package doesn't log native-module warnings in Expo Go.
+  const VEXO_KEY =
+    process.env.VEXO_API_KEY ||
+    (() => {
+      try {
+        const Constants = require('expo-constants');
+        return (
+          (Constants &&
+            Constants.expoConfig &&
+            Constants.expoConfig.extra &&
+            Constants.expoConfig.extra.VEXO_API_KEY) ||
+          null
+        );
+      } catch (e) {
+        return null;
+      }
+    })();
+
+  if (VEXO_KEY && !__DEV__) {
+    try {
+      // require only in non-DEV to avoid noisy runtime warnings when native
+      // modules are not linked (Expo Go).
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const _vexo = require('vexo-analytics');
+      const vexo = _vexo && (_vexo.vexo || _vexo.default || _vexo);
+      if (vexo) {
+        try {
+          vexo(VEXO_KEY);
+        } catch (e) {
+          console.warn('Vexo init failed', e);
+        }
+      }
+    } catch (e) {
+      // package not installed or native module missing — silently ignore in DEV
+    }
+  }
+} catch (e) {
+  // ignore
+}
 if (__DEV__) {
   // require lazily so production bundles are unaffected
 
@@ -34,6 +78,12 @@ import { useOfflineSync } from './src/hooks/useOfflineSync';
 import { useAuth } from './src/hooks/useAuth';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  startForegroundSyncScheduler,
+  stopForegroundSyncScheduler,
+  startBackgroundFetch,
+  stopBackgroundFetch,
+} from './src/services/syncManager';
 let Sentry: any = null;
 let LogRocket: any = null;
 try {
@@ -123,6 +173,72 @@ export default Sentry.wrap(function App() {
   const [dbReady, setDbReady] = React.useState(false);
   const [dbInitError, setDbInitError] = React.useState<string | null>(null);
   const queryClient = React.useMemo(() => new QueryClient(), []);
+  const { user } = useAuth();
+
+  // Run DB migrations early on startup (best-effort). This helps ensure
+  // the local tables are present before session or other DB operations
+  // attempt to read/write them. Fail silently if migrations can't run.
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const migrations = require('./src/db/migrations').default;
+        if (migrations && typeof migrations.runMigrations === 'function') {
+          await migrations.runMigrations();
+        }
+      } catch (e) {
+        // ignore — migrations are best-effort here
+      }
+    })();
+  }, []);
+
+  // Identify device with Vexo when user logs in/out
+  React.useEffect(() => {
+    (async () => {
+      try {
+        await vexoService.identifyDevice(user?.id ?? null);
+      } catch (e) {
+        // ignore
+      }
+    })();
+  }, [user]);
+
+  // Initialize Vexo analytics only in non-DEV builds to avoid requiring native
+  // modules in Expo Go which would log warnings.
+  if (!__DEV__) {
+    try {
+      // Use dynamic require to avoid bundling/throwing during tests.
+      const _vexo = require('vexo-analytics');
+      const vexo = _vexo && (_vexo.vexo || _vexo.default || _vexo);
+      // Prefer environment variable, then Expo config extra.
+      const VEXO_KEY =
+        process.env.VEXO_API_KEY ||
+        (() => {
+          try {
+            const Constants = require('expo-constants');
+            return (
+              (Constants &&
+                Constants.expoConfig &&
+                Constants.expoConfig.extra &&
+                Constants.expoConfig.extra.VEXO_API_KEY) ||
+              null
+            );
+          } catch (e) {
+            return null;
+          }
+        })();
+
+      if (vexo && VEXO_KEY) {
+        try {
+          // vexo is a function exported directly by the package
+          vexo(VEXO_KEY);
+        } catch (e) {
+          console.warn('Vexo init failed', e);
+        }
+      }
+    } catch (e) {
+      // If package isn't installed or native code missing, skip initialization silently.
+    }
+  }
 
   React.useEffect(() => {
     const setup = async () => {
@@ -151,6 +267,35 @@ export default Sentry.wrap(function App() {
 
     setup();
   }, []);
+
+  // Start schedulers once DB is ready
+  React.useEffect(() => {
+    if (!dbReady) return;
+    // Start foreground scheduler with default 15s interval
+    try {
+      startForegroundSyncScheduler(15000);
+    } catch (e) {
+      console.warn('Failed to start foreground scheduler', e);
+    }
+
+    // Attempt to start background fetch (safe no-op when library missing)
+    (async () => {
+      try {
+        await startBackgroundFetch();
+      } catch (e) {
+        console.warn('Background fetch start failed or unavailable', e);
+      }
+    })();
+
+    return () => {
+      try {
+        stopForegroundSyncScheduler();
+      } catch (e) {}
+      try {
+        stopBackgroundFetch();
+      } catch (e) {}
+    };
+  }, [dbReady]);
 
   if (!dbReady) {
     // show minimal fallback while DB initializing or failed

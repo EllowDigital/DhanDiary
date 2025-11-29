@@ -3,7 +3,7 @@
     "owner": "ellowdigital",
     "name": "DhanDiary",
     "slug": "dhandiary",
-    "version": "2.0.2",
+    "version": "2.2.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -14,10 +14,12 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "buildNumber": "20251130"
     },
     "android": {
       "package": "com.ellowdigital.dhandiary",
+      "versionCode": 20251130,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -35,13 +37,25 @@
           "project": "dhandiary",
           "organization": "ellowdigital"
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableHermes": true,
+            "enableProguardInReleaseBuilds": true,
+            "minifyEnabled": true,
+            "shrinkResources": true
+          }
+        }
       ]
     ],
     "extra": {
-      "NEON_URL": "postgresql://neondb_owner:npg_P9tO0GqmlWKp@ep-shiny-bonus-a9focnqz-pooler.gwc.azure.neon.tech/neondb?sslmode=require&channel_binding=require",
       "eas": {
         "projectId": "77c33e0a-8d3a-4f5b-afcf-72967c9af0bf"
       }
+      // NOTE: Secrets such as `NEON_URL` and `VEXO_API_KEY` must NOT be committed here.
+      // Put them into your environment/EAS secrets and reference via `Constants.expoConfig.extra` at runtime.
     }
   }
 }

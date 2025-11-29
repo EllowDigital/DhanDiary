@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
-import { getSession } from '../db/session';
+import { getSession, saveSession } from '../db/session';
 import { subscribeSession } from '../utils/sessionEvents';
+import { query } from '../api/neonClient';
+import NetInfo from '@react-native-community/netinfo';
 
 type UserSession = { id: string; name: string; email: string };
 
@@ -12,7 +14,37 @@ export const useAuth = () => {
     const load = async () => {
       try {
         const session = await getSession();
-        setUser(session || null);
+        if (session && session.id) {
+          // Try to refresh profile from server when online and NEON configured
+          try {
+            const net = await NetInfo.fetch();
+            if (net.isConnected) {
+              try {
+                const rows = await query(
+                  'SELECT id, name, email FROM users WHERE id = $1 LIMIT 1',
+                  [session.id]
+                );
+                if (rows && rows.length) {
+                  const u = rows[0];
+                  // persist fresh profile locally
+                  await saveSession(u.id, u.name || '', u.email || '');
+                  setUser({ id: u.id, name: u.name || '', email: u.email || '' });
+                } else {
+                  setUser(session || null);
+                }
+              } catch (e) {
+                // network or query failed — fall back to local session
+                setUser(session || null);
+              }
+            } else {
+              setUser(session || null);
+            }
+          } catch (e) {
+            setUser(session || null);
+          }
+        } else {
+          setUser(session || null);
+        }
       } catch (e) {
         console.error(e);
       } finally {

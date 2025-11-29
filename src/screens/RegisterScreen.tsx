@@ -13,7 +13,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../types/navigation';
 import { registerOnline } from '../services/auth';
 import { useToast } from '../context/ToastContext';
-import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
+import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Animated, {
@@ -24,6 +24,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { spacing, colors, shadows, fonts } from '../utils/design';
+import FullScreenSpinner from '../components/FullScreenSpinner';
 
 type RegisterScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList>;
 
@@ -85,7 +86,15 @@ const RegisterScreen = () => {
 
       (navigation.getParent() as any)?.replace('Main');
     } catch (err: any) {
-      Alert.alert('Registration Failed', err.message || 'Something went wrong');
+      const msg = err && err.message ? String(err.message) : String(err);
+      if (msg.toLowerCase().includes('timed out')) {
+        Alert.alert('Registration Failed', 'Request timed out', [
+          { text: 'Retry', onPress: () => handleRegister() },
+          { text: 'OK', style: 'cancel' },
+        ]);
+      } else {
+        Alert.alert('Registration Failed', msg || 'Something went wrong');
+      }
     } finally {
       setLoading(false);
     }
@@ -111,6 +120,8 @@ const RegisterScreen = () => {
               containerStyle={styles.inputWrap}
               inputContainerStyle={styles.inputContainer}
               inputStyle={styles.inputText}
+              accessibilityLabel="Full name input"
+              accessible
             />
 
             {/* Email */}
@@ -128,6 +139,8 @@ const RegisterScreen = () => {
               inputStyle={styles.inputText}
               errorMessage={emailError || ''}
               errorStyle={styles.inputError}
+              accessibilityLabel="Email input"
+              accessible
             />
 
             {/* Password */}
@@ -169,6 +182,8 @@ const RegisterScreen = () => {
               inputStyle={styles.inputText}
               errorMessage={passwordError || ''}
               errorStyle={styles.inputError}
+              accessibilityLabel="Password input"
+              accessible
             />
 
             {/* Register Button */}
@@ -186,6 +201,8 @@ const RegisterScreen = () => {
                   style={{ marginRight: 6 }}
                 />
               }
+              accessibilityLabel="Create account button"
+              accessibilityRole="button"
             />
 
             {/* Back to Login */}
@@ -194,6 +211,7 @@ const RegisterScreen = () => {
             </TouchableOpacity>
           </View>
         </Animated.View>
+        <FullScreenSpinner visible={loading} message="Creating account..." />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

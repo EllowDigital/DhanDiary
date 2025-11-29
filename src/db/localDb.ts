@@ -136,7 +136,8 @@ export const flushQueuedLocalRemoteMappings = async () => {
 export const getLocalByClientId = entries.getLocalByClientId;
 
 // compatibility: read any fallback entries saved by older versions in AsyncStorage
-import AsyncStorage from '@react-native-async-storage/async-storage';
+// Use wrapper that falls back to an in-memory store when native module missing
+import AsyncStorage from '../utils/AsyncStorageWrapper';
 export const flushFallbackLocalEntries = async () => {
   const KEY = 'fallback_local_entries';
   try {

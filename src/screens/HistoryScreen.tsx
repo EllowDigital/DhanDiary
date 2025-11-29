@@ -12,14 +12,19 @@ import {
 } from 'react-native';
 import { Text, Button, Input } from '@rneui/themed';
 import SimpleButtonGroup from '../components/SimpleButtonGroup';
-import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
+import CategoryPickerModal from '../components/CategoryPickerModal';
+import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useEntries } from '../hooks/useEntries';
 import { useAuth } from '../hooks/useAuth';
 import TransactionCard from '../components/TransactionCard';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useToast } from '../context/ToastContext';
 import runInBackground from '../utils/background';
+import { getEntryByLocalId } from '../db/entries';
+import { Animated as RNAnimated } from 'react-native';
+import useDelayedLoading from '../hooks/useDelayedLoading';
+import FullScreenSpinner from '../components/FullScreenSpinner';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const scale = SCREEN_WIDTH / 390;
@@ -29,6 +34,12 @@ const HistoryScreen = () => {
   const { user } = useAuth();
   const { entries = [], isLoading, updateEntry, deleteEntry } = useEntries(user?.id);
   const navigation = useNavigation<any>();
+  type HistoryRouteParams = { edit_local_id?: string; edit_item?: any } | undefined;
+  type HistoryRouteProp = RouteProp<Record<string, HistoryRouteParams>, string>;
+  const route = useRoute<HistoryRouteProp>();
+
+  // show spinner only if loading lasts more than a short delay
+  const showLoading = useDelayedLoading(Boolean(isLoading));
 
   const [filtersVisible, setFiltersVisible] = useState(false);
   const [typeIndex, setTypeIndex] = useState(0); // all / in / out
@@ -43,8 +54,29 @@ const HistoryScreen = () => {
   const [editingEntry, setEditingEntry] = useState<any | null>(null);
   const [editAmount, setEditAmount] = useState('');
   const [editCategory, setEditCategory] = useState('');
+  // guard against multiple openEdit calls (double-tap / multiple navigations)
+  const isOpeningRef = React.useRef(false);
+  const setEditingSafely = (item: any | null) => {
+    if (item) {
+      if (isOpeningRef.current) return;
+      isOpeningRef.current = true;
+      setEditingEntry(item);
+      // release guard after brief delay
+      setTimeout(() => {
+        isOpeningRef.current = false;
+      }, 500);
+    } else {
+      // closing
+      setEditingEntry(null);
+      isOpeningRef.current = false;
+    }
+  };
   const [editNote, setEditNote] = useState('');
   const [editTypeIndex, setEditTypeIndex] = useState(0);
+  const [editDate, setEditDate] = useState<Date | null>(null);
+  const [showEditDatePicker, setShowEditDatePicker] = useState(false);
+  const [editDateChanged, setEditDateChanged] = useState(false);
+  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
 
   const types = ['All', 'Cash (IN)', 'Cash (OUT)'];
 
@@ -118,13 +150,80 @@ const HistoryScreen = () => {
   // -----------------------
   // EDIT ENTRY
   // -----------------------
+  // If the screen was navigated to with a param to open an editor, do that now.
+  React.useEffect(() => {
+    try {
+      // If the caller passed the full item, open it immediately (fast overlay)
+      const editItem = (route?.params as any)?.edit_item;
+      if (editItem) {
+        openEdit(editItem);
+        try {
+          // clear the navigation params so we don't reopen repeatedly
+          navigation.setParams &&
+            navigation.setParams({ edit_item: undefined, edit_local_id: undefined });
+        } catch (e) {}
+        return;
+      }
+
+      // Fallback: if only local id was passed, try to find it in entries
+      const editId = route?.params?.edit_local_id;
+      if (editId) {
+        const found = entries.find((e) => e.local_id === editId);
+        if (found) {
+          openEdit(found);
+          try {
+            navigation.setParams &&
+              navigation.setParams({ edit_item: undefined, edit_local_id: undefined });
+          } catch (e) {}
+        } else {
+          // try DB lookup to ensure freshest data even if entries not yet loaded
+          (async () => {
+            try {
+              const r = await getEntryByLocalId(String(editId));
+              if (r) {
+                openEdit(r);
+                try {
+                  navigation.setParams &&
+                    navigation.setParams({ edit_item: undefined, edit_local_id: undefined });
+                } catch (e) {}
+              }
+            } catch (e) {
+              // ignore lookup failures
+            }
+          })();
+        }
+      }
+    } catch (e) {}
+  }, [route?.params, entries]);
   const openEdit = (item: any) => {
-    setEditingEntry(item);
+    setEditingSafely(item);
     setEditAmount(String(item.amount));
     setEditCategory(item.category || 'General');
     setEditNote(item.note || '');
     setEditTypeIndex(item.type === 'in' ? 1 : 0);
+    // initialize date but don't mark as changed until user picks a new value
+    try {
+      const d = (item && (item.date || item.created_at)) || null;
+      setEditDate(d ? new Date(d) : null);
+    } catch (e) {
+      setEditDate(null);
+    }
+    setEditDateChanged(false);
   };
+
+  // Focus amount input when editingEntry opens — hold a ref to Input
+  const amountInputRef = React.useRef<any>(null);
+  useEffect(() => {
+    if (editingEntry) {
+      // small timeout to wait for modal animation
+      const t = setTimeout(() => {
+        try {
+          amountInputRef.current && amountInputRef.current.focus && amountInputRef.current.focus();
+        } catch (e) {}
+      }, 120);
+      return () => clearTimeout(t);
+    }
+  }, [editingEntry]);
 
   const { showToast } = useToast();
 
@@ -141,15 +240,16 @@ const HistoryScreen = () => {
     // Run actual update in background so UI stays responsive.
     runInBackground(async () => {
       try {
-        await updateEntry({
-          local_id: editingEntry.local_id,
-          updates: {
-            amount: amt,
-            category: editCategory,
-            note: editNote,
-            type: editTypeIndex === 1 ? 'in' : 'out',
-          },
-        });
+        const updates: any = {
+          amount: amt,
+          category: editCategory,
+          note: editNote,
+          type: editTypeIndex === 1 ? 'in' : 'out',
+        };
+        if (editDateChanged && editDate) {
+          updates.date = editDate;
+        }
+        await updateEntry({ local_id: editingEntry.local_id, updates });
         showToast('Saved');
       } catch (err: any) {
         showToast(err.message || 'Save failed');
@@ -317,8 +417,10 @@ const HistoryScreen = () => {
         </View>
       )}
 
-      {/* EMPTY STATE */}
-      {filtered.length === 0 && !isLoading ? (
+      {/* EMPTY / LOADING STATE */}
+      {showLoading ? (
+        <FullScreenSpinner visible={true} />
+      ) : filtered.length === 0 && !isLoading ? (
         <View style={styles.emptyWrap}>
           <MaterialIcon name="receipt-long" size={80} color="#9CA3AF" />
           <Text style={styles.emptyTitle}>No Transactions Found</Text>
@@ -384,15 +486,47 @@ const HistoryScreen = () => {
                 onChangeText={setEditAmount}
                 inputContainerStyle={styles.modalInput}
                 labelStyle={styles.modalLabel}
+                ref={amountInputRef}
               />
-              <Input
-                label="Category"
-                placeholder="e.g., Food, Shopping"
-                value={editCategory}
-                onChangeText={setEditCategory}
-                inputContainerStyle={styles.modalInput}
-                labelStyle={styles.modalLabel}
-              />
+              <View style={{ marginBottom: 10 }}>
+                <Text style={[styles.modalLabel, { marginBottom: 8 }]}>Category</Text>
+                <Button
+                  title={editCategory || 'Select Category'}
+                  type="outline"
+                  onPress={() => setShowCategoryPicker(true)}
+                  buttonStyle={{ borderRadius: 10, paddingVertical: 10 }}
+                />
+                <CategoryPickerModal
+                  visible={showCategoryPicker}
+                  onClose={() => setShowCategoryPicker(false)}
+                  onSelect={(c) => {
+                    setEditCategory(c);
+                    setShowCategoryPicker(false);
+                  }}
+                />
+              </View>
+              <View style={{ marginBottom: 10 }}>
+                <Button
+                  title={editDate ? editDate.toLocaleDateString() : 'Date'}
+                  type="outline"
+                  onPress={() => setShowEditDatePicker(true)}
+                  buttonStyle={{ borderRadius: 10, paddingVertical: 10 }}
+                />
+                {showEditDatePicker && (
+                  <DateTimePicker
+                    value={editDate || new Date()}
+                    mode="date"
+                    display="default"
+                    onChange={(e, d) => {
+                      setShowEditDatePicker(false);
+                      if (d) {
+                        setEditDate(d);
+                        setEditDateChanged(true);
+                      }
+                    }}
+                  />
+                )}
+              </View>
               <Input
                 label="Note (Optional)"
                 placeholder="Add a short description"
@@ -601,5 +735,11 @@ const styles = StyleSheet.create({
   },
   modalSaveButton: {
     backgroundColor: '#2563EB',
+  },
+  loadingWrap: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
   },
 });

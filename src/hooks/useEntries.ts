@@ -1,3 +1,4 @@
+import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getEntries,
@@ -6,6 +7,7 @@ import {
   updateLocalEntry,
   markEntryDeleted,
 } from '../db/entries';
+import { subscribeEntries } from '../utils/dbEvents';
 import { getSession, saveSession } from '../db/session';
 
 /* ----------------------------------------------------------
@@ -63,17 +65,29 @@ export const useEntries = (userId?: string | null) => {
     data: entries,
     isLoading,
     refetch,
-  } = useQuery({
+  } = useQuery<LocalEntry[], Error>({
     queryKey: ['entries', userId],
     queryFn: async () => {
-      if (!userId) return [];
+      if (!userId) return [] as LocalEntry[];
       return await getEntries(userId);
     },
     enabled: !!userId,
     staleTime: 30_000,
     refetchOnWindowFocus: false,
+    // keepPreviousData isn't recognized by some installed @tanstack/react-query types
+    // in older versions; cast to any to avoid type incompatibility while preserving runtime behavior.
     keepPreviousData: true,
-  });
+  } as any);
+
+  // Keep query data fresh when DB is mutated by background syncs or other processes.
+  React.useEffect(() => {
+    const unsub = subscribeEntries(() => {
+      try {
+        refetch();
+      } catch (e) {}
+    });
+    return () => unsub();
+  }, [refetch]);
 
   /* ----------------------------------------------------------
      ADD ENTRY
@@ -113,8 +127,9 @@ export const useEntries = (userId?: string | null) => {
     },
 
     onError: (_err, _vars, ctx) => {
-      if (ctx?.key) {
-        queryClient.setQueryData(ctx.key, ctx.previous);
+      const c = ctx as any;
+      if (c?.key) {
+        queryClient.setQueryData(c.key, c.previous);
       }
     },
 
@@ -164,8 +179,9 @@ export const useEntries = (userId?: string | null) => {
     },
 
     onError: (_err, _vars, ctx) => {
-      if (ctx?.key) {
-        queryClient.setQueryData(ctx.key, ctx.previous);
+      const c = ctx as any;
+      if (c?.key) {
+        queryClient.setQueryData(c.key, c.previous);
       }
     },
 
@@ -198,8 +214,9 @@ export const useEntries = (userId?: string | null) => {
     },
 
     onError: (_err, _vars, ctx) => {
-      if (ctx?.key) {
-        queryClient.setQueryData(ctx.key, ctx.previous);
+      const c = ctx as any;
+      if (c?.key) {
+        queryClient.setQueryData(c.key, c.previous);
       }
     },
 
@@ -210,7 +227,7 @@ export const useEntries = (userId?: string | null) => {
   });
 
   return {
-    entries,
+    entries: entries as LocalEntry[] | undefined,
     isLoading,
     addEntry: addEntryMutation.mutateAsync,
     updateEntry: updateEntryMutation.mutateAsync,
@@ -218,3 +235,5 @@ export const useEntries = (userId?: string | null) => {
     refetch,
   };
 };
+
+// (No-op) helper exports removed — subscription is wired directly inside `useEntries`.

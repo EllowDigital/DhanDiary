@@ -29,6 +29,7 @@ const migrations: Migration[] = [
         note TEXT,
         date TEXT,
         currency TEXT DEFAULT 'INR',
+        server_version INTEGER DEFAULT 0,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         is_synced INTEGER DEFAULT 0,
@@ -67,6 +68,17 @@ const migrations: Migration[] = [
         queued_at TEXT,
         attempts INTEGER DEFAULT 0
       )`);
+    },
+  },
+  {
+    id: 2,
+    up: async (db) => {
+      // Add server_version to local_entries if missing (idempotent)
+      try {
+        await db.run('ALTER TABLE local_entries ADD COLUMN server_version INTEGER DEFAULT 0');
+      } catch (e) {
+        // Some sqlite builds don't support ALTER TABLE ADD COLUMN IF NOT EXISTS — ignore errors
+      }
     },
   },
 ];
