@@ -4,13 +4,13 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  SafeAreaView,
   Alert,
   Platform,
   StatusBar,
   useWindowDimensions,
   FlatList,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
 import SimpleButtonGroup from '../components/SimpleButtonGroup';
 import TransactionCard from '../components/TransactionCard';

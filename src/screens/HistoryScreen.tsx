@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Text, Button, Input } from '@rneui/themed';
 import SimpleButtonGroup from '../components/SimpleButtonGroup';
+import CategoryPickerModal from '../components/CategoryPickerModal';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useEntries } from '../hooks/useEntries';
@@ -72,6 +73,10 @@ const HistoryScreen = () => {
   };
   const [editNote, setEditNote] = useState('');
   const [editTypeIndex, setEditTypeIndex] = useState(0);
+  const [editDate, setEditDate] = useState<Date | null>(null);
+  const [showEditDatePicker, setShowEditDatePicker] = useState(false);
+  const [editDateChanged, setEditDateChanged] = useState(false);
+  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
 
   const types = ['All', 'Cash (IN)', 'Cash (OUT)'];
 
@@ -152,6 +157,11 @@ const HistoryScreen = () => {
       const editItem = (route?.params as any)?.edit_item;
       if (editItem) {
         openEdit(editItem);
+        try {
+          // clear the navigation params so we don't reopen repeatedly
+          navigation.setParams &&
+            navigation.setParams({ edit_item: undefined, edit_local_id: undefined });
+        } catch (e) {}
         return;
       }
 
@@ -161,12 +171,22 @@ const HistoryScreen = () => {
         const found = entries.find((e) => e.local_id === editId);
         if (found) {
           openEdit(found);
+          try {
+            navigation.setParams &&
+              navigation.setParams({ edit_item: undefined, edit_local_id: undefined });
+          } catch (e) {}
         } else {
           // try DB lookup to ensure freshest data even if entries not yet loaded
           (async () => {
             try {
               const r = await getEntryByLocalId(String(editId));
-              if (r) openEdit(r);
+              if (r) {
+                openEdit(r);
+                try {
+                  navigation.setParams &&
+                    navigation.setParams({ edit_item: undefined, edit_local_id: undefined });
+                } catch (e) {}
+              }
             } catch (e) {
               // ignore lookup failures
             }
@@ -181,6 +201,14 @@ const HistoryScreen = () => {
     setEditCategory(item.category || 'General');
     setEditNote(item.note || '');
     setEditTypeIndex(item.type === 'in' ? 1 : 0);
+    // initialize date but don't mark as changed until user picks a new value
+    try {
+      const d = (item && (item.date || item.created_at)) || null;
+      setEditDate(d ? new Date(d) : null);
+    } catch (e) {
+      setEditDate(null);
+    }
+    setEditDateChanged(false);
   };
 
   // Focus amount input when editingEntry opens — hold a ref to Input
@@ -212,15 +240,16 @@ const HistoryScreen = () => {
     // Run actual update in background so UI stays responsive.
     runInBackground(async () => {
       try {
-        await updateEntry({
-          local_id: editingEntry.local_id,
-          updates: {
-            amount: amt,
-            category: editCategory,
-            note: editNote,
-            type: editTypeIndex === 1 ? 'in' : 'out',
-          },
-        });
+        const updates: any = {
+          amount: amt,
+          category: editCategory,
+          note: editNote,
+          type: editTypeIndex === 1 ? 'in' : 'out',
+        };
+        if (editDateChanged && editDate) {
+          updates.date = editDate;
+        }
+        await updateEntry({ local_id: editingEntry.local_id, updates });
         showToast('Saved');
       } catch (err: any) {
         showToast(err.message || 'Save failed');
@@ -448,7 +477,7 @@ const HistoryScreen = () => {
                   backgroundColor: editTypeIndex === 0 ? '#FF5D5D' : '#3CCB75',
                 }}
               />
-              
+
               <Input
                 label="Amount"
                 placeholder="0.00"
@@ -459,14 +488,45 @@ const HistoryScreen = () => {
                 labelStyle={styles.modalLabel}
                 ref={amountInputRef}
               />
-              <Input
-                label="Category"
-                placeholder="e.g., Food, Shopping"
-                value={editCategory}
-                onChangeText={setEditCategory}
-                inputContainerStyle={styles.modalInput}
-                labelStyle={styles.modalLabel}
-              />
+              <View style={{ marginBottom: 10 }}>
+                <Text style={[styles.modalLabel, { marginBottom: 8 }]}>Category</Text>
+                <Button
+                  title={editCategory || 'Select Category'}
+                  type="outline"
+                  onPress={() => setShowCategoryPicker(true)}
+                  buttonStyle={{ borderRadius: 10, paddingVertical: 10 }}
+                />
+                <CategoryPickerModal
+                  visible={showCategoryPicker}
+                  onClose={() => setShowCategoryPicker(false)}
+                  onSelect={(c) => {
+                    setEditCategory(c);
+                    setShowCategoryPicker(false);
+                  }}
+                />
+              </View>
+              <View style={{ marginBottom: 10 }}>
+                <Button
+                  title={editDate ? editDate.toLocaleDateString() : 'Date'}
+                  type="outline"
+                  onPress={() => setShowEditDatePicker(true)}
+                  buttonStyle={{ borderRadius: 10, paddingVertical: 10 }}
+                />
+                {showEditDatePicker && (
+                  <DateTimePicker
+                    value={editDate || new Date()}
+                    mode="date"
+                    display="default"
+                    onChange={(e, d) => {
+                      setShowEditDatePicker(false);
+                      if (d) {
+                        setEditDate(d);
+                        setEditDateChanged(true);
+                      }
+                    }}
+                  />
+                )}
+              </View>
               <Input
                 label="Note (Optional)"
                 placeholder="Add a short description"

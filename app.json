@@ -3,7 +3,7 @@
     "owner": "ellowdigital",
     "name": "DhanDiary",
     "slug": "dhandiary",
-    "version": "2.1.0",
+    "version": "2.2.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -14,10 +14,12 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "buildNumber": "20251130"
     },
     "android": {
       "package": "com.ellowdigital.dhandiary",
+      "versionCode": 20251130,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"

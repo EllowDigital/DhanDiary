@@ -1,4 +1,5 @@
 import NetInfo from '@react-native-community/netinfo';
+import { Platform } from 'react-native';
 // Use AsyncStorage wrapper which falls back to an in-memory store when native
 // AsyncStorage isn’t available (Expo Go). This prevents crashes in dev.
 import AsyncStorage from '../utils/AsyncStorageWrapper';
@@ -22,16 +23,46 @@ import {
   markLocalDeletedByRemoteId,
   markEntrySynced,
 } from '../db/entries';
-
 import { query } from '../api/neonClient';
 import vexoService from './vexo';
 const Q = (sql: string, params: any[] = []) => query(sql, params, { retries: 2, timeoutMs: 15000 });
-
-// Module-level state
-let _syncInProgress: boolean = false;
 let _unsubscribe: (() => void) | null = null;
 let _foregroundTimer: any = null;
 let _backgroundFetchInstance: any = null;
+// If a sync is requested while one is already running, schedule one extra run
+// after the current finishes to pick up any missed changes.
+let _pendingSyncRequested: boolean = false;
+// Guard that prevents overlapping sync runs
+let _syncInProgress: boolean = false;
+
+// Helper that wraps the query call with consistent logging and error propagation.
+const safeQ = async (sql: string, params: any[] = []) => {
+  try {
+    return await Q(sql, params);
+  } catch (err) {
+    try {
+      console.error('Neon query failed', { sql, params, err });
+    } catch (e) {}
+    throw err;
+  }
+};
+
+// Run a callback inside a remote transaction. Rolls back on error.
+const runRemoteTransaction = async (fn: () => Promise<any>) => {
+  await safeQ('BEGIN');
+  try {
+    const r = await fn();
+    await safeQ('COMMIT');
+    return r;
+  } catch (err) {
+    try {
+      await safeQ('ROLLBACK');
+    } catch (e) {
+      console.warn('Failed to rollback transaction', e);
+    }
+    throw err;
+  }
+};
 
 export const syncPending = async () => {
   await initDb();
@@ -55,18 +86,23 @@ export const syncPending = async () => {
   const inserts = pending.filter((e) => !e.remote_id && !e.is_deleted);
   const updates = pending.filter((e) => e.remote_id && e.need_sync);
 
-  // Batch deletions
+  // Batch deletions (wrapped in transaction to avoid partial deletes)
   if (deletions.length > 0) {
     try {
-      const delRes = await Q('DELETE FROM cash_entries WHERE id = ANY($1) RETURNING id', [
-        deletions,
-      ]);
-      deleted += (delRes && delRes.length) || deletions.length;
+      await runRemoteTransaction(async () => {
+        // Ensure we cast the incoming id array to uuid[] so Postgres compares types correctly
+        const delRes = await safeQ(
+          'DELETE FROM cash_entries WHERE id = ANY($1::uuid[]) RETURNING id',
+          [deletions]
+        );
+        deleted += (delRes && delRes.length) || deletions.length;
+        return delRes;
+      });
     } catch (err) {
-      console.error('Failed to batch delete remote rows', err);
+      console.error('Failed to batch delete remote rows, falling back to per-row', err);
       for (const rid of deletions) {
         try {
-          await Q('DELETE FROM cash_entries WHERE id = $1', [rid]);
+          await safeQ('DELETE FROM cash_entries WHERE id = $1', [rid]);
           deleted += 1;
         } catch (e) {
           console.error('Failed to delete remote row', rid, e);
@@ -88,102 +124,99 @@ export const syncPending = async () => {
     } catch (e) {}
   }
 
-  // Batch inserts
+  // Batch inserts (wrap in transaction to avoid partial insert state on failure)
   if (inserts.length > 0) {
-    const values: any[] = [];
-    const placeholders: string[] = [];
-    let idx = 1;
-    for (const it of inserts) {
-      placeholders.push(
-        `($${idx++},$${idx++},$${idx++},$${idx++},$${idx++},$${idx++},$${idx++},$${idx++},false,$${idx++})`
-      );
-      values.push(
-        it.user_id,
-        it.type,
-        it.amount,
-        it.category,
-        it.note || null,
-        it.currency || 'INR',
-        it.created_at,
-        it.updated_at,
-        it.local_id
-      );
-    }
-    const sql = `INSERT INTO cash_entries (user_id, type, amount, category, note, currency, created_at, updated_at, need_sync, client_id) VALUES ${placeholders.join(',')} ON CONFLICT (client_id) DO NOTHING RETURNING id, client_id, server_version`;
     try {
-      const res = await Q(sql, values);
-      if (res && res.length) {
-        for (const r of res) {
-          const localId = String(r.client_id);
-          try {
-            await markEntrySynced(
-              localId,
-              String(r.id),
-              typeof r.server_version === 'number' ? Number(r.server_version) : undefined
-            );
-            pushed += 1;
-          } catch (e) {
-            try {
-              await queueLocalRemoteMapping(localId, String(r.id));
-            } catch (q) {}
-          }
-        }
-      }
-    } catch (err: any) {
-      if (
-        err &&
-        typeof err.message === 'string' &&
-        err.message.includes('no unique or exclusion constraint')
-      ) {
-        // fall back to per-row resilient insert
+      await runRemoteTransaction(async () => {
+        const values: any[] = [];
+        const placeholders: string[] = [];
+        let idx = 1;
         for (const it of inserts) {
-          try {
-            const insertRes = await Q(
-              `INSERT INTO cash_entries (user_id, type, amount, category, note, currency, created_at, updated_at, need_sync, client_id)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false, $9) RETURNING id, server_version`,
-              [
-                it.user_id,
-                it.type,
-                it.amount,
-                it.category,
-                it.note || null,
-                it.currency || 'INR',
-                it.created_at,
-                it.updated_at,
-                it.local_id,
-              ]
-            );
-            let remoteId =
-              insertRes && insertRes[0] && insertRes[0].id ? insertRes[0].id : undefined;
-            if (!remoteId) {
-              const found = await Q(
-                `SELECT id, server_version FROM cash_entries WHERE client_id = $1 LIMIT 1`,
-                [it.local_id]
+          placeholders.push(
+            // cast created_at and updated_at to timestamptz to match remote column type
+            `($${idx++},$${idx++},$${idx++},$${idx++},$${idx++},$${idx++},$${idx++}::timestamptz,$${idx++}::timestamptz,false,$${idx++})`
+          );
+          values.push(
+            it.user_id,
+            it.type,
+            // coerce amount to numeric for Postgres
+            Number(it.amount),
+            it.category,
+            it.note || null,
+            it.currency || 'INR',
+            it.created_at,
+            it.updated_at,
+            it.local_id
+          );
+        }
+        const sql = `INSERT INTO cash_entries (user_id, type, amount, category, note, currency, created_at, updated_at, need_sync, client_id) VALUES ${placeholders.join(',')} ON CONFLICT (client_id) DO NOTHING RETURNING id, client_id, server_version`;
+        const res = await safeQ(sql, values);
+        if (res && res.length) {
+          for (const r of res) {
+            const localId = String(r.client_id);
+            try {
+              await markEntrySynced(
+                localId,
+                String(r.id),
+                typeof r.server_version === 'number' ? Number(r.server_version) : undefined
               );
-              if (found && found[0] && found[0].id) {
-                remoteId = found[0].id;
-              }
-            }
-            if (remoteId) {
-              const sv =
-                insertRes && insertRes[0] && insertRes[0].server_version
-                  ? Number(insertRes[0].server_version)
-                  : undefined;
+              pushed += 1;
+            } catch (e) {
               try {
-                await markEntrySynced(it.local_id, String(remoteId), sv);
-                pushed += 1;
-              } catch (e) {
-                try {
-                  await queueLocalRemoteMapping(it.local_id, String(remoteId));
-                } catch (q) {}
-              }
+                await queueLocalRemoteMapping(localId, String(r.id));
+              } catch (q) {}
             }
-          } catch (e) {
-            console.error('Failed to insert remote entry (fallback)', it.local_id, e);
           }
         }
-      } else {
-        console.error('Failed to batch insert remote entries', err);
+        return res;
+      });
+    } catch (err: any) {
+      // If batch insert fails due to constraint issues or other, fall back to per-row resilient insert
+      console.warn('Batch insert failed; falling back to per-row inserts', err);
+      for (const it of inserts) {
+        try {
+          const insertRes = await safeQ(
+            `INSERT INTO cash_entries (user_id, type, amount, category, note, currency, created_at, updated_at, need_sync, client_id)
+               VALUES ($1, $2, $3::numeric, $4, $5, $6, $7::timestamptz, $8::timestamptz, false, $9) RETURNING id, server_version`,
+            [
+              it.user_id,
+              it.type,
+              Number(it.amount),
+              it.category,
+              it.note || null,
+              it.currency || 'INR',
+              it.created_at,
+              it.updated_at,
+              it.local_id,
+            ]
+          );
+          let remoteId = insertRes && insertRes[0] && insertRes[0].id ? insertRes[0].id : undefined;
+          if (!remoteId) {
+            const found = await safeQ(
+              `SELECT id, server_version FROM cash_entries WHERE client_id = $1 LIMIT 1`,
+              [it.local_id]
+            );
+            if (found && found[0] && found[0].id) {
+              remoteId = found[0].id;
+            }
+          }
+          if (remoteId) {
+            const sv =
+              insertRes && insertRes[0] && insertRes[0].server_version
+                ? Number(insertRes[0].server_version)
+                : undefined;
+            try {
+              await markEntrySynced(it.local_id, String(remoteId), sv);
+              pushed += 1;
+            } catch (e) {
+              try {
+                await queueLocalRemoteMapping(it.local_id, String(remoteId));
+              } catch (q) {}
+            }
+          }
+        } catch (e) {
+          console.error('Failed to insert remote entry (fallback)', it.local_id, e);
+        }
       }
     }
   }
@@ -194,10 +227,15 @@ export const syncPending = async () => {
     const rowPlaceholders: string[] = [];
     let j = 1;
     for (const u of updates) {
-      rowPlaceholders.push(`($${j++},$${j++},$${j++},$${j++},$${j++},$${j++},$${j++})`);
+      // Cast the id column, amount and updated_at timestamp in the VALUES to correct types
+      // so Postgres compares types correctly and accepts the timestamp input.
+      rowPlaceholders.push(
+        `($${j++}::uuid,$${j++}::numeric,$${j++},$${j++},$${j++},$${j++},$${j++}::timestamptz)`
+      );
       vals.push(
         u.remote_id,
-        u.amount,
+        // coerce amount to numeric
+        Number(u.amount),
         u.type,
         u.category,
         u.note || null,
@@ -205,36 +243,42 @@ export const syncPending = async () => {
         u.updated_at
       );
     }
-    const updateSql = `UPDATE cash_entries AS c SET amount = v.amount, type = v.type, category = v.category, note = v.note, currency = v.currency, updated_at = v.updated_at, need_sync = true FROM (VALUES ${rowPlaceholders.join(',')}) AS v(id, amount, type, category, note, currency, updated_at) WHERE c.id = v.id RETURNING c.id, server_version`;
+
+    const updateSql = `UPDATE cash_entries AS c SET amount = v.amount, type = v.type, category = v.category, note = v.note, currency = v.currency, updated_at = v.updated_at::timestamptz, need_sync = true FROM (VALUES ${rowPlaceholders.join(',')}) AS v(id, amount, type, category, note, currency, updated_at) WHERE c.id = v.id RETURNING c.id, server_version`;
+
+    // Batch updates (wrapped in transaction to keep consistency)
     try {
-      const updRes = await Q(updateSql, vals);
-      if (updRes && updRes.length) {
-        const remoteToLocal: Record<string, string> = {};
-        for (const u of updates) {
-          remoteToLocal[String(u.remote_id)] = u.local_id;
-        }
-        for (const r of updRes) {
-          const localId = remoteToLocal[String(r.id)];
-          if (localId) {
-            try {
-              await markEntrySynced(
-                localId,
-                String(r.id),
-                typeof r.server_version === 'number' ? Number(r.server_version) : undefined
-              );
-              updated += 1;
-            } catch (e) {}
+      await runRemoteTransaction(async () => {
+        const updRes = await safeQ(updateSql, vals);
+        if (updRes && updRes.length) {
+          const remoteToLocal: Record<string, string> = {};
+          for (const u of updates) {
+            remoteToLocal[String(u.remote_id)] = u.local_id;
+          }
+          for (const r of updRes) {
+            const localId = remoteToLocal[String(r.id)];
+            if (localId) {
+              try {
+                await markEntrySynced(
+                  localId,
+                  String(r.id),
+                  typeof r.server_version === 'number' ? Number(r.server_version) : undefined
+                );
+                updated += 1;
+              } catch (e) {}
+            }
           }
         }
-      }
+        return updRes;
+      });
     } catch (err) {
-      console.error('Failed to batch update remote entries, falling back to per-row', err);
+      console.warn('Batch update failed; falling back to per-row updates', err);
       for (const u of updates) {
         try {
-          const res = await Q(
-            `UPDATE cash_entries SET amount = $1, type = $2, category = $3, note = $4, currency = $5, updated_at = $6, need_sync = true WHERE id = $7 RETURNING id, server_version`,
+          const res = await safeQ(
+            `UPDATE cash_entries SET amount = $1::numeric, type = $2, category = $3, note = $4, currency = $5, updated_at = $6::timestamptz, need_sync = true WHERE id = $7 RETURNING id, server_version`,
             [
-              u.amount,
+              Number(u.amount),
               u.type,
               u.category,
               u.note || null,
@@ -375,11 +419,11 @@ export const pullRemote = async () => {
             try {
               const insertRes = await Q(
                 `INSERT INTO cash_entries (user_id, type, amount, category, note, currency, created_at, updated_at, need_sync, client_id)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false, $9) RETURNING id, server_version`,
+                   VALUES ($1, $2, $3::numeric, $4, $5, $6, $7::timestamptz, $8::timestamptz, false, $9) RETURNING id, server_version`,
                 [
                   localForDeleted.user_id,
                   localForDeleted.type,
-                  localForDeleted.amount,
+                  Number(localForDeleted.amount),
                   localForDeleted.category,
                   localForDeleted.note || null,
                   localForDeleted.currency || 'INR',
@@ -456,28 +500,34 @@ export const pullRemote = async () => {
 
             // Conflict: both remote and local changed. To avoid data loss, push local as a new remote row
             try {
-              const insertRes = await Q(
-                `INSERT INTO cash_entries (user_id, type, amount, category, note, currency, created_at, updated_at, need_sync)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false) RETURNING id`,
+              // Prefer updating the existing remote row (client-wins) instead of creating duplicates.
+              const upd = await Q(
+                `UPDATE cash_entries SET amount = $1::numeric, type = $2, category = $3, note = $4, currency = $5, updated_at = $6::timestamptz WHERE id = $7 RETURNING id, server_version`,
                 [
-                  local.user_id,
+                  Number(local.amount),
                   local.type,
-                  local.amount,
                   local.category,
                   local.note || null,
                   local.currency || 'INR',
-                  local.created_at,
                   local.updated_at,
+                  r.id,
                 ]
               );
-              const newRemoteId =
-                insertRes && insertRes[0] && insertRes[0].id ? insertRes[0].id : undefined;
-              if (newRemoteId) {
-                await markEntrySynced(local.local_id, String(newRemoteId));
-                merged += 1;
+              if (upd && upd[0] && upd[0].id) {
+                const newId = upd[0].id;
+                const sv =
+                  upd[0].server_version !== undefined ? Number(upd[0].server_version) : undefined;
+                try {
+                  await markEntrySynced(local.local_id, String(newId), sv);
+                  merged += 1;
+                } catch (e) {}
               }
             } catch (err) {
-              console.error('Failed to push local-as-new for conflict', local.local_id, err);
+              console.error(
+                'Failed to push local change to existing remote for conflict',
+                local.local_id,
+                err
+              );
             }
             continue;
           }
@@ -490,9 +540,9 @@ export const pullRemote = async () => {
             // Local is newer -> push local state to remote (client wins)
             try {
               await Q(
-                `UPDATE cash_entries SET amount = $1, type = $2, category = $3, note = $4, currency = $5, updated_at = $6 WHERE id = $7`,
+                `UPDATE cash_entries SET amount = $1::numeric, type = $2, category = $3, note = $4, currency = $5, updated_at = $6::timestamptz WHERE id = $7`,
                 [
-                  local.amount,
+                  Number(local.amount),
                   local.type,
                   local.category,
                   local.note || null,
@@ -608,7 +658,10 @@ const ensureRemoteSchema = async () => {
 
 export const syncBothWays = async () => {
   if (_syncInProgress) {
-    console.log('syncBothWays: already running, skipping concurrent invocation');
+    // Another caller requested a sync while one is already running.
+    // Schedule a single follow-up run when the current finishes to pick up any new changes.
+    _pendingSyncRequested = true;
+    console.log('syncBothWays: already running, scheduled follow-up run');
     return { pushed: 0, updated: 0, deleted: 0, pulled: 0, merged: 0, total: 0 };
   }
   const state = await NetInfo.fetch();
@@ -673,6 +726,14 @@ export const syncBothWays = async () => {
     return result;
   } finally {
     _syncInProgress = false;
+    // If another sync was requested while we were running, clear the flag and run once more.
+    if (_pendingSyncRequested) {
+      _pendingSyncRequested = false;
+      // schedule shortly after to let any other quick churn settle
+      setTimeout(() => {
+        syncBothWays().catch((err) => console.error('Scheduled follow-up sync failed', err));
+      }, 200);
+    }
     try {
       // If the sync finished but recorded no activity, emit a small heartbeat
       vexoService.customEvent &&
@@ -755,30 +816,44 @@ export const startBackgroundFetch = async () => {
     // require dynamically to avoid a hard dependency
     const BackgroundFetch = require('react-native-background-fetch');
     _backgroundFetchInstance = BackgroundFetch;
-    BackgroundFetch.configure(
-      {
-        minimumFetchInterval: 15, // minutes (OS-driven)
-        stopOnTerminate: false,
-        enableHeadless: true,
-        requiredNetworkType: BackgroundFetch.NETWORK_TYPE_ANY,
-      },
-      async (taskId: string) => {
-        try {
-          if (!_syncInProgress) await syncBothWays();
-        } catch (err) {
-          console.error('Background fetch sync failed', err);
-        } finally {
+    if (BackgroundFetch && typeof BackgroundFetch.configure === 'function') {
+      BackgroundFetch.configure(
+        {
+          minimumFetchInterval: 15, // minutes (OS-driven)
+          stopOnTerminate: false,
+          enableHeadless: true,
+          requiredNetworkType: BackgroundFetch.NETWORK_TYPE_ANY,
+        },
+        async (taskId: string) => {
           try {
-            BackgroundFetch.finish(taskId);
-          } catch (e) {
-            // ignore
+            if (!_syncInProgress) await syncBothWays();
+          } catch (err) {
+            console.error('Background fetch sync failed', err);
+          } finally {
+            try {
+              BackgroundFetch.finish(taskId);
+            } catch (e) {
+              // ignore
+            }
           }
+        },
+        (error: any) => {
+          console.warn('BackgroundFetch failed to start', error);
         }
-      },
-      (error: any) => {
-        console.warn('BackgroundFetch failed to start', error);
+      );
+    } else {
+      // Only warn about missing/incompatible background-fetch on real native
+      // devices (Android/iOS) and when not running under tests. In dev (Expo
+      // Go) the native module may be absent and this warning is noisy.
+      const isNative = Platform.OS === 'android' || Platform.OS === 'ios';
+      const isTest = typeof process !== 'undefined' && !!process.env.JEST_WORKER_ID;
+      if (isNative && !isTest) {
+        console.warn(
+          'react-native-background-fetch missing or has incompatible API; background fetch disabled'
+        );
       }
-    );
+      // otherwise silently no-op in non-native or test environments
+    }
   } catch (e) {
     console.warn('react-native-background-fetch not available; background fetch disabled', e);
   }

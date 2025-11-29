@@ -50,6 +50,29 @@ export const query = async (
       return result.rows;
     } catch (error) {
       lastErr = error;
+      // Normalize potential Event-like errors (e.g. WebSocket error events from the pool)
+      // Some environments surface low-level WS errors as Event objects which are not
+      // instanceof Error. Inspect and convert to a readable Error so our transient
+      // detection and logging behave predictably.
+      if (error && typeof error === 'object' && !(error instanceof Error)) {
+        try {
+          const eAny: any = error;
+          // If it looks like a WebSocket event, construct a short message
+          if (eAny && eAny.type && eAny.target && eAny.target.readyState !== undefined) {
+            const ready = eAny.target.readyState;
+            const url = eAny.target.url || '<socket>';
+            const msg = `WebSocket event type=${String(eAny.type)} readyState=${String(
+              ready
+            )} url=${String(url)}`;
+            // replace lastErr with an Error wrapper for consistent downstream handling
+            lastErr = new Error(msg);
+            // Also mark `error` to the simplified wrapper for logging below
+            error = lastErr;
+          }
+        } catch (e) {
+          // fallthrough — keep original error
+        }
+      }
       // Determine if the error looks transient (network / timeout / connection reset)
       const msg = String(((error as any) && ((error as any).message || error)) || '').toLowerCase();
       const isTransient =
