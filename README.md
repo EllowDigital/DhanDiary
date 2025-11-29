@@ -1,3 +1,29 @@
+# Environment and Secrets
+
+This project must not store secrets in source control. If you found a secret in `app.json` or in the Git history (for example `VEXO_API_KEY` or `NEON_URL`), take these steps:
+
+- Rotate the exposed keys immediately (contact the provider dashboard).
+- Remove the secret from the repository and purge history (see commands below).
+- Use environment variables or EAS secrets for runtime secrets.
+
+Local development: copy `.env.example` -> `.env` and add your values.
+
+Purge secret from git history (use with care):
+
+```pwsh
+# Remove file with secrets from history (example using BFG or git filter-branch is recommended)
+git rm --cached app.json
+git commit -m "Remove hardcoded secrets from app.json"
+# Use BFG or git filter-repo to scrub the secret string from history
+# Example with git filter-repo (install separately):
+git filter-repo --replace-text replacements.txt
+
+# Where replacements.txt contains a line like:
+# 5d3859ed-a3a5-47cc-8b4e-82396334ada4==[REMOVED]
+```
+
+After rewriting history, push with `--force` to remote and inform team members to re-clone.
+
 # DhanDiary
 
 A React Native (Expo) expense tracker with offline-first capabilities and NeonDB sync.
