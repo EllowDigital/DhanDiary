@@ -22,15 +22,19 @@ describe('Foreground scheduler', () => {
     // ensure no leftover timer from other tests
     stopForegroundSyncScheduler();
     // Replace internal syncBothWays implementation used by the module
-    syncManager.syncBothWays = jest.fn().mockResolvedValue({ pushed: 0, updated: 0, deleted: 0, pulled: 0, merged: 0, total: 0 });
+    syncManager.syncBothWays = jest
+      .fn()
+      .mockResolvedValue({ pushed: 0, updated: 0, deleted: 0, pulled: 0, merged: 0, total: 0 });
 
     // Spy on setInterval so we can capture the timer callback and invoke it manually
     const timers: Function[] = [];
-    const setIntervalSpy = jest.spyOn(global, 'setInterval' as any).mockImplementation((...args: any[]) => {
-      const fn = args[0];
-      timers.push(fn);
-      return 123 as any;
-    });
+    const setIntervalSpy = jest
+      .spyOn(global, 'setInterval' as any)
+      .mockImplementation((...args: any[]) => {
+        const fn = args[0];
+        timers.push(fn);
+        return 123 as any;
+      });
 
     startForegroundSyncScheduler(1000);
 
@@ -50,7 +54,9 @@ describe('Foreground scheduler', () => {
   });
 
   test('stopForegroundSyncScheduler clears interval', () => {
-    syncManager.syncBothWays = jest.fn().mockResolvedValue({ pushed: 0, updated: 0, deleted: 0, pulled: 0, merged: 0, total: 0 });
+    syncManager.syncBothWays = jest
+      .fn()
+      .mockResolvedValue({ pushed: 0, updated: 0, deleted: 0, pulled: 0, merged: 0, total: 0 });
     startForegroundSyncScheduler(1000);
     stopForegroundSyncScheduler();
     jest.advanceTimersByTime(5000);

@@ -9,6 +9,7 @@ import {
   ScrollView,
   TouchableOpacity,
   LayoutAnimation,
+  ActivityIndicator,
 } from 'react-native';
 import { Text, Button, Input } from '@rneui/themed';
 import SimpleButtonGroup from '../components/SimpleButtonGroup';
@@ -17,7 +18,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { useEntries } from '../hooks/useEntries';
 import { useAuth } from '../hooks/useAuth';
 import TransactionCard from '../components/TransactionCard';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useToast } from '../context/ToastContext';
 import runInBackground from '../utils/background';
 
@@ -29,7 +30,24 @@ const HistoryScreen = () => {
   const { user } = useAuth();
   const { entries = [], isLoading, updateEntry, deleteEntry } = useEntries(user?.id);
   const navigation = useNavigation<any>();
-  const route = require('@react-navigation/native').useRoute<any>();
+  type HistoryRouteParams = { edit_local_id?: string } | undefined;
+  type HistoryRouteProp = RouteProp<Record<string, HistoryRouteParams>, string>;
+  const route = useRoute<HistoryRouteProp>();
+
+  // show spinner only if loading lasts more than a short delay
+  const [showLoading, setShowLoading] = useState(false);
+  useEffect(() => {
+    let timer: NodeJS.Timeout | null = null;
+    if (isLoading) {
+      timer = setTimeout(() => setShowLoading(true), 160);
+    } else {
+      if (timer) clearTimeout(timer);
+      setShowLoading(false);
+    }
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [isLoading]);
 
   const [filtersVisible, setFiltersVisible] = useState(false);
   const [typeIndex, setTypeIndex] = useState(0); // all / in / out
@@ -328,8 +346,12 @@ const HistoryScreen = () => {
         </View>
       )}
 
-      {/* EMPTY STATE */}
-      {filtered.length === 0 && !isLoading ? (
+      {/* EMPTY / LOADING STATE */}
+      {showLoading ? (
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator size="large" color="#2563EB" />
+        </View>
+      ) : filtered.length === 0 && !isLoading ? (
         <View style={styles.emptyWrap}>
           <MaterialIcon name="receipt-long" size={80} color="#9CA3AF" />
           <Text style={styles.emptyTitle}>No Transactions Found</Text>
@@ -612,5 +634,11 @@ const styles = StyleSheet.create({
   },
   modalSaveButton: {
     backgroundColor: '#2563EB',
+  },
+  loadingWrap: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
   },
 });

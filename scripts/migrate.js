@@ -29,7 +29,10 @@ const pool = new Pool({ connectionString: NEON_URL });
       console.log('Running full SQL file as single query');
       await pool.query(sql);
     } catch (err) {
-      console.warn('Full-file execution failed, falling back to statement-by-statement execution:', err.message || err);
+      console.warn(
+        'Full-file execution failed, falling back to statement-by-statement execution:',
+        err.message || err
+      );
       // Split into statements by semicolon; this is acceptable for plain DDL
       const rawStatements = sql
         .split(';')

@@ -48,7 +48,9 @@ export const syncPending = async () => {
   let deleted = 0;
 
   // Partition pending rows into deletions, inserts, updates
-  const deletions = pending.filter((e) => e.is_deleted && e.remote_id).map((e) => String(e.remote_id));
+  const deletions = pending
+    .filter((e) => e.is_deleted && e.remote_id)
+    .map((e) => String(e.remote_id));
   const toMarkLocalDeletedOnly = pending.filter((e) => e.is_deleted && !e.remote_id);
   const inserts = pending.filter((e) => !e.remote_id && !e.is_deleted);
   const updates = pending.filter((e) => e.remote_id && e.need_sync);
@@ -56,7 +58,9 @@ export const syncPending = async () => {
   // Batch deletions
   if (deletions.length > 0) {
     try {
-      const delRes = await Q('DELETE FROM cash_entries WHERE id = ANY($1) RETURNING id', [deletions]);
+      const delRes = await Q('DELETE FROM cash_entries WHERE id = ANY($1) RETURNING id', [
+        deletions,
+      ]);
       deleted += (delRes && delRes.length) || deletions.length;
     } catch (err) {
       console.error('Failed to batch delete remote rows', err);
@@ -90,7 +94,9 @@ export const syncPending = async () => {
     const placeholders: string[] = [];
     let idx = 1;
     for (const it of inserts) {
-      placeholders.push(`($${idx++},$${idx++},$${idx++},$${idx++},$${idx++},$${idx++},$${idx++},$${idx++},false,$${idx++})`);
+      placeholders.push(
+        `($${idx++},$${idx++},$${idx++},$${idx++},$${idx++},$${idx++},$${idx++},$${idx++},false,$${idx++})`
+      );
       values.push(
         it.user_id,
         it.type,
@@ -110,7 +116,11 @@ export const syncPending = async () => {
         for (const r of res) {
           const localId = String(r.client_id);
           try {
-            await markEntrySynced(localId, String(r.id), typeof r.server_version === 'number' ? Number(r.server_version) : undefined);
+            await markEntrySynced(
+              localId,
+              String(r.id),
+              typeof r.server_version === 'number' ? Number(r.server_version) : undefined
+            );
             pushed += 1;
           } catch (e) {
             try {
@@ -120,7 +130,11 @@ export const syncPending = async () => {
         }
       }
     } catch (err: any) {
-      if (err && typeof err.message === 'string' && err.message.includes('no unique or exclusion constraint')) {
+      if (
+        err &&
+        typeof err.message === 'string' &&
+        err.message.includes('no unique or exclusion constraint')
+      ) {
         // fall back to per-row resilient insert
         for (const it of inserts) {
           try {
@@ -139,15 +153,22 @@ export const syncPending = async () => {
                 it.local_id,
               ]
             );
-            let remoteId = insertRes && insertRes[0] && insertRes[0].id ? insertRes[0].id : undefined;
+            let remoteId =
+              insertRes && insertRes[0] && insertRes[0].id ? insertRes[0].id : undefined;
             if (!remoteId) {
-              const found = await Q(`SELECT id, server_version FROM cash_entries WHERE client_id = $1 LIMIT 1`, [it.local_id]);
+              const found = await Q(
+                `SELECT id, server_version FROM cash_entries WHERE client_id = $1 LIMIT 1`,
+                [it.local_id]
+              );
               if (found && found[0] && found[0].id) {
                 remoteId = found[0].id;
               }
             }
             if (remoteId) {
-              const sv = insertRes && insertRes[0] && insertRes[0].server_version ? Number(insertRes[0].server_version) : undefined;
+              const sv =
+                insertRes && insertRes[0] && insertRes[0].server_version
+                  ? Number(insertRes[0].server_version)
+                  : undefined;
               try {
                 await markEntrySynced(it.local_id, String(remoteId), sv);
                 pushed += 1;
@@ -174,7 +195,15 @@ export const syncPending = async () => {
     let j = 1;
     for (const u of updates) {
       rowPlaceholders.push(`($${j++},$${j++},$${j++},$${j++},$${j++},$${j++},$${j++})`);
-      vals.push(u.remote_id, u.amount, u.type, u.category, u.note || null, u.currency || 'INR', u.updated_at);
+      vals.push(
+        u.remote_id,
+        u.amount,
+        u.type,
+        u.category,
+        u.note || null,
+        u.currency || 'INR',
+        u.updated_at
+      );
     }
     const updateSql = `UPDATE cash_entries AS c SET amount = v.amount, type = v.type, category = v.category, note = v.note, currency = v.currency, updated_at = v.updated_at, need_sync = true FROM (VALUES ${rowPlaceholders.join(',')}) AS v(id, amount, type, category, note, currency, updated_at) WHERE c.id = v.id RETURNING c.id, server_version`;
     try {
@@ -188,7 +217,11 @@ export const syncPending = async () => {
           const localId = remoteToLocal[String(r.id)];
           if (localId) {
             try {
-              await markEntrySynced(localId, String(r.id), typeof r.server_version === 'number' ? Number(r.server_version) : undefined);
+              await markEntrySynced(
+                localId,
+                String(r.id),
+                typeof r.server_version === 'number' ? Number(r.server_version) : undefined
+              );
               updated += 1;
             } catch (e) {}
           }
@@ -200,10 +233,19 @@ export const syncPending = async () => {
         try {
           const res = await Q(
             `UPDATE cash_entries SET amount = $1, type = $2, category = $3, note = $4, currency = $5, updated_at = $6, need_sync = true WHERE id = $7 RETURNING id, server_version`,
-            [u.amount, u.type, u.category, u.note || null, u.currency || 'INR', u.updated_at, u.remote_id]
+            [
+              u.amount,
+              u.type,
+              u.category,
+              u.note || null,
+              u.currency || 'INR',
+              u.updated_at,
+              u.remote_id,
+            ]
           );
           if (res && res[0] && res[0].id) {
-            const sv = res[0].server_version !== undefined ? Number(res[0].server_version) : undefined;
+            const sv =
+              res[0].server_version !== undefined ? Number(res[0].server_version) : undefined;
             try {
               await markEntrySynced(u.local_id, String(res[0].id), sv);
               updated += 1;
@@ -346,22 +388,37 @@ export const pullRemote = async () => {
                   localForDeleted.local_id,
                 ]
               );
-              const newRemoteId = insertRes && insertRes[0] && insertRes[0].id ? insertRes[0].id : undefined;
-              const sv = insertRes && insertRes[0] && insertRes[0].server_version ? Number(insertRes[0].server_version) : undefined;
+              const newRemoteId =
+                insertRes && insertRes[0] && insertRes[0].id ? insertRes[0].id : undefined;
+              const sv =
+                insertRes && insertRes[0] && insertRes[0].server_version
+                  ? Number(insertRes[0].server_version)
+                  : undefined;
               if (newRemoteId) {
                 try {
                   await markEntrySynced(localForDeleted.local_id, String(newRemoteId), sv);
                 } catch (e) {
                   try {
                     await queueLocalRemoteMapping(localForDeleted.local_id, String(newRemoteId));
-                    console.log('DB not operational, queued local->remote mapping for', localForDeleted.local_id);
+                    console.log(
+                      'DB not operational, queued local->remote mapping for',
+                      localForDeleted.local_id
+                    );
                   } catch (q) {
-                    console.warn('Failed to queue local->remote mapping after recreate', localForDeleted.local_id, q);
+                    console.warn(
+                      'Failed to queue local->remote mapping after recreate',
+                      localForDeleted.local_id,
+                      q
+                    );
                   }
                 }
               }
             } catch (err) {
-              console.error('Failed to recreate remote row for locally-modified deleted remote', localForDeleted.local_id, err);
+              console.error(
+                'Failed to recreate remote row for locally-modified deleted remote',
+                localForDeleted.local_id,
+                err
+              );
               // fallback to marking local deleted
               await markLocalDeletedByRemoteId(String(r.id));
             }
@@ -560,7 +617,8 @@ export const syncBothWays = async () => {
   let result = { pushed: 0, updated: 0, deleted: 0, pulled: 0, merged: 0, total: 0 };
   try {
     try {
-      vexoService.customEvent && vexoService.customEvent('sync_start', { when: new Date().toISOString() });
+      vexoService.customEvent &&
+        vexoService.customEvent('sync_start', { when: new Date().toISOString() });
     } catch (e) {}
     // ensure remote schema can accept our metadata
     await ensureRemoteSchema();
@@ -603,14 +661,22 @@ export const syncBothWays = async () => {
     result = { pushed, updated, deleted, pulled, merged, total };
     try {
       vexoService.customEvent &&
-        vexoService.customEvent('sync_complete', { pushed, updated, deleted, pulled, merged, total });
+        vexoService.customEvent('sync_complete', {
+          pushed,
+          updated,
+          deleted,
+          pulled,
+          merged,
+          total,
+        });
     } catch (e) {}
     return result;
   } finally {
     _syncInProgress = false;
     try {
       // If the sync finished but recorded no activity, emit a small heartbeat
-      vexoService.customEvent && vexoService.customEvent('sync_ended', { when: new Date().toISOString() });
+      vexoService.customEvent &&
+        vexoService.customEvent('sync_ended', { when: new Date().toISOString() });
     } catch (e) {}
   }
 };
@@ -662,7 +728,9 @@ export const startForegroundSyncScheduler = (intervalMs: number = 15000) => {
         // require dynamically so tests can replace the exported implementation
         const mod: any = require('./syncManager');
         if (mod && typeof mod.syncBothWays === 'function') {
-          mod.syncBothWays().catch((err: any) => console.error('Foreground scheduled sync failed', err));
+          mod
+            .syncBothWays()
+            .catch((err: any) => console.error('Foreground scheduled sync failed', err));
         }
       } catch (e) {
         // fallback to direct call
