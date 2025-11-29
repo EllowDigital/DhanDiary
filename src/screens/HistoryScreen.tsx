@@ -53,6 +53,23 @@ const HistoryScreen = () => {
   const [editingEntry, setEditingEntry] = useState<any | null>(null);
   const [editAmount, setEditAmount] = useState('');
   const [editCategory, setEditCategory] = useState('');
+  // guard against multiple openEdit calls (double-tap / multiple navigations)
+  const isOpeningRef = React.useRef(false);
+  const setEditingSafely = (item: any | null) => {
+    if (item) {
+      if (isOpeningRef.current) return;
+      isOpeningRef.current = true;
+      setEditingEntry(item);
+      // release guard after brief delay
+      setTimeout(() => {
+        isOpeningRef.current = false;
+      }, 500);
+    } else {
+      // closing
+      setEditingEntry(null);
+      isOpeningRef.current = false;
+    }
+  };
   const [editNote, setEditNote] = useState('');
   const [editTypeIndex, setEditTypeIndex] = useState(0);
 
@@ -159,7 +176,7 @@ const HistoryScreen = () => {
     } catch (e) {}
   }, [route?.params, entries]);
   const openEdit = (item: any) => {
-    setEditingEntry(item);
+    setEditingSafely(item);
     setEditAmount(String(item.amount));
     setEditCategory(item.category || 'General');
     setEditNote(item.note || '');
