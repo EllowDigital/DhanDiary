@@ -20,6 +20,8 @@ import TransactionCard from '../components/TransactionCard';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useToast } from '../context/ToastContext';
 import runInBackground from '../utils/background';
+import { getEntryByLocalId } from '../db/entries';
+import { Animated as RNAnimated } from 'react-native';
 import useDelayedLoading from '../hooks/useDelayedLoading';
 import FullScreenSpinner from '../components/FullScreenSpinner';
 
@@ -140,7 +142,19 @@ const HistoryScreen = () => {
       const editId = route?.params?.edit_local_id;
       if (editId) {
         const found = entries.find((e) => e.local_id === editId);
-        if (found) openEdit(found);
+        if (found) {
+          openEdit(found);
+        } else {
+          // try DB lookup to ensure freshest data even if entries not yet loaded
+          (async () => {
+            try {
+              const r = await getEntryByLocalId(String(editId));
+              if (r) openEdit(r);
+            } catch (e) {
+              // ignore lookup failures
+            }
+          })();
+        }
       }
     } catch (e) {}
   }, [route?.params, entries]);
@@ -151,6 +165,20 @@ const HistoryScreen = () => {
     setEditNote(item.note || '');
     setEditTypeIndex(item.type === 'in' ? 1 : 0);
   };
+
+  // Focus amount input when editingEntry opens — hold a ref to Input
+  const amountInputRef = React.useRef<any>(null);
+  useEffect(() => {
+    if (editingEntry) {
+      // small timeout to wait for modal animation
+      const t = setTimeout(() => {
+        try {
+          amountInputRef.current && amountInputRef.current.focus && amountInputRef.current.focus();
+        } catch (e) {}
+      }, 120);
+      return () => clearTimeout(t);
+    }
+  }, [editingEntry]);
 
   const { showToast } = useToast();
 
@@ -403,7 +431,7 @@ const HistoryScreen = () => {
                   backgroundColor: editTypeIndex === 0 ? '#FF5D5D' : '#3CCB75',
                 }}
               />
-
+              
               <Input
                 label="Amount"
                 placeholder="0.00"
@@ -412,6 +440,7 @@ const HistoryScreen = () => {
                 onChangeText={setEditAmount}
                 inputContainerStyle={styles.modalInput}
                 labelStyle={styles.modalLabel}
+                ref={amountInputRef}
               />
               <Input
                 label="Category"
