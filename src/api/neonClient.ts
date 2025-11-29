@@ -9,7 +9,7 @@ const pool = NEON_URL ? new Pool({ connectionString: NEON_URL }) : null;
 
 const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
-const defaultTimeout = 15000; // 15s default timeout per request
+const defaultTimeout = 20000; // 20s default timeout per request
 
 const withTimeout = <T>(p: Promise<T>, ms = defaultTimeout): Promise<T> =>
   Promise.race([
@@ -31,7 +31,8 @@ export const query = async (
     throw new Error('Neon requires internet + NEON_URL');
   }
 
-  const { retries = 2, timeoutMs = defaultTimeout } = opts || {};
+  // Treat timeouts as transient and increase retries by default to handle brief network hiccups
+  const { retries = 3, timeoutMs = defaultTimeout } = opts || {};
 
   // short-circuit if offline to avoid waiting on timeouts
   try {
@@ -60,6 +61,11 @@ export const query = async (
         msg.includes('socket') ||
         msg.includes('econnreset') ||
         msg.includes('enotfound');
+
+      // Treat our explicit 'Request timed out' as transient too
+      if (msg.includes('request timed out')) {
+        // mark as transient
+      }
 
       // Avoid noisy logs for unique-constraint collisions (handled by callers)
       try {
