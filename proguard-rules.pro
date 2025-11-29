@@ -39,6 +39,10 @@
 -keep class coil3.network.** { *; }
 -keep class okhttp3.** { *; }
 
+# Explicitly keep Coil PlatformContext which R8 reported missing
+-keep class coil3.PlatformContext { *; }
+
+
 # Some libraries reference javax.lang.model.* (annotation processors) which is not
 # available on Android. Suppress warnings rather than fail the build.
 -dontwarn javax.lang.model.**
