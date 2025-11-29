@@ -6,7 +6,8 @@ import bcrypt from 'bcryptjs';
 import Constants from 'expo-constants';
 
 // Utility: helper to fail fast on slow network operations
-const withTimeout = <T>(p: Promise<T>, ms = 8000): Promise<T> => {
+// Increase default timeout to 15s for mobile networks which may be slower.
+const withTimeout = <T>(p: Promise<T>, ms = 15000): Promise<T> => {
   return Promise.race([
     p,
     new Promise<T>((_res, rej) => setTimeout(() => rej(new Error('Request timed out')), ms)),
@@ -50,7 +51,7 @@ export const registerOnline = async (name: string, email: string, password: stri
       'INSERT INTO users (name, email, password_hash) VALUES ($1, $2, $3) RETURNING id, name, email',
       [name, email, hash]
     ),
-    8000
+    20000
   );
 
   const user = result[0];
@@ -64,7 +65,7 @@ export const loginOnline = async (email: string, password: string) => {
   if (!online) throw new Error('Online required for login');
 
   // fail fast on slow responses
-  const result = await withTimeout(query('SELECT * FROM users WHERE email = $1', [email]), 8000);
+  const result = await withTimeout(query('SELECT * FROM users WHERE email = $1', [email]), 20000);
   if (result.length === 0) {
     throw new Error('User not found');
   }

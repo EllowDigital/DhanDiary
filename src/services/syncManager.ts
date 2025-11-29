@@ -1,5 +1,7 @@
 import NetInfo from '@react-native-community/netinfo';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+// Use AsyncStorage wrapper which falls back to an in-memory store when native
+// AsyncStorage isn’t available (Expo Go). This prevents crashes in dev.
+import AsyncStorage from '../utils/AsyncStorageWrapper';
 import {
   init as initDb,
   getPendingProfileUpdates,
@@ -26,6 +28,8 @@ import {
 } from '../db/localDb';
 import { query } from '../api/neonClient';
 
+const Q = (sql: string, params: any[] = []) => query(sql, params, { retries: 2, timeoutMs: 15000 });
+
 let _unsubscribe: (() => void) | null = null;
 let _syncInProgress = false;
 
@@ -49,7 +53,7 @@ export const syncPending = async () => {
       if (entry.is_deleted) {
         if (entry.remote_id) {
           try {
-            await query('DELETE FROM cash_entries WHERE id = $1', [entry.remote_id]);
+            await Q('DELETE FROM cash_entries WHERE id = $1', [entry.remote_id]);
             deleted += 1;
           } catch (err) {
             console.error('Failed to delete remote row for', entry.local_id, err);
@@ -63,7 +67,7 @@ export const syncPending = async () => {
       // If we have a remote_id and the local row explicitly needs sync, update remote
       if (entry.remote_id && entry.need_sync) {
         try {
-          const res = await query(
+          const res = await Q(
             `UPDATE cash_entries SET amount = $1, type = $2, category = $3, note = $4, currency = $5, updated_at = $6, need_sync = true WHERE id = $7 RETURNING id`,
             [
               entry.amount,
@@ -95,7 +99,7 @@ export const syncPending = async () => {
         // Try to insert with client_id mapping so remote can dedupe.
         // Use ON CONFLICT DO NOTHING to avoid raising unique-constraint errors
         // when another device already created a row with the same client_id.
-        const insertRes = await query(
+        const insertRes = await Q(
           `INSERT INTO cash_entries (user_id, type, amount, category, note, currency, created_at, updated_at, need_sync, client_id)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false, $9) ON CONFLICT (client_id) DO NOTHING RETURNING id`,
           [
@@ -116,7 +120,7 @@ export const syncPending = async () => {
         if (!remoteId) {
           // Insert did nothing (conflict) or returned no id — try to locate the remote row by client_id
           try {
-            const found = await query(`SELECT id FROM cash_entries WHERE client_id = $1 LIMIT 1`, [
+            const found = await Q(`SELECT id FROM cash_entries WHERE client_id = $1 LIMIT 1`, [
               entry.local_id,
             ]);
             if (found && found[0] && found[0].id) {
@@ -168,7 +172,7 @@ const flushPendingProfileUpdates = async () => {
       // try to update remote users table
       // ensure email uniqueness if provided
       if (p.email) {
-        const existing = await query('SELECT id FROM users WHERE email = $1 AND id <> $2 LIMIT 1', [
+        const existing = await Q('SELECT id FROM users WHERE email = $1 AND id <> $2 LIMIT 1', [
           p.email,
           p.user_id,
         ]);
@@ -197,7 +201,7 @@ const flushPendingProfileUpdates = async () => {
       }
       params.push(p.user_id);
       const sql = `UPDATE users SET ${fields.join(', ')} WHERE id = $${idx} RETURNING id, name, email`;
-      const res = await query(sql, params);
+      const res = await Q(sql, params);
       if (res && res.length) {
         const user = res[0];
         try {
@@ -240,7 +244,7 @@ export const pullRemote = async () => {
       console.warn('Failed to flush queued remote rows', e);
     }
     // fetch all remote rows for this user (including deleted flag)
-    const rows = await query(
+    const rows = await Q(
       `SELECT id, user_id, type, amount, category, note, currency, created_at, updated_at, deleted, client_id FROM cash_entries WHERE user_id = $1`,
       [session.id]
     );
@@ -284,7 +288,7 @@ export const pullRemote = async () => {
 
             // Conflict: both remote and local changed. To avoid data loss, push local as a new remote row
             try {
-              const insertRes = await query(
+              const insertRes = await Q(
                 `INSERT INTO cash_entries (user_id, type, amount, category, note, currency, created_at, updated_at, need_sync)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false) RETURNING id`,
                 [
@@ -317,7 +321,7 @@ export const pullRemote = async () => {
           if (localUpdated > remoteUpdated) {
             // Local is newer -> push local state to remote (client wins)
             try {
-              await query(
+              await Q(
                 `UPDATE cash_entries SET amount = $1, type = $2, category = $3, note = $4, currency = $5, updated_at = $6 WHERE id = $7`,
                 [
                   local.amount,

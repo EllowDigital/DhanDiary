@@ -8,10 +8,10 @@ import { View, ViewProps } from 'react-native';
 const addKeysRecursively = (node: any, prefix = 'k') => {
   if (!React.isValidElement(node)) return node;
 
-  const children = node.props?.children;
+  const children = (node.props && (node.props as any).children) || null;
   if (!children) {
     // ensure element itself has a key
-    if (node.key != null) return node;
+    if ((node as any).key != null) return node;
     return React.cloneElement(node, { key: prefix });
   }
 
@@ -26,7 +26,7 @@ const addKeysRecursively = (node: any, prefix = 'k') => {
 
   // clone node with new keyed children and ensure it has a key
   const props: any = { children: mapped };
-  if (node.key == null) props.key = prefix;
+  if ((node as any).key == null) props.key = prefix;
   return React.cloneElement(node, props);
 };
 
@@ -42,7 +42,7 @@ const KeyedView: React.FC<ViewProps> = ({ children, ...rest }) => {
     // If child has no key, log once so developers can fix upstream if desired
     if (child.key == null && !warned) {
       const t = child.type
-        ? child.type.displayName || child.type.name || String(child.type)
+        ? (child.type as any).displayName || (child.type as any).name || String(child.type)
         : 'unknown';
 
       console.warn(

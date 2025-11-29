@@ -10,6 +10,7 @@ export type LocalEntry = {
   category: string;
   note?: string | null;
   currency?: string;
+  server_version?: number;
   created_at: string;
   updated_at: string;
   is_synced?: number;

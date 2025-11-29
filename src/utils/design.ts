@@ -27,6 +27,13 @@ export const shadows = {
     shadowRadius: 12,
     elevation: 4,
   },
+  large: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.08,
+    shadowRadius: 20,
+    elevation: 8,
+  },
 };
 
 export const fonts = {

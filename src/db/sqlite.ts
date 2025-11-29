@@ -16,10 +16,18 @@ const open = async (): Promise<DB> => {
 
   DB_INSTANCE = (async () => {
     let raw: any;
+    // Different expo-sqlite versions expose openDatabase or openDatabaseSync/openDatabaseAsync.
     if ((SQLite as any).openDatabaseAsync) {
       raw = await (SQLite as any).openDatabaseAsync('dhandiary.db');
+    } else if ((SQLite as any).openDatabaseSync) {
+      raw = (SQLite as any).openDatabaseSync('dhandiary.db');
+    } else if ((SQLite as any).openDatabase) {
+      raw = (SQLite as any).openDatabase('dhandiary.db');
     } else {
-      raw = SQLite.openDatabase('dhandiary.db');
+      // fallback: try calling as any
+      raw = (SQLite as any).openDatabaseSync
+        ? (SQLite as any).openDatabaseSync('dhandiary.db')
+        : null;
     }
 
     const run = (sql: string, params: any[] = []) =>

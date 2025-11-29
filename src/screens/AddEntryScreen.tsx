@@ -50,7 +50,7 @@ const AddEntryScreen: React.FC = () => {
   const [date, setDate] = useState<Date>(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
 
-  const types = ['out', 'in'];
+  const types: ('out' | 'in')[] = ['out', 'in'];
 
   useEffect(() => {
     if (editingParamId && entries) {

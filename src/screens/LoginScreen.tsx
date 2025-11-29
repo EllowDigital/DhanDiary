@@ -24,6 +24,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { spacing, colors, shadows, fonts } from '../utils/design';
+import FullScreenSpinner from '../components/FullScreenSpinner';
 
 type LoginScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList>;
 
@@ -59,7 +60,15 @@ const LoginScreen = () => {
       showToast('Logged in successfully!');
       (navigation.getParent() as any)?.replace('Main');
     } catch (err: any) {
-      Alert.alert('Login Failed', err.message);
+      const msg = err && err.message ? String(err.message) : String(err);
+      if (msg.toLowerCase().includes('timed out')) {
+        Alert.alert('Login Failed', 'Request timed out', [
+          { text: 'Retry', onPress: () => handleLogin() },
+          { text: 'OK', style: 'cancel' },
+        ]);
+      } else {
+        Alert.alert('Login Failed', msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -89,8 +98,10 @@ const LoginScreen = () => {
               containerStyle={styles.inputWrap}
               inputContainerStyle={styles.inputContainer}
               inputStyle={styles.inputText}
-              autoComplete="password"
-              textContentType="password"
+              autoComplete="email"
+              textContentType="emailAddress"
+              accessibilityLabel="Email input"
+              accessible
             />
 
             {/* Password Input */}
@@ -114,6 +125,8 @@ const LoginScreen = () => {
               inputStyle={styles.inputText}
               autoComplete="password"
               textContentType="password"
+              accessibilityLabel="Password input"
+              accessible
             />
 
             {/* Login Button */}
@@ -121,6 +134,8 @@ const LoginScreen = () => {
               title="Login"
               onPress={handleLogin}
               loading={loading}
+              accessibilityLabel="Login button"
+              accessibilityRole="button"
               icon={
                 <MaterialIcon
                   name="arrow-forward"
@@ -142,6 +157,7 @@ const LoginScreen = () => {
             </TouchableOpacity>
           </View>
         </Animated.View>
+        <FullScreenSpinner visible={loading} message="Logging in..." />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

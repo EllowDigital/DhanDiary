@@ -99,7 +99,8 @@ const CustomDrawerContent = React.memo((props: DrawerContentComponentProps) => {
                   activeOpacity={0.7}
                   onPress={() => props.navigation.navigate(route.name)}
                 >
-                  {drawerIcon && drawerIcon({ color: focused ? '#1E293B' : '#64748B', size: 26 })}
+                  {drawerIcon &&
+                    drawerIcon({ color: focused ? '#1E293B' : '#64748B', size: 26, focused })}
                   <Text
                     style={{
                       marginLeft: 14,
@@ -108,7 +109,9 @@ const CustomDrawerContent = React.memo((props: DrawerContentComponentProps) => {
                       color: focused ? '#1E293B' : '#64748B',
                     }}
                   >
-                    {drawerLabel || route.name}
+                    {typeof drawerLabel === 'function'
+                      ? drawerLabel({ color: focused ? '#1E293B' : '#64748B', focused })
+                      : drawerLabel || route.name}
                   </Text>
                 </TouchableOpacity>
               );

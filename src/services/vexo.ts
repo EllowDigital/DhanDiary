@@ -36,8 +36,9 @@ export function initVexo(key?: string | null) {
     }
   } catch (e) {
     // not installed or native code missing; remain safely non-initialized
+    // silence noisy warning in development environments
     // eslint-disable-next-line no-console
-    console.warn('vexo-analytics not available', e && e.message ? e.message : e);
+    console.debug('vexo-analytics not available');
   }
 }
 

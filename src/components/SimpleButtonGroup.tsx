@@ -8,6 +8,8 @@ type Props = {
   onPress?: (i: number) => void;
   containerStyle?: any;
   selectedButtonStyle?: any;
+  buttonStyle?: any;
+  textStyle?: any;
 };
 
 const SimpleButtonGroup = ({

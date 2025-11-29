@@ -33,7 +33,6 @@ VEXO_API_KEY=your_key_here
 
 4. The app initializes Vexo automatically in production builds if `VEXO_API_KEY` is set.
 
-
 ## Features
 
 - **Authentication**: Online-only (Login/Register).
