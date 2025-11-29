@@ -80,7 +80,8 @@ export const syncPending = async () => {
             ]
           );
           if (res && res[0] && res[0].id) {
-            await markEntrySynced(entry.local_id, res[0].id);
+              const sv = res[0].server_version !== undefined ? Number(res[0].server_version) : undefined;
+              await markEntrySynced(entry.local_id, res[0].id, sv);
             updated += 1;
           }
         } catch (err) {
@@ -138,7 +139,9 @@ export const syncPending = async () => {
         if (remoteId) {
           pushed += 1;
           try {
-            await markEntrySynced(entry.local_id, remoteId);
+            // If the insert returned server_version include it when marking local synced
+            const sv = insertRes && insertRes[0] && insertRes[0].server_version ? Number(insertRes[0].server_version) : undefined;
+            await markEntrySynced(entry.local_id, remoteId, sv);
           } catch (e) {
             // If local DB is not operational, queue mapping for later
             try {
@@ -245,7 +248,7 @@ export const pullRemote = async () => {
     }
     // fetch all remote rows for this user (including deleted flag)
     const rows = await Q(
-      `SELECT id, user_id, type, amount, category, note, currency, created_at, updated_at, deleted, client_id FROM cash_entries WHERE user_id = $1`,
+      `SELECT id, user_id, type, amount, category, note, currency, created_at, updated_at, deleted, client_id, server_version FROM cash_entries WHERE user_id = $1`,
       [session.id]
     );
 
@@ -358,6 +361,7 @@ export const pullRemote = async () => {
             updated_at: r.updated_at,
             deleted: !!r.deleted,
             client_id: r.client_id || null,
+            server_version: typeof r.server_version === 'number' ? r.server_version : undefined,
           });
           pulled += 1;
         } catch (err) {
@@ -415,6 +419,22 @@ const ensureRemoteSchema = async () => {
       }
     } catch (e) {
       console.warn('Could not verify remote client_id schema', e);
+    }
+    // Ensure remote has server_version column for deterministic merges
+    try {
+      const col3 = await query(
+        `SELECT column_name FROM information_schema.columns WHERE table_name = 'cash_entries' AND column_name = 'server_version' LIMIT 1`,
+        []
+      );
+      if (!col3 || col3.length === 0) {
+        try {
+          await query(`ALTER TABLE cash_entries ADD COLUMN server_version integer DEFAULT 0`, []);
+        } catch (e) {
+          console.warn('Failed to add server_version column on remote, continuing', e);
+        }
+      }
+    } catch (e) {
+      console.warn('Could not verify remote server_version schema', e);
     }
   } catch (e) {
     console.warn('Could not verify remote schema', e);
