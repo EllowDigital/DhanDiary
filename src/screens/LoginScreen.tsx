@@ -13,8 +13,9 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../types/navigation';
 import { loginOnline } from '../services/auth';
+import { syncBothWays } from '../services/syncManager';
 import { useToast } from '../context/ToastContext';
-import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
+import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, {
   useSharedValue,
@@ -57,6 +58,13 @@ const LoginScreen = () => {
     setLoading(true);
     try {
       await loginOnline(email, password);
+      // Immediately sync after successful login so UI and remote state are up-to-date
+      try {
+        await syncBothWays();
+      } catch (e) {
+        // don't block login on sync failures
+        console.warn('Immediate post-login sync failed', e);
+      }
       showToast('Logged in successfully!');
       (navigation.getParent() as any)?.replace('Main');
     } catch (err: any) {

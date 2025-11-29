@@ -14,7 +14,7 @@ import {
 import { Text } from '@rneui/themed';
 import SimpleButtonGroup from '../components/SimpleButtonGroup';
 import TransactionCard from '../components/TransactionCard';
-import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
+import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../hooks/useAuth';
 import { useEntries } from '../hooks/useEntries';

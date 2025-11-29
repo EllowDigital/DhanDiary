@@ -53,7 +53,8 @@ CREATE INDEX IF NOT EXISTS idx_entries_type ON cash_entries (type);
 CREATE INDEX IF NOT EXISTS idx_entries_created_at ON cash_entries (created_at);
 CREATE INDEX IF NOT EXISTS idx_entries_need_sync ON cash_entries (need_sync);
 -- Unique index for client_id but allow multiple NULLs (partial index)
-CREATE UNIQUE INDEX IF NOT EXISTS idx_cash_entries_client_id_unique ON cash_entries (client_id) WHERE client_id IS NOT NULL;
+-- create a unique index on client_id so `ON CONFLICT (client_id)` works reliably
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cash_entries_client_id ON cash_entries (client_id);
 
 -- Ensure legacy databases gain the new columns if missing (idempotent)
 ALTER TABLE cash_entries ADD COLUMN IF NOT EXISTS client_id TEXT;

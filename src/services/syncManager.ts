@@ -7,31 +7,31 @@ import {
   getPendingProfileUpdates,
   markPendingProfileProcessed,
   isDbOperational,
+  getSession,
+  saveSession,
+  queueLocalRemoteMapping,
+  queueRemoteRow,
+  flushQueuedLocalRemoteMappings,
+  flushQueuedRemoteRows,
+  getUnsyncedEntries,
 } from '../db/localDb';
 import {
-  getUnsyncedEntries,
-  markEntrySynced,
-  upsertLocalFromRemote,
-  markLocalDeletedByRemoteId,
   getLocalByRemoteId,
   getLocalByClientId,
+  upsertLocalFromRemote,
+  markLocalDeletedByRemoteId,
+  markEntrySynced,
 } from '../db/entries';
-import { getSession, saveSession } from '../db/session';
-import {
-  queueRemoteRow,
-  queueLocalRemoteMapping,
-  getQueuedLocalRemoteMappings,
-  removeQueuedRemoteRow,
-  removeQueuedLocalRemoteMapping,
-  flushQueuedRemoteRows,
-  flushQueuedLocalRemoteMappings,
-} from '../db/localDb';
-import { query } from '../api/neonClient';
 
+import { query } from '../api/neonClient';
+import vexoService from './vexo';
 const Q = (sql: string, params: any[] = []) => query(sql, params, { retries: 2, timeoutMs: 15000 });
 
+// Module-level state
+let _syncInProgress: boolean = false;
 let _unsubscribe: (() => void) | null = null;
-let _syncInProgress = false;
+let _foregroundTimer: any = null;
+let _backgroundFetchInstance: any = null;
 
 export const syncPending = async () => {
   await initDb();
@@ -47,120 +47,175 @@ export const syncPending = async () => {
   let updated = 0;
   let deleted = 0;
 
-  for (const entry of pending) {
+  // Partition pending rows into deletions, inserts, updates
+  const deletions = pending.filter((e) => e.is_deleted && e.remote_id).map((e) => String(e.remote_id));
+  const toMarkLocalDeletedOnly = pending.filter((e) => e.is_deleted && !e.remote_id);
+  const inserts = pending.filter((e) => !e.remote_id && !e.is_deleted);
+  const updates = pending.filter((e) => e.remote_id && e.need_sync);
+
+  // Batch deletions
+  if (deletions.length > 0) {
     try {
-      // Handle deletions first
-      if (entry.is_deleted) {
-        if (entry.remote_id) {
-          try {
-            await Q('DELETE FROM cash_entries WHERE id = $1', [entry.remote_id]);
-            deleted += 1;
-          } catch (err) {
-            console.error('Failed to delete remote row for', entry.local_id, err);
-            continue;
-          }
-        }
-        await markEntrySynced(entry.local_id, entry.remote_id || undefined);
-        continue;
-      }
-
-      // If we have a remote_id and the local row explicitly needs sync, update remote
-      if (entry.remote_id && entry.need_sync) {
+      const delRes = await Q('DELETE FROM cash_entries WHERE id = ANY($1) RETURNING id', [deletions]);
+      deleted += (delRes && delRes.length) || deletions.length;
+    } catch (err) {
+      console.error('Failed to batch delete remote rows', err);
+      for (const rid of deletions) {
         try {
-          const res = await Q(
-            `UPDATE cash_entries SET amount = $1, type = $2, category = $3, note = $4, currency = $5, updated_at = $6, need_sync = true WHERE id = $7 RETURNING id`,
-            [
-              entry.amount,
-              entry.type,
-              entry.category,
-              entry.note || null,
-              entry.currency || 'INR',
-              entry.updated_at,
-              entry.remote_id,
-            ]
-          );
-          if (res && res[0] && res[0].id) {
-              const sv = res[0].server_version !== undefined ? Number(res[0].server_version) : undefined;
-              await markEntrySynced(entry.local_id, res[0].id, sv);
-            updated += 1;
-          }
-        } catch (err) {
-          console.error('Failed to update remote entry', entry.local_id, err);
+          await Q('DELETE FROM cash_entries WHERE id = $1', [rid]);
+          deleted += 1;
+        } catch (e) {
+          console.error('Failed to delete remote row', rid, e);
         }
-        continue;
       }
-
-      // If we have a remote_id but local doesn't need sync, skip
-      if (entry.remote_id && !entry.need_sync) {
-        continue;
-      }
-
-      // Otherwise insert new remote row and update local with returned id
+    }
+    // Mark local rows as synced where appropriate
+    for (const d of pending.filter((e) => e.is_deleted)) {
       try {
-        // Try to insert with client_id mapping so remote can dedupe.
-        // Use ON CONFLICT DO NOTHING to avoid raising unique-constraint errors
-        // when another device already created a row with the same client_id.
-        const insertRes = await Q(
-          `INSERT INTO cash_entries (user_id, type, amount, category, note, currency, created_at, updated_at, need_sync, client_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false, $9) ON CONFLICT (client_id) DO NOTHING RETURNING id`,
-          [
-            entry.user_id,
-            entry.type,
-            entry.amount,
-            entry.category,
-            entry.note || null,
-            entry.currency || 'INR',
-            entry.created_at,
-            entry.updated_at,
-            entry.local_id,
-          ]
-        );
-
-        let remoteId = insertRes && insertRes[0] && insertRes[0].id ? insertRes[0].id : undefined;
-
-        if (!remoteId) {
-          // Insert did nothing (conflict) or returned no id — try to locate the remote row by client_id
-          try {
-            const found = await Q(`SELECT id FROM cash_entries WHERE client_id = $1 LIMIT 1`, [
-              entry.local_id,
-            ]);
-            if (found && found[0] && found[0].id) {
-              remoteId = String(found[0].id);
-            }
-          } catch (e) {
-            console.error(
-              'Failed to locate remote by client_id after insert (no exception path)',
-              entry.local_id,
-              e
-            );
-          }
-        }
-
-        if (remoteId) {
-          pushed += 1;
-          try {
-            // If the insert returned server_version include it when marking local synced
-            const sv = insertRes && insertRes[0] && insertRes[0].server_version ? Number(insertRes[0].server_version) : undefined;
-            await markEntrySynced(entry.local_id, remoteId, sv);
-          } catch (e) {
-            // If local DB is not operational, queue mapping for later
-            try {
-              await queueLocalRemoteMapping(entry.local_id, remoteId);
-              console.log('DB not operational, queued local->remote mapping for', entry.local_id);
-            } catch (q) {
-              console.warn('Failed to queue local->remote mapping after insert', entry.local_id, q);
-            }
-          }
-        }
-      } catch (err: any) {
-        // Generic failure (network/permission/etc.) — log and continue. We avoid
-        // treating unique-constraint errors specially because ON CONFLICT prevents them.
-        console.error(`Failed to insert remote entry ${entry.local_id}`, err);
-      }
-    } catch (error) {
-      console.error(`Failed to sync entry ${entry.local_id}`, error);
+        await markEntrySynced(d.local_id, d.remote_id || undefined);
+      } catch (e) {}
     }
   }
+
+  // If rows were marked deleted locally but had no remote_id, mark them synced (nothing to delete remotely)
+  for (const d of toMarkLocalDeletedOnly) {
+    try {
+      await markEntrySynced(d.local_id, undefined);
+    } catch (e) {}
+  }
+
+  // Batch inserts
+  if (inserts.length > 0) {
+    const values: any[] = [];
+    const placeholders: string[] = [];
+    let idx = 1;
+    for (const it of inserts) {
+      placeholders.push(`($${idx++},$${idx++},$${idx++},$${idx++},$${idx++},$${idx++},$${idx++},$${idx++},false,$${idx++})`);
+      values.push(
+        it.user_id,
+        it.type,
+        it.amount,
+        it.category,
+        it.note || null,
+        it.currency || 'INR',
+        it.created_at,
+        it.updated_at,
+        it.local_id
+      );
+    }
+    const sql = `INSERT INTO cash_entries (user_id, type, amount, category, note, currency, created_at, updated_at, need_sync, client_id) VALUES ${placeholders.join(',')} ON CONFLICT (client_id) DO NOTHING RETURNING id, client_id, server_version`;
+    try {
+      const res = await Q(sql, values);
+      if (res && res.length) {
+        for (const r of res) {
+          const localId = String(r.client_id);
+          try {
+            await markEntrySynced(localId, String(r.id), typeof r.server_version === 'number' ? Number(r.server_version) : undefined);
+            pushed += 1;
+          } catch (e) {
+            try {
+              await queueLocalRemoteMapping(localId, String(r.id));
+            } catch (q) {}
+          }
+        }
+      }
+    } catch (err: any) {
+      if (err && typeof err.message === 'string' && err.message.includes('no unique or exclusion constraint')) {
+        // fall back to per-row resilient insert
+        for (const it of inserts) {
+          try {
+            const insertRes = await Q(
+              `INSERT INTO cash_entries (user_id, type, amount, category, note, currency, created_at, updated_at, need_sync, client_id)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false, $9) RETURNING id, server_version`,
+              [
+                it.user_id,
+                it.type,
+                it.amount,
+                it.category,
+                it.note || null,
+                it.currency || 'INR',
+                it.created_at,
+                it.updated_at,
+                it.local_id,
+              ]
+            );
+            let remoteId = insertRes && insertRes[0] && insertRes[0].id ? insertRes[0].id : undefined;
+            if (!remoteId) {
+              const found = await Q(`SELECT id, server_version FROM cash_entries WHERE client_id = $1 LIMIT 1`, [it.local_id]);
+              if (found && found[0] && found[0].id) {
+                remoteId = found[0].id;
+              }
+            }
+            if (remoteId) {
+              const sv = insertRes && insertRes[0] && insertRes[0].server_version ? Number(insertRes[0].server_version) : undefined;
+              try {
+                await markEntrySynced(it.local_id, String(remoteId), sv);
+                pushed += 1;
+              } catch (e) {
+                try {
+                  await queueLocalRemoteMapping(it.local_id, String(remoteId));
+                } catch (q) {}
+              }
+            }
+          } catch (e) {
+            console.error('Failed to insert remote entry (fallback)', it.local_id, e);
+          }
+        }
+      } else {
+        console.error('Failed to batch insert remote entries', err);
+      }
+    }
+  }
+
+  // Batch updates using UPDATE ... FROM (VALUES ...)
+  if (updates.length > 0) {
+    const vals: any[] = [];
+    const rowPlaceholders: string[] = [];
+    let j = 1;
+    for (const u of updates) {
+      rowPlaceholders.push(`($${j++},$${j++},$${j++},$${j++},$${j++},$${j++},$${j++})`);
+      vals.push(u.remote_id, u.amount, u.type, u.category, u.note || null, u.currency || 'INR', u.updated_at);
+    }
+    const updateSql = `UPDATE cash_entries AS c SET amount = v.amount, type = v.type, category = v.category, note = v.note, currency = v.currency, updated_at = v.updated_at, need_sync = true FROM (VALUES ${rowPlaceholders.join(',')}) AS v(id, amount, type, category, note, currency, updated_at) WHERE c.id = v.id RETURNING c.id, server_version`;
+    try {
+      const updRes = await Q(updateSql, vals);
+      if (updRes && updRes.length) {
+        const remoteToLocal: Record<string, string> = {};
+        for (const u of updates) {
+          remoteToLocal[String(u.remote_id)] = u.local_id;
+        }
+        for (const r of updRes) {
+          const localId = remoteToLocal[String(r.id)];
+          if (localId) {
+            try {
+              await markEntrySynced(localId, String(r.id), typeof r.server_version === 'number' ? Number(r.server_version) : undefined);
+              updated += 1;
+            } catch (e) {}
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to batch update remote entries, falling back to per-row', err);
+      for (const u of updates) {
+        try {
+          const res = await Q(
+            `UPDATE cash_entries SET amount = $1, type = $2, category = $3, note = $4, currency = $5, updated_at = $6, need_sync = true WHERE id = $7 RETURNING id, server_version`,
+            [u.amount, u.type, u.category, u.note || null, u.currency || 'INR', u.updated_at, u.remote_id]
+          );
+          if (res && res[0] && res[0].id) {
+            const sv = res[0].server_version !== undefined ? Number(res[0].server_version) : undefined;
+            try {
+              await markEntrySynced(u.local_id, String(res[0].id), sv);
+              updated += 1;
+            } catch (e) {}
+          }
+        } catch (e) {
+          console.error('Failed to update remote entry', u.local_id, e);
+        }
+      }
+    }
+  }
+
   console.log('Sync complete');
   return { pushed, updated, deleted };
 };
@@ -259,8 +314,61 @@ export const pullRemote = async () => {
 
     for (const r of rows) {
       try {
-        // if deleted remotely, mark local as deleted
+        // if deleted remotely, prefer local if local has pending changes
         if (r.deleted) {
+          // attempt to find a local row mapped to this remote
+          let localForDeleted: any = null;
+          try {
+            localForDeleted = await getLocalByRemoteId(String(r.id));
+          } catch (e) {}
+          if (!localForDeleted && r.client_id) {
+            try {
+              localForDeleted = await getLocalByClientId(String(r.client_id));
+            } catch (e) {}
+          }
+
+          // If local exists and still needs sync, treat local as intent-to-keep:
+          // recreate a remote row from the local copy and map it.
+          if (localForDeleted && (localForDeleted as any).need_sync) {
+            try {
+              const insertRes = await Q(
+                `INSERT INTO cash_entries (user_id, type, amount, category, note, currency, created_at, updated_at, need_sync, client_id)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false, $9) RETURNING id, server_version`,
+                [
+                  localForDeleted.user_id,
+                  localForDeleted.type,
+                  localForDeleted.amount,
+                  localForDeleted.category,
+                  localForDeleted.note || null,
+                  localForDeleted.currency || 'INR',
+                  localForDeleted.created_at,
+                  localForDeleted.updated_at,
+                  localForDeleted.local_id,
+                ]
+              );
+              const newRemoteId = insertRes && insertRes[0] && insertRes[0].id ? insertRes[0].id : undefined;
+              const sv = insertRes && insertRes[0] && insertRes[0].server_version ? Number(insertRes[0].server_version) : undefined;
+              if (newRemoteId) {
+                try {
+                  await markEntrySynced(localForDeleted.local_id, String(newRemoteId), sv);
+                } catch (e) {
+                  try {
+                    await queueLocalRemoteMapping(localForDeleted.local_id, String(newRemoteId));
+                    console.log('DB not operational, queued local->remote mapping for', localForDeleted.local_id);
+                  } catch (q) {
+                    console.warn('Failed to queue local->remote mapping after recreate', localForDeleted.local_id, q);
+                  }
+                }
+              }
+            } catch (err) {
+              console.error('Failed to recreate remote row for locally-modified deleted remote', localForDeleted.local_id, err);
+              // fallback to marking local deleted
+              await markLocalDeletedByRemoteId(String(r.id));
+            }
+            continue;
+          }
+
+          // otherwise mark local deleted to mirror remote
           await markLocalDeletedByRemoteId(String(r.id));
           continue;
         }
@@ -451,6 +559,9 @@ export const syncBothWays = async () => {
   _syncInProgress = true;
   let result = { pushed: 0, updated: 0, deleted: 0, pulled: 0, merged: 0, total: 0 };
   try {
+    try {
+      vexoService.customEvent && vexoService.customEvent('sync_start', { when: new Date().toISOString() });
+    } catch (e) {}
     // ensure remote schema can accept our metadata
     await ensureRemoteSchema();
     // Flush any pending profile updates first
@@ -490,9 +601,17 @@ export const syncBothWays = async () => {
     }
 
     result = { pushed, updated, deleted, pulled, merged, total };
+    try {
+      vexoService.customEvent &&
+        vexoService.customEvent('sync_complete', { pushed, updated, deleted, pulled, merged, total });
+    } catch (e) {}
     return result;
   } finally {
     _syncInProgress = false;
+    try {
+      // If the sync finished but recorded no activity, emit a small heartbeat
+      vexoService.customEvent && vexoService.customEvent('sync_ended', { when: new Date().toISOString() });
+    } catch (e) {}
   }
 };
 
@@ -531,5 +650,70 @@ export const stopAutoSyncListener = () => {
   if (_unsubscribe) {
     _unsubscribe();
     _unsubscribe = null;
+  }
+};
+
+// Foreground scheduler: runs periodic sync while app is in foreground.
+export const startForegroundSyncScheduler = (intervalMs: number = 15000) => {
+  if (_foregroundTimer) return;
+  _foregroundTimer = setInterval(() => {
+    if (!_syncInProgress) {
+      syncBothWays().catch((err) => console.error('Foreground scheduled sync failed', err));
+    }
+  }, intervalMs);
+};
+
+export const stopForegroundSyncScheduler = () => {
+  if (_foregroundTimer) {
+    clearInterval(_foregroundTimer);
+    _foregroundTimer = null;
+  }
+};
+
+// Background fetch support (optional dependency: react-native-background-fetch)
+// If the library isn't available we gracefully no-op.
+export const startBackgroundFetch = async () => {
+  if (_backgroundFetchInstance) return;
+  try {
+    // require dynamically to avoid a hard dependency
+    const BackgroundFetch = require('react-native-background-fetch');
+    _backgroundFetchInstance = BackgroundFetch;
+    BackgroundFetch.configure(
+      {
+        minimumFetchInterval: 15, // minutes (OS-driven)
+        stopOnTerminate: false,
+        enableHeadless: true,
+        requiredNetworkType: BackgroundFetch.NETWORK_TYPE_ANY,
+      },
+      async (taskId: string) => {
+        try {
+          if (!_syncInProgress) await syncBothWays();
+        } catch (err) {
+          console.error('Background fetch sync failed', err);
+        } finally {
+          try {
+            BackgroundFetch.finish(taskId);
+          } catch (e) {
+            // ignore
+          }
+        }
+      },
+      (error: any) => {
+        console.warn('BackgroundFetch failed to start', error);
+      }
+    );
+  } catch (e) {
+    console.warn('react-native-background-fetch not available; background fetch disabled', e);
+  }
+};
+
+export const stopBackgroundFetch = async () => {
+  if (!_backgroundFetchInstance) return;
+  try {
+    _backgroundFetchInstance.stop();
+  } catch (e) {
+    // ignore
+  } finally {
+    _backgroundFetchInstance = null;
   }
 };

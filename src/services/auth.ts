@@ -80,6 +80,19 @@ export const loginOnline = async (email: string, password: string) => {
 };
 
 export const logout = async () => {
+  try {
+    // attempt a final sync before clearing session so pending local changes are pushed
+    const { syncBothWays } = require('./syncManager');
+    try {
+      await syncBothWays();
+    } catch (e) {
+      // ignore sync failures during logout
+      console.warn('Final sync before logout failed', e);
+    }
+  } catch (e) {
+    // ignore if syncManager can't be required
+  }
+
   await clearSession();
 };
 

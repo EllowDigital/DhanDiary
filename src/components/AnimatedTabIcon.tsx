@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated } from 'react-native';
-import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
-import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
+import MaterialIcon from '@expo/vector-icons/MaterialIcons';
+import MaterialCommunityIcon from '@expo/vector-icons/MaterialCommunityIcons';
 
 type Props = {
   name: string;

@@ -8,7 +8,7 @@ import {
   Text as RNText,
 } from 'react-native';
 import { Text } from '@rneui/themed';
-import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
+import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { RectButton } from 'react-native-gesture-handler';
 import dayjs from 'dayjs';

@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { Text } from '@rneui/themed';
 import { useNavigation, NavigationProp } from '@react-navigation/native';
-import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
+import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const scale = SCREEN_WIDTH / 390;
@@ -48,7 +48,7 @@ const MoreScreen: React.FC = () => {
     >
       <View style={styles.rowLeft}>
         <View style={styles.iconContainer}>
-          <MaterialIcon name={icon} size={font(22)} color="#3B82F6" />
+          <MaterialIcon name={icon as any} size={font(22)} color="#3B82F6" />
         </View>
         <Text style={styles.rowText}>{label}</Text>
       </View>

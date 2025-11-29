@@ -131,7 +131,7 @@ const AboutScreen: React.FC = () => {
 };
 
 // Re-import MaterialIcon if it's not already imported
-import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
+import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 
 export default AboutScreen;
 

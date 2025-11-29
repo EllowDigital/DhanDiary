@@ -78,6 +78,12 @@ import { useOfflineSync } from './src/hooks/useOfflineSync';
 import { useAuth } from './src/hooks/useAuth';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  startForegroundSyncScheduler,
+  stopForegroundSyncScheduler,
+  startBackgroundFetch,
+  stopBackgroundFetch,
+} from './src/services/syncManager';
 let Sentry: any = null;
 let LogRocket: any = null;
 try {
@@ -261,6 +267,35 @@ export default Sentry.wrap(function App() {
 
     setup();
   }, []);
+
+  // Start schedulers once DB is ready
+  React.useEffect(() => {
+    if (!dbReady) return;
+    // Start foreground scheduler with default 15s interval
+    try {
+      startForegroundSyncScheduler(15000);
+    } catch (e) {
+      console.warn('Failed to start foreground scheduler', e);
+    }
+
+    // Attempt to start background fetch (safe no-op when library missing)
+    (async () => {
+      try {
+        await startBackgroundFetch();
+      } catch (e) {
+        console.warn('Background fetch start failed or unavailable', e);
+      }
+    })();
+
+    return () => {
+      try {
+        stopForegroundSyncScheduler();
+      } catch (e) {}
+      try {
+        stopBackgroundFetch();
+      } catch (e) {}
+    };
+  }, [dbReady]);
 
   if (!dbReady) {
     // show minimal fallback while DB initializing or failed

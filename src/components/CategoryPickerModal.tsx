@@ -1,7 +1,7 @@
 import React from 'react';
 import { Modal, View, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { Text, Button } from '@rneui/themed';
-import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
+import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 
 const DEFAULT_CATEGORIES = [
   'General',
