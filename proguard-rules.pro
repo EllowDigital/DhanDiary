@@ -29,3 +29,24 @@
 -keepclassmembers class * implements android.os.Parcelable {
   public static final android.os.Parcelable$Creator CREATOR;
 }
+
+# Keep and ignore warnings for Coil (image loading) and related network fetchers
+# Some Coil artifact classes are referenced dynamically; keep them to avoid R8 stripping.
+-keep class coil3.** { *; }
+-dontwarn coil3.**
+
+# Keep OkHttp/Network fetchers referenced by Coil
+-keep class coil3.network.** { *; }
+-keep class okhttp3.** { *; }
+
+# Some libraries reference javax.lang.model.* (annotation processors) which is not
+# available on Android. Suppress warnings rather than fail the build.
+-dontwarn javax.lang.model.**
+
+# Google errorprone annotation references can cause missing-class R8 failures in
+# some build environments — keep and suppress warnings for the annotations.
+-dontwarn com.google.errorprone.annotations.**
+-keep class com.google.errorprone.annotations.** { *; }
+
+# Keep runtime annotations so reflection/annotation-based lookups still work
+-keepattributes *Annotation*
