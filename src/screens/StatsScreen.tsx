@@ -12,6 +12,7 @@ import { useEntries } from '../hooks/useEntries';
 import { useAuth } from '../hooks/useAuth';
 import { subscribeEntries } from '../utils/dbEvents';
 import dayjs from 'dayjs';
+import { getStartDateForFilter, getDaysCountForFilter } from '../utils/stats';
 import { LineChart, PieChart } from 'react-native-chart-kit';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -49,27 +50,7 @@ const StatsScreen = () => {
   const [filter, setFilter] = useState('7D');
 
   const filteredEntries = useMemo(() => {
-    const now = dayjs();
-    let startDate;
-
-    switch (filter) {
-      case '7D':
-        startDate = now.subtract(6, 'day').startOf('day');
-        break;
-      case '30D':
-        startDate = now.subtract(29, 'day').startOf('day');
-        break;
-      case 'This Month':
-        startDate = now.startOf('month');
-        break;
-      case 'This Year':
-        startDate = now.startOf('year');
-        break;
-      default:
-        startDate = now.subtract(6, 'day').startOf('day');
-    }
-
-    // include entries on the start boundary (use isBefore to exclude older entries)
+    const startDate = getStartDateForFilter(filter);
     return entries.filter((e: any) => {
       const d = dayjs(e.date || e.created_at);
       return !d.isBefore(startDate);
@@ -127,21 +108,8 @@ const StatsScreen = () => {
 
     if (filter !== 'This Year') {
       const now = dayjs();
-      let startDate;
-      let days = 0;
-      if (filter === '7D') {
-        days = 7;
-        startDate = now.subtract(6, 'day').startOf('day');
-      } else if (filter === '30D') {
-        days = 30;
-        startDate = now.subtract(29, 'day').startOf('day');
-      } else if (filter === 'This Month') {
-        startDate = now.startOf('month');
-        days = now.diff(startDate, 'day') + 1;
-      } else {
-        days = 7;
-        startDate = now.subtract(6, 'day').startOf('day');
-      }
+      const startDate = getStartDateForFilter(filter, now);
+      const days = getDaysCountForFilter(filter, now);
 
       // Determine label density to avoid overlap (max ~10 labels shown)
       const maxLabels = 10;
@@ -149,8 +117,8 @@ const StatsScreen = () => {
 
       for (let i = 0; i < days; i++) {
         const date = startDate.add(i, 'day');
-        // show only some labels to prevent clutter
-        const labelText = i % step === 0 ? date.format(format) : '';
+        // show abbreviated label (day number) and hide some labels based on step
+        const labelText = i % step === 0 ? date.format(shortFormat) : '';
         labels.push(labelText);
         inData.push(0);
         outData.push(0);
@@ -247,6 +215,10 @@ const StatsScreen = () => {
           height={280}
           chartConfig={chartConfig}
           style={styles.chartStyle}
+          // shorten x-axis labels and keep spacing predictable
+          formatXLabel={(label) => (typeof label === 'string' ? label : String(label))}
+          withInnerLines={false}
+          withOuterLines={false}
         />
       );
     } catch (error) {

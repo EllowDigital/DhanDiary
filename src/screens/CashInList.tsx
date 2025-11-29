@@ -40,7 +40,8 @@ const CashInList = () => {
   }));
 
   const handleEdit = (item: any) => {
-    navigation.navigate('AddEntry', { local_id: item.local_id });
+    // Open edit in the History inline editor for consistency
+    navigation.navigate('History', { edit_local_id: item.local_id });
   };
 
   const handleDelete = async (id: string) => {

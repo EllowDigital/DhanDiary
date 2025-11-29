@@ -68,13 +68,16 @@ const CustomDrawerContent = React.memo((props: DrawerContentComponentProps) => {
     <DrawerContentScrollView {...props} contentContainerStyle={styles.container}>
       {/* HEADER */}
       <Animated.View style={[styles.headerCard, aStyle]}>
-        <Image
-          source={require('../../assets/icon.png')}
-          style={[styles.logo, { width: iconSize, height: iconSize }]}
-        />
-
-        <Text style={styles.appName}>DhanDiary</Text>
-        <Text style={styles.username}>{user?.name || 'Guest Profile'}</Text>
+        <View style={styles.headerRow}>
+          <Image
+            source={require('../../assets/icon.png')}
+            style={[styles.smallLogo, { width: 56, height: 56 }]}
+          />
+          <View style={styles.headerTextWrap}>
+            <Text style={styles.heyText}>Hey,</Text>
+            <Text style={styles.usernameBig}>{user?.name || 'Guest'}</Text>
+          </View>
+        </View>
       </Animated.View>
 
       {/* DRAWER ITEM LIST */}

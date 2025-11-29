@@ -29,6 +29,7 @@ const HistoryScreen = () => {
   const { user } = useAuth();
   const { entries = [], isLoading, updateEntry, deleteEntry } = useEntries(user?.id);
   const navigation = useNavigation<any>();
+  const route = require('@react-navigation/native').useRoute<any>();
 
   const [filtersVisible, setFiltersVisible] = useState(false);
   const [typeIndex, setTypeIndex] = useState(0); // all / in / out
@@ -118,6 +119,16 @@ const HistoryScreen = () => {
   // -----------------------
   // EDIT ENTRY
   // -----------------------
+  // If the screen was navigated to with a param to open an editor, do that now.
+  React.useEffect(() => {
+    try {
+      const editId = route?.params?.edit_local_id;
+      if (editId) {
+        const found = entries.find((e) => e.local_id === editId);
+        if (found) openEdit(found);
+      }
+    } catch (e) {}
+  }, [route?.params, entries]);
   const openEdit = (item: any) => {
     setEditingEntry(item);
     setEditAmount(String(item.amount));
