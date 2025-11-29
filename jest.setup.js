@@ -16,9 +16,15 @@ jest.mock('@react-native-community/netinfo', () => ({
 }));
 
 // Mock the neon client module used by the app so tests don't attempt network calls
-jest.mock('src/api/neonClient', () => ({
-  query: jest.fn().mockResolvedValue([]),
-}));
+try {
+  jest.mock('src/api/neonClient', () => ({ query: jest.fn().mockResolvedValue([]) }));
+} catch (e) {}
+try {
+  jest.mock('../src/api/neonClient', () => ({ query: jest.fn().mockResolvedValue([]) }));
+} catch (e) {}
+try {
+  jest.mock('./src/api/neonClient', () => ({ query: jest.fn().mockResolvedValue([]) }));
+} catch (e) {}
 
 // Provide a lightweight global stub for any other native modules the tests might import
 global.__TEST__ = true;

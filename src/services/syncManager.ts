@@ -658,7 +658,16 @@ export const startForegroundSyncScheduler = (intervalMs: number = 15000) => {
   if (_foregroundTimer) return;
   _foregroundTimer = setInterval(() => {
     if (!_syncInProgress) {
-      syncBothWays().catch((err) => console.error('Foreground scheduled sync failed', err));
+      try {
+        // require dynamically so tests can replace the exported implementation
+        const mod: any = require('./syncManager');
+        if (mod && typeof mod.syncBothWays === 'function') {
+          mod.syncBothWays().catch((err: any) => console.error('Foreground scheduled sync failed', err));
+        }
+      } catch (e) {
+        // fallback to direct call
+        syncBothWays().catch((err) => console.error('Foreground scheduled sync failed', err));
+      }
     }
   }, intervalMs);
 };
