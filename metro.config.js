@@ -1,5 +1,6 @@
-const { getDefaultConfig } = require('expo/metro-config');
 
-const config = getDefaultConfig(__dirname);
+import { getDefaultConfig } from 'expo/metro-config';
 
-module.exports = config;
+const config = getDefaultConfig(process.cwd());
+
+export default config;
