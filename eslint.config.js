@@ -78,6 +78,7 @@ export default [
       'babel.config.js',
       'metro.config.js',
       'jest.config.js',
+      'jest.setup.js',
       'tailwind.config.js',
       'postcss.config.js',
       '*.config.js',
@@ -95,10 +96,35 @@ export default [
         __dirname: true,
         process: true,
         console: true,
+        global: true,
       },
     },
 
     rules: {},
+  },
+
+  // -------------------------------------------------------
+  // 2b. Test files - enable jest env and avoid TS project parser for JS helpers
+  // -------------------------------------------------------
+  {
+    files: ['__tests__/**', '**/*.test.js', '**/*.test.ts', '**/*.spec.ts', '**/*.test.tsx'],
+    languageOptions: {
+      parserOptions: {
+        project: null,
+      },
+      globals: {
+        jest: true,
+        describe: true,
+        it: true,
+        test: true,
+        expect: true,
+        beforeAll: true,
+        afterAll: true,
+        beforeEach: true,
+        afterEach: true,
+        global: true,
+      },
+    },
   },
 
   // -------------------------------------------------------

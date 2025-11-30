@@ -27,11 +27,11 @@ describe('Foreground scheduler', () => {
       .mockResolvedValue({ pushed: 0, updated: 0, deleted: 0, pulled: 0, merged: 0, total: 0 });
 
     // Spy on setInterval so we can capture the timer callback and invoke it manually
-    const timers: Function[] = [];
+    const timers: Array<() => Promise<void> | void> = [];
     const setIntervalSpy = jest
       .spyOn(global, 'setInterval' as any)
       .mockImplementation((...args: any[]) => {
-        const fn = args[0];
+        const fn = args[0] as () => Promise<void> | void;
         timers.push(fn);
         return 123 as any;
       });

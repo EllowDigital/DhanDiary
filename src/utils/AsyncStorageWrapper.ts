@@ -7,7 +7,7 @@ let AsyncStorageImpl: any = null;
 
 try {
   // Try to require the community AsyncStorage module
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+
   const mod = require('@react-native-async-storage/async-storage');
   AsyncStorageImpl = mod && mod.default ? mod.default : mod;
   // If it appears unusable, fall through to fallback

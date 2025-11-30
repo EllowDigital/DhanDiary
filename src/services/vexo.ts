@@ -17,7 +17,7 @@ export function initVexo(key?: string | null) {
   if (initialized) return;
   try {
     // dynamic require so missing native module won't crash tests or Expo Go
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+
     const mod = require('vexo-analytics');
     // package may export default or named
     const candidate = (mod && (mod.vexo || mod.default || mod)) as any;
@@ -28,7 +28,7 @@ export function initVexo(key?: string | null) {
           vexoFn(key);
         } catch (e) {
           // ignore init errors
-          // eslint-disable-next-line no-console
+
           console.warn('vexo init failed', e);
         }
       }
@@ -37,7 +37,7 @@ export function initVexo(key?: string | null) {
   } catch (e) {
     // not installed or native code missing; remain safely non-initialized
     // silence noisy warning in development environments
-    // eslint-disable-next-line no-console
+
     console.debug('vexo-analytics not available');
   }
 }
@@ -46,7 +46,7 @@ export async function identifyDevice(id: string | null) {
   try {
     if (!vexoFn) return;
     // try named export
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+
     const mod = require('vexo-analytics');
     const fn = mod && (mod.identifyDevice || mod.default?.identifyDevice);
     if (typeof fn === 'function') return await fn(id);

@@ -159,8 +159,9 @@ const HistoryScreen = () => {
         openEdit(editItem);
         try {
           // clear the navigation params so we don't reopen repeatedly
-          navigation.setParams &&
+          if (navigation.setParams) {
             navigation.setParams({ edit_item: undefined, edit_local_id: undefined });
+          }
         } catch (e) {}
         return;
       }
@@ -172,8 +173,9 @@ const HistoryScreen = () => {
         if (found) {
           openEdit(found);
           try {
-            navigation.setParams &&
+            if (navigation.setParams) {
               navigation.setParams({ edit_item: undefined, edit_local_id: undefined });
+            }
           } catch (e) {}
         } else {
           // try DB lookup to ensure freshest data even if entries not yet loaded
@@ -183,8 +185,9 @@ const HistoryScreen = () => {
               if (r) {
                 openEdit(r);
                 try {
-                  navigation.setParams &&
+                  if (navigation.setParams) {
                     navigation.setParams({ edit_item: undefined, edit_local_id: undefined });
+                  }
                 } catch (e) {}
               }
             } catch (e) {
@@ -218,7 +221,9 @@ const HistoryScreen = () => {
       // small timeout to wait for modal animation
       const t = setTimeout(() => {
         try {
-          amountInputRef.current && amountInputRef.current.focus && amountInputRef.current.focus();
+          if (amountInputRef.current && amountInputRef.current.focus) {
+            amountInputRef.current.focus();
+          }
         } catch (e) {}
       }, 120);
       return () => clearTimeout(t);
