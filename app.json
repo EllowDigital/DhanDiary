@@ -3,7 +3,7 @@
     "owner": "ellowdigital",
     "name": "DhanDiary",
     "slug": "dhandiary",
-    "version": "2.2.0",
+    "version": "2.3.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -15,11 +15,11 @@
     },
     "ios": {
       "supportsTablet": true,
-      "buildNumber": "20251130"
+      "buildNumber": "20251202"
     },
     "android": {
       "package": "com.ellowdigital.dhandiary",
-      "versionCode": 20251130,
+      "versionCode": 20251202,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -29,31 +29,17 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "expo-font",
       "expo-sqlite",
-      [
-        "@sentry/react-native/expo",
-        {
-          "url": "https://sentry.io",
-          "project": "dhandiary",
-          "organization": "ellowdigital"
-        }
-      ],
       [
         "expo-build-properties",
         {
           "android": {
-                "enableHermes": true,
-                "enableProguardInReleaseBuilds": false,
-                "minifyEnabled": false,
-                "shrinkResources": true,
-                "gradleProperties": {
-                  "android.enableR8": "false",
-                  "org.gradle.jvmargs": "-Xmx4096m"
-                },
-                "ndk": {
-                  "debugSymbolLevel": "NONE"
-                }
-              }
+            "enableHermes": true,
+            "ndk": {
+              "debugSymbolLevel": "NONE"
+            }
+          }
         }
       ]
     ],

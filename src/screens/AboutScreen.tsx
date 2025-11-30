@@ -101,11 +101,7 @@ const AboutScreen: React.FC = () => {
             label="Environment"
             value={process.env.NODE_ENV === 'production' ? 'Production' : 'Development'}
           />
-          <InfoRow label="Commit" value={String(BUILD_COMMIT).slice(0, 12)} />
-          <InfoRow
-            label="Built"
-            value={BUILD_TIMESTAMP ? new Date(BUILD_TIMESTAMP).toLocaleString() : 'local/dev'}
-          />
+          {/* Commit and build timestamp removed from About screen for privacy/stability */}
 
           <Text style={styles.description}>
             DhanDiary helps you manage expenses, income, and personal finances with a powerful

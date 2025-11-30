@@ -54,6 +54,7 @@ export const query = async (
       // Some environments surface low-level WS errors as Event objects which are not
       // instanceof Error. Inspect and convert to a readable Error so our transient
       // detection and logging behave predictably.
+      let normalizedError: any = error;
       if (error && typeof error === 'object' && !(error instanceof Error)) {
         try {
           const eAny: any = error;
@@ -66,15 +67,17 @@ export const query = async (
             )} url=${String(url)}`;
             // replace lastErr with an Error wrapper for consistent downstream handling
             lastErr = new Error(msg);
-            // Also mark `error` to the simplified wrapper for logging below
-            error = lastErr;
+            // Use normalizedError for further processing instead of reassigning the catch param
+            normalizedError = lastErr;
           }
         } catch (e) {
           // fallthrough — keep original error
         }
       }
       // Determine if the error looks transient (network / timeout / connection reset)
-      const msg = String(((error as any) && ((error as any).message || error)) || '').toLowerCase();
+      const msg = String(
+        ((normalizedError as any) && ((normalizedError as any).message || normalizedError)) || ''
+      ).toLowerCase();
       const isTransient =
         msg.includes('timeout') ||
         msg.includes('ec timed out') ||
@@ -92,7 +95,7 @@ export const query = async (
 
       // Avoid noisy logs for unique-constraint collisions (handled by callers)
       try {
-        const e: any = error;
+        const e: any = normalizedError;
         const code = e && e.code ? String(e.code) : '';
         const msgFull = String(e && e.message ? e.message : '');
         if (
@@ -109,8 +112,8 @@ export const query = async (
 
       if (!isTransient) {
         // not transient — log and rethrow immediately
-        console.error('Neon Query Error (permanent):', error);
-        throw error;
+        console.error('Neon Query Error (permanent):', normalizedError);
+        throw normalizedError;
       }
 
       // transient — retry with exponential backoff

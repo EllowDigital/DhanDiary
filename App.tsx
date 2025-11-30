@@ -49,7 +49,7 @@ try {
     try {
       // require only in non-DEV to avoid noisy runtime warnings when native
       // modules are not linked (Expo Go).
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
+
       const _vexo = require('vexo-analytics');
       const vexo = _vexo && (_vexo.vexo || _vexo.default || _vexo);
       if (vexo) {
@@ -84,79 +84,13 @@ import {
   startBackgroundFetch,
   stopBackgroundFetch,
 } from './src/services/syncManager';
-let Sentry: any = null;
-let LogRocket: any = null;
-try {
-  // Use dynamic require so missing native modules do not crash the bundle at module-evaluation time.
-  // This keeps the app from failing to open if a native dependency isn't linked in a build.
-
-  Sentry = require('@sentry/react-native');
-  try {
-    Sentry.init({
-      dsn: 'https://34b47580512858b155c2c4bcc7c88996@o4510441099886592.ingest.us.sentry.io/4510441165553664',
-      sendDefaultPii: true,
-      enableLogs: true,
-      replaysSessionSampleRate: 0.1,
-      replaysOnErrorSampleRate: 1,
-      integrations: [
-        // protect integrations which may not be present in every build
-        ...(Sentry.mobileReplayIntegration ? [Sentry.mobileReplayIntegration()] : []),
-        ...(Sentry.feedbackIntegration ? [Sentry.feedbackIntegration()] : []),
-      ],
-    });
-  } catch (e) {
-    // don't crash app if Sentry init fails
-
-    console.warn('Sentry.init failed', e);
-  }
-} catch (e) {
-  // missing Sentry package or require failed — avoid crashing the app
-
-  console.warn('Sentry not available', e);
-}
-
-try {
-  const _mod = require('@logrocket/react-native');
-  LogRocket = _mod && _mod.default ? _mod.default : _mod;
-} catch (e) {
-  // ignore — LogRocket is optional
-}
-// Initialize LogRocket if configured. Set `LOGROCKET_APPID` in your local env (.env.local)
-const LOGROCKET_APPID = process.env.LOGROCKET_APPID || '';
-if (LogRocket && LOGROCKET_APPID) {
-  try {
-    if (typeof LogRocket.init === 'function') {
-      LogRocket.init(LOGROCKET_APPID);
-    } else {
-      // Some builds may provide a different API shape; avoid crashing
-      console.warn('LogRocket.init not available');
-    }
-  } catch (e) {
-    // don't crash the app if LogRocket init fails
-
-    console.warn('LogRocket init failed', e);
-  }
-}
-
+// Telemetry integrations removed
 const AppContent = () => {
   const { user, loading } = useAuth();
   // provide user id to offline sync so it only runs when a user is present
   useOfflineSync(user?.id);
 
-  // Identify user in LogRocket when available so sessions can be searched by name/email
-  React.useEffect(() => {
-    if (!user) return;
-    try {
-      if (LogRocket && user.id && typeof LogRocket.identify === 'function') {
-        LogRocket.identify(user.id, {
-          name: user.name,
-          email: user.email,
-        });
-      }
-    } catch (e) {
-      console.warn('LogRocket identify failed', e);
-    }
-  }, [user]);
+  // Telemetry integrations removed
 
   return (
     <NavigationContainer>
@@ -169,7 +103,7 @@ const AppContent = () => {
   );
 };
 
-export default Sentry.wrap(function App() {
+export default function App() {
   const [dbReady, setDbReady] = React.useState(false);
   const [dbInitError, setDbInitError] = React.useState<string | null>(null);
   const queryClient = React.useMemo(() => new QueryClient(), []);
@@ -349,4 +283,4 @@ export default Sentry.wrap(function App() {
       </ToastProvider>
     </QueryClientProvider>
   );
-});
+}

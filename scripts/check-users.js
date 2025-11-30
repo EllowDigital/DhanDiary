@@ -1,4 +1,10 @@
-require('dotenv').config();
+try {
+  require('dotenv').config({ quiet: true });
+} catch (e) {
+  try {
+    require('dotenv').config();
+  } catch (ee) {}
+}
 const { Pool } = require('@neondatabase/serverless');
 
 const checkUsers = async () => {

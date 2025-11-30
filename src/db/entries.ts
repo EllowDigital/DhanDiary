@@ -1,5 +1,9 @@
 import sqlite from './sqlite';
 import { notifyEntriesChanged } from '../utils/dbEvents';
+import dayjs from 'dayjs';
+import customParseFormat from 'dayjs/plugin/customParseFormat';
+
+dayjs.extend(customParseFormat);
 
 export type LocalEntry = {
   local_id: string;
@@ -20,12 +24,51 @@ export type LocalEntry = {
 };
 
 const normalizeDate = (v?: any) => {
-  if (!v && v !== 0) return null;
+  if (v === undefined || v === null || v === '') return null;
   try {
+    // Date instance
     if (v instanceof Date) return v.toISOString();
-    const s = String(v);
-    const d = new Date(s);
-    if (!isNaN(d.getTime())) return d.toISOString();
+
+    // Numeric values (timestamp in seconds or milliseconds)
+    if (typeof v === 'number') {
+      const n = v;
+      const ms = n < 1e12 ? n * 1000 : n; // treat <1e12 as seconds
+      const d = new Date(ms);
+      if (!isNaN(d.getTime())) return d.toISOString();
+    }
+
+    const s = String(v).trim();
+
+    // Pure numeric string
+    if (/^\d+$/.test(s)) {
+      const n = Number(s);
+      const ms = s.length === 10 ? n * 1000 : n; // 10-digit = seconds
+      const d = new Date(ms);
+      if (!isNaN(d.getTime())) return d.toISOString();
+    }
+
+    // Try native Date parsing first
+    const d1 = new Date(s);
+    if (!isNaN(d1.getTime())) return d1.toISOString();
+
+    // Fallback: replace hyphens with slashes (some platforms parse better)
+    const d2 = new Date(s.replace(/-/g, '/'));
+    if (!isNaN(d2.getTime())) return d2.toISOString();
+
+    // Try dayjs with some common formats (DD-MM-YYYY, DD/MM/YYYY etc.)
+    const formats = [
+      'DD-MM-YYYY',
+      'D-M-YYYY',
+      'DD/MM/YYYY',
+      'D/M/YYYY',
+      'MMM D YYYY',
+      'MMMM D YYYY',
+      'YYYY-MM-DD',
+      'YYYY/MM/DD',
+      'YYYY-MM-DDTHH:mm:ssZ',
+    ];
+    const dj = dayjs(s, formats, true);
+    if (dj.isValid()) return dj.toISOString();
   } catch (e) {}
   return null;
 };
@@ -36,17 +79,46 @@ export const getEntries = async (userId: string) => {
     'SELECT * FROM local_entries WHERE user_id = ? AND is_deleted = 0 ORDER BY date DESC',
     [userId]
   );
-  return (rows || []).map(
-    (r) =>
-      ({
-        ...r,
-        created_at: normalizeDate(r.created_at) || new Date().toISOString(),
-        updated_at:
-          normalizeDate(r.updated_at) ||
-          (r.created_at ? normalizeDate(r.created_at) : new Date().toISOString()),
-        date: normalizeDate((r as any).date) || normalizeDate(r.created_at) || null,
-      }) as LocalEntry
-  );
+  const mapped = (rows || []).map((r) => ({
+    ...r,
+    created_at: normalizeDate(r.created_at) || new Date().toISOString(),
+    updated_at:
+      normalizeDate(r.updated_at) ||
+      (r.created_at ? normalizeDate(r.created_at) : new Date().toISOString()),
+    date: normalizeDate((r as any).date) || normalizeDate(r.created_at) || null,
+  })) as LocalEntry[];
+
+  // De-duplicate entries by remote_id when possible (keep the most recent by updated_at),
+  // this helps avoid showing duplicates created during earlier sync conflict resolutions.
+  const byRemote: Record<string, LocalEntry> = {};
+  const uniques: LocalEntry[] = [];
+  for (const e of mapped) {
+    if (e.remote_id) {
+      const key = String(e.remote_id);
+      const existing = byRemote[key];
+      if (!existing) {
+        byRemote[key] = e;
+      } else {
+        const existingTime = new Date(existing.updated_at || 0).getTime();
+        const thisTime = new Date(e.updated_at || 0).getTime();
+        if (thisTime > existingTime) byRemote[key] = e;
+      }
+    } else {
+      uniques.push(e);
+    }
+  }
+
+  // Combine deduped remote-backed entries and local-only entries
+  const result = uniques.concat(Object.values(byRemote));
+
+  // Ensure deterministic ordering by date (desc)
+  result.sort((a, b) => {
+    const ta = a.date ? new Date(a.date).getTime() : 0;
+    const tb = b.date ? new Date(b.date).getTime() : 0;
+    return tb - ta;
+  });
+
+  return result;
 };
 
 export const addLocalEntry = async (entry: Omit<LocalEntry, 'is_synced' | 'is_deleted'>) => {

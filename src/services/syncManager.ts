@@ -29,6 +29,7 @@ const Q = (sql: string, params: any[] = []) => query(sql, params, { retries: 2, 
 let _unsubscribe: (() => void) | null = null;
 let _foregroundTimer: any = null;
 let _backgroundFetchInstance: any = null;
+let _backgroundFetchWarned = false;
 // If a sync is requested while one is already running, schedule one extra run
 // after the current finishes to pick up any missed changes.
 let _pendingSyncRequested: boolean = false;
@@ -670,8 +671,9 @@ export const syncBothWays = async () => {
   let result = { pushed: 0, updated: 0, deleted: 0, pulled: 0, merged: 0, total: 0 };
   try {
     try {
-      vexoService.customEvent &&
+      if (vexoService.customEvent) {
         vexoService.customEvent('sync_start', { when: new Date().toISOString() });
+      }
     } catch (e) {}
     // ensure remote schema can accept our metadata
     await ensureRemoteSchema();
@@ -713,7 +715,7 @@ export const syncBothWays = async () => {
 
     result = { pushed, updated, deleted, pulled, merged, total };
     try {
-      vexoService.customEvent &&
+      if (vexoService.customEvent) {
         vexoService.customEvent('sync_complete', {
           pushed,
           updated,
@@ -722,6 +724,7 @@ export const syncBothWays = async () => {
           merged,
           total,
         });
+      }
     } catch (e) {}
     return result;
   } finally {
@@ -736,8 +739,9 @@ export const syncBothWays = async () => {
     }
     try {
       // If the sync finished but recorded no activity, emit a small heartbeat
-      vexoService.customEvent &&
+      if (vexoService.customEvent) {
         vexoService.customEvent('sync_ended', { when: new Date().toISOString() });
+      }
     } catch (e) {}
   }
 };
@@ -855,7 +859,10 @@ export const startBackgroundFetch = async () => {
       // otherwise silently no-op in non-native or test environments
     }
   } catch (e) {
-    console.warn('react-native-background-fetch not available; background fetch disabled', e);
+    if (!_backgroundFetchWarned) {
+      _backgroundFetchWarned = true;
+      console.warn('react-native-background-fetch not available; background fetch disabled', e);
+    }
   }
 };
 
