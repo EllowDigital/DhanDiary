@@ -5,7 +5,7 @@ const path = require('path');
 const cwd = process.cwd();
 const candidates = [
   'node_modules/react-native-worklets/android/build/intermediates/prefab_package/release/prefab/README.txt',
-  'node_modules/react-native-worklets-core/android/build/intermediates/prefab_package/release/prefab/README.txt'
+  'node_modules/react-native-worklets-core/android/build/intermediates/prefab_package/release/prefab/README.txt',
 ];
 
 candidates.forEach((rel) => {
@@ -16,7 +16,10 @@ candidates.forEach((rel) => {
       fs.mkdirSync(dir, { recursive: true });
     }
     if (!fs.existsSync(full)) {
-      fs.writeFileSync(full, 'Prefab stub created by postinstall-fixes.js to ensure build tooling can read the prefab package.');
+      fs.writeFileSync(
+        full,
+        'Prefab stub created by postinstall-fixes.js to ensure build tooling can read the prefab package.'
+      );
       console.log('[postinstall-fixes] Created:', rel);
     }
   } catch (e) {
