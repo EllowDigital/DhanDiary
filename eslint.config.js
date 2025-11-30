@@ -1,9 +1,9 @@
-import js from '@eslint/js';
-import tseslint from '@typescript-eslint/eslint-plugin';
-import tsparser from '@typescript-eslint/parser';
-import prettier from 'eslint-config-prettier';
+const js = require('@eslint/js');
+const tseslint = require('@typescript-eslint/eslint-plugin');
+const tsparser = require('@typescript-eslint/parser');
+const prettier = require('eslint-config-prettier');
 
-export default [
+module.exports = [
   // -------------------------------------------------------
   // Base JS Recommended Rules
   // -------------------------------------------------------
@@ -15,13 +15,13 @@ export default [
   {
     files: ['**/*.{js,jsx,ts,tsx}'],
 
-    languageOptions: {
+        languageOptions: {
       parser: tsparser,
       parserOptions: {
         ecmaVersion: 'latest',
         sourceType: 'module',
         project: './tsconfig.json',
-        tsconfigRootDir: import.meta.dirname,
+        tsconfigRootDir: __dirname,
       },
 
       globals: {
