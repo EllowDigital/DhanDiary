@@ -1,0 +1,27 @@
+{
+  "ignore": [
+    "@shopify/react-native-skia",
+    "autoprefixer",
+    "axios",
+    "expo-build-properties",
+    "expo-crypto",
+    "expo-status-bar",
+    "expo-system-ui",
+    "expo-updates",
+    "postcss",
+    "react-dom",
+    "react-native-screens",
+    "react-native-vector-icons",
+    "react-native-worklets-core",
+    "zustand",
+    "@react-native-community/cli",
+    "@react-native-community/eslint-config",
+    "@react-native/metro-config",
+    "@types/jest",
+    "babel-plugin-inline-dotenv",
+    "eslint-import-resolver-typescript",
+    "eslint-plugin-import",
+    "eslint-plugin-prettier",
+    "react-test-renderer"
+  ]
+}

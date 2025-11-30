@@ -3,7 +3,13 @@
   Migration runner that applies SQL statements from db/schema.sql
   to the NeonDB specified by NEON_URL in environment (.env or env vars).
 */
-require('dotenv').config();
+try {
+  require('dotenv').config({ quiet: true });
+} catch (e) {
+  try {
+    require('dotenv').config();
+  } catch (ee) {}
+}
 const fs = require('fs');
 const path = require('path');
 const { Pool } = require('@neondatabase/serverless');

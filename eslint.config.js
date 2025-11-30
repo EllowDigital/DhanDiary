@@ -15,7 +15,7 @@ module.exports = [
   {
     files: ['**/*.{js,jsx,ts,tsx}'],
 
-        languageOptions: {
+    languageOptions: {
       parser: tsparser,
       parserOptions: {
         ecmaVersion: 'latest',

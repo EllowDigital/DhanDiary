@@ -3,7 +3,7 @@
     "owner": "ellowdigital",
     "name": "DhanDiary",
     "slug": "dhandiary",
-    "version": "2.2.1",
+    "version": "2.3.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -15,11 +15,11 @@
     },
     "ios": {
       "supportsTablet": true,
-      "buildNumber": "20251201"
+      "buildNumber": "20251202"
     },
     "android": {
       "package": "com.ellowdigital.dhandiary",
-      "versionCode": 20251201,
+      "versionCode": 20251202,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -29,6 +29,7 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "expo-font",
       "expo-sqlite",
       [
         "expo-build-properties",

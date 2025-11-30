@@ -2,9 +2,16 @@ const dotenv = require('dotenv');
 const fs = require('fs');
 const path = require('path');
 
-// Load .env if present
+// Load .env if present (suppress dotenv logs)
 if (fs.existsSync(path.resolve(process.cwd(), '.env'))) {
-  dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+  try {
+    dotenv.config({ path: path.resolve(process.cwd(), '.env'), quiet: true });
+  } catch (e) {
+    // Some dotenv variants may not accept `quiet`; fall back to standard config
+    try {
+      dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+    } catch (ee) {}
+  }
 }
 
 // Defensive app config: sometimes the `config` argument may be undefined

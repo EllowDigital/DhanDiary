@@ -29,6 +29,7 @@ const Q = (sql: string, params: any[] = []) => query(sql, params, { retries: 2, 
 let _unsubscribe: (() => void) | null = null;
 let _foregroundTimer: any = null;
 let _backgroundFetchInstance: any = null;
+let _backgroundFetchWarned = false;
 // If a sync is requested while one is already running, schedule one extra run
 // after the current finishes to pick up any missed changes.
 let _pendingSyncRequested: boolean = false;
@@ -858,7 +859,10 @@ export const startBackgroundFetch = async () => {
       // otherwise silently no-op in non-native or test environments
     }
   } catch (e) {
-    console.warn('react-native-background-fetch not available; background fetch disabled', e);
+    if (!_backgroundFetchWarned) {
+      _backgroundFetchWarned = true;
+      console.warn('react-native-background-fetch not available; background fetch disabled', e);
+    }
   }
 };
 
