@@ -1,6 +1,7 @@
 {
   "name": "dhandiary",
   "version": "2.2.1",
+  "type": "module",
   "main": "index.ts",
   "private": true,
   "scripts": {
