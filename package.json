@@ -10,6 +10,8 @@
     "web": "expo start --web",
     "prebuild": "npm run lint && npm test && npx tsc --noEmit",
     "test": "jest",
+    "postinstall": "node ./scripts/postinstall-fixes.js",
+    "postprebuild": "node ./scripts/postprebuild-fixes.js",
     "migrate": "node ./scripts/migrate.js",
     "format": "prettier --write .",
     "lint": "eslint ./ --ext .js,.jsx,.ts,.tsx",

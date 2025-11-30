@@ -31,25 +31,10 @@
     "plugins": [
       "expo-sqlite",
       [
-        "@sentry/react-native/expo",
-        {
-          "url": "https://sentry.io",
-          "project": "dhandiary",
-          "organization": "ellowdigital"
-        }
-      ],
-      [
         "expo-build-properties",
         {
           "android": {
                 "enableHermes": true,
-                "enableProguardInReleaseBuilds": false,
-                "minifyEnabled": false,
-                "shrinkResources": true,
-                "gradleProperties": {
-                  "android.enableR8": "false",
-                  "org.gradle.jvmargs": "-Xmx4096m"
-                },
                 "ndk": {
                   "debugSymbolLevel": "NONE"
                 }
