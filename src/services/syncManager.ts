@@ -422,7 +422,9 @@ export const pullRemote = async () => {
           if (localForDeleted && (localForDeleted as any).need_sync) {
             try {
               const revivedUpdatedAt =
-                localForDeleted.updated_at || localForDeleted.created_at || new Date().toISOString();
+                localForDeleted.updated_at ||
+                localForDeleted.created_at ||
+                new Date().toISOString();
               const revived = await Q(
                 `UPDATE cash_entries
                    SET deleted = false,

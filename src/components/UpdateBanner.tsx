@@ -31,7 +31,19 @@ const UpdateBanner: React.FC<Props> = ({ visible, message, duration = 4000, onPr
 
   return (
     <Animated.View
-      style={[styles.container, { transform: [{ translateY: (translateY as any).interpolate({ inputRange: [0, 1], outputRange: [0, 80] }) }] }]}
+      style={[
+        styles.container,
+        {
+          transform: [
+            {
+              translateY: (translateY as any).interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, 80],
+              }),
+            },
+          ],
+        },
+      ]}
       pointerEvents="box-none"
     >
       <View style={styles.banner}>

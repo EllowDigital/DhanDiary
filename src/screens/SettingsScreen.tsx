@@ -36,7 +36,10 @@ const SettingsScreen = () => {
   const basePadding = useMemo(() => clamp(width * 0.055, 18, 28), [width]);
   const cardRadius = useMemo(() => clamp(width * 0.045, 18, 26), [width]);
   const fontScale = useMemo(() => clamp(width / 390, 0.92, 1.08), [width]);
-  const styles = useMemo(() => createStyles(basePadding, cardRadius, fontScale), [basePadding, cardRadius, fontScale]);
+  const styles = useMemo(
+    () => createStyles(basePadding, cardRadius, fontScale),
+    [basePadding, cardRadius, fontScale]
+  );
 
   const [syncing, setSyncing] = useState(false);
   const [lastSynced, setLastSynced] = useState<string | null>(null);
@@ -149,7 +152,9 @@ const SettingsScreen = () => {
         <MaterialIcon name={icon as any} size={22} color={iconColor} />
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={[styles.actionLabel, destructive && { color: colors.accentRed }]}>{label}</Text>
+        <Text style={[styles.actionLabel, destructive && { color: colors.accentRed }]}>
+          {label}
+        </Text>
         {description ? <Text style={styles.actionDescription}>{description}</Text> : null}
       </View>
       <MaterialIcon name="chevron-right" size={22} color={colors.muted} />
@@ -158,12 +163,17 @@ const SettingsScreen = () => {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.contentContainer}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.contentContainer}
+      >
         <Animated.View style={[styles.heroCard, animatedStyle(0)]}>
           <View style={styles.heroHeader}>
             <View style={{ flex: 1 }}>
               <Text style={styles.greeting}>Hi, {user?.name || 'there'} 👋</Text>
-              <Text style={styles.greetingSub}>Stay in control of your account and sync health.</Text>
+              <Text style={styles.greetingSub}>
+                Stay in control of your account and sync health.
+              </Text>
             </View>
             <View style={styles.statusPill}>
               <MaterialIcon name="verified-user" size={16} color={colors.accentGreen} />
@@ -229,7 +239,9 @@ const SettingsScreen = () => {
             containerStyle={styles.btnContainer}
             buttonStyle={styles.primaryBtn}
             titleStyle={styles.primaryBtnTitle}
-            icon={<MaterialIcon name="sync" size={18} color={colors.white} style={{ marginRight: 8 }} />}
+            icon={
+              <MaterialIcon name="sync" size={18} color={colors.white} style={{ marginRight: 8 }} />
+            }
           />
         </Animated.View>
 

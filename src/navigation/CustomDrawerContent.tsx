@@ -1,9 +1,6 @@
 import React, { useEffect, useMemo } from 'react';
 import { View, StyleSheet, Alert, Dimensions, TouchableOpacity } from 'react-native';
-import {
-  DrawerContentScrollView,
-  DrawerContentComponentProps,
-} from '@react-navigation/drawer';
+import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-navigation/drawer';
 import { Text, Button } from '@rneui/themed';
 
 import { logout } from '../services/auth';
@@ -62,7 +59,9 @@ const CustomDrawerContent = React.memo((props: DrawerContentComponentProps) => {
         return (
           <Animated.View
             key={route.key}
-            entering={FadeInDown.delay(60 + idx * 50).springify().damping(16)}
+            entering={FadeInDown.delay(60 + idx * 50)
+              .springify()
+              .damping(16)}
             style={styles.menuItemWrapper}
           >
             <TouchableOpacity

@@ -250,11 +250,34 @@ const AboutScreen: React.FC = () => {
         />
 
         {/* Update details modal */}
-        <Modal visible={showUpdateModal} transparent animationType="slide" onRequestClose={() => setShowUpdateModal(false)}>
-          <RNView style={{ flex: 1, backgroundColor: colors.backdrop, justifyContent: 'center', padding: 20 }}>
+        <Modal
+          visible={showUpdateModal}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowUpdateModal(false)}
+        >
+          <RNView
+            style={{
+              flex: 1,
+              backgroundColor: colors.backdrop,
+              justifyContent: 'center',
+              padding: 20,
+            }}
+          >
             <RNView style={{ backgroundColor: colors.card, borderRadius: 12, padding: 18 }}>
-              <Text style={{ fontSize: fontSize(18), fontWeight: '700', marginBottom: 8, color: colors.text }}>New Update</Text>
-              <Text style={{ marginBottom: 10, color: colors.subtleText }}>Version: {pkg.version}</Text>
+              <Text
+                style={{
+                  fontSize: fontSize(18),
+                  fontWeight: '700',
+                  marginBottom: 8,
+                  color: colors.text,
+                }}
+              >
+                New Update
+              </Text>
+              <Text style={{ marginBottom: 10, color: colors.subtleText }}>
+                Version: {pkg.version}
+              </Text>
               <Text style={{ marginBottom: 14, color: colors.subtleText }}>
                 {updateInfo && updateInfo?.manifest && updateInfo.manifest?.releaseNotes
                   ? updateInfo.manifest.releaseNotes
@@ -263,7 +286,11 @@ const AboutScreen: React.FC = () => {
               <Button
                 title={checking ? 'Applying…' : 'Download & Install'}
                 onPress={fetchAndApplyUpdate}
-                buttonStyle={{ backgroundColor: colors.accentGreen, borderRadius: 10, marginBottom: 8 }}
+                buttonStyle={{
+                  backgroundColor: colors.accentGreen,
+                  borderRadius: 10,
+                  marginBottom: 8,
+                }}
               />
               <Button
                 title="Cancel"
@@ -278,7 +305,12 @@ const AboutScreen: React.FC = () => {
           title="Share with Friends"
           onPress={handleShare}
           icon={
-            <MaterialIcon name="share" color={colors.white} size={fontSize(18)} style={{ marginRight: 8 }} />
+            <MaterialIcon
+              name="share"
+              color={colors.white}
+              size={fontSize(18)}
+              style={{ marginRight: 8 }}
+            />
           }
           buttonStyle={styles.actionButton}
           titleStyle={styles.actionButtonTitle}
@@ -289,7 +321,12 @@ const AboutScreen: React.FC = () => {
             Linking.openURL(`mailto:sarwanyadav26@outlook.com?subject=DhanDiary%20Feedback`)
           }
           icon={
-            <MaterialIcon name="email" color={colors.strongMuted} size={fontSize(18)} style={{ marginRight: 8 }} />
+            <MaterialIcon
+              name="email"
+              color={colors.strongMuted}
+              size={fontSize(18)}
+              style={{ marginRight: 8 }}
+            />
           }
           buttonStyle={[styles.actionButton, styles.secondaryActionButton]}
           titleStyle={[styles.actionButtonTitle, styles.secondaryActionButtonTitle]}

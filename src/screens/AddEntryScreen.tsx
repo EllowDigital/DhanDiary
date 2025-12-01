@@ -253,13 +253,19 @@ const AddEntryScreen: React.FC = () => {
           <Pressable onPressIn={onPressInCard} onPressOut={onPressOutCard}>
             <Animated.View
               entering={FadeInDown.delay(120).springify().damping(14)}
-              style={[styles.cardWrapper, { borderColor: `${typeMeta.accent}33` }, animatedCardStyle]}
+              style={[
+                styles.cardWrapper,
+                { borderColor: `${typeMeta.accent}33` },
+                animatedCardStyle,
+              ]}
             >
               <View style={styles.cardHeader}>
                 <Text style={styles.cardTitle}>Amount</Text>
                 <View style={[styles.typeBadge, { backgroundColor: typeMeta.accentSoft }]}>
                   <MaterialIcon name={typeMeta.icon as any} size={16} color={typeMeta.accent} />
-                  <Text style={[styles.typeBadgeText, { color: typeMeta.accent }]}>{typeMeta.label}</Text>
+                  <Text style={[styles.typeBadgeText, { color: typeMeta.accent }]}>
+                    {typeMeta.label}
+                  </Text>
                 </View>
               </View>
 
@@ -283,10 +289,7 @@ const AddEntryScreen: React.FC = () => {
 
           <Animated.View entering={FadeInDown.delay(200).springify().damping(14)}>
             <View style={styles.dualRow}>
-              <Pressable
-                style={styles.infoTile}
-                onPress={() => setCategoryModalVisible(true)}
-              >
+              <Pressable style={styles.infoTile} onPress={() => setCategoryModalVisible(true)}>
                 <View style={styles.infoLabelRow}>
                   <MaterialIcon name="category" size={20} color={colors.subtleText} />
                   <Text style={styles.infoLabel}>Category</Text>
@@ -336,7 +339,9 @@ const AddEntryScreen: React.FC = () => {
                     style={[styles.chip, active && { backgroundColor: typeMeta.accentSoft }]}
                     onPress={() => setCategory(item)}
                   >
-                    <Text style={[styles.chipText, active && { color: typeMeta.accent }]}>{item}</Text>
+                    <Text style={[styles.chipText, active && { color: typeMeta.accent }]}>
+                      {item}
+                    </Text>
                   </Pressable>
                 );
               })}

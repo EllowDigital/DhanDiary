@@ -41,7 +41,7 @@ const DrawerNavigator = () => {
           borderRightWidth: 1,
           borderColor: colors.border,
         },
-        sceneContainerStyle: { backgroundColor: colors.background },
+        sceneStyle: { backgroundColor: colors.background },
       }}
     >
       {/* Dashboard Tabs */}

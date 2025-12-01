@@ -373,7 +373,12 @@ const StatsScreen = () => {
         <View style={styles.heroBottomRow}>
           <View>
             <Text style={styles.heroBottomLabel}>Net savings</Text>
-            <Text style={[styles.heroBottomValue, { color: netPositive ? colors.accentGreen : colors.accentRed }]}>
+            <Text
+              style={[
+                styles.heroBottomValue,
+                { color: netPositive ? colors.accentGreen : colors.accentRed },
+              ]}
+            >
               ₹{stats.net.toLocaleString('en-IN')}
             </Text>
           </View>
@@ -384,7 +389,9 @@ const StatsScreen = () => {
         </View>
       </Animated.View>
 
-      <Animated.View style={[styles.sectionBlock, { transform: [{ translateY: filterTranslate }] }]}>
+      <Animated.View
+        style={[styles.sectionBlock, { transform: [{ translateY: filterTranslate }] }]}
+      >
         <Text style={styles.sectionLabel}>Timeframe</Text>
         <View style={styles.filterRow}>
           {FILTERS.map((f) => {
@@ -395,7 +402,9 @@ const StatsScreen = () => {
                 style={[styles.filterPill, isActive && styles.filterPillActive]}
                 onPress={() => handleFilterPress(f)}
               >
-                <Text style={[styles.filterPillText, isActive && styles.filterPillTextActive]}>{f}</Text>
+                <Text style={[styles.filterPillText, isActive && styles.filterPillTextActive]}>
+                  {f}
+                </Text>
               </Pressable>
             );
           })}
@@ -422,7 +431,7 @@ const StatsScreen = () => {
         {renderPieChart()}
       </View>
 
-      <View style={[styles.chartCard, styles.sectionBlock]}> 
+      <View style={[styles.chartCard, styles.sectionBlock]}>
         <Text style={styles.chartTitle}>Income vs. Expenses</Text>
         {renderLineChart()}
       </View>

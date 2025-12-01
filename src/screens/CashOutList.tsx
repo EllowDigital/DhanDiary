@@ -62,12 +62,18 @@ const CashOutList = () => {
     [entries, timeFilter, sortMode]
   );
 
-  const summary = useMemo(() => summarizeEntries(entryView.filteredEntries), [entryView.filteredEntries]);
+  const summary = useMemo(
+    () => summarizeEntries(entryView.filteredEntries),
+    [entryView.filteredEntries]
+  );
   const lastActivityLabel = summary.lastTimestamp
     ? new Date(summary.lastTimestamp).toLocaleDateString()
     : 'No activity';
   const listVersion = useMemo(
-    () => entryView.sortedEntries.map((entry) => `${entry.local_id}-${entry.updated_at || entry.date || ''}`).join('|'),
+    () =>
+      entryView.sortedEntries
+        .map((entry) => `${entry.local_id}-${entry.updated_at || entry.date || ''}`)
+        .join('|'),
     [entryView.sortedEntries]
   );
   const quickStats = useMemo(
@@ -111,7 +117,8 @@ const CashOutList = () => {
         <Text style={styles.heroOverline}>Spending</Text>
         <Text style={styles.heroTitle}>Expenses</Text>
         <Text style={styles.heroSubtitle}>
-          ₹{summary.total.toLocaleString('en-IN')} total · {summary.count} item{summary.count === 1 ? '' : 's'}
+          ₹{summary.total.toLocaleString('en-IN')} total · {summary.count} item
+          {summary.count === 1 ? '' : 's'}
         </Text>
         <View style={styles.heroRow}>
           <View style={styles.heroCol}>
@@ -152,7 +159,9 @@ const CashOutList = () => {
                 style={[styles.pill, active && styles.pillActive]}
                 onPress={() => setTimeFilter(filter.value)}
               >
-                <Text style={[styles.pillText, active && styles.pillTextActive]}>{filter.label}</Text>
+                <Text style={[styles.pillText, active && styles.pillTextActive]}>
+                  {filter.label}
+                </Text>
               </TouchableOpacity>
             );
           })}
@@ -170,7 +179,9 @@ const CashOutList = () => {
                 style={[styles.pill, active && styles.pillActive]}
                 onPress={() => setSortMode(option.value)}
               >
-                <Text style={[styles.pillText, active && styles.pillTextActive]}>{option.label}</Text>
+                <Text style={[styles.pillText, active && styles.pillTextActive]}>
+                  {option.label}
+                </Text>
               </TouchableOpacity>
             );
           })}
@@ -185,7 +196,9 @@ const CashOutList = () => {
         <MaterialIcon name="trending-down" size={font(40)} color={colors.accentRed} />
       </View>
       <Text style={styles.emptyTitle}>No expenses yet</Text>
-      <Text style={styles.emptySubtitle}>Add your first expense to start tracking cash outflows.</Text>
+      <Text style={styles.emptySubtitle}>
+        Add your first expense to start tracking cash outflows.
+      </Text>
       <Button
         title="Add Expense"
         onPress={() => navigation.navigate('AddEntry')}
@@ -212,7 +225,9 @@ const CashOutList = () => {
         removeClippedSubviews={false}
         renderItem={({ item, index }) => (
           <Animated.View
-            entering={FadeInDown.delay(index * 40).springify().damping(14)}
+            entering={FadeInDown.delay(index * 40)
+              .springify()
+              .damping(14)}
             style={styles.transactionWrapper}
           >
             <TransactionCard

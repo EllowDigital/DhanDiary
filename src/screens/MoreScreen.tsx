@@ -73,7 +73,6 @@ const MoreScreen: React.FC = () => {
     []
   );
 
-
   const Row = ({
     icon,
     label,
@@ -89,11 +88,19 @@ const MoreScreen: React.FC = () => {
     isLast?: boolean;
     index?: number;
   }) => (
-    <Animated.View entering={FadeInDown.delay(120 + index * 40).springify().damping(18)}>
+    <Animated.View
+      entering={FadeInDown.delay(120 + index * 40)
+        .springify()
+        .damping(18)}
+    >
       <Pressable
         onPress={onPress}
         android_ripple={{ color: colors.surfaceMuted }}
-        style={({ pressed }) => [styles.row, pressed && styles.rowPressed, isLast && styles.rowLast]}
+        style={({ pressed }) => [
+          styles.row,
+          pressed && styles.rowPressed,
+          isLast && styles.rowLast,
+        ]}
         accessibilityRole="button"
         accessibilityLabel={label}
       >
@@ -115,7 +122,9 @@ const MoreScreen: React.FC = () => {
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Animated.View entering={FadeInDown.duration(400)} style={styles.headingBlock}>
         <Text style={styles.headingTitle}>More</Text>
-        <Text style={styles.headingSubtitle}>All the controls you reach for every day, now in one tidy place.</Text>
+        <Text style={styles.headingSubtitle}>
+          All the controls you reach for every day, now in one tidy place.
+        </Text>
       </Animated.View>
 
       <View style={styles.sectionCard}>
@@ -147,7 +156,9 @@ const MoreScreen: React.FC = () => {
           />
         ))}
       </View>
-      <Text style={styles.footnote}>Need something else? Ping us anytime — we usually reply within a day.</Text>
+      <Text style={styles.footnote}>
+        Need something else? Ping us anytime — we usually reply within a day.
+      </Text>
     </ScrollView>
   );
 };

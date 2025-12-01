@@ -211,7 +211,8 @@ const HistoryScreen = () => {
       categoryTotals[category] = (categoryTotals[category] || 0) + amount;
     });
 
-    const topCategory = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1])[0]?.[0] || 'General';
+    const topCategory =
+      Object.entries(categoryTotals).sort((a, b) => b[1] - a[1])[0]?.[0] || 'General';
     const latestLabel = latestTs ? new Date(latestTs).toLocaleDateString() : 'No activity yet';
     return {
       totalIn,
@@ -401,7 +402,10 @@ const HistoryScreen = () => {
   const renderHeader = () => (
     <View style={styles.headerWrapper}>
       <RNAnimated.View
-        style={[styles.heroCard, { opacity: heroOpacity, transform: [{ translateY: heroTranslate }] }]}
+        style={[
+          styles.heroCard,
+          { opacity: heroOpacity, transform: [{ translateY: heroTranslate }] },
+        ]}
       >
         <Text style={styles.heroOverline}>Your Activity</Text>
         <Text style={styles.heroTitle}>History</Text>
@@ -411,15 +415,24 @@ const HistoryScreen = () => {
         <View style={styles.heroStatRow}>
           <View style={styles.heroColumn}>
             <Text style={styles.heroLabel}>Cash in</Text>
-            <Text style={[styles.heroValue, { color: colors.accentGreen }]}>₹{summary.totalIn.toLocaleString('en-IN')}</Text>
+            <Text style={[styles.heroValue, { color: colors.accentGreen }]}>
+              ₹{summary.totalIn.toLocaleString('en-IN')}
+            </Text>
           </View>
           <View style={styles.heroColumn}>
             <Text style={styles.heroLabel}>Cash out</Text>
-            <Text style={[styles.heroValue, { color: colors.accentRed }]}>₹{summary.totalOut.toLocaleString('en-IN')}</Text>
+            <Text style={[styles.heroValue, { color: colors.accentRed }]}>
+              ₹{summary.totalOut.toLocaleString('en-IN')}
+            </Text>
           </View>
           <View style={[styles.heroColumn, styles.heroColumnLast]}>
             <Text style={styles.heroLabel}>Net</Text>
-            <Text style={[styles.heroValue, { color: summary.net >= 0 ? colors.primary : colors.accentRed }]}>
+            <Text
+              style={[
+                styles.heroValue,
+                { color: summary.net >= 0 ? colors.primary : colors.accentRed },
+              ]}
+            >
               ₹{summary.net.toLocaleString('en-IN')}
             </Text>
           </View>
@@ -443,10 +456,16 @@ const HistoryScreen = () => {
         <View style={{ flex: 1 }}>
           <Text style={styles.filterToggleLabel}>Filters</Text>
           <Text style={styles.filterToggleHint}>
-            {activeFilterCount ? `${activeFilterCount} active filter${activeFilterCount > 1 ? 's' : ''}` : 'Refine your history'}
+            {activeFilterCount
+              ? `${activeFilterCount} active filter${activeFilterCount > 1 ? 's' : ''}`
+              : 'Refine your history'}
           </Text>
         </View>
-        <MaterialIcon name={filtersVisible ? 'expand-less' : 'expand-more'} size={22} color={colors.muted} />
+        <MaterialIcon
+          name={filtersVisible ? 'expand-less' : 'expand-more'}
+          size={22}
+          color={colors.muted}
+        />
       </TouchableOpacity>
 
       {filtersVisible && (
@@ -576,7 +595,9 @@ const HistoryScreen = () => {
     <View style={styles.emptyWrap}>
       <MaterialIcon name="receipt-long" size={80} color={colors.muted} />
       <Text style={styles.emptyTitle}>No Transactions Found</Text>
-      <Text style={styles.emptySubtitle}>Adjust filters or add a new transaction to get started.</Text>
+      <Text style={styles.emptySubtitle}>
+        Adjust filters or add a new transaction to get started.
+      </Text>
       <Button
         title="Add Transaction"
         onPress={() => navigation.navigate('AddEntry')}

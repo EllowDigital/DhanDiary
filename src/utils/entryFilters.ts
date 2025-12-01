@@ -45,10 +45,7 @@ export const applyTimeframeFilter = (
   return entries.filter((entry) => entryTimestamp(entry) >= cutoff);
 };
 
-export const sortEntriesByMode = (
-  entries: LocalEntry[],
-  sortMode: EntrySortMode
-): LocalEntry[] => {
+export const sortEntriesByMode = (entries: LocalEntry[], sortMode: EntrySortMode): LocalEntry[] => {
   if (!entries.length) return entries;
   const list = [...entries];
   if (sortMode === 'amount') {
@@ -89,7 +86,8 @@ export const summarizeEntries = (entries: LocalEntry[]): EntrySummary => {
     categoryTotals[category] = (categoryTotals[category] || 0) + amount;
   });
 
-  const topCategory = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1])[0]?.[0] || 'General';
+  const topCategory =
+    Object.entries(categoryTotals).sort((a, b) => b[1] - a[1])[0]?.[0] || 'General';
   const count = entries.length;
 
   return {

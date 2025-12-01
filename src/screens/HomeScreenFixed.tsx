@@ -1,5 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, StatusBar, useWindowDimensions, FlatList } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  TouchableOpacity,
+  StatusBar,
+  useWindowDimensions,
+  FlatList,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
 import SimpleButtonGroup from '../components/SimpleButtonGroup';
@@ -11,7 +18,14 @@ import { useEntries } from '../hooks/useEntries';
 import useDelayedLoading from '../hooks/useDelayedLoading';
 import FullScreenSpinner from '../components/FullScreenSpinner';
 
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, withRepeat, Easing, FadeInDown } from 'react-native-reanimated';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withRepeat,
+  Easing,
+  FadeInDown,
+} from 'react-native-reanimated';
 
 import { spacing, colors } from '../utils/design';
 
@@ -119,12 +133,14 @@ const HomeScreen: React.FC = () => {
   const periodLabel = period === 'week' ? 'This week' : 'This month';
 
   const periodIncome = useMemo(
-    () => periodEntries.filter((e) => e.type === 'in').reduce((s, x) => s + Number(x.amount || 0), 0),
+    () =>
+      periodEntries.filter((e) => e.type === 'in').reduce((s, x) => s + Number(x.amount || 0), 0),
     [periodEntries]
   );
 
   const periodExpense = useMemo(
-    () => periodEntries.filter((e) => e.type === 'out').reduce((s, x) => s + Number(x.amount || 0), 0),
+    () =>
+      periodEntries.filter((e) => e.type === 'out').reduce((s, x) => s + Number(x.amount || 0), 0),
     [periodEntries]
   );
 
@@ -285,7 +301,11 @@ const HomeScreen: React.FC = () => {
       };
     }
     if (netTrend.delta === null) {
-      return { label: 'New activity this week', color: colors.secondary, icon: 'auto-graph' as const };
+      return {
+        label: 'New activity this week',
+        color: colors.secondary,
+        icon: 'auto-graph' as const,
+      };
     }
     const isUp = netTrend.delta >= 0;
     return {
@@ -315,7 +335,11 @@ const HomeScreen: React.FC = () => {
       { label: 'Top category', value: topExpenseCategory, icon: 'category' },
       { label: 'Net (7d)', value: `₹${netTrend.current.toFixed(0)}`, icon: 'timeline' },
       { label: 'Balance', value: `₹${balance.toFixed(0)}`, icon: 'account-balance-wallet' },
-      { label: 'Cash flow', value: `${period === 'week' ? 'Weekly' : 'Monthly'}`, icon: 'insights' },
+      {
+        label: 'Cash flow',
+        value: `${period === 'week' ? 'Weekly' : 'Monthly'}`,
+        icon: 'insights',
+      },
     ],
     [topExpenseCategory, netTrend.current, balance, period]
   );
@@ -361,7 +385,11 @@ const HomeScreen: React.FC = () => {
           keyExtractor={(item) => item.local_id}
           showsVerticalScrollIndicator={false}
           renderItem={({ item, index }) => (
-            <Animated.View entering={FadeInDown.delay(520 + index * 40).springify().damping(16)}>
+            <Animated.View
+              entering={FadeInDown.delay(520 + index * 40)
+                .springify()
+                .damping(16)}
+            >
               <TransactionCard item={item} />
             </Animated.View>
           )}
@@ -380,9 +408,7 @@ const HomeScreen: React.FC = () => {
                 <View style={styles.heroTopRow}>
                   <View>
                     <Text style={styles.heroSubtle}>Welcome back</Text>
-                    <Text style={styles.heroGreeting}>
-                      {user?.name ? user.name : 'Guest'} 👋
-                    </Text>
+                    <Text style={styles.heroGreeting}>{user?.name ? user.name : 'Guest'} 👋</Text>
                   </View>
                   <TouchableOpacity
                     style={styles.heroSettings}
@@ -396,8 +422,14 @@ const HomeScreen: React.FC = () => {
                   <Text style={styles.heroPeriod}>{periodLabel}</Text>
                 </View>
                 <Text style={styles.heroBalance}>₹{periodNet.toFixed(2)}</Text>
-                <View style={[styles.trendBadge, { backgroundColor: `${heroTrendDetails.color}22` }]}>
-                  <MaterialIcon name={heroTrendDetails.icon} size={18} color={heroTrendDetails.color} />
+                <View
+                  style={[styles.trendBadge, { backgroundColor: `${heroTrendDetails.color}22` }]}
+                >
+                  <MaterialIcon
+                    name={heroTrendDetails.icon}
+                    size={18}
+                    color={heroTrendDetails.color}
+                  />
                   <Text style={[styles.trendText, { color: heroTrendDetails.color }]}>
                     {heroTrendDetails.label}
                   </Text>
@@ -405,15 +437,21 @@ const HomeScreen: React.FC = () => {
                 <View style={styles.heroStatsRow}>
                   <View style={[styles.heroStatCard, styles.heroStatSpacing]}>
                     <Text style={styles.heroStatLabel}>Income</Text>
-                    <Text style={[styles.heroStatValue, { color: colors.accentGreen }]}>₹{periodIncome.toFixed(2)}</Text>
+                    <Text style={[styles.heroStatValue, { color: colors.accentGreen }]}>
+                      ₹{periodIncome.toFixed(2)}
+                    </Text>
                   </View>
                   <View style={[styles.heroStatCard, styles.heroStatSpacing]}>
                     <Text style={styles.heroStatLabel}>Expense</Text>
-                    <Text style={[styles.heroStatValue, { color: colors.accentRed }]}>₹{periodExpense.toFixed(2)}</Text>
+                    <Text style={[styles.heroStatValue, { color: colors.accentRed }]}>
+                      ₹{periodExpense.toFixed(2)}
+                    </Text>
                   </View>
                   <View style={styles.heroStatCard}>
                     <Text style={styles.heroStatLabel}>Entries</Text>
-                    <Text style={[styles.heroStatValue, { color: colors.secondary }]}>{periodEntries.length}</Text>
+                    <Text style={[styles.heroStatValue, { color: colors.secondary }]}>
+                      {periodEntries.length}
+                    </Text>
                   </View>
                 </View>
               </View>
@@ -422,8 +460,13 @@ const HomeScreen: React.FC = () => {
                 {highlightCards.map((card, idx) => (
                   <Animated.View
                     key={card.label}
-                    entering={FadeInDown.delay(160 + idx * 60).springify().damping(16)}
-                    style={[styles.highlightCard, idx !== highlightCards.length - 1 && styles.horizontalSpacer]}
+                    entering={FadeInDown.delay(160 + idx * 60)
+                      .springify()
+                      .damping(16)}
+                    style={[
+                      styles.highlightCard,
+                      idx !== highlightCards.length - 1 && styles.horizontalSpacer,
+                    ]}
                   >
                     <MaterialIcon name={card.icon as any} size={18} color={colors.muted} />
                     <Text style={styles.highlightLabel}>{card.label}</Text>
@@ -436,8 +479,13 @@ const HomeScreen: React.FC = () => {
                 {homeActions.map((action, idx) => (
                   <Animated.View
                     key={action.label}
-                    entering={FadeInDown.delay(260 + idx * 60).springify().damping(15)}
-                    style={[styles.actionWrapper, idx !== homeActions.length - 1 && styles.horizontalSpacer]}
+                    entering={FadeInDown.delay(260 + idx * 60)
+                      .springify()
+                      .damping(15)}
+                    style={[
+                      styles.actionWrapper,
+                      idx !== homeActions.length - 1 && styles.horizontalSpacer,
+                    ]}
                   >
                     <TouchableOpacity
                       style={[styles.actionCard, { backgroundColor: `${action.accent}15` }]}
@@ -458,7 +506,9 @@ const HomeScreen: React.FC = () => {
                     <Text style={styles.cardTitle}>Cash flow</Text>
                     <Text style={styles.cardSubtitle}>Visualize income vs expense</Text>
                   </View>
-                  <TouchableOpacity onPress={() => setChartType(chartType === 'pie' ? 'bar' : 'pie')}>
+                  <TouchableOpacity
+                    onPress={() => setChartType(chartType === 'pie' ? 'bar' : 'pie')}
+                  >
                     <MaterialIcon
                       name={chartType === 'pie' ? 'bar-chart' : 'pie-chart'}
                       size={22}
@@ -484,7 +534,9 @@ const HomeScreen: React.FC = () => {
 
                 {isLoading ? (
                   <Animated.View style={[styles.skeletonBox, shimmerStyle]} />
-                ) : pieData.length > 0 || weeklyBar.income?.some(Boolean) || weeklyBar.expense?.some(Boolean) ? (
+                ) : pieData.length > 0 ||
+                  weeklyBar.income?.some(Boolean) ||
+                  weeklyBar.expense?.some(Boolean) ? (
                   <View style={styles.chartWrapper}>
                     {chartType === 'pie' && PieChart ? (
                       <PieChart
@@ -503,8 +555,16 @@ const HomeScreen: React.FC = () => {
                         data={{
                           labels: weeklyBar.labels,
                           datasets: [
-                            { data: weeklyBar.income, color: () => colors.accentGreen, label: 'Income' },
-                            { data: weeklyBar.expense, color: () => colors.accentRed, label: 'Expense' },
+                            {
+                              data: weeklyBar.income,
+                              color: () => colors.accentGreen,
+                              label: 'Income',
+                            },
+                            {
+                              data: weeklyBar.expense,
+                              color: () => colors.accentRed,
+                              label: 'Expense',
+                            },
                           ],
                         }}
                         width={CHART_WIDTH}
@@ -561,7 +621,10 @@ const HomeScreen: React.FC = () => {
             <View style={styles.emptyTransactions}>
               <MaterialIcon name="hourglass-empty" size={36} color={colors.muted} />
               <Text style={styles.unavailable}>No recent activity</Text>
-              <TouchableOpacity style={styles.emptyCta} onPress={() => navigation.navigate('AddEntry')}>
+              <TouchableOpacity
+                style={styles.emptyCta}
+                onPress={() => navigation.navigate('AddEntry')}
+              >
                 <Text style={styles.emptyCtaText}>Log your first entry</Text>
               </TouchableOpacity>
             </View>

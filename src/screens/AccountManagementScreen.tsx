@@ -348,10 +348,15 @@ const AccountManagementScreen = () => {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.contentContainer}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.contentContainer}
+      >
         <Animated.View style={[styles.heroCard, animatedStyle(0)]}>
           <Text style={styles.heroTitle}>Account Center</Text>
-          <Text style={styles.heroSubtitle}>Manage your profile and security settings in one place.</Text>
+          <Text style={styles.heroSubtitle}>
+            Manage your profile and security settings in one place.
+          </Text>
           <View style={styles.heroRow}>
             <View style={styles.heroBadge}>
               <MaterialIcon name="person" size={20} color={colors.primary} />
@@ -376,7 +381,7 @@ const AccountManagementScreen = () => {
                 style={styles.cardHeader}
                 onPress={() => toggleCard(section.id)}
               >
-                <View style={[styles.cardIcon, { backgroundColor: `${section.color}15` }]}> 
+                <View style={[styles.cardIcon, { backgroundColor: `${section.color}15` }]}>
                   <MaterialIcon name={section.icon as any} size={22} color={section.color} />
                 </View>
                 <View style={{ flex: 1 }}>
