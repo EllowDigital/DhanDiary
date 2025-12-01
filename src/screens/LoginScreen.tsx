@@ -102,7 +102,7 @@ const LoginScreen = () => {
               value={email}
               onChangeText={setEmail}
               autoCapitalize="none"
-              leftIcon={<MaterialIcon name="email" size={22} color="#64748B" />}
+              leftIcon={<MaterialIcon name="email" size={22} color={colors.muted} />}
               containerStyle={styles.inputWrap}
               inputContainerStyle={styles.inputContainer}
               inputStyle={styles.inputText}
@@ -118,12 +118,12 @@ const LoginScreen = () => {
               value={password}
               onChangeText={setPassword}
               secureTextEntry={!showPass}
-              leftIcon={<MaterialIcon name="lock" size={22} color="#64748B" />}
+              leftIcon={<MaterialIcon name="lock" size={22} color={colors.muted} />}
               rightIcon={
                 <TouchableOpacity onPress={() => setShowPass(!showPass)}>
                   <MaterialIcon
                     name={showPass ? 'visibility' : 'visibility-off'}
-                    color="#64748B"
+                    color={colors.muted}
                     size={22}
                   />
                 </TouchableOpacity>
@@ -148,7 +148,7 @@ const LoginScreen = () => {
                 <MaterialIcon
                   name="arrow-forward"
                   size={18}
-                  color="white"
+                  color={colors.white}
                   style={{ marginRight: 6 }}
                 />
               }
@@ -179,7 +179,7 @@ export default LoginScreen;
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#EEF3FF',
+    backgroundColor: colors.background,
   },
 
   container: {
@@ -189,10 +189,12 @@ const styles = StyleSheet.create({
   },
 
   card: {
-    backgroundColor: 'rgba(255,255,255,0.95)',
+    backgroundColor: colors.card,
     padding: spacing(3),
     borderRadius: 20,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
     ...shadows.large,
   },
 
@@ -206,14 +208,14 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#0F172A',
+    color: colors.text,
     textAlign: 'center',
     marginBottom: 4,
     fontFamily: fonts.heading,
   },
 
   subtitle: {
-    color: '#64748B',
+    color: colors.muted,
     marginBottom: spacing(2.5),
     textAlign: 'center',
     fontSize: 15,
@@ -225,14 +227,14 @@ const styles = StyleSheet.create({
   },
 
   inputContainer: {
-    backgroundColor: '#F1F5F9',
+    backgroundColor: colors.surfaceMuted,
     borderRadius: 12,
     paddingHorizontal: 12,
     borderBottomWidth: 0,
   },
 
   inputText: {
-    color: '#1E293B',
+    color: colors.text,
     fontSize: 16,
     paddingLeft: 6,
   },

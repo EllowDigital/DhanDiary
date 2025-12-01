@@ -25,6 +25,7 @@ import { getEntryByLocalId } from '../db/entries';
 import { Animated as RNAnimated } from 'react-native';
 import useDelayedLoading from '../hooks/useDelayedLoading';
 import FullScreenSpinner from '../components/FullScreenSpinner';
+import { colors, shadows } from '../utils/design';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const scale = SCREEN_WIDTH / 390;
@@ -410,15 +411,15 @@ const HistoryScreen = () => {
         <View style={styles.heroStatRow}>
           <View style={styles.heroColumn}>
             <Text style={styles.heroLabel}>Cash in</Text>
-            <Text style={[styles.heroValue, { color: '#3CCB75' }]}>₹{summary.totalIn.toLocaleString('en-IN')}</Text>
+            <Text style={[styles.heroValue, { color: colors.accentGreen }]}>₹{summary.totalIn.toLocaleString('en-IN')}</Text>
           </View>
           <View style={styles.heroColumn}>
             <Text style={styles.heroLabel}>Cash out</Text>
-            <Text style={[styles.heroValue, { color: '#FF5D5D' }]}>₹{summary.totalOut.toLocaleString('en-IN')}</Text>
+            <Text style={[styles.heroValue, { color: colors.accentRed }]}>₹{summary.totalOut.toLocaleString('en-IN')}</Text>
           </View>
           <View style={[styles.heroColumn, styles.heroColumnLast]}>
             <Text style={styles.heroLabel}>Net</Text>
-            <Text style={[styles.heroValue, { color: summary.net >= 0 ? '#60A5FA' : '#F87171' }]}>
+            <Text style={[styles.heroValue, { color: summary.net >= 0 ? colors.primary : colors.accentRed }]}>
               ₹{summary.net.toLocaleString('en-IN')}
             </Text>
           </View>
@@ -438,14 +439,14 @@ const HistoryScreen = () => {
       </View>
 
       <TouchableOpacity style={styles.filterToggle} onPress={toggleFilters}>
-        <MaterialIcon name="filter-list" size={22} color="#A5B4FC" />
+        <MaterialIcon name="filter-list" size={22} color={colors.primary} />
         <View style={{ flex: 1 }}>
           <Text style={styles.filterToggleLabel}>Filters</Text>
           <Text style={styles.filterToggleHint}>
             {activeFilterCount ? `${activeFilterCount} active filter${activeFilterCount > 1 ? 's' : ''}` : 'Refine your history'}
           </Text>
         </View>
-        <MaterialIcon name={filtersVisible ? 'expand-less' : 'expand-more'} size={22} color="#CBD5F5" />
+        <MaterialIcon name={filtersVisible ? 'expand-less' : 'expand-more'} size={22} color={colors.muted} />
       </TouchableOpacity>
 
       {filtersVisible && (
@@ -573,7 +574,7 @@ const HistoryScreen = () => {
 
   const emptyComponent = !showLoading ? (
     <View style={styles.emptyWrap}>
-      <MaterialIcon name="receipt-long" size={80} color="#94A3B8" />
+      <MaterialIcon name="receipt-long" size={80} color={colors.muted} />
       <Text style={styles.emptyTitle}>No Transactions Found</Text>
       <Text style={styles.emptySubtitle}>Adjust filters or add a new transaction to get started.</Text>
       <Button
@@ -631,7 +632,7 @@ const HistoryScreen = () => {
                 containerStyle={{ marginVertical: 10, borderRadius: 12 }}
                 buttonStyle={{ paddingVertical: 10 }}
                 selectedButtonStyle={{
-                  backgroundColor: editTypeIndex === 0 ? '#FF5D5D' : '#3CCB75',
+                  backgroundColor: editTypeIndex === 0 ? colors.accentRed : colors.accentGreen,
                 }}
               />
 
@@ -723,7 +724,7 @@ export default HistoryScreen;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#020617',
+    backgroundColor: colors.background,
   },
   listContent: {
     paddingHorizontal: 20,
@@ -734,33 +735,29 @@ const styles = StyleSheet.create({
     marginBottom: 26,
   },
   heroCard: {
-    backgroundColor: '#0F172A',
+    backgroundColor: colors.card,
     borderRadius: 24,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#1E2B44',
-    shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 16 },
-    elevation: 6,
+    borderColor: colors.border,
     marginBottom: 20,
+    ...shadows.large,
   },
   heroOverline: {
     fontSize: font(12),
     letterSpacing: 1,
     textTransform: 'uppercase',
-    color: '#A5B4FC',
+    color: colors.muted,
   },
   heroTitle: {
     fontSize: font(30),
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: colors.text,
     marginTop: 6,
   },
   heroSubtitle: {
     fontSize: font(14),
-    color: '#94A3B8',
+    color: colors.muted,
     marginTop: 4,
   },
   heroStatRow: {
@@ -776,13 +773,13 @@ const styles = StyleSheet.create({
   },
   heroLabel: {
     fontSize: font(12),
-    color: '#94A3B8',
+    color: colors.muted,
     marginBottom: 6,
   },
   heroValue: {
     fontSize: font(18),
     fontWeight: '700',
-    color: '#F8FAFC',
+    color: colors.text,
   },
   quickRow: {
     flexDirection: 'row',
@@ -790,52 +787,55 @@ const styles = StyleSheet.create({
   },
   quickCard: {
     flex: 1,
-    backgroundColor: '#0B1222',
+    backgroundColor: colors.card,
     borderRadius: 18,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#16213B',
+    borderColor: colors.border,
     marginRight: 12,
+    ...shadows.small,
   },
   quickCardLast: {
     marginRight: 0,
   },
   quickLabel: {
     fontSize: font(12),
-    color: '#94A3B8',
+    color: colors.muted,
     marginBottom: 6,
   },
   quickValue: {
     fontSize: font(16),
     fontWeight: '600',
-    color: '#F8FAFC',
+    color: colors.text,
   },
   filterToggle: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#111C32',
+    backgroundColor: colors.card,
     borderRadius: 20,
     paddingVertical: 14,
     paddingHorizontal: 16,
     borderWidth: 1,
-    borderColor: '#1E2B44',
+    borderColor: colors.border,
+    ...shadows.small,
   },
   filterToggleLabel: {
-    color: '#E2E8F0',
+    color: colors.text,
     fontSize: font(16),
     fontWeight: '600',
   },
   filterToggleHint: {
-    color: '#94A3B8',
+    color: colors.muted,
     fontSize: font(13),
   },
   filterCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderRadius: 22,
     padding: 18,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: colors.border,
     marginTop: 18,
+    ...shadows.small,
   },
   dateRow: {
     flexDirection: 'row',
@@ -845,10 +845,10 @@ const styles = StyleSheet.create({
     flex: 1,
     marginHorizontal: 5,
     borderRadius: 12,
-    borderColor: '#D1D5DB',
+    borderColor: colors.border,
   },
   dateBtnTitle: {
-    color: '#1F2937',
+    color: colors.text,
     fontSize: font(14),
   },
   presetRow: {
@@ -857,12 +857,12 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   presetBtnTitle: {
-    color: '#2563EB',
+    color: colors.primary,
     fontSize: font(13),
     fontWeight: '600',
   },
   input: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.surfaceMuted,
     borderBottomWidth: 0,
     borderRadius: 12,
     paddingHorizontal: 12,
@@ -871,11 +871,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   clearButton: {
-    borderColor: '#EF4444',
+    borderColor: colors.accentRed,
     marginTop: 10,
   },
   clearButtonTitle: {
-    color: '#EF4444',
+    color: colors.accentRed,
     fontWeight: '600',
   },
   emptyWrap: {
@@ -886,17 +886,17 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: font(20),
     fontWeight: '700',
-    color: '#E2E8F0',
+    color: colors.text,
   },
   emptySubtitle: {
     marginTop: 8,
-    color: '#94A3B8',
+    color: colors.muted,
     textAlign: 'center',
     fontSize: font(14),
     paddingHorizontal: 12,
   },
   emptyButton: {
-    backgroundColor: '#3B82F6',
+    backgroundColor: colors.primary,
     borderRadius: 14,
     paddingVertical: 12,
     paddingHorizontal: 20,
@@ -904,34 +904,35 @@ const styles = StyleSheet.create({
   emptyButtonTitle: {
     fontSize: font(15),
     fontWeight: '600',
+    color: colors.white,
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: colors.backdrop,
     justifyContent: 'center',
     padding: 20,
   },
   modalCard: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
     borderRadius: 16,
     padding: 20,
-    elevation: 4,
+    ...shadows.medium,
   },
   modalHeader: {
     fontSize: font(20),
     fontWeight: 'bold',
     marginBottom: 20,
     textAlign: 'center',
-    color: '#1F2937',
+    color: colors.text,
   },
   modalLabel: {
     fontSize: font(14),
-    color: '#4B5563',
+    color: colors.muted,
     fontWeight: '600',
     marginBottom: 4,
   },
   modalInput: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceMuted,
     borderRadius: 10,
     borderBottomWidth: 0,
     paddingHorizontal: 12,
@@ -942,12 +943,12 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
   modalCancelButton: {
-    borderColor: '#D1D5DB',
+    borderColor: colors.border,
   },
   modalCancelTitle: {
-    color: '#374151',
+    color: colors.muted,
   },
   modalSaveButton: {
-    backgroundColor: '#2563EB',
+    backgroundColor: colors.primary,
   },
 });
