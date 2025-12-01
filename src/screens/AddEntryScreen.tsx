@@ -1,5 +1,5 @@
 // src/screens/AddEntryScreen.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -12,7 +12,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Input, Button, Text } from '@rneui/themed';
-import SimpleButtonGroup from '../components/SimpleButtonGroup';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -23,15 +22,37 @@ import CategoryPickerModal from '../components/CategoryPickerModal';
 import { v4 as uuidv4 } from 'uuid';
 
 import Animated, {
+  FadeInDown,
+  FadeInUp,
   useSharedValue,
   useAnimatedStyle,
   withSpring,
   withTiming,
+  Easing,
 } from 'react-native-reanimated';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const scale = SCREEN_WIDTH / 390;
 const font = (s: number) => Math.round(s * scale);
+
+const quickCategories = ['Food', 'Transport', 'Bills', 'Salary', 'Shopping', 'Health', 'Other'];
+
+const typeConfigs = [
+  {
+    label: 'Cash Out',
+    subtitle: 'Expenses & payouts',
+    accent: '#F87171',
+    accentSoft: '#FEE2E2',
+    icon: 'trending-down',
+  },
+  {
+    label: 'Cash In',
+    subtitle: 'Income & refunds',
+    accent: '#10B981',
+    accentSoft: '#D1FAE5',
+    icon: 'trending-up',
+  },
+];
 
 const AddEntryScreen: React.FC = () => {
   const navigation = useNavigation();
@@ -49,8 +70,11 @@ const AddEntryScreen: React.FC = () => {
 
   const [date, setDate] = useState<Date>(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [segmentWidth, setSegmentWidth] = useState(0);
 
   const types: ('out' | 'in')[] = ['out', 'in'];
+  const typeMeta = typeConfigs[typeIndex];
+  const noteLength = note.trim().length;
 
   useEffect(() => {
     if (editingParamId && entries) {
@@ -118,6 +142,8 @@ const AddEntryScreen: React.FC = () => {
   // CARD ANIMATION
   const scaleValue = useSharedValue(1);
   const shadowValue = useSharedValue(5);
+  const segmentProgress = useSharedValue(0);
+  const amountFocusProgress = useSharedValue(0);
 
   const onPressInCard = () => {
     scaleValue.value = withSpring(1.02);
@@ -128,12 +154,46 @@ const AddEntryScreen: React.FC = () => {
     shadowValue.value = withTiming(5);
   };
 
+  useEffect(() => {
+    segmentProgress.value = withTiming(typeIndex, {
+      duration: 280,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [typeIndex, segmentProgress]);
+
+  const handleAmountFocus = () => {
+    amountFocusProgress.value = withTiming(1, { duration: 220, easing: Easing.out(Easing.quad) });
+  };
+
+  const handleAmountBlur = () => {
+    amountFocusProgress.value = withTiming(0, { duration: 220, easing: Easing.out(Easing.quad) });
+  };
+
   const animatedCardStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scaleValue.value }],
+    transform: [{ scale: scaleValue.value + amountFocusProgress.value * 0.01 }],
     elevation: shadowValue.value,
-    shadowRadius: shadowValue.value,
-    shadowOpacity: 0.09,
+    shadowRadius: shadowValue.value + amountFocusProgress.value * 6,
+    shadowOpacity: 0.08 + amountFocusProgress.value * 0.15,
   }));
+
+  const indicatorStyle = useAnimatedStyle(() => {
+    if (!segmentWidth) return { opacity: 0 };
+    const buttonWidth = (segmentWidth - 12) / 2;
+    const translateX = segmentProgress.value * (buttonWidth + 6);
+    return {
+      opacity: 1,
+      width: buttonWidth,
+      transform: [{ translateX }],
+    };
+  });
+
+  const subtitleLabel = editingLocalId
+    ? 'Update or adjust an existing movement'
+    : 'Log new income or expense in seconds';
+
+  const handleSegmentLayout = useCallback((event: any) => {
+    setSegmentWidth(event.nativeEvent.layout.width);
+  }, []);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -148,87 +208,168 @@ const AddEntryScreen: React.FC = () => {
           <Text style={styles.title}>
             {editingLocalId ? 'Edit Transaction' : 'Add Transaction'}
           </Text>
+          <Text style={styles.subtitle}>{subtitleLabel}</Text>
 
-          {/* TYPE SELECTOR */}
-          <SimpleButtonGroup
-            buttons={['Cash (OUT)', 'Cash (IN)']}
-            selectedIndex={typeIndex}
-            onPress={setTypeIndex}
-            containerStyle={styles.typeGroup}
-            buttonStyle={styles.typeButton}
-            selectedButtonStyle={{
-              backgroundColor: typeIndex === 0 ? '#FF5D5D' : '#3CCB75',
-            }}
-            textStyle={styles.typeText}
-          />
+          <Animated.View
+            entering={FadeInDown.delay(40).springify().damping(14)}
+            style={styles.segmentWrapper}
+            onLayout={handleSegmentLayout}
+          >
+            <Animated.View style={[styles.segmentIndicator, indicatorStyle]} />
+            {typeConfigs.map((cfg, idx) => {
+              const active = typeIndex === idx;
+              return (
+                <Pressable
+                  key={cfg.label}
+                  style={styles.segmentButton}
+                  onPress={() => setTypeIndex(idx)}
+                >
+                  <View style={styles.segmentContent}>
+                    <View
+                      style={[
+                        styles.segmentIcon,
+                        { backgroundColor: active ? cfg.accent : '#0D1F1B' },
+                      ]}
+                    >
+                      <MaterialIcon
+                        name={cfg.icon as any}
+                        size={18}
+                        color={active ? '#FFFFFF' : '#34D399'}
+                      />
+                    </View>
+                    <View>
+                      <Text style={[styles.segmentLabel, active && styles.segmentLabelActive]}>
+                        {cfg.label}
+                      </Text>
+                      <Text style={styles.segmentSubtitle}>{cfg.subtitle}</Text>
+                    </View>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </Animated.View>
 
-          {/* MAIN CARD */}
           <Pressable onPressIn={onPressInCard} onPressOut={onPressOutCard}>
-            <Animated.View style={[styles.cardWrapper, animatedCardStyle]}>
-              <View style={styles.cardInner}>
-                {/* AMOUNT */}
-                <View style={styles.amountRow}>
-                  <Text style={styles.currency}>₹</Text>
-                  <Input
-                    placeholder="0"
-                    keyboardType="numeric"
-                    value={amount}
-                    onChangeText={setAmount}
-                    containerStyle={{ flex: 1, paddingLeft: 0 }}
-                    inputContainerStyle={{ borderBottomWidth: 0 }}
-                    inputStyle={styles.amountInput}
-                  />
+            <Animated.View
+              entering={FadeInDown.delay(120).springify().damping(14)}
+              style={[styles.cardWrapper, { borderColor: `${typeMeta.accent}33` }, animatedCardStyle]}
+            >
+              <View style={styles.cardHeader}>
+                <Text style={styles.cardTitle}>Amount</Text>
+                <View style={[styles.typeBadge, { backgroundColor: typeMeta.accentSoft }]}>
+                  <MaterialIcon name={typeMeta.icon as any} size={16} color={typeMeta.accent} />
+                  <Text style={[styles.typeBadgeText, { color: typeMeta.accent }]}>{typeMeta.label}</Text>
                 </View>
+              </View>
 
-                {/* CATEGORY */}
-                <Pressable style={styles.row} onPress={() => setCategoryModalVisible(true)}>
-                  <View style={styles.rowLeft}>
-                    <MaterialIcon name="category" size={20} color="#475569" />
-                    <Text style={styles.rowLabel}>Category</Text>
-                  </View>
-                  <Text style={styles.rowValue}>{category}</Text>
-                </Pressable>
-
-                {/* DATE */}
-                <Pressable style={styles.row} onPress={() => setShowDatePicker(true)}>
-                  <View style={styles.rowLeft}>
-                    <MaterialIcon name="event" size={20} color="#475569" />
-                    <Text style={styles.rowLabel}>Date</Text>
-                  </View>
-                  <Text style={styles.rowValue}>{date.toDateString()}</Text>
-                </Pressable>
-
-                {showDatePicker && (
-                  <DateTimePicker
-                    value={date}
-                    mode="date"
-                    display="default"
-                    onChange={(e, d) => {
-                      setShowDatePicker(false);
-                      if (d) setDate(d);
-                    }}
-                  />
-                )}
-
-                {/* NOTE */}
+              <View style={styles.amountRow}>
+                <Text style={[styles.currency, { color: typeMeta.accent }]}>₹</Text>
                 <Input
-                  placeholder="Note (optional)"
-                  value={note}
-                  onChangeText={setNote}
-                  multiline
-                  inputContainerStyle={styles.noteInput}
+                  placeholder="0.00"
+                  keyboardType="decimal-pad"
+                  value={amount}
+                  onChangeText={setAmount}
+                  onFocus={handleAmountFocus}
+                  onBlur={handleAmountBlur}
+                  containerStyle={{ flex: 1, paddingLeft: 0 }}
+                  inputContainerStyle={{ borderBottomWidth: 0 }}
+                  inputStyle={styles.amountInput}
                 />
               </View>
+              <Text style={styles.cardHint}>{typeMeta.subtitle}</Text>
             </Animated.View>
           </Pressable>
 
-          {/* SAVE BUTTON */}
-          <Button
-            title={editingLocalId ? 'Update Transaction' : 'Save Transaction'}
-            onPress={handleSave}
-            buttonStyle={styles.saveButton}
-            containerStyle={{ marginTop: 15 }}
-          />
+          <Animated.View entering={FadeInDown.delay(200).springify().damping(14)}>
+            <View style={styles.dualRow}>
+              <Pressable
+                style={styles.infoTile}
+                onPress={() => setCategoryModalVisible(true)}
+              >
+                <View style={styles.infoLabelRow}>
+                  <MaterialIcon name="category" size={20} color="#5C6B7A" />
+                  <Text style={styles.infoLabel}>Category</Text>
+                </View>
+                <View style={styles.infoValueRow}>
+                  <Text style={styles.infoValue}>{category}</Text>
+                  <MaterialIcon name="chevron-right" size={20} color="#9CA3AF" />
+                </View>
+              </Pressable>
+
+              <Pressable style={styles.infoTile} onPress={() => setShowDatePicker(true)}>
+                <View style={styles.infoLabelRow}>
+                  <MaterialIcon name="event" size={20} color="#5C6B7A" />
+                  <Text style={styles.infoLabel}>Date</Text>
+                </View>
+                <View style={styles.infoValueRow}>
+                  <Text style={styles.infoValue}>{date.toDateString()}</Text>
+                  <MaterialIcon name="chevron-right" size={20} color="#9CA3AF" />
+                </View>
+              </Pressable>
+            </View>
+          </Animated.View>
+
+          {showDatePicker && (
+            <DateTimePicker
+              value={date}
+              mode="date"
+              display="default"
+              onChange={(e, d) => {
+                setShowDatePicker(false);
+                if (d) setDate(d);
+              }}
+            />
+          )}
+
+          <Animated.View entering={FadeInDown.delay(280).springify().damping(14)}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>Quick categories</Text>
+              <Text style={styles.sectionHint}>Tap to autofill</Text>
+            </View>
+            <View style={styles.chipRow}>
+              {quickCategories.map((item) => {
+                const active = category === item;
+                return (
+                  <Pressable
+                    key={item}
+                    style={[styles.chip, active && { backgroundColor: typeMeta.accentSoft }]}
+                    onPress={() => setCategory(item)}
+                  >
+                    <Text style={[styles.chipText, active && { color: typeMeta.accent }]}>{item}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </Animated.View>
+
+          <Animated.View
+            entering={FadeInDown.delay(360).springify().damping(14)}
+            style={styles.noteCard}
+          >
+            <View style={styles.noteHeader}>
+              <Text style={styles.sectionTitle}>Notes</Text>
+              <Text style={styles.sectionHint}>{noteLength}/160</Text>
+            </View>
+            <Input
+              placeholder="Add a short note (optional)"
+              value={note}
+              onChangeText={(text) => setNote(text.slice(0, 160))}
+              multiline
+              numberOfLines={3}
+              inputContainerStyle={styles.noteInput}
+              inputStyle={styles.noteText}
+              placeholderTextColor="#94A3B8"
+            />
+          </Animated.View>
+
+          <Animated.View entering={FadeInUp.delay(420).springify().damping(12)}>
+            <Button
+              title={editingLocalId ? 'Update Transaction' : 'Save Transaction'}
+              onPress={handleSave}
+              buttonStyle={[styles.saveButton, { backgroundColor: typeMeta.accent }]}
+              titleStyle={styles.saveButtonTitle}
+            />
+          </Animated.View>
 
           <CategoryPickerModal
             visible={categoryModalVisible}
@@ -250,119 +391,226 @@ export default AddEntryScreen;
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#F6F8FB',
+    backgroundColor: '#F4F7FB',
   },
-
   scrollContainer: {
     padding: 20,
-    paddingBottom: 40,
+    paddingBottom: 60,
   },
-
   title: {
     textAlign: 'center',
-    fontSize: font(22),
+    fontSize: font(24),
     fontWeight: '700',
-    marginBottom: 14,
+    marginBottom: 4,
     color: '#0F172A',
   },
-
-  /* TYPE BUTTON GROUP */
-  typeGroup: {
-    width: '78%',
-    alignSelf: 'center',
-    marginBottom: 20,
-  },
-  typeButton: {
-    paddingVertical: 8,
-    borderRadius: 10,
-  },
-  typeText: {
+  subtitle: {
+    textAlign: 'center',
+    color: '#64748B',
+    marginBottom: 18,
     fontSize: font(14),
-    fontWeight: '600',
   },
-
-  /* MAIN CARD */
+  segmentWrapper: {
+    flexDirection: 'row',
+    backgroundColor: '#071B1A',
+    borderRadius: 22,
+    padding: 6,
+    marginBottom: 18,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  segmentIndicator: {
+    position: 'absolute',
+    top: 6,
+    bottom: 6,
+    left: 6,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000000',
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+  },
+  segmentButton: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+  },
+  segmentContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  segmentIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  segmentLabel: {
+    fontSize: font(15),
+    fontWeight: '600',
+    color: '#8DA2AB',
+  },
+  segmentLabelActive: {
+    color: '#0F172A',
+  },
+  segmentSubtitle: {
+    fontSize: font(12),
+    color: '#94A3B8',
+  },
   cardWrapper: {
     backgroundColor: '#FFFFFF',
-    padding: 10,
-    borderRadius: 18,
-    marginBottom: 22,
+    borderRadius: 22,
+    padding: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
     elevation: 5,
+    marginBottom: 20,
+    borderWidth: 1,
   },
-
-  cardInner: {
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    padding: 16,
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
   },
-
+  cardTitle: {
+    fontSize: font(15),
+    fontWeight: '600',
+    color: '#475569',
+  },
+  typeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  typeBadgeText: {
+    fontSize: font(12),
+    fontWeight: '600',
+    marginLeft: 6,
+  },
   amountRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-    paddingBottom: 10,
+    marginTop: 6,
   },
-
   currency: {
-    fontSize: font(28),
+    fontSize: font(34),
     fontWeight: '800',
-    color: '#0F172A',
-    marginRight: 10,
+    marginRight: 8,
   },
-
   amountInput: {
-    fontSize: font(36),
+    fontSize: font(40),
     fontWeight: '800',
     color: '#0F172A',
   },
-
-  row: {
-    paddingVertical: 16,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    backgroundColor: '#F9FAFB',
+  cardHint: {
+    marginTop: 4,
+    color: '#94A3B8',
+    fontSize: font(12),
+  },
+  dualRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 20,
+  },
+  infoTile: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  infoLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 10,
-
+  },
+  infoLabel: {
+    fontSize: font(13),
+    fontWeight: '600',
+    color: '#64748B',
+    marginLeft: 8,
+  },
+  infoValueRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-
-  rowLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-
-  rowLabel: {
-    marginLeft: 10,
-    fontWeight: '600',
+  infoValue: {
     fontSize: font(16),
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  sectionTitle: {
+    fontSize: font(15),
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  sectionHint: {
+    fontSize: font(12),
+    color: '#94A3B8',
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 24,
+  },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: '#E5E7EB',
+    marginRight: 10,
+    marginBottom: 10,
+  },
+  chipText: {
+    fontSize: font(13),
+    fontWeight: '600',
     color: '#475569',
   },
-
-  rowValue: {
-    fontWeight: '700',
-    fontSize: font(16),
-    color: '#111',
+  noteCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 26,
   },
-
+  noteHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
   noteInput: {
-    backgroundColor: '#F9FAFB',
-    borderRadius: 10,
-    padding: 12,
-    marginTop: 10,
     borderBottomWidth: 0,
+    paddingTop: 4,
   },
-
+  noteText: {
+    fontSize: font(14),
+    color: '#0F172A',
+  },
   saveButton: {
-    backgroundColor: '#2563EB',
     paddingVertical: 16,
-    borderRadius: 12,
+    borderRadius: 16,
+  },
+  saveButtonTitle: {
+    fontSize: font(16),
+    fontWeight: '700',
   },
 });
