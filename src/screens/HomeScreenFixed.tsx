@@ -27,13 +27,22 @@ try {
 }
 
 const PIE_COLORS = [
-  '#4F46E5', // Indigo
-  '#06B6D4', // Cyan
-  '#22C55E', // Green
-  '#F59E0B', // Amber
-  '#EF4444', // Red
-  '#A855F7', // Purple
+  colors.primary,
+  colors.accentBlue,
+  colors.accentGreen,
+  colors.accentOrange,
+  colors.accentRed,
+  colors.secondary,
 ];
+
+const hexToRgb = (hex: string) => {
+  const normalized = hex.replace('#', '');
+  const bigint = parseInt(normalized, 16);
+  const r = (bigint >> 16) & 255;
+  const g = (bigint >> 8) & 255;
+  const b = bigint & 255;
+  return `${r}, ${g}, ${b}`;
+};
 
 const HomeScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -255,13 +264,16 @@ const HomeScreen: React.FC = () => {
   // Use pieExpenseData for pie chart (can toggle to pieIncomeData if needed)
   const pieData = pieExpenseData;
 
+  const chartPrimaryRgb = hexToRgb(colors.primary);
+  const chartLabelRgb = hexToRgb(colors.muted);
+
   const chartConfig = {
     backgroundColor: colors.card,
     backgroundGradientFrom: colors.card,
     backgroundGradientTo: colors.card,
     decimalPlaces: 0,
-    color: (opacity = 1) => `rgba(37, 99, 235, ${opacity})`,
-    labelColor: (opacity = 1) => `rgba(100, 116, 139, ${opacity})`,
+    color: (opacity = 1) => `rgba(${chartPrimaryRgb}, ${opacity})`,
+    labelColor: (opacity = 1) => `rgba(${chartLabelRgb}, ${opacity})`,
   };
 
   const heroTrendDetails = useMemo(() => {
@@ -432,7 +444,7 @@ const HomeScreen: React.FC = () => {
                       onPress={action.onPress}
                     >
                       <View style={[styles.actionIconWrap, { backgroundColor: action.accent }]}>
-                        <MaterialIcon name={action.icon as any} size={20} color="#fff" />
+                        <MaterialIcon name={action.icon as any} size={20} color={colors.white} />
                       </View>
                       <Text style={styles.actionLabel}>{action.label}</Text>
                     </TouchableOpacity>
@@ -491,8 +503,8 @@ const HomeScreen: React.FC = () => {
                         data={{
                           labels: weeklyBar.labels,
                           datasets: [
-                            { data: weeklyBar.income, color: () => '#22C55E', label: 'Income' },
-                            { data: weeklyBar.expense, color: () => '#F43F5E', label: 'Expense' },
+                            { data: weeklyBar.income, color: () => colors.accentGreen, label: 'Income' },
+                            { data: weeklyBar.expense, color: () => colors.accentRed, label: 'Expense' },
                           ],
                         }}
                         width={CHART_WIDTH}
@@ -783,7 +795,7 @@ const styles = StyleSheet.create({
   },
   skeletonBox: {
     height: 200,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceMuted,
     borderRadius: 18,
   },
   insightsCard: {
@@ -865,7 +877,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   emptyCtaText: {
-    color: '#FFFFFF',
+    color: colors.white,
     fontWeight: '600',
   },
   horizontalSpacer: {

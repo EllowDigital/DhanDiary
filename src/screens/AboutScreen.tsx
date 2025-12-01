@@ -212,8 +212,13 @@ const AboutScreen: React.FC = () => {
         <Button
           title={checking ? 'Checking…' : 'Check for Updates'}
           onPress={checkForUpdates}
-          icon=
-            <MaterialIcon name="system-update" color={colors.white} size={fontSize(18)} style={{ marginRight: 8 }} />
+          icon={
+            <MaterialIcon
+              name="system-update"
+              color={colors.white}
+              size={fontSize(18)}
+              style={{ marginRight: 8 }}
+            />
           }
           buttonStyle={styles.actionButton}
           titleStyle={styles.actionButtonTitle}
@@ -222,8 +227,13 @@ const AboutScreen: React.FC = () => {
           <Button
             title={checking ? 'Applying…' : 'Download & Apply Update'}
             onPress={() => setShowUpdateModal(true)}
-            icon=
-              <MaterialIcon name="file-download" color={colors.white} size={fontSize(18)} style={{ marginRight: 8 }} />
+            icon={
+              <MaterialIcon
+                name="file-download"
+                color={colors.white}
+                size={fontSize(18)}
+                style={{ marginRight: 8 }}
+              />
             }
             buttonStyle={[styles.actionButton, { backgroundColor: colors.accentGreen }]}
             titleStyle={styles.actionButtonTitle}

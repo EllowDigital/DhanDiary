@@ -116,7 +116,7 @@ const RegisterScreen = () => {
               placeholder="Full Name"
               value={name}
               onChangeText={setName}
-              leftIcon={<MaterialIcon name="person" size={22} color="#64748B" />}
+              leftIcon={<MaterialIcon name="person" size={22} color={colors.muted} />}
               containerStyle={styles.inputWrap}
               inputContainerStyle={styles.inputContainer}
               inputStyle={styles.inputText}
@@ -133,7 +133,7 @@ const RegisterScreen = () => {
                 if (emailError) setEmailError(null);
               }}
               autoCapitalize="none"
-              leftIcon={<MaterialIcon name="email" size={22} color="#64748B" />}
+              leftIcon={<MaterialIcon name="email" size={22} color={colors.muted} />}
               containerStyle={styles.inputWrap}
               inputContainerStyle={styles.inputContainer}
               inputStyle={styles.inputText}
@@ -152,7 +152,7 @@ const RegisterScreen = () => {
                 if (passwordError && v.length >= 8) setPasswordError(null);
               }}
               secureTextEntry={!showPass}
-              leftIcon={<MaterialIcon name="lock" size={22} color="#64748B" />}
+              leftIcon={<MaterialIcon name="lock" size={22} color={colors.muted} />}
               rightIcon={
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <TouchableOpacity
@@ -162,7 +162,7 @@ const RegisterScreen = () => {
                     <MaterialIcon
                       name={showPass ? 'visibility' : 'visibility-off'}
                       size={22}
-                      color="#64748B"
+                      color={colors.muted}
                     />
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -173,7 +173,7 @@ const RegisterScreen = () => {
                       )
                     }
                   >
-                    <MaterialIcon name="info-outline" size={20} color="#64748B" />
+                    <MaterialIcon name="info-outline" size={20} color={colors.muted} />
                   </TouchableOpacity>
                 </View>
               }
@@ -197,7 +197,7 @@ const RegisterScreen = () => {
                 <MaterialIcon
                   name="person-add"
                   size={18}
-                  color="white"
+                  color={colors.white}
                   style={{ marginRight: 6 }}
                 />
               }
@@ -225,7 +225,7 @@ export default RegisterScreen;
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#EEF3FF',
+    backgroundColor: colors.background,
   },
 
   container: {
@@ -235,9 +235,11 @@ const styles = StyleSheet.create({
   },
 
   card: {
-    backgroundColor: 'rgba(255,255,255,0.95)',
+    backgroundColor: colors.card,
     borderRadius: 20,
     padding: spacing(3),
+    borderWidth: 1,
+    borderColor: colors.border,
     ...shadows.large,
   },
 
@@ -245,13 +247,13 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '700',
     textAlign: 'center',
-    color: '#0F172A',
+    color: colors.text,
     fontFamily: fonts.heading,
   },
 
   subtitle: {
     textAlign: 'center',
-    color: '#64748B',
+    color: colors.muted,
     marginBottom: spacing(3),
     fontSize: 15,
   },
@@ -262,7 +264,7 @@ const styles = StyleSheet.create({
   },
 
   inputContainer: {
-    backgroundColor: '#F1F5F9',
+    backgroundColor: colors.surfaceMuted,
     borderRadius: 12,
     paddingHorizontal: 12,
     borderBottomWidth: 0,
@@ -270,7 +272,7 @@ const styles = StyleSheet.create({
 
   inputText: {
     fontSize: 16,
-    color: '#1E293B',
+    color: colors.text,
     paddingLeft: 6,
   },
 
@@ -293,7 +295,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   inputError: {
-    color: '#EF4444',
+    color: colors.accentRed,
     marginLeft: 6,
     fontSize: 12,
   },

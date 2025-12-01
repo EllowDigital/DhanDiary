@@ -22,6 +22,7 @@ import { clearAllData } from '../db/localDb';
 import { useNavigation } from '@react-navigation/native';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '../context/ToastContext';
+import { colors, shadows } from '../utils/design';
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 const sections = ['hero', 'quick', 'sync', 'danger'] as const;
@@ -148,10 +149,10 @@ const SettingsScreen = () => {
         <MaterialIcon name={icon as any} size={22} color={iconColor} />
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={[styles.actionLabel, destructive && { color: '#DC2626' }]}>{label}</Text>
+        <Text style={[styles.actionLabel, destructive && { color: colors.accentRed }]}>{label}</Text>
         {description ? <Text style={styles.actionDescription}>{description}</Text> : null}
       </View>
-      <MaterialIcon name="chevron-right" size={22} color="#94A3B8" />
+      <MaterialIcon name="chevron-right" size={22} color={colors.muted} />
     </TouchableOpacity>
   );
 
@@ -165,7 +166,7 @@ const SettingsScreen = () => {
               <Text style={styles.greetingSub}>Stay in control of your account and sync health.</Text>
             </View>
             <View style={styles.statusPill}>
-              <MaterialIcon name="verified-user" size={16} color="#22C55E" />
+              <MaterialIcon name="verified-user" size={16} color={colors.accentGreen} />
               <Text style={styles.statusText}>{user?.email || 'Guest user'}</Text>
             </View>
           </View>
@@ -185,14 +186,14 @@ const SettingsScreen = () => {
           <Text style={styles.cardTitle}>Quick Actions</Text>
           <ActionRow
             icon="person"
-            iconColor="#2563EB"
+            iconColor={colors.primary}
             label="Account Management"
             description="Update your personal info and preferences"
             onPress={() => navigation.navigate('Account')}
           />
           <ActionRow
             icon="logout"
-            iconColor="#DC2626"
+            iconColor={colors.accentRed}
             label="Logout"
             description="Sign out safely from this device"
             destructive
@@ -204,7 +205,7 @@ const SettingsScreen = () => {
           <Text style={styles.cardTitle}>Backup & Sync</Text>
           <View style={styles.infoRow}>
             <View style={styles.infoBadge}>
-              <MaterialIcon name="cloud-done" size={18} color="#2563EB" />
+              <MaterialIcon name="cloud-done" size={18} color={colors.primary} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.infoLabel}>Last Synced</Text>
@@ -213,7 +214,7 @@ const SettingsScreen = () => {
           </View>
           <View style={styles.infoRow}>
             <View style={styles.infoBadge}>
-              <MaterialIcon name="storage" size={18} color="#0EA5E9" />
+              <MaterialIcon name="storage" size={18} color={colors.secondary} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.infoLabel}>Synced Items</Text>
@@ -228,15 +229,15 @@ const SettingsScreen = () => {
             containerStyle={styles.btnContainer}
             buttonStyle={styles.primaryBtn}
             titleStyle={styles.primaryBtnTitle}
-            icon={<MaterialIcon name="sync" size={18} color="#fff" style={{ marginRight: 8 }} />}
+            icon={<MaterialIcon name="sync" size={18} color={colors.white} style={{ marginRight: 8 }} />}
           />
         </Animated.View>
 
         <Animated.View style={[styles.card, styles.dangerCard, animatedStyle(3)]}>
-          <Text style={[styles.cardTitle, { color: '#B45309' }]}>Danger Zone</Text>
+          <Text style={[styles.cardTitle, { color: colors.accentOrange }]}>Danger Zone</Text>
           <ActionRow
             icon="delete-forever"
-            iconColor="#EA580C"
+            iconColor={colors.accentOrange}
             label="Clear Local Data"
             description="Removes cached entries and logs you out"
             destructive
@@ -256,21 +257,20 @@ const createStyles = (padding: number, radius: number, fontScale: number) =>
   StyleSheet.create({
     safe: {
       flex: 1,
-      backgroundColor: '#EEF2FF',
+      backgroundColor: colors.background,
     },
     contentContainer: {
       padding: padding,
       paddingBottom: padding * 1.5,
     },
     heroCard: {
-      backgroundColor: '#0F172A',
+      backgroundColor: colors.card,
       borderRadius: radius,
       padding: padding,
       marginBottom: padding,
-      shadowColor: '#0F172A',
-      shadowOpacity: 0.25,
-      shadowRadius: 20,
-      elevation: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      ...shadows.large,
     },
     heroHeader: {
       flexDirection: 'row',
@@ -280,17 +280,17 @@ const createStyles = (padding: number, radius: number, fontScale: number) =>
     greeting: {
       fontSize: Math.round(18 * fontScale),
       fontWeight: '700',
-      color: '#F8FAFC',
+      color: colors.text,
     },
     greetingSub: {
-      color: '#CBD5F5',
+      color: colors.muted,
       marginTop: 6,
       fontSize: Math.round(14 * fontScale),
     },
     statusPill: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: '#1E293B',
+      backgroundColor: colors.surfaceMuted,
       paddingHorizontal: 12,
       paddingVertical: 6,
       borderRadius: 999,
@@ -298,7 +298,7 @@ const createStyles = (padding: number, radius: number, fontScale: number) =>
     },
     statusText: {
       marginLeft: 6,
-      color: '#E2E8F0',
+      color: colors.text,
       fontSize: Math.round(12 * fontScale),
     },
     metricsRow: {
@@ -307,42 +307,43 @@ const createStyles = (padding: number, radius: number, fontScale: number) =>
     },
     metricCard: {
       flex: 1,
-      backgroundColor: '#1D2439',
+      backgroundColor: colors.softCard,
       borderRadius: radius - 6,
       padding: 14,
+      borderWidth: 1,
+      borderColor: colors.border,
     },
     metricLabel: {
-      color: '#CBD5F5',
+      color: colors.muted,
       fontSize: Math.round(12 * fontScale),
     },
     metricValue: {
       marginTop: 4,
-      color: '#F8FAFC',
+      color: colors.text,
       fontSize: Math.round(14 * fontScale),
       fontWeight: '600',
     },
     card: {
-      backgroundColor: '#FFFFFF',
+      backgroundColor: colors.card,
       borderRadius: radius,
       padding: padding,
       marginBottom: padding,
-      shadowColor: '#0F172A',
-      shadowOpacity: 0.05,
-      shadowRadius: 12,
-      elevation: 4,
+      borderWidth: 1,
+      borderColor: colors.border,
+      ...shadows.small,
     },
     cardTitle: {
       fontSize: Math.round(16 * fontScale),
       fontWeight: '700',
       marginBottom: 16,
-      color: '#0F172A',
+      color: colors.text,
     },
     actionRow: {
       flexDirection: 'row',
       alignItems: 'center',
       paddingVertical: 12,
       borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: '#E2E8F0',
+      borderBottomColor: colors.border,
     },
     actionIcon: {
       width: 44,
@@ -355,12 +356,12 @@ const createStyles = (padding: number, radius: number, fontScale: number) =>
     actionLabel: {
       fontSize: Math.round(15 * fontScale),
       fontWeight: '600',
-      color: '#0F172A',
+      color: colors.text,
     },
     actionDescription: {
       marginTop: 2,
       fontSize: Math.round(12 * fontScale),
-      color: '#64748B',
+      color: colors.muted,
     },
     infoRow: {
       flexDirection: 'row',
@@ -372,18 +373,18 @@ const createStyles = (padding: number, radius: number, fontScale: number) =>
       width: 38,
       height: 38,
       borderRadius: 10,
-      backgroundColor: '#EFF6FF',
+      backgroundColor: colors.primarySoft,
       alignItems: 'center',
       justifyContent: 'center',
       marginRight: 14,
     },
     infoLabel: {
       fontSize: Math.round(13 * fontScale),
-      color: '#475569',
+      color: colors.subtleText,
     },
     infoValue: {
       fontSize: Math.round(14 * fontScale),
-      color: '#0F172A',
+      color: colors.text,
       fontWeight: '600',
       marginTop: 2,
     },
@@ -391,17 +392,18 @@ const createStyles = (padding: number, radius: number, fontScale: number) =>
       marginTop: 18,
     },
     primaryBtn: {
-      backgroundColor: '#2563EB',
+      backgroundColor: colors.primary,
       borderRadius: 14,
       paddingVertical: 13,
     },
     primaryBtnTitle: {
       fontWeight: '700',
       fontSize: Math.round(15 * fontScale),
+      color: colors.white,
     },
     dangerCard: {
-      backgroundColor: '#FFF7ED',
+      backgroundColor: `${colors.accentOrange}14`,
       borderWidth: 1,
-      borderColor: '#FED7AA',
+      borderColor: colors.accentOrange,
     },
   });

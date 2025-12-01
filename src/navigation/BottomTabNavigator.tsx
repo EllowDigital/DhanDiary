@@ -15,7 +15,7 @@ const Tab = createBottomTabNavigator();
 
 const labelStyle: TextStyle = {
   fontSize: 12,
-  fontWeight: '600',
+  fontWeight: '600' as TextStyle['fontWeight'],
   marginTop: -4,
 };
 
