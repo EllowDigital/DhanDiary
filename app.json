@@ -3,7 +3,7 @@
     "owner": "ellowdigital",
     "name": "DhanDiary",
     "slug": "dhandiary",
-    "version": "2.3.0",
+    "version": "2.4.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -15,11 +15,11 @@
     },
     "ios": {
       "supportsTablet": true,
-      "buildNumber": "20251202"
+      "buildNumber": "20251203"
     },
     "android": {
       "package": "com.ellowdigital.dhandiary",
-      "versionCode": 20251202,
+      "versionCode": 20251203,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -47,7 +47,8 @@
     "updates": {
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
-      "fallbackToCacheTimeout": 0
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/77c33e0a-8d3a-4f5b-afcf-72967c9af0bf"
     },
     "runtimeVersion": {
       "policy": "appVersion"
@@ -56,8 +57,6 @@
       "eas": {
         "projectId": "77c33e0a-8d3a-4f5b-afcf-72967c9af0bf"
       }
-      // NOTE: Secrets such as `NEON_URL` and `VEXO_API_KEY` must NOT be committed here.
-      // Put them into your environment/EAS secrets and reference via `Constants.expoConfig.extra` at runtime.
     }
   }
 }
