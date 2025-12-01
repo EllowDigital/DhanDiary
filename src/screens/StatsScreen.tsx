@@ -9,7 +9,6 @@ import {
   Animated,
   LayoutAnimation,
   Platform,
-  UIManager,
   Pressable,
 } from 'react-native';
 import { Text } from '@rneui/themed';
@@ -20,6 +19,7 @@ import dayjs from 'dayjs';
 import { getStartDateForFilter, getDaysCountForFilter } from '../utils/stats';
 import { LineChart, PieChart } from 'react-native-chart-kit';
 import { colors, shadows } from '../utils/design';
+import { enableLegacyLayoutAnimations } from '../utils/layoutAnimation';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const fontScale = PixelRatio.getFontScale();
@@ -44,8 +44,8 @@ const CHART_COLORS = [
   colors.secondary,
 ];
 
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
+if (Platform.OS === 'android') {
+  enableLegacyLayoutAnimations();
 }
 
 const chartTextColor = hexToRgb(colors.text);

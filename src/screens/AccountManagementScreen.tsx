@@ -9,7 +9,6 @@ import {
   SafeAreaView,
   LayoutAnimation,
   Platform,
-  UIManager,
   Animated,
   Easing,
 } from 'react-native';
@@ -23,9 +22,10 @@ import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../context/ToastContext';
 import { useNavigation } from '@react-navigation/native';
 import { colors } from '../utils/design';
+import { enableLegacyLayoutAnimations } from '../utils/layoutAnimation';
 
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
+if (Platform.OS === 'android') {
+  enableLegacyLayoutAnimations();
 }
 
 const AccountManagementScreen = () => {

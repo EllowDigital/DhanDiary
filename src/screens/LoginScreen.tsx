@@ -8,7 +8,7 @@ import {
   Platform,
   TouchableOpacity,
 } from 'react-native';
-import { Input, Button, Text } from '@rneui/themed';
+import { Button, Text } from '@rneui/themed';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../types/navigation';
@@ -22,16 +22,20 @@ import Animated, {
   useAnimatedStyle,
   withTiming,
   Easing,
+  FadeInDown,
 } from 'react-native-reanimated';
 
 import { spacing, colors, shadows, fonts } from '../utils/design';
 import FullScreenSpinner from '../components/FullScreenSpinner';
+import { useInternetStatus } from '../hooks/useInternetStatus';
+import AuthField from '../components/AuthField';
 
 type LoginScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList>;
 
 const LoginScreen = () => {
   const navigation = useNavigation<LoginScreenNavigationProp>();
   const { showToast } = useToast();
+  const isOnline = useInternetStatus();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -53,18 +57,19 @@ const LoginScreen = () => {
   }));
 
   const handleLogin = async () => {
+    if (loading) return;
     if (!email || !password) return Alert.alert('Validation', 'Please enter email and password');
+    if (!isOnline) {
+      return Alert.alert('Offline', 'Connect to the internet to sign in.');
+    }
 
     setLoading(true);
     try {
       await loginOnline(email, password);
       // Immediately sync after successful login so UI and remote state are up-to-date
-      try {
-        await syncBothWays();
-      } catch (e) {
-        // don't block login on sync failures
+      syncBothWays().catch((e: unknown) => {
         console.warn('Immediate post-login sync failed', e);
-      }
+      });
       showToast('Logged in successfully!');
       (navigation.getParent() as any)?.replace('Main');
     } catch (err: any) {
@@ -90,82 +95,102 @@ const LoginScreen = () => {
       >
         <Animated.View style={[styles.container, aStyle]}>
           <View style={styles.card}>
-            {/* App Icon */}
-            <Image source={require('../../assets/icon.png')} style={styles.logo} />
-
-            <Text style={styles.title}>Welcome Back 👋</Text>
-            <Text style={styles.subtitle}>Login to continue</Text>
+            <Animated.View entering={FadeInDown.duration(500)} style={styles.heroRow}>
+              <Image source={require('../../assets/icon.png')} style={styles.logo} />
+              <View style={styles.heroCopy}>
+                <Text style={styles.kicker}>Welcome back</Text>
+                <Text style={styles.title}>Log into DhanDiary</Text>
+                <Text style={styles.subtitle}>Pick up your cash flow in seconds.</Text>
+                <View style={styles.heroBullets}>
+                  <View style={styles.heroBullet}>
+                    <MaterialIcon name="shield" size={16} color={colors.primary} />
+                    <Text style={styles.heroBulletText}>AES-256 vault security</Text>
+                  </View>
+                  <View style={styles.heroBullet}>
+                    <MaterialIcon name="flash-on" size={16} color={colors.secondary} />
+                    <Text style={styles.heroBulletText}>Instant resume across devices</Text>
+                  </View>
+                </View>
+              </View>
+            </Animated.View>
 
             {/* Email Input */}
-            <Input
-              placeholder="Email"
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              leftIcon={<MaterialIcon name="email" size={22} color={colors.muted} />}
-              containerStyle={styles.inputWrap}
-              inputContainerStyle={styles.inputContainer}
-              inputStyle={styles.inputText}
-              autoComplete="email"
-              textContentType="emailAddress"
-              accessibilityLabel="Email input"
-              accessible
-            />
+            <Animated.View entering={FadeInDown.delay(180).springify().damping(16)}>
+              <AuthField
+                icon="mail-outline"
+                placeholder="Email"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoComplete="email"
+                textContentType="emailAddress"
+                value={email}
+                onChangeText={setEmail}
+                accessibilityLabel="Email input"
+                accessible
+              />
+            </Animated.View>
 
             {/* Password Input */}
-            <Input
-              placeholder="Password"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPass}
-              leftIcon={<MaterialIcon name="lock" size={22} color={colors.muted} />}
-              rightIcon={
-                <TouchableOpacity onPress={() => setShowPass(!showPass)}>
-                  <MaterialIcon
-                    name={showPass ? 'visibility' : 'visibility-off'}
-                    color={colors.muted}
-                    size={22}
-                  />
-                </TouchableOpacity>
-              }
-              containerStyle={styles.inputWrap}
-              inputContainerStyle={styles.inputContainer}
-              inputStyle={styles.inputText}
-              autoComplete="password"
-              textContentType="password"
-              accessibilityLabel="Password input"
-              accessible
-            />
+            <Animated.View entering={FadeInDown.delay(220).springify().damping(16)}>
+              <AuthField
+                icon="lock"
+                placeholder="Password"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPass}
+                autoComplete="password"
+                textContentType="password"
+                accessibilityLabel="Password input"
+                accessible
+                rightAccessory={
+                  <TouchableOpacity onPress={() => setShowPass(!showPass)}>
+                    <MaterialIcon
+                      name={showPass ? 'visibility' : 'visibility-off'}
+                      color={colors.muted}
+                      size={22}
+                    />
+                  </TouchableOpacity>
+                }
+              />
+            </Animated.View>
 
             {/* Login Button */}
-            <Button
-              title="Login"
-              onPress={handleLogin}
-              loading={loading}
-              accessibilityLabel="Login button"
-              accessibilityRole="button"
-              icon={
-                <MaterialIcon
-                  name="arrow-forward"
-                  size={18}
-                  color={colors.white}
-                  style={{ marginRight: 6 }}
-                />
-              }
-              buttonStyle={styles.primaryButton}
-              containerStyle={styles.buttonContainer}
-            />
+            <Animated.View
+              entering={FadeInDown.delay(260).springify().damping(16)}
+              style={{ width: '100%' }}
+            >
+              <Button
+                title={loading ? 'Signing in…' : 'Login'}
+                onPress={handleLogin}
+                loading={loading}
+                disabled={loading || !isOnline}
+                accessibilityLabel="Login button"
+                accessibilityRole="button"
+                icon={
+                  <MaterialIcon
+                    name="arrow-forward"
+                    size={18}
+                    color={colors.white}
+                    style={{ marginRight: 6 }}
+                  />
+                }
+                buttonStyle={styles.primaryButton}
+                containerStyle={styles.buttonContainer}
+              />
+            </Animated.View>
 
             {/* Register Link */}
-            <TouchableOpacity
-              onPress={() => navigation.navigate('Register')}
-              style={{ marginTop: spacing(2) }}
-            >
-              <Text style={styles.link}>Don't have an account? Create one</Text>
-            </TouchableOpacity>
+            <Animated.View entering={FadeInDown.delay(320).springify().damping(16)}>
+              <TouchableOpacity
+                onPress={() => navigation.navigate('Register')}
+                style={{ marginTop: spacing(2) }}
+              >
+                <Text style={styles.link}>Don't have an account? Create one</Text>
+              </TouchableOpacity>
+            </Animated.View>
           </View>
         </Animated.View>
-        <FullScreenSpinner visible={loading} message="Logging in..." />
+        <FullScreenSpinner visible={loading} message="Securing your session..." />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -192,51 +217,67 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     padding: spacing(3),
     borderRadius: 20,
-    alignItems: 'center',
+    alignItems: 'stretch',
     borderWidth: 1,
     borderColor: colors.border,
     ...shadows.large,
   },
 
-  logo: {
-    width: 90,
-    height: 90,
-    borderRadius: 20,
+  heroRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
     marginBottom: spacing(2),
+    gap: 12,
+  },
+
+  logo: {
+    width: 72,
+    height: 72,
+    borderRadius: 20,
+  },
+
+  heroCopy: {
+    flex: 1,
+  },
+
+  kicker: {
+    color: colors.muted,
+    textTransform: 'uppercase',
+    fontSize: 12,
+    letterSpacing: 1.3,
+    marginBottom: 4,
+    fontWeight: '600',
   },
 
   title: {
     fontSize: 24,
     fontWeight: '700',
     color: colors.text,
-    textAlign: 'center',
-    marginBottom: 4,
     fontFamily: fonts.heading,
   },
 
   subtitle: {
     color: colors.muted,
-    marginBottom: spacing(2.5),
-    textAlign: 'center',
+    marginTop: 4,
     fontSize: 15,
   },
 
-  inputWrap: {
-    width: '100%',
-    marginTop: spacing(1),
+  heroBullets: {
+    marginTop: spacing(1.5),
+    gap: spacing(1),
   },
 
-  inputContainer: {
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    borderBottomWidth: 0,
+  heroBullet: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
 
-  inputText: {
-    color: colors.text,
-    fontSize: 16,
-    paddingLeft: 6,
+  heroBulletText: {
+    color: colors.subtleText,
+    fontSize: 14,
+    fontWeight: '600',
   },
 
   primaryButton: {
