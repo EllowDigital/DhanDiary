@@ -14,21 +14,38 @@ type Props = {
 const AnimatedIcon = Animated.createAnimatedComponent(Animated.View);
 
 const AnimatedTabIcon = ({ name, library = 'material', color, size, focused = false }: Props) => {
-  const scale = useRef(new Animated.Value(focused ? 1.08 : 1)).current;
+  const anim = useRef(new Animated.Value(focused ? 1 : 0)).current;
 
   useEffect(() => {
-    Animated.spring(scale, {
-      toValue: focused ? 1.08 : 1,
+    Animated.spring(anim, {
+      toValue: focused ? 1 : 0,
       useNativeDriver: true,
-      friction: 8,
-      tension: 80,
+      tension: 180,
+      friction: 16,
     }).start();
-  }, [focused, scale]);
+  }, [focused, anim]);
 
   const IconComponent = library === 'mc' ? MaterialCommunityIcon : MaterialIcon;
 
+  const animatedStyle = {
+    transform: [
+      {
+        scale: anim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.96, 1.12],
+        }),
+      },
+      {
+        translateY: anim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [2, -4],
+        }),
+      },
+    ],
+  } as const;
+
   return (
-    <AnimatedIcon style={{ transform: [{ scale }] }}>
+    <AnimatedIcon style={animatedStyle}>
       <IconComponent name={name as any} color={color} size={size} />
     </AnimatedIcon>
   );
