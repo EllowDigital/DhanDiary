@@ -15,12 +15,14 @@ import { Alert, Modal, View as RNView } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import UpdateBanner from '../components/UpdateBanner';
 import * as Updates from 'expo-updates';
+import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
   Easing,
 } from 'react-native-reanimated';
+import { colors } from '../utils/design';
 
 const ELLOW_URL = 'https://ellowdigital.netlify.app';
 import getLatestShareLink from '../utils/shareLink';
@@ -210,8 +212,8 @@ const AboutScreen: React.FC = () => {
         <Button
           title={checking ? 'Checking…' : 'Check for Updates'}
           onPress={checkForUpdates}
-          icon={
-            <MaterialIcon name="system-update" color="#fff" size={fontSize(18)} style={{ marginRight: 8 }} />
+          icon=
+            <MaterialIcon name="system-update" color={colors.white} size={fontSize(18)} style={{ marginRight: 8 }} />
           }
           buttonStyle={styles.actionButton}
           titleStyle={styles.actionButtonTitle}
@@ -220,10 +222,10 @@ const AboutScreen: React.FC = () => {
           <Button
             title={checking ? 'Applying…' : 'Download & Apply Update'}
             onPress={() => setShowUpdateModal(true)}
-            icon={
-              <MaterialIcon name="file-download" color="#fff" size={fontSize(18)} style={{ marginRight: 8 }} />
+            icon=
+              <MaterialIcon name="file-download" color={colors.white} size={fontSize(18)} style={{ marginRight: 8 }} />
             }
-            buttonStyle={[styles.actionButton, { backgroundColor: '#059669' }]}
+            buttonStyle={[styles.actionButton, { backgroundColor: colors.accentGreen }]}
             titleStyle={styles.actionButtonTitle}
           />
         ) : null}
@@ -239,11 +241,11 @@ const AboutScreen: React.FC = () => {
 
         {/* Update details modal */}
         <Modal visible={showUpdateModal} transparent animationType="slide" onRequestClose={() => setShowUpdateModal(false)}>
-          <RNView style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: 20 }}>
-            <RNView style={{ backgroundColor: 'white', borderRadius: 12, padding: 18 }}>
-              <Text style={{ fontSize: fontSize(18), fontWeight: '700', marginBottom: 8 }}>New Update</Text>
-              <Text style={{ marginBottom: 10 }}>Version: {pkg.version}</Text>
-              <Text style={{ marginBottom: 14, color: '#475569' }}>
+          <RNView style={{ flex: 1, backgroundColor: colors.backdrop, justifyContent: 'center', padding: 20 }}>
+            <RNView style={{ backgroundColor: colors.card, borderRadius: 12, padding: 18 }}>
+              <Text style={{ fontSize: fontSize(18), fontWeight: '700', marginBottom: 8, color: colors.text }}>New Update</Text>
+              <Text style={{ marginBottom: 10, color: colors.subtleText }}>Version: {pkg.version}</Text>
+              <Text style={{ marginBottom: 14, color: colors.subtleText }}>
                 {updateInfo && updateInfo?.manifest && updateInfo.manifest?.releaseNotes
                   ? updateInfo.manifest.releaseNotes
                   : 'No release notes available.'}
@@ -251,13 +253,13 @@ const AboutScreen: React.FC = () => {
               <Button
                 title={checking ? 'Applying…' : 'Download & Install'}
                 onPress={fetchAndApplyUpdate}
-                buttonStyle={{ backgroundColor: '#059669', borderRadius: 10, marginBottom: 8 }}
+                buttonStyle={{ backgroundColor: colors.accentGreen, borderRadius: 10, marginBottom: 8 }}
               />
               <Button
                 title="Cancel"
                 onPress={() => setShowUpdateModal(false)}
-                buttonStyle={{ backgroundColor: '#E2E8F0', borderRadius: 10 }}
-                titleStyle={{ color: '#334155' }}
+                buttonStyle={{ backgroundColor: colors.border, borderRadius: 10 }}
+                titleStyle={{ color: colors.strongMuted }}
               />
             </RNView>
           </RNView>
@@ -266,7 +268,7 @@ const AboutScreen: React.FC = () => {
           title="Share with Friends"
           onPress={handleShare}
           icon={
-            <MaterialIcon name="share" color="#fff" size={fontSize(18)} style={{ marginRight: 8 }} />
+            <MaterialIcon name="share" color={colors.white} size={fontSize(18)} style={{ marginRight: 8 }} />
           }
           buttonStyle={styles.actionButton}
           titleStyle={styles.actionButtonTitle}
@@ -277,7 +279,7 @@ const AboutScreen: React.FC = () => {
             Linking.openURL(`mailto:sarwanyadav26@outlook.com?subject=DhanDiary%20Feedback`)
           }
           icon={
-            <MaterialIcon name="email" color="#334155" size={fontSize(18)} style={{ marginRight: 8 }} />
+            <MaterialIcon name="email" color={colors.strongMuted} size={fontSize(18)} style={{ marginRight: 8 }} />
           }
           buttonStyle={[styles.actionButton, styles.secondaryActionButton]}
           titleStyle={[styles.actionButtonTitle, styles.secondaryActionButtonTitle]}
@@ -286,13 +288,13 @@ const AboutScreen: React.FC = () => {
         {/* Persistent retry UI shown when updates have failed repeatedly */}
         {failureCount >= 2 && (
           <View style={styles.persistentRetry}>
-            <Text style={{ color: '#111827', fontWeight: '600', marginBottom: 6 }}>
+            <Text style={{ color: colors.text, fontWeight: '600', marginBottom: 6 }}>
               Update failed previously — you can retry or clear the retry state.
             </Text>
             <Button
               title={checking ? 'Retrying…' : 'Retry Update'}
               onPress={fetchAndApplyUpdate}
-              buttonStyle={{ backgroundColor: '#2563EB', borderRadius: 10, marginBottom: 8 }}
+              buttonStyle={{ backgroundColor: colors.primary, borderRadius: 10, marginBottom: 8 }}
             />
             <Button
               title="Clear Retry State"
@@ -302,8 +304,8 @@ const AboutScreen: React.FC = () => {
                   setFailureCount(0);
                 } catch (e) {}
               }}
-              buttonStyle={{ backgroundColor: '#E2E8F0', borderRadius: 10 }}
-              titleStyle={{ color: '#334155' }}
+              buttonStyle={{ backgroundColor: colors.border, borderRadius: 10 }}
+              titleStyle={{ color: colors.strongMuted }}
             />
           </View>
         )}
@@ -320,8 +322,6 @@ const AboutScreen: React.FC = () => {
 };
 
 // Re-import MaterialIcon if it's not already imported
-import MaterialIcon from '@expo/vector-icons/MaterialIcons';
-
 export default AboutScreen;
 
 /* MODERN, CLEAN STYLES */
@@ -334,7 +334,7 @@ const createStyles = (
   StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: '#F8FAFC',
+      backgroundColor: colors.background,
     },
     scrollContent: {
       paddingHorizontal: outerPadding,
@@ -351,10 +351,10 @@ const createStyles = (
       height: clamp(cardPadding * 4.8, 72, 96),
       borderRadius: 16,
       marginRight: gap * 0.9,
-      backgroundColor: '#fff',
+      backgroundColor: colors.card,
       elevation: 4,
-      shadowColor: '#000',
-      shadowOpacity: 0.1,
+      shadowColor: colors.shadow,
+      shadowOpacity: 1,
       shadowRadius: 10,
     },
     headerText: {
@@ -364,22 +364,22 @@ const createStyles = (
     appName: {
       fontSize: font(22),
       fontWeight: '800',
-      color: '#0F172A',
+      color: colors.text,
     },
     appSubtitle: {
       fontSize: font(14),
-      color: '#475569',
+      color: colors.subtleText,
       marginTop: 6,
       fontWeight: '600',
     },
 
     card: {
-      backgroundColor: '#fff',
+      backgroundColor: colors.card,
       padding: cardPadding,
       borderRadius: 16,
       marginBottom: gap,
       borderWidth: 1,
-      borderColor: '#E2E8F0',
+      borderColor: colors.border,
     },
     row: {
       flexDirection: 'row',
@@ -387,26 +387,26 @@ const createStyles = (
       alignItems: 'center',
       paddingVertical: 14,
       borderBottomWidth: 1,
-      borderBottomColor: '#F1F5F9',
+      borderBottomColor: colors.divider,
     },
     label: {
       fontSize: font(15),
-      color: '#64748B',
+      color: colors.muted,
     },
     value: {
       fontSize: font(15),
       fontWeight: '600',
-      color: '#1E293B',
+      color: colors.text,
     },
     description: {
       paddingTop: 16,
       fontSize: font(15),
-      color: '#475569',
+      color: colors.subtleText,
       lineHeight: 23,
     },
 
     actionButton: {
-      backgroundColor: '#2563EB',
+      backgroundColor: colors.primary,
       borderRadius: 12,
       paddingVertical: clamp(cardPadding * 0.7, 12, 18),
       marginBottom: 12,
@@ -416,19 +416,19 @@ const createStyles = (
       fontWeight: '600',
     },
     secondaryActionButton: {
-      backgroundColor: '#E2E8F0',
+      backgroundColor: colors.border,
     },
     secondaryActionButtonTitle: {
-      color: '#334155',
+      color: colors.strongMuted,
     },
 
     persistentRetry: {
-      backgroundColor: '#fff',
+      backgroundColor: colors.card,
       padding: cardPadding,
       borderRadius: 12,
       marginTop: gap,
       borderWidth: 1,
-      borderColor: '#E2E8F0',
+      borderColor: colors.border,
     },
 
     footer: {
@@ -437,11 +437,11 @@ const createStyles = (
     },
     footerText: {
       fontSize: font(14),
-      color: '#64748B',
+      color: colors.muted,
       textAlign: 'center',
     },
     footerLink: {
       fontWeight: 'bold',
-      color: '#2563EB',
+      color: colors.primary,
     },
   });

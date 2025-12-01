@@ -20,6 +20,7 @@ import { useToast } from '../context/ToastContext';
 import runInBackground from '../utils/background';
 import CategoryPickerModal from '../components/CategoryPickerModal';
 import { v4 as uuidv4 } from 'uuid';
+import { colors } from '../utils/design';
 
 import Animated, {
   FadeInDown,
@@ -41,15 +42,15 @@ const typeConfigs = [
   {
     label: 'Cash Out',
     subtitle: 'Expenses & payouts',
-    accent: '#F87171',
-    accentSoft: '#FEE2E2',
+    accent: colors.accentRed,
+    accentSoft: colors.accentRedSoft,
     icon: 'trending-down',
   },
   {
     label: 'Cash In',
     subtitle: 'Income & refunds',
-    accent: '#10B981',
-    accentSoft: '#D1FAE5',
+    accent: colors.accentGreen,
+    accentSoft: colors.accentGreenSoft,
     icon: 'trending-up',
   },
 ];
@@ -228,13 +229,13 @@ const AddEntryScreen: React.FC = () => {
                     <View
                       style={[
                         styles.segmentIcon,
-                        { backgroundColor: active ? cfg.accent : '#0D1F1B' },
+                        { backgroundColor: active ? cfg.accent : colors.card },
                       ]}
                     >
                       <MaterialIcon
                         name={cfg.icon as any}
                         size={18}
-                        color={active ? '#FFFFFF' : '#34D399'}
+                        color={active ? colors.white : cfg.accent}
                       />
                     </View>
                     <View>
@@ -287,23 +288,23 @@ const AddEntryScreen: React.FC = () => {
                 onPress={() => setCategoryModalVisible(true)}
               >
                 <View style={styles.infoLabelRow}>
-                  <MaterialIcon name="category" size={20} color="#5C6B7A" />
+                  <MaterialIcon name="category" size={20} color={colors.subtleText} />
                   <Text style={styles.infoLabel}>Category</Text>
                 </View>
                 <View style={styles.infoValueRow}>
                   <Text style={styles.infoValue}>{category}</Text>
-                  <MaterialIcon name="chevron-right" size={20} color="#9CA3AF" />
+                  <MaterialIcon name="chevron-right" size={20} color={colors.mutedSoft} />
                 </View>
               </Pressable>
 
               <Pressable style={styles.infoTile} onPress={() => setShowDatePicker(true)}>
                 <View style={styles.infoLabelRow}>
-                  <MaterialIcon name="event" size={20} color="#5C6B7A" />
+                  <MaterialIcon name="event" size={20} color={colors.subtleText} />
                   <Text style={styles.infoLabel}>Date</Text>
                 </View>
                 <View style={styles.infoValueRow}>
                   <Text style={styles.infoValue}>{date.toDateString()}</Text>
-                  <MaterialIcon name="chevron-right" size={20} color="#9CA3AF" />
+                  <MaterialIcon name="chevron-right" size={20} color={colors.mutedSoft} />
                 </View>
               </Pressable>
             </View>
@@ -358,7 +359,7 @@ const AddEntryScreen: React.FC = () => {
               numberOfLines={3}
               inputContainerStyle={styles.noteInput}
               inputStyle={styles.noteText}
-              placeholderTextColor="#94A3B8"
+              placeholderTextColor={colors.mutedSoft}
             />
           </Animated.View>
 
@@ -391,28 +392,29 @@ export default AddEntryScreen;
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#F4F7FB',
+    backgroundColor: colors.background,
   },
   scrollContainer: {
     padding: 20,
     paddingBottom: 60,
+    backgroundColor: colors.background,
   },
   title: {
     textAlign: 'center',
     fontSize: font(24),
     fontWeight: '700',
     marginBottom: 4,
-    color: '#0F172A',
+    color: colors.text,
   },
   subtitle: {
     textAlign: 'center',
-    color: '#64748B',
+    color: colors.muted,
     marginBottom: 18,
     fontSize: font(14),
   },
   segmentWrapper: {
     flexDirection: 'row',
-    backgroundColor: '#071B1A',
+    backgroundColor: colors.surfaceMuted,
     borderRadius: 22,
     padding: 6,
     marginBottom: 18,
@@ -425,9 +427,9 @@ const styles = StyleSheet.create({
     bottom: 6,
     left: 6,
     borderRadius: 16,
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#000000',
-    shadowOpacity: 0.15,
+    backgroundColor: colors.card,
+    shadowColor: colors.shadow,
+    shadowOpacity: 1,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 6 },
     elevation: 6,
@@ -452,26 +454,27 @@ const styles = StyleSheet.create({
   segmentLabel: {
     fontSize: font(15),
     fontWeight: '600',
-    color: '#8DA2AB',
+    color: colors.muted,
   },
   segmentLabelActive: {
-    color: '#0F172A',
+    color: colors.text,
   },
   segmentSubtitle: {
     fontSize: font(12),
-    color: '#94A3B8',
+    color: colors.mutedSoft,
   },
   cardWrapper: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderRadius: 22,
     padding: 20,
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 1,
     shadowRadius: 12,
     elevation: 5,
     marginBottom: 20,
     borderWidth: 1,
+    borderColor: colors.border,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -482,7 +485,7 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: font(15),
     fontWeight: '600',
-    color: '#475569',
+    color: colors.subtleText,
   },
   typeBadge: {
     flexDirection: 'row',
@@ -509,11 +512,11 @@ const styles = StyleSheet.create({
   amountInput: {
     fontSize: font(40),
     fontWeight: '800',
-    color: '#0F172A',
+    color: colors.text,
   },
   cardHint: {
     marginTop: 4,
-    color: '#94A3B8',
+    color: colors.mutedSoft,
     fontSize: font(12),
   },
   dualRow: {
@@ -523,11 +526,11 @@ const styles = StyleSheet.create({
   },
   infoTile: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderRadius: 18,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: colors.border,
   },
   infoLabelRow: {
     flexDirection: 'row',
@@ -537,7 +540,7 @@ const styles = StyleSheet.create({
   infoLabel: {
     fontSize: font(13),
     fontWeight: '600',
-    color: '#64748B',
+    color: colors.muted,
     marginLeft: 8,
   },
   infoValueRow: {
@@ -548,7 +551,7 @@ const styles = StyleSheet.create({
   infoValue: {
     fontSize: font(16),
     fontWeight: '700',
-    color: '#0F172A',
+    color: colors.text,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
@@ -559,11 +562,11 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: font(15),
     fontWeight: '700',
-    color: '#0F172A',
+    color: colors.text,
   },
   sectionHint: {
     fontSize: font(12),
-    color: '#94A3B8',
+    color: colors.mutedSoft,
   },
   chipRow: {
     flexDirection: 'row',
@@ -574,21 +577,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 999,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: colors.border,
     marginRight: 10,
     marginBottom: 10,
   },
   chipText: {
     fontSize: font(13),
     fontWeight: '600',
-    color: '#475569',
+    color: colors.subtleText,
   },
   noteCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderRadius: 20,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: colors.border,
     marginBottom: 26,
   },
   noteHeader: {
@@ -603,7 +606,7 @@ const styles = StyleSheet.create({
   },
   noteText: {
     fontSize: font(14),
-    color: '#0F172A',
+    color: colors.text,
   },
   saveButton: {
     paddingVertical: 16,

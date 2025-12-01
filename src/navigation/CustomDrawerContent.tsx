@@ -9,6 +9,7 @@ import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 
 import { logout } from '../services/auth';
 import { useAuth } from '../hooks/useAuth';
+import { colors } from '../utils/design';
 
 import Animated, {
   useSharedValue,
@@ -55,7 +56,7 @@ const CustomDrawerContent = React.memo((props: DrawerContentComponentProps) => {
         const { drawerLabel, drawerIcon } = props.descriptors[route.key].options;
         const label =
           typeof drawerLabel === 'function'
-            ? drawerLabel({ color: focused ? '#0F172A' : '#94A3B8', focused })
+            ? drawerLabel({ color: focused ? colors.text : colors.muted, focused })
             : drawerLabel || route.name;
         return (
           <Animated.View
@@ -70,13 +71,13 @@ const CustomDrawerContent = React.memo((props: DrawerContentComponentProps) => {
             >
               <View style={[styles.menuIconWrap, focused && styles.menuIconActive]}>
                 {drawerIcon &&
-                  drawerIcon({ color: focused ? '#0F172A' : '#94A3B8', size: 24, focused })}
+                  drawerIcon({ color: focused ? colors.text : colors.muted, size: 24, focused })}
               </View>
               <Text style={[styles.menuLabel, focused && styles.menuLabelActive]}>{label}</Text>
               <MaterialIcon
                 name="chevron-right"
                 size={20}
-                color={focused ? '#0F172A' : '#94A3B8'}
+                color={focused ? colors.text : colors.muted}
                 style={{ marginLeft: 'auto' }}
               />
             </TouchableOpacity>
@@ -133,11 +134,11 @@ const CustomDrawerContent = React.memo((props: DrawerContentComponentProps) => {
 
         <View style={styles.userBadges}>
           <View style={styles.badgePill}>
-            <MaterialIcon name="verified" size={16} color="#34D399" />
+            <MaterialIcon name="verified" size={16} color={colors.accentGreen} />
             <Text style={styles.badgeText}>Secure sync</Text>
           </View>
           <View style={styles.badgePill}>
-            <MaterialIcon name="schedule" size={16} color="#60A5FA" />
+            <MaterialIcon name="schedule" size={16} color={colors.secondary} />
             <Text style={styles.badgeText}>Realtime updates</Text>
           </View>
         </View>
@@ -149,7 +150,7 @@ const CustomDrawerContent = React.memo((props: DrawerContentComponentProps) => {
           onPress={() => props.navigation.navigate('AddEntry' as never)}
           activeOpacity={0.85}
         >
-          <View style={[styles.quickIconWrap, { backgroundColor: '#4F46E5' }]}>
+          <View style={[styles.quickIconWrap, { backgroundColor: colors.primary }]}>
             <MaterialIcon name="add" size={18} color="#fff" />
           </View>
           <Text style={styles.quickLabel}>Add entry</Text>
@@ -159,7 +160,7 @@ const CustomDrawerContent = React.memo((props: DrawerContentComponentProps) => {
           onPress={() => props.navigation.navigate('Stats' as never)}
           activeOpacity={0.85}
         >
-          <View style={[styles.quickIconWrap, { backgroundColor: '#0EA5E9' }]}>
+          <View style={[styles.quickIconWrap, { backgroundColor: colors.secondary }]}>
             <MaterialIcon name="insights" size={18} color="#fff" />
           </View>
           <Text style={styles.quickLabel}>Insights</Text>
@@ -200,27 +201,26 @@ export default CustomDrawerContent;
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
-    backgroundColor: '#020617',
+    backgroundColor: colors.background,
     paddingTop: 0,
     paddingBottom: 24,
   },
 
-  /* Header card */
   headerCard: {
-    backgroundColor: '#0F172A',
+    backgroundColor: colors.card,
     borderRadius: 28,
-    paddingVertical: 28,
+    paddingVertical: 26,
     paddingHorizontal: 20,
     alignItems: 'flex-start',
     marginHorizontal: 16,
     marginTop: 16,
     marginBottom: 18,
-    shadowColor: '#0F172A',
-    shadowOpacity: 0.35,
-    shadowRadius: 20,
+    shadowColor: colors.text,
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
     elevation: 6,
     borderWidth: 1,
-    borderColor: '#1E293B',
+    borderColor: colors.border,
   },
   brandRow: {
     flexDirection: 'row',
@@ -230,11 +230,11 @@ const styles = StyleSheet.create({
   appHeading: {
     fontSize: font(20),
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: colors.text,
   },
   appSub: {
     fontSize: font(12),
-    color: '#94A3B8',
+    color: colors.muted,
     marginTop: 4,
     fontWeight: '600',
   },
@@ -243,7 +243,9 @@ const styles = StyleSheet.create({
     height: 54,
     borderRadius: 16,
     marginRight: 12,
-    backgroundColor: '#fff',
+    backgroundColor: colors.softCard,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   userRow: {
     flexDirection: 'row',
@@ -254,14 +256,14 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 18,
-    backgroundColor: '#1D283A',
+    backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#1E293B',
+    borderColor: colors.border,
   },
   avatarText: {
-    color: '#FFFFFF',
+    color: colors.primary,
     fontWeight: '700',
     fontSize: font(18),
   },
@@ -270,12 +272,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   userName: {
-    color: '#FFFFFF',
+    color: colors.text,
     fontSize: font(16),
     fontWeight: '700',
   },
   userEmail: {
-    color: '#94A3B8',
+    color: colors.muted,
     fontSize: font(13),
     marginTop: 4,
   },
@@ -286,14 +288,14 @@ const styles = StyleSheet.create({
   badgePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1E293B',
+    backgroundColor: colors.softCard,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 999,
     marginRight: 10,
   },
   badgeText: {
-    color: '#CBD5F5',
+    color: colors.muted,
     fontSize: font(11),
     fontWeight: '600',
     marginLeft: 6,
@@ -306,12 +308,12 @@ const styles = StyleSheet.create({
   },
   quickAction: {
     flex: 1,
-    backgroundColor: '#0F172A',
+    backgroundColor: colors.card,
     borderRadius: 18,
     paddingVertical: 12,
     paddingHorizontal: 14,
     borderWidth: 1,
-    borderColor: '#1E293B',
+    borderColor: colors.border,
     marginHorizontal: 6,
   },
   quickIconWrap: {
@@ -323,7 +325,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   quickLabel: {
-    color: '#E2E8F0',
+    color: colors.text,
     fontWeight: '600',
   },
   menuWrap: {
@@ -337,75 +339,77 @@ const styles = StyleSheet.create({
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0B1120',
+    backgroundColor: colors.card,
     borderRadius: 18,
     paddingVertical: 14,
     paddingHorizontal: 14,
     borderWidth: 1,
-    borderColor: '#111827',
+    borderColor: colors.border,
   },
   menuItemActive: {
-    backgroundColor: '#E0E7FF',
-    borderColor: '#C7D2FE',
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primary,
   },
   menuIconWrap: {
     width: 38,
     height: 38,
     borderRadius: 14,
-    backgroundColor: '#111827',
+    backgroundColor: colors.softCard,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
   menuIconActive: {
-    backgroundColor: '#EEF2FF',
+    backgroundColor: colors.card,
   },
   menuLabel: {
-    color: '#94A3B8',
+    color: colors.muted,
     fontSize: font(15),
     fontWeight: '600',
   },
   menuLabelActive: {
-    color: '#0F172A',
+    color: colors.text,
   },
   promoCard: {
-    backgroundColor: '#0F172A',
+    backgroundColor: colors.softCard,
     borderRadius: 20,
     padding: 18,
     marginHorizontal: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#1D2A3F',
+    borderColor: colors.border,
   },
   promoTitle: {
-    color: '#FFFFFF',
+    color: colors.text,
     fontWeight: '700',
     marginBottom: 6,
   },
   promoText: {
-    color: '#94A3B8',
+    color: colors.muted,
     fontSize: 13,
     marginBottom: 10,
   },
   promoBtn: {
     alignSelf: 'flex-start',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.primary,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 999,
   },
   promoBtnText: {
-    color: '#0F172A',
+    color: '#FFFFFF',
     fontWeight: '700',
   },
 
   footer: {
     paddingHorizontal: 16,
     paddingBottom: 16,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
 
   logoutBtn: {
-    backgroundColor: '#EF4444',
+    backgroundColor: colors.accentRed,
     paddingVertical: 14,
     borderRadius: 16,
   },

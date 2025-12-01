@@ -14,6 +14,7 @@ import {
   EntryTimeframe,
   summarizeEntries,
 } from '../utils/entryFilters';
+import { colors } from '../utils/design';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,

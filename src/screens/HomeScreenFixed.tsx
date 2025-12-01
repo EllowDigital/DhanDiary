@@ -13,7 +13,7 @@ import FullScreenSpinner from '../components/FullScreenSpinner';
 
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withRepeat, Easing, FadeInDown } from 'react-native-reanimated';
 
-import { spacing, colors, shadows } from '../utils/design';
+import { spacing, colors } from '../utils/design';
 
 /* CHART KIT (safe load) */
 let PieChart: any = null;
@@ -256,29 +256,29 @@ const HomeScreen: React.FC = () => {
   const pieData = pieExpenseData;
 
   const chartConfig = {
-    backgroundColor: '#ffffff',
-    backgroundGradientFrom: '#ffffff',
-    backgroundGradientTo: '#ffffff',
+    backgroundColor: colors.card,
+    backgroundGradientFrom: colors.card,
+    backgroundGradientTo: colors.card,
     decimalPlaces: 0,
-    color: (opacity = 1) => `rgba(79, 70, 229, ${opacity})`,
-    labelColor: (opacity = 1) => `rgba(71, 85, 105, ${opacity})`,
+    color: (opacity = 1) => `rgba(37, 99, 235, ${opacity})`,
+    labelColor: (opacity = 1) => `rgba(100, 116, 139, ${opacity})`,
   };
 
   const heroTrendDetails = useMemo(() => {
     if (!entries.length) {
       return {
         label: 'Start logging to see insights',
-        color: '#38BDF8',
+        color: colors.secondary,
         icon: 'auto-graph' as const,
       };
     }
     if (netTrend.delta === null) {
-      return { label: 'New activity this week', color: '#38BDF8', icon: 'auto-graph' as const };
+      return { label: 'New activity this week', color: colors.secondary, icon: 'auto-graph' as const };
     }
     const isUp = netTrend.delta >= 0;
     return {
       label: `${isUp ? 'Up' : 'Down'} ${Math.abs(netTrend.delta).toFixed(1)}% vs last week`,
-      color: isUp ? '#22C55E' : '#F43F5E',
+      color: isUp ? colors.accentGreen : colors.accentRed,
       icon: isUp ? ('trending-up' as const) : ('trending-down' as const),
     };
   }, [entries.length, netTrend]);
@@ -313,19 +313,19 @@ const HomeScreen: React.FC = () => {
       {
         label: 'Add entry',
         icon: 'flash-on',
-        accent: '#4F46E5',
+        accent: colors.primary,
         onPress: () => navigation.navigate('AddEntry'),
       },
       {
         label: 'History',
         icon: 'history',
-        accent: '#0284C7',
+        accent: colors.secondary,
         onPress: () => navigation.navigate('History'),
       },
       {
         label: 'Stats',
         icon: 'insights',
-        accent: '#10B981',
+        accent: colors.accentGreen,
         onPress: () => navigation.navigate('Stats'),
       },
     ],
@@ -376,7 +376,7 @@ const HomeScreen: React.FC = () => {
                     style={styles.heroSettings}
                     onPress={() => navigation.navigate('Settings')}
                   >
-                    <MaterialIcon name="settings" size={20} color="#CBD5F5" />
+                    <MaterialIcon name="settings" size={20} color={colors.muted} />
                   </TouchableOpacity>
                 </View>
                 <View style={styles.heroLabelRow}>
@@ -393,15 +393,15 @@ const HomeScreen: React.FC = () => {
                 <View style={styles.heroStatsRow}>
                   <View style={[styles.heroStatCard, styles.heroStatSpacing]}>
                     <Text style={styles.heroStatLabel}>Income</Text>
-                    <Text style={[styles.heroStatValue, { color: '#22C55E' }]}>₹{periodIncome.toFixed(2)}</Text>
+                    <Text style={[styles.heroStatValue, { color: colors.accentGreen }]}>₹{periodIncome.toFixed(2)}</Text>
                   </View>
                   <View style={[styles.heroStatCard, styles.heroStatSpacing]}>
                     <Text style={styles.heroStatLabel}>Expense</Text>
-                    <Text style={[styles.heroStatValue, { color: '#F43F5E' }]}>₹{periodExpense.toFixed(2)}</Text>
+                    <Text style={[styles.heroStatValue, { color: colors.accentRed }]}>₹{periodExpense.toFixed(2)}</Text>
                   </View>
                   <View style={styles.heroStatCard}>
                     <Text style={styles.heroStatLabel}>Entries</Text>
-                    <Text style={[styles.heroStatValue, { color: '#38BDF8' }]}>{periodEntries.length}</Text>
+                    <Text style={[styles.heroStatValue, { color: colors.secondary }]}>{periodEntries.length}</Text>
                   </View>
                 </View>
               </View>
@@ -413,7 +413,7 @@ const HomeScreen: React.FC = () => {
                     entering={FadeInDown.delay(160 + idx * 60).springify().damping(16)}
                     style={[styles.highlightCard, idx !== highlightCards.length - 1 && styles.horizontalSpacer]}
                   >
-                    <MaterialIcon name={card.icon as any} size={18} color="#94A3B8" />
+                    <MaterialIcon name={card.icon as any} size={18} color={colors.muted} />
                     <Text style={styles.highlightLabel}>{card.label}</Text>
                     <Text style={styles.highlightValue}>{card.value}</Text>
                   </Animated.View>
@@ -450,7 +450,7 @@ const HomeScreen: React.FC = () => {
                     <MaterialIcon
                       name={chartType === 'pie' ? 'bar-chart' : 'pie-chart'}
                       size={22}
-                      color="#4F46E5"
+                      color={colors.primary}
                     />
                   </TouchableOpacity>
                 </View>
@@ -520,13 +520,13 @@ const HomeScreen: React.FC = () => {
                     <Text style={styles.cardTitle}>Insights</Text>
                     <Text style={styles.cardSubtitle}>Auto-curated from your activity</Text>
                   </View>
-                  <MaterialIcon name="lightbulb" size={22} color="#FBBF24" />
+                  <MaterialIcon name="lightbulb" size={22} color={colors.accentOrange} />
                 </View>
                 <View style={styles.insightGrid}>
                   {insightRows.map((row) => (
                     <View key={row.label} style={styles.insightItem}>
                       <View style={styles.insightIconWrap}>
-                        <MaterialIcon name={row.icon as any} size={18} color="#2563EB" />
+                        <MaterialIcon name={row.icon as any} size={18} color={colors.primary} />
                       </View>
                       <View style={styles.insightTextWrap}>
                         <Text style={styles.insightLabel}>{row.label}</Text>
@@ -547,7 +547,7 @@ const HomeScreen: React.FC = () => {
           }
           ListEmptyComponent={
             <View style={styles.emptyTransactions}>
-              <MaterialIcon name="hourglass-empty" size={36} color="#94A3B8" />
+              <MaterialIcon name="hourglass-empty" size={36} color={colors.muted} />
               <Text style={styles.unavailable}>No recent activity</Text>
               <TouchableOpacity style={styles.emptyCta} onPress={() => navigation.navigate('AddEntry')}>
                 <Text style={styles.emptyCtaText}>Log your first entry</Text>
@@ -569,7 +569,7 @@ export default HomeScreen;
 const styles = StyleSheet.create({
   mainContainer: {
     flex: 1,
-    backgroundColor: colors.background || '#F8FAFC',
+    backgroundColor: colors.background,
   },
   safeArea: {
     flex: 1,
@@ -583,17 +583,17 @@ const styles = StyleSheet.create({
     paddingBottom: spacing(3),
   },
   heroCard: {
-    backgroundColor: '#0F172A',
+    backgroundColor: colors.softCard,
     borderRadius: 28,
     padding: spacing(3),
     marginBottom: spacing(3),
     borderWidth: 1,
-    borderColor: '#1E293B',
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.35,
+    borderColor: colors.border,
+    shadowColor: colors.text,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.08,
     shadowRadius: 20,
-    elevation: 8,
+    elevation: 6,
   },
   heroTopRow: {
     flexDirection: 'row',
@@ -602,26 +602,28 @@ const styles = StyleSheet.create({
     marginBottom: spacing(2),
   },
   heroSubtle: {
-    color: '#94A3B8',
+    color: colors.muted,
     fontSize: 14,
     marginBottom: 4,
   },
   heroGreeting: {
     fontSize: 22,
-    color: '#FFFFFF',
+    color: colors.text,
     fontWeight: '700',
     letterSpacing: -0.5,
   },
   heroSettings: {
-    backgroundColor: '#1E293B',
+    backgroundColor: colors.card,
     width: 38,
     height: 38,
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   heroLabel: {
-    color: '#94A3B8',
+    color: colors.muted,
     fontSize: 13,
     marginBottom: 4,
   },
@@ -632,12 +634,12 @@ const styles = StyleSheet.create({
     marginTop: spacing(1),
   },
   heroPeriod: {
-    color: '#CBD5F5',
+    color: colors.muted,
     fontSize: 12,
     fontWeight: '600',
   },
   heroBalance: {
-    color: '#FFFFFF',
+    color: colors.text,
     fontSize: 36,
     fontWeight: '800',
     letterSpacing: -1,
@@ -663,17 +665,17 @@ const styles = StyleSheet.create({
   },
   heroStatCard: {
     flex: 1,
-    backgroundColor: '#182232',
+    backgroundColor: colors.card,
     padding: 14,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#1F2937',
+    borderColor: colors.border,
   },
   heroStatSpacing: {
     marginRight: 12,
   },
   heroStatLabel: {
-    color: '#94A3B8',
+    color: colors.muted,
     fontSize: 12,
     marginBottom: 6,
   },
@@ -687,12 +689,12 @@ const styles = StyleSheet.create({
   },
   highlightCard: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderRadius: 18,
     padding: 14,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    shadowColor: '#000',
+    borderColor: colors.border,
+    shadowColor: colors.text,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.04,
     shadowRadius: 10,
@@ -700,11 +702,11 @@ const styles = StyleSheet.create({
   },
   highlightLabel: {
     marginTop: 8,
-    color: '#94A3B8',
+    color: colors.muted,
     fontSize: 12,
   },
   highlightValue: {
-    color: '#111827',
+    color: colors.text,
     fontWeight: '700',
     fontSize: 16,
     marginTop: 2,
@@ -722,7 +724,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#E0E7FF',
+    borderColor: colors.border,
   },
   actionIconWrap: {
     width: 40,
@@ -733,17 +735,17 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   actionLabel: {
-    color: '#0F172A',
+    color: colors.text,
     fontWeight: '700',
   },
   analyticsCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderRadius: 24,
     padding: spacing(3),
     marginBottom: spacing(3),
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    shadowColor: '#000',
+    borderColor: colors.border,
+    shadowColor: colors.text,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.05,
     shadowRadius: 14,
@@ -758,10 +760,10 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#111827',
+    color: colors.text,
   },
   cardSubtitle: {
-    color: '#94A3B8',
+    color: colors.muted,
     fontSize: 13,
   },
   controlsRow: {
@@ -776,7 +778,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   unavailable: {
-    color: '#94A3B8',
+    color: colors.muted,
     fontSize: 13,
   },
   skeletonBox: {
@@ -785,17 +787,17 @@ const styles = StyleSheet.create({
     borderRadius: 18,
   },
   insightsCard: {
-    backgroundColor: '#0B1120',
+    backgroundColor: colors.card,
     borderRadius: 24,
     padding: spacing(3),
     marginBottom: spacing(3),
     borderWidth: 1,
-    borderColor: '#1E293B',
-    shadowColor: '#0B1120',
+    borderColor: colors.border,
+    shadowColor: colors.text,
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.35,
+    shadowOpacity: 0.05,
     shadowRadius: 18,
-    elevation: 6,
+    elevation: 4,
   },
   insightGrid: {
     flexDirection: 'row',
@@ -812,7 +814,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 12,
-    backgroundColor: '#1E293B',
+    backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 10,
@@ -821,11 +823,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   insightLabel: {
-    color: '#94A3B8',
+    color: colors.muted,
     fontSize: 12,
   },
   insightValue: {
-    color: '#FFFFFF',
+    color: colors.text,
     fontWeight: '700',
     fontSize: 15,
   },
@@ -839,28 +841,28 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#0F172A',
+    color: colors.text,
   },
   seeAll: {
-    color: '#4F46E5',
+    color: colors.primary,
     fontWeight: '600',
     fontSize: 13,
   },
   emptyTransactions: {
     alignItems: 'center',
     padding: spacing(4),
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderRadius: 20,
     marginHorizontal: spacing(2),
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   emptyCta: {
     marginTop: 12,
     paddingHorizontal: 18,
     paddingVertical: 8,
     borderRadius: 999,
-    backgroundColor: '#4F46E5',
+    backgroundColor: colors.primary,
   },
   emptyCtaText: {
     color: '#FFFFFF',
