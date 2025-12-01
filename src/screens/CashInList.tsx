@@ -182,7 +182,7 @@ const CashInList = () => {
   const emptyComponent = !showLoading ? (
     <View style={styles.emptyWrap}>
       <View style={styles.emptyIconContainer}>
-        <MaterialIcon name="trending-up" size={font(40)} color="#34D399" />
+        <MaterialIcon name="trending-up" size={font(40)} color={colors.accentGreen} />
       </View>
       <Text style={styles.emptyTitle}>No income yet</Text>
       <Text style={styles.emptySubtitle}>Record your first earning to see it here.</Text>
@@ -233,7 +233,7 @@ export default CashInList;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#03130F',
+    backgroundColor: colors.background,
   },
   listContent: {
     paddingHorizontal: Math.round(20 * scale),
@@ -244,32 +244,32 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   heroCard: {
-    backgroundColor: '#052E27',
+    backgroundColor: colors.card,
     borderRadius: 24,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#0F3F33',
-    shadowColor: '#000',
-    shadowOpacity: 0.25,
+    borderColor: colors.border,
+    shadowColor: colors.shadow,
+    shadowOpacity: 1,
     shadowRadius: 20,
-    shadowOffset: { width: 0, height: 16 },
+    shadowOffset: { width: 0, height: 12 },
     marginBottom: 18,
   },
   heroOverline: {
     fontSize: font(12),
     textTransform: 'uppercase',
     letterSpacing: 1,
-    color: '#6EE7B7',
+    color: colors.accentGreen,
   },
   heroTitle: {
     fontSize: font(30),
     fontWeight: '700',
-    color: '#ECFDF5',
+    color: colors.text,
     marginTop: 4,
   },
   heroSubtitle: {
     fontSize: font(14),
-    color: '#A7F3D0',
+    color: colors.muted,
     marginTop: 8,
   },
   heroRow: {
@@ -285,13 +285,13 @@ const styles = StyleSheet.create({
   },
   heroLabel: {
     fontSize: font(12),
-    color: '#A7F3D0',
+    color: colors.muted,
     marginBottom: 6,
   },
   heroValue: {
     fontSize: font(16),
     fontWeight: '600',
-    color: '#ECFDF5',
+    color: colors.text,
   },
   quickGrid: {
     flexDirection: 'row',
@@ -305,8 +305,8 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#0F3F33',
-    backgroundColor: '#03201A',
+    borderColor: colors.border,
+    backgroundColor: colors.card,
     marginBottom: 12,
     paddingHorizontal: 16,
   },
@@ -315,19 +315,19 @@ const styles = StyleSheet.create({
   },
   quickLabel: {
     fontSize: font(12),
-    color: '#93E6C9',
+    color: colors.muted,
     marginBottom: 6,
   },
   quickValue: {
     fontSize: font(15),
-    color: '#ECFDF5',
+    color: colors.text,
     fontWeight: '600',
   },
   pillSection: {
     marginBottom: 16,
   },
   pillHeading: {
-    color: '#A7F3D0',
+    color: colors.muted,
     fontSize: font(13),
     marginBottom: 8,
     fontWeight: '600',
@@ -342,20 +342,20 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#0F3F33',
+    borderColor: colors.border,
     margin: 4,
   },
   pillActive: {
-    backgroundColor: '#10B981',
-    borderColor: '#10B981',
+    backgroundColor: colors.accentGreen,
+    borderColor: colors.accentGreen,
   },
   pillText: {
-    color: '#93E6C9',
+    color: colors.muted,
     fontSize: font(13),
     fontWeight: '600',
   },
   pillTextActive: {
-    color: '#FFFFFF',
+    color: colors.white,
   },
   transactionWrapper: {
     marginBottom: 12,
@@ -368,7 +368,7 @@ const styles = StyleSheet.create({
     width: font(80),
     height: font(80),
     borderRadius: font(40),
-    backgroundColor: '#052E27',
+    backgroundColor: colors.accentGreenSoft,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20,
@@ -376,18 +376,18 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: font(20),
     fontWeight: '700',
-    color: '#ECFDF5',
+    color: colors.text,
     textAlign: 'center',
   },
   emptySubtitle: {
     marginTop: 8,
     fontSize: font(14),
-    color: '#A7F3D0',
+    color: colors.muted,
     textAlign: 'center',
     paddingHorizontal: 12,
   },
   addBtn: {
-    backgroundColor: '#10B981',
+    backgroundColor: colors.accentGreen,
     borderRadius: 14,
     paddingVertical: 12,
     paddingHorizontal: 24,
@@ -395,5 +395,6 @@ const styles = StyleSheet.create({
   addBtnTitle: {
     fontSize: font(15),
     fontWeight: '600',
+    color: colors.white,
   },
 });

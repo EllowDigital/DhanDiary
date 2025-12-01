@@ -14,6 +14,7 @@ import {
   EntryTimeframe,
   summarizeEntries,
 } from '../utils/entryFilters';
+import { colors } from '../utils/design';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -181,7 +182,7 @@ const CashOutList = () => {
   const emptyComponent = !showLoading ? (
     <View style={styles.emptyWrap}>
       <View style={styles.emptyIconContainer}>
-        <MaterialIcon name="trending-down" size={font(40)} color="#F87171" />
+        <MaterialIcon name="trending-down" size={font(40)} color={colors.accentRed} />
       </View>
       <Text style={styles.emptyTitle}>No expenses yet</Text>
       <Text style={styles.emptySubtitle}>Add your first expense to start tracking cash outflows.</Text>
@@ -232,7 +233,7 @@ export default CashOutList;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#030712',
+    backgroundColor: colors.background,
   },
   listContent: {
     paddingHorizontal: Math.round(20 * scale),
@@ -243,32 +244,32 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   heroCard: {
-    backgroundColor: '#0F172A',
+    backgroundColor: colors.card,
     borderRadius: 24,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#1E2B44',
-    shadowColor: '#000',
-    shadowOpacity: 0.25,
+    borderColor: colors.border,
+    shadowColor: colors.shadow,
+    shadowOpacity: 1,
     shadowRadius: 20,
-    shadowOffset: { width: 0, height: 16 },
+    shadowOffset: { width: 0, height: 12 },
     marginBottom: 18,
   },
   heroOverline: {
     fontSize: font(12),
     textTransform: 'uppercase',
     letterSpacing: 1,
-    color: '#A5B4FC',
+    color: colors.accentRed,
   },
   heroTitle: {
     fontSize: font(30),
     fontWeight: '700',
-    color: '#F8FAFC',
+    color: colors.text,
     marginTop: 4,
   },
   heroSubtitle: {
     fontSize: font(14),
-    color: '#94A3B8',
+    color: colors.muted,
     marginTop: 8,
   },
   heroRow: {
@@ -284,13 +285,13 @@ const styles = StyleSheet.create({
   },
   heroLabel: {
     fontSize: font(12),
-    color: '#94A3B8',
+    color: colors.muted,
     marginBottom: 6,
   },
   heroValue: {
     fontSize: font(16),
     fontWeight: '600',
-    color: '#F8FAFC',
+    color: colors.text,
   },
   quickGrid: {
     flexDirection: 'row',
@@ -304,8 +305,8 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#1F2A44',
-    backgroundColor: '#0B1121',
+    borderColor: colors.border,
+    backgroundColor: colors.card,
     marginBottom: 12,
     paddingHorizontal: 16,
   },
@@ -314,19 +315,19 @@ const styles = StyleSheet.create({
   },
   quickLabel: {
     fontSize: font(12),
-    color: '#94A3B8',
+    color: colors.muted,
     marginBottom: 6,
   },
   quickValue: {
     fontSize: font(15),
-    color: '#F8FAFC',
+    color: colors.text,
     fontWeight: '600',
   },
   pillSection: {
     marginBottom: 16,
   },
   pillHeading: {
-    color: '#CBD5F5',
+    color: colors.muted,
     fontSize: font(13),
     marginBottom: 8,
     fontWeight: '600',
@@ -341,20 +342,20 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#1E2B44',
+    borderColor: colors.border,
     margin: 4,
   },
   pillActive: {
-    backgroundColor: '#3B82F6',
-    borderColor: '#3B82F6',
+    backgroundColor: colors.accentRed,
+    borderColor: colors.accentRed,
   },
   pillText: {
-    color: '#94A3B8',
+    color: colors.muted,
     fontSize: font(13),
     fontWeight: '600',
   },
   pillTextActive: {
-    color: '#FFFFFF',
+    color: colors.white,
   },
   transactionWrapper: {
     marginBottom: 12,
@@ -367,7 +368,7 @@ const styles = StyleSheet.create({
     width: font(80),
     height: font(80),
     borderRadius: font(40),
-    backgroundColor: '#1F2937',
+    backgroundColor: colors.primarySoft,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20,
@@ -375,18 +376,18 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: font(20),
     fontWeight: '700',
-    color: '#F8FAFC',
+    color: colors.text,
     textAlign: 'center',
   },
   emptySubtitle: {
     marginTop: 8,
     fontSize: font(14),
-    color: '#94A3B8',
+    color: colors.muted,
     textAlign: 'center',
     paddingHorizontal: 12,
   },
   addBtn: {
-    backgroundColor: '#EF4444',
+    backgroundColor: colors.accentRed,
     borderRadius: 14,
     paddingVertical: 12,
     paddingHorizontal: 24,
@@ -394,5 +395,6 @@ const styles = StyleSheet.create({
   addBtnTitle: {
     fontSize: font(15),
     fontWeight: '600',
+    color: colors.white,
   },
 });
