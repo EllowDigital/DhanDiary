@@ -37,7 +37,7 @@ export const upsertLocalFromRemote = entries.upsertLocalFromRemote;
 export const getUnsyncedEntries = async () => {
   const db = await sqlite.open();
   return await db.all(
-    'SELECT * FROM local_entries WHERE need_sync = 1 OR is_deleted = 1 OR (is_synced = 0 AND remote_id IS NULL)'
+    'SELECT * FROM local_entries WHERE need_sync = 1 OR (is_deleted = 1 AND is_synced = 0) OR (is_synced = 0 AND remote_id IS NULL)'
   );
 };
 

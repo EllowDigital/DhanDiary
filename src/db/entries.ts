@@ -252,7 +252,7 @@ export const getLocalByRemoteId = async (remoteId: string) => {
 export const getUnsyncedEntries = async () => {
   const db = await sqlite.open();
   return await db.all<LocalEntry>(
-    'SELECT * FROM local_entries WHERE need_sync = 1 OR is_deleted = 1 OR (is_synced = 0 AND remote_id IS NULL)'
+    'SELECT * FROM local_entries WHERE need_sync = 1 OR (is_deleted = 1 AND is_synced = 0) OR (is_synced = 0 AND remote_id IS NULL)'
   );
 };
 
@@ -327,7 +327,7 @@ export const markLocalDeletedByRemoteId = async (remoteId: string) => {
   const db = await sqlite.open();
   const now = new Date().toISOString();
   await db.run(
-    'UPDATE local_entries SET is_deleted = 1, is_synced = 1, updated_at = ? WHERE remote_id = ?',
+    'UPDATE local_entries SET is_deleted = 1, is_synced = 1, need_sync = 0, updated_at = ? WHERE remote_id = ?',
     [now, String(remoteId)]
   );
   try {

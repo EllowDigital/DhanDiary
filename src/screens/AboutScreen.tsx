@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Constants from 'expo-constants';
 import {
   View,
@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   Linking,
   ScrollView,
-  Dimensions,
+  useWindowDimensions,
   Share,
 } from 'react-native';
 import { Text, Button } from '@rneui/themed';
@@ -22,10 +22,6 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const scale = SCREEN_WIDTH / 390;
-const font = (s: number) => Math.round(s * scale);
-
 const ELLOW_URL = 'https://ellowdigital.netlify.app';
 import getLatestShareLink from '../utils/shareLink';
 
@@ -37,10 +33,26 @@ const BUILD_TYPE =
   process.env.BUILD_TYPE ||
   extra.BUILD_TYPE ||
   (pkg.version.includes('-beta') ? 'Beta' : 'Release');
-const BUILD_COMMIT = process.env.BUILD_COMMIT || extra.BUILD_COMMIT || 'local';
-const BUILD_TIMESTAMP = process.env.BUILD_TIMESTAMP || extra.BUILD_TIMESTAMP || null;
+
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
+const useResponsiveMetrics = () => {
+  const { width } = useWindowDimensions();
+  const normalizedWidth = width || 390;
+  const scale = clamp(normalizedWidth / 390, 0.85, 1.2);
+  const outerPadding = clamp(normalizedWidth * 0.06, 16, 36);
+  const cardPadding = clamp(normalizedWidth * 0.045, 14, 28);
+  const fontSize = useCallback((size: number) => Math.round(size * scale), [scale]);
+  const gap = clamp(normalizedWidth * 0.04, 16, 28);
+  return { fontSize, outerPadding, cardPadding, gap } as const;
+};
 
 const AboutScreen: React.FC = () => {
+  const { fontSize, outerPadding, cardPadding, gap } = useResponsiveMetrics();
+  const styles = useMemo(
+    () => createStyles(fontSize, outerPadding, cardPadding, gap),
+    [fontSize, outerPadding, cardPadding, gap]
+  );
   const fade = useSharedValue(0);
 
   /* Fade In Animation */
@@ -181,21 +193,11 @@ const AboutScreen: React.FC = () => {
         {/* MAIN CARD */}
         <View style={styles.card}>
           <InfoRow label="App Version" value={pkg.version} />
-          <InfoRow label="Native Version" value={(Constants as any)?.nativeAppVersion || pkg.version} />
-          <InfoRow label="Runtime Version" value={
-            (Updates as any)?.runtimeVersion || (Constants as any)?.expoConfig?.runtimeVersion || pkg.version
-          } />
           <InfoRow label="Build Type" value={String(BUILD_TYPE)} />
           <InfoRow
             label="Environment"
             value={process.env.NODE_ENV === 'production' ? 'Production' : 'Development'}
           />
-          <View style={{ paddingVertical: 10 }}>
-            <Text style={{ fontSize: font(13), color: '#475569' }}>
-              Note: JS-only updates (over-the-air) do not require a native rebuild. Native plugin
-              or config changes still require an EAS/native build.
-            </Text>
-          </View>
           {/* Commit and build timestamp removed from About screen for privacy/stability */}
 
           <Text style={styles.description}>
@@ -208,7 +210,9 @@ const AboutScreen: React.FC = () => {
         <Button
           title={checking ? 'Checking…' : 'Check for Updates'}
           onPress={checkForUpdates}
-          icon={<MaterialIcon name="system-update" color="#fff" size={font(18)} style={{ marginRight: 8 }} />}
+          icon={
+            <MaterialIcon name="system-update" color="#fff" size={fontSize(18)} style={{ marginRight: 8 }} />
+          }
           buttonStyle={styles.actionButton}
           titleStyle={styles.actionButtonTitle}
         />
@@ -216,7 +220,9 @@ const AboutScreen: React.FC = () => {
           <Button
             title={checking ? 'Applying…' : 'Download & Apply Update'}
             onPress={() => setShowUpdateModal(true)}
-            icon={<MaterialIcon name="file-download" color="#fff" size={font(18)} style={{ marginRight: 8 }} />}
+            icon={
+              <MaterialIcon name="file-download" color="#fff" size={fontSize(18)} style={{ marginRight: 8 }} />
+            }
             buttonStyle={[styles.actionButton, { backgroundColor: '#059669' }]}
             titleStyle={styles.actionButtonTitle}
           />
@@ -235,7 +241,7 @@ const AboutScreen: React.FC = () => {
         <Modal visible={showUpdateModal} transparent animationType="slide" onRequestClose={() => setShowUpdateModal(false)}>
           <RNView style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: 20 }}>
             <RNView style={{ backgroundColor: 'white', borderRadius: 12, padding: 18 }}>
-              <Text style={{ fontSize: font(18), fontWeight: '700', marginBottom: 8 }}>New Update</Text>
+              <Text style={{ fontSize: fontSize(18), fontWeight: '700', marginBottom: 8 }}>New Update</Text>
               <Text style={{ marginBottom: 10 }}>Version: {pkg.version}</Text>
               <Text style={{ marginBottom: 14, color: '#475569' }}>
                 {updateInfo && updateInfo?.manifest && updateInfo.manifest?.releaseNotes
@@ -260,7 +266,7 @@ const AboutScreen: React.FC = () => {
           title="Share with Friends"
           onPress={handleShare}
           icon={
-            <MaterialIcon name="share" color="#fff" size={font(18)} style={{ marginRight: 8 }} />
+            <MaterialIcon name="share" color="#fff" size={fontSize(18)} style={{ marginRight: 8 }} />
           }
           buttonStyle={styles.actionButton}
           titleStyle={styles.actionButtonTitle}
@@ -271,7 +277,7 @@ const AboutScreen: React.FC = () => {
             Linking.openURL(`mailto:sarwanyadav26@outlook.com?subject=DhanDiary%20Feedback`)
           }
           icon={
-            <MaterialIcon name="email" color="#334155" size={font(18)} style={{ marginRight: 8 }} />
+            <MaterialIcon name="email" color="#334155" size={fontSize(18)} style={{ marginRight: 8 }} />
           }
           buttonStyle={[styles.actionButton, styles.secondaryActionButton]}
           titleStyle={[styles.actionButtonTitle, styles.secondaryActionButtonTitle]}
@@ -319,106 +325,123 @@ import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 export default AboutScreen;
 
 /* MODERN, CLEAN STYLES */
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
-  scrollContent: {
-    padding: 24,
-    paddingTop: 30,
-  },
-  headerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 32,
-  },
-  appIcon: {
-    width: 84,
-    height: 84,
-    borderRadius: 16,
-    marginRight: 16,
-    backgroundColor: '#fff',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-  },
-  headerText: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  appName: {
-    fontSize: font(22),
-    fontWeight: '800',
-    color: '#0F172A',
-  },
-  appSubtitle: {
-    fontSize: font(14),
-    color: '#475569',
-    marginTop: 6,
-    fontWeight: '600',
-  },
+const createStyles = (
+  font: (size: number) => number,
+  outerPadding: number,
+  cardPadding: number,
+  gap: number
+) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: '#F8FAFC',
+    },
+    scrollContent: {
+      paddingHorizontal: outerPadding,
+      paddingTop: outerPadding + 6,
+      paddingBottom: outerPadding,
+    },
+    headerContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: gap * 1.1,
+    },
+    appIcon: {
+      width: clamp(cardPadding * 4.8, 72, 96),
+      height: clamp(cardPadding * 4.8, 72, 96),
+      borderRadius: 16,
+      marginRight: gap * 0.9,
+      backgroundColor: '#fff',
+      elevation: 4,
+      shadowColor: '#000',
+      shadowOpacity: 0.1,
+      shadowRadius: 10,
+    },
+    headerText: {
+      flex: 1,
+      justifyContent: 'center',
+    },
+    appName: {
+      fontSize: font(22),
+      fontWeight: '800',
+      color: '#0F172A',
+    },
+    appSubtitle: {
+      fontSize: font(14),
+      color: '#475569',
+      marginTop: 6,
+      fontWeight: '600',
+    },
 
-  card: {
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 16,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-  },
-  label: {
-    fontSize: font(15),
-    color: '#64748B',
-  },
-  value: {
-    fontSize: font(15),
-    fontWeight: '600',
-    color: '#1E293B',
-  },
-  description: {
-    paddingTop: 16,
-    fontSize: font(15),
-    color: '#475569',
-    lineHeight: 23,
-  },
+    card: {
+      backgroundColor: '#fff',
+      padding: cardPadding,
+      borderRadius: 16,
+      marginBottom: gap,
+      borderWidth: 1,
+      borderColor: '#E2E8F0',
+    },
+    row: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingVertical: 14,
+      borderBottomWidth: 1,
+      borderBottomColor: '#F1F5F9',
+    },
+    label: {
+      fontSize: font(15),
+      color: '#64748B',
+    },
+    value: {
+      fontSize: font(15),
+      fontWeight: '600',
+      color: '#1E293B',
+    },
+    description: {
+      paddingTop: 16,
+      fontSize: font(15),
+      color: '#475569',
+      lineHeight: 23,
+    },
 
-  actionButton: {
-    backgroundColor: '#2563EB',
-    borderRadius: 12,
-    paddingVertical: 14,
-    marginBottom: 12,
-  },
-  actionButtonTitle: {
-    fontSize: font(16),
-    fontWeight: '600',
-  },
-  secondaryActionButton: {
-    backgroundColor: '#E2E8F0',
-  },
-  secondaryActionButtonTitle: {
-    color: '#334155',
-  },
+    actionButton: {
+      backgroundColor: '#2563EB',
+      borderRadius: 12,
+      paddingVertical: clamp(cardPadding * 0.7, 12, 18),
+      marginBottom: 12,
+    },
+    actionButtonTitle: {
+      fontSize: font(16),
+      fontWeight: '600',
+    },
+    secondaryActionButton: {
+      backgroundColor: '#E2E8F0',
+    },
+    secondaryActionButtonTitle: {
+      color: '#334155',
+    },
 
-  footer: {
-    marginTop: 32,
-    alignItems: 'center',
-  },
-  footerText: {
-    fontSize: font(14),
-    color: '#64748B',
-  },
-  footerLink: {
-    fontWeight: 'bold',
-    color: '#2563EB',
-  },
-});
+    persistentRetry: {
+      backgroundColor: '#fff',
+      padding: cardPadding,
+      borderRadius: 12,
+      marginTop: gap,
+      borderWidth: 1,
+      borderColor: '#E2E8F0',
+    },
+
+    footer: {
+      marginTop: gap * 1.2,
+      alignItems: 'center',
+    },
+    footerText: {
+      fontSize: font(14),
+      color: '#64748B',
+      textAlign: 'center',
+    },
+    footerLink: {
+      fontWeight: 'bold',
+      color: '#2563EB',
+    },
+  });
