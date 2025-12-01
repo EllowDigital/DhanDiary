@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -29,6 +29,51 @@ import FullScreenSpinner from '../components/FullScreenSpinner';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const scale = SCREEN_WIDTH / 390;
 const font = (s: number) => Math.round(s * scale);
+
+type AnimatedTransactionProps = {
+  item: any;
+  index: number;
+  onEdit: () => void;
+  onDelete: () => void;
+  ready: boolean;
+};
+
+const AnimatedTransaction: React.FC<AnimatedTransactionProps> = React.memo(
+  ({ item, index, onEdit, onDelete, ready }) => {
+    const anim = useRef(new RNAnimated.Value(0)).current;
+
+    useEffect(() => {
+      if (!ready) return;
+      RNAnimated.timing(anim, {
+        toValue: 1,
+        duration: 320,
+        delay: index * 35,
+        useNativeDriver: true,
+      }).start();
+    }, [anim, index, ready]);
+
+    return (
+      <RNAnimated.View
+        style={{
+          opacity: anim,
+          transform: [
+            {
+              translateY: anim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [14, 0],
+              }),
+            },
+          ],
+          marginBottom: 12,
+        }}
+      >
+        <TransactionCard item={item} onEdit={onEdit} onDelete={onDelete} />
+      </RNAnimated.View>
+    );
+  }
+);
+
+AnimatedTransaction.displayName = 'AnimatedTransaction';
 
 const HistoryScreen = () => {
   const { user } = useAuth();
@@ -77,8 +122,29 @@ const HistoryScreen = () => {
   const [showEditDatePicker, setShowEditDatePicker] = useState(false);
   const [editDateChanged, setEditDateChanged] = useState(false);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+  const heroOpacity = useRef(new RNAnimated.Value(0)).current;
+  const heroTranslate = useRef(new RNAnimated.Value(16)).current;
+  const [listReady, setListReady] = useState(false);
 
   const types = ['All', 'Cash (IN)', 'Cash (OUT)'];
+
+  useEffect(() => {
+    RNAnimated.parallel([
+      RNAnimated.timing(heroOpacity, {
+        toValue: 1,
+        duration: 350,
+        useNativeDriver: true,
+      }),
+      RNAnimated.spring(heroTranslate, {
+        toValue: 0,
+        bounciness: 10,
+        speed: 12,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setListReady(true);
+    });
+  }, [heroOpacity, heroTranslate]);
 
   // -----------------------
   // FILTER RESULT
@@ -120,6 +186,50 @@ const HistoryScreen = () => {
 
     return list;
   }, [entries, typeIndex, startDate, endDate, categoryFilter, amountMin, amountMax]);
+
+  const summary = useMemo(() => {
+    let totalIn = 0;
+    let totalOut = 0;
+    let latestTs = 0;
+    const categoryTotals: Record<string, number> = {};
+
+    filtered.forEach((entry) => {
+      const amount = Number(entry.amount) || 0;
+      if (entry.type === 'in') {
+        totalIn += amount;
+      } else {
+        totalOut += amount;
+      }
+
+      const timestamp = new Date(entry.date || entry.created_at).getTime();
+      if (!Number.isNaN(timestamp) && timestamp > latestTs) {
+        latestTs = timestamp;
+      }
+
+      const category = entry.category || 'General';
+      categoryTotals[category] = (categoryTotals[category] || 0) + amount;
+    });
+
+    const topCategory = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1])[0]?.[0] || 'General';
+    const latestLabel = latestTs ? new Date(latestTs).toLocaleDateString() : 'No activity yet';
+    return {
+      totalIn,
+      totalOut,
+      net: totalIn - totalOut,
+      topCategory,
+      latestLabel,
+      count: filtered.length,
+    };
+  }, [filtered]);
+
+  const quickStats = useMemo(
+    () => [
+      { label: 'Showing', value: summary.count ? `${summary.count} entries` : 'No entries' },
+      { label: 'Top category', value: summary.topCategory },
+      { label: 'Last activity', value: summary.latestLabel },
+    ],
+    [summary]
+  );
 
   // compute active filters count for a small badge
   const activeFilterCount = useMemo(() => {
@@ -287,20 +397,57 @@ const HistoryScreen = () => {
   // -----------------------
   // UI
   // -----------------------
-  return (
-    <View style={styles.container}>
-      {/* FILTER TOGGLE */}
-      <TouchableOpacity style={styles.filterToggle} onPress={toggleFilters}>
-        <MaterialIcon name="filter-list" size={24} color="#2563EB" />
-        <Text style={styles.filterToggleText}>Filters</Text>
-        {activeFilterCount > 0 && (
-          <View style={styles.filterBadge}>
-            <Text style={styles.filterBadgeText}>{activeFilterCount}</Text>
+  const renderHeader = () => (
+    <View style={styles.headerWrapper}>
+      <RNAnimated.View
+        style={[styles.heroCard, { opacity: heroOpacity, transform: [{ translateY: heroTranslate }] }]}
+      >
+        <Text style={styles.heroOverline}>Your Activity</Text>
+        <Text style={styles.heroTitle}>History</Text>
+        <Text style={styles.heroSubtitle}>
+          {summary.count ? `${summary.count} records visible now` : 'No records in this view yet'}
+        </Text>
+        <View style={styles.heroStatRow}>
+          <View style={styles.heroColumn}>
+            <Text style={styles.heroLabel}>Cash in</Text>
+            <Text style={[styles.heroValue, { color: '#3CCB75' }]}>₹{summary.totalIn.toLocaleString('en-IN')}</Text>
           </View>
-        )}
+          <View style={styles.heroColumn}>
+            <Text style={styles.heroLabel}>Cash out</Text>
+            <Text style={[styles.heroValue, { color: '#FF5D5D' }]}>₹{summary.totalOut.toLocaleString('en-IN')}</Text>
+          </View>
+          <View style={[styles.heroColumn, styles.heroColumnLast]}>
+            <Text style={styles.heroLabel}>Net</Text>
+            <Text style={[styles.heroValue, { color: summary.net >= 0 ? '#60A5FA' : '#F87171' }]}>
+              ₹{summary.net.toLocaleString('en-IN')}
+            </Text>
+          </View>
+        </View>
+      </RNAnimated.View>
+
+      <View style={styles.quickRow}>
+        {quickStats.map((stat, index) => (
+          <View
+            key={stat.label}
+            style={[styles.quickCard, index === quickStats.length - 1 && styles.quickCardLast]}
+          >
+            <Text style={styles.quickLabel}>{stat.label}</Text>
+            <Text style={styles.quickValue}>{stat.value}</Text>
+          </View>
+        ))}
+      </View>
+
+      <TouchableOpacity style={styles.filterToggle} onPress={toggleFilters}>
+        <MaterialIcon name="filter-list" size={22} color="#A5B4FC" />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.filterToggleLabel}>Filters</Text>
+          <Text style={styles.filterToggleHint}>
+            {activeFilterCount ? `${activeFilterCount} active filter${activeFilterCount > 1 ? 's' : ''}` : 'Refine your history'}
+          </Text>
+        </View>
+        <MaterialIcon name={filtersVisible ? 'expand-less' : 'expand-more'} size={22} color="#CBD5F5" />
       </TouchableOpacity>
 
-      {/* FILTER CARD */}
       {filtersVisible && (
         <View style={styles.filterCard}>
           <SimpleButtonGroup
@@ -391,7 +538,7 @@ const HistoryScreen = () => {
             inputContainerStyle={styles.input}
           />
 
-          <View style={{ flexDirection: 'row' }}>
+          <View style={styles.amountRow}>
             <Input
               placeholder="Min amount"
               value={amountMin}
@@ -421,45 +568,50 @@ const HistoryScreen = () => {
           )}
         </View>
       )}
+    </View>
+  );
 
-      {/* EMPTY / LOADING STATE */}
-      {showLoading ? (
-        <FullScreenSpinner visible={true} />
-      ) : filtered.length === 0 && !isLoading ? (
-        <View style={styles.emptyWrap}>
-          <MaterialIcon name="receipt-long" size={80} color="#9CA3AF" />
-          <Text style={styles.emptyTitle}>No Transactions Found</Text>
-          <Text style={styles.emptySubtitle}>
-            Try adjusting the filters or adding a new transaction.
-          </Text>
-          <Button
-            title="Add New Transaction"
-            onPress={() => navigation.navigate('AddEntry')}
-            buttonStyle={styles.emptyButton}
-            titleStyle={styles.emptyButtonTitle}
-            containerStyle={{ marginTop: 24 }}
+  const emptyComponent = !showLoading ? (
+    <View style={styles.emptyWrap}>
+      <MaterialIcon name="receipt-long" size={80} color="#94A3B8" />
+      <Text style={styles.emptyTitle}>No Transactions Found</Text>
+      <Text style={styles.emptySubtitle}>Adjust filters or add a new transaction to get started.</Text>
+      <Button
+        title="Add Transaction"
+        onPress={() => navigation.navigate('AddEntry')}
+        buttonStyle={styles.emptyButton}
+        titleStyle={styles.emptyButtonTitle}
+        containerStyle={{ marginTop: 24 }}
+      />
+    </View>
+  ) : null;
+
+  return (
+    <View style={styles.container}>
+      <FlatList
+        data={filtered}
+        keyExtractor={(item) => item.local_id}
+        contentContainerStyle={styles.listContent}
+        ListHeaderComponent={renderHeader}
+        ListEmptyComponent={emptyComponent}
+        refreshing={isLoading}
+        onRefresh={() => {}}
+        initialNumToRender={12}
+        maxToRenderPerBatch={12}
+        windowSize={15}
+        removeClippedSubviews={false}
+        renderItem={({ item, index }) => (
+          <AnimatedTransaction
+            item={item}
+            index={index}
+            onEdit={() => openEdit(item)}
+            onDelete={() => handleDelete(item.local_id)}
+            ready={listReady}
           />
-        </View>
-      ) : (
-        <FlatList
-          data={filtered}
-          keyExtractor={(item) => item.local_id}
-          contentContainerStyle={{ paddingBottom: 120 }}
-          refreshing={isLoading}
-          onRefresh={() => {}}
-          initialNumToRender={12}
-          maxToRenderPerBatch={12}
-          windowSize={15}
-          removeClippedSubviews={true}
-          renderItem={({ item }) => (
-            <TransactionCard
-              item={item}
-              onEdit={() => openEdit(item)}
-              onDelete={() => handleDelete(item.local_id)}
-            />
-          )}
-        />
-      )}
+        )}
+      />
+
+      <FullScreenSpinner visible={showLoading} />
 
       {/* EDIT MODAL */}
       <Modal
@@ -571,131 +723,188 @@ export default HistoryScreen;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
-    paddingHorizontal: 14,
-    paddingTop: 10,
+    backgroundColor: '#020617',
   },
-
-  header: {
-    fontSize: font(28),
-    fontWeight: '800',
-    marginBottom: 16,
-    color: '#1F2937',
+  listContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 160,
+    paddingTop: 16,
   },
-
+  headerWrapper: {
+    marginBottom: 26,
+  },
+  heroCard: {
+    backgroundColor: '#0F172A',
+    borderRadius: 24,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#1E2B44',
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 16 },
+    elevation: 6,
+    marginBottom: 20,
+  },
+  heroOverline: {
+    fontSize: font(12),
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: '#A5B4FC',
+  },
+  heroTitle: {
+    fontSize: font(30),
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginTop: 6,
+  },
+  heroSubtitle: {
+    fontSize: font(14),
+    color: '#94A3B8',
+    marginTop: 4,
+  },
+  heroStatRow: {
+    flexDirection: 'row',
+    marginTop: 20,
+  },
+  heroColumn: {
+    flex: 1,
+    marginRight: 12,
+  },
+  heroColumnLast: {
+    marginRight: 0,
+  },
+  heroLabel: {
+    fontSize: font(12),
+    color: '#94A3B8',
+    marginBottom: 6,
+  },
+  heroValue: {
+    fontSize: font(18),
+    fontWeight: '700',
+    color: '#F8FAFC',
+  },
+  quickRow: {
+    flexDirection: 'row',
+    marginBottom: 20,
+  },
+  quickCard: {
+    flex: 1,
+    backgroundColor: '#0B1222',
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#16213B',
+    marginRight: 12,
+  },
+  quickCardLast: {
+    marginRight: 0,
+  },
+  quickLabel: {
+    fontSize: font(12),
+    color: '#94A3B8',
+    marginBottom: 6,
+  },
+  quickValue: {
+    fontSize: font(16),
+    fontWeight: '600',
+    color: '#F8FAFC',
+  },
   filterToggle: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#E9EFFB',
-    paddingVertical: 10,
+    backgroundColor: '#111C32',
+    borderRadius: 20,
+    paddingVertical: 14,
     paddingHorizontal: 16,
-    borderRadius: 12,
-    marginBottom: 14,
-    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#1E2B44',
   },
-  filterToggleText: {
+  filterToggleLabel: {
+    color: '#E2E8F0',
     fontSize: font(16),
-    fontWeight: '700',
-    color: '#2563EB',
-    marginLeft: 8,
+    fontWeight: '600',
   },
-  filterBadge: {
-    backgroundColor: '#2563EB',
-    borderRadius: 10,
-    width: 20,
-    height: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 10,
+  filterToggleHint: {
+    color: '#94A3B8',
+    fontSize: font(13),
   },
-  filterBadgeText: {
-    color: '#fff',
-    fontSize: font(12),
-    fontWeight: '700',
-  },
-
   filterCard: {
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 16,
-    marginBottom: 14,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginTop: 18,
   },
-
   dateRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
     marginVertical: 10,
   },
   dateBtn: {
     flex: 1,
     marginHorizontal: 5,
-    borderRadius: 10,
+    borderRadius: 12,
     borderColor: '#D1D5DB',
   },
   dateBtnTitle: {
-    color: '#374151',
+    color: '#1F2937',
     fontSize: font(14),
   },
-
   presetRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'space-between',
     marginBottom: 10,
   },
   presetBtnTitle: {
     color: '#2563EB',
-    fontSize: font(14),
+    fontSize: font(13),
     fontWeight: '600',
   },
-
   input: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#F8FAFC',
     borderBottomWidth: 0,
-    borderRadius: 10,
-    paddingHorizontal: 10,
+    borderRadius: 12,
+    paddingHorizontal: 12,
   },
-
+  amountRow: {
+    flexDirection: 'row',
+  },
   clearButton: {
     borderColor: '#EF4444',
     marginTop: 10,
   },
   clearButtonTitle: {
     color: '#EF4444',
+    fontWeight: '600',
   },
-
   emptyWrap: {
-    flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingVertical: 80,
   },
   emptyTitle: {
-    marginTop: 20,
+    marginTop: 16,
     fontSize: font(20),
     fontWeight: '700',
-    color: '#374151',
+    color: '#E2E8F0',
   },
   emptySubtitle: {
     marginTop: 8,
-    color: '#6B7280',
+    color: '#94A3B8',
     textAlign: 'center',
-    fontSize: font(15),
+    fontSize: font(14),
+    paddingHorizontal: 12,
   },
   emptyButton: {
-    backgroundColor: '#2563EB',
-    borderRadius: 12,
+    backgroundColor: '#3B82F6',
+    borderRadius: 14,
     paddingVertical: 12,
+    paddingHorizontal: 20,
   },
   emptyButtonTitle: {
-    fontSize: font(16),
+    fontSize: font(15),
     fontWeight: '600',
   },
-
-  // Modal Styles
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -740,11 +949,5 @@ const styles = StyleSheet.create({
   },
   modalSaveButton: {
     backgroundColor: '#2563EB',
-  },
-  loadingWrap: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 40,
   },
 });
