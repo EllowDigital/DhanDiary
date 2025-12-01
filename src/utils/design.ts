@@ -1,15 +1,20 @@
 export const spacing = (multiplier = 1) => 8 * multiplier;
 
 export const colors = {
-  background: '#f6f9fc',
-  card: '#ffffff',
-  softCard: '#f1f6fb',
-  primary: '#2f8cff',
-  primarySoft: '#dff0ff',
-  accentGreen: '#2ecc71',
-  accentRed: '#ff7b7b',
-  text: '#222',
-  muted: '#6b7280',
+  background: '#F5F7FB',
+  card: '#FFFFFF',
+  softCard: '#EEF2FF',
+  surfaceMuted: '#F8FAFF',
+  primary: '#2563EB',
+  primarySoft: '#E0E7FF',
+  secondary: '#0EA5E9',
+  accentGreen: '#22C55E',
+  accentRed: '#EF4444',
+  accentOrange: '#F97316',
+  text: '#0F172A',
+  muted: '#64748B',
+  border: '#E2E8F0',
+  shadow: 'rgba(15, 23, 42, 0.08)',
 };
 
 export const shadows = {

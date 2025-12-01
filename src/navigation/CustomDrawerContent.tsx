@@ -1,11 +1,11 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { View, StyleSheet, Image, Alert, Dimensions, TouchableOpacity } from 'react-native';
 import {
   DrawerContentScrollView,
-  DrawerItemList,
   DrawerContentComponentProps,
 } from '@react-navigation/drawer';
 import { Text, Button } from '@rneui/themed';
+import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 
 import { logout } from '../services/auth';
 import { useAuth } from '../hooks/useAuth';
@@ -15,6 +15,7 @@ import Animated, {
   useAnimatedStyle,
   withTiming,
   Easing,
+  FadeInDown,
 } from 'react-native-reanimated';
 
 const { width } = Dimensions.get('window');
@@ -37,8 +38,53 @@ const CustomDrawerContent = React.memo((props: DrawerContentComponentProps) => {
     opacity: fade.value,
     transform: [{ translateY: (1 - fade.value) * 18 }],
   }));
+  const initials = useMemo(() => {
+    if (!user?.name) return 'DD';
+    return user.name
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((chunk) => chunk[0].toUpperCase())
+      .join('');
+  }, [user?.name]);
 
-  const iconSize = width >= 420 ? 90 : width >= 360 ? 78 : 64;
+  const drawerItems = useMemo(
+    () =>
+      props.state.routes.map((route, idx) => {
+        const focused = props.state.index === idx;
+        const { drawerLabel, drawerIcon } = props.descriptors[route.key].options;
+        const label =
+          typeof drawerLabel === 'function'
+            ? drawerLabel({ color: focused ? '#0F172A' : '#94A3B8', focused })
+            : drawerLabel || route.name;
+        return (
+          <Animated.View
+            key={route.key}
+            entering={FadeInDown.delay(80 + idx * 60).springify().damping(14)}
+            style={styles.menuItemWrapper}
+          >
+            <TouchableOpacity
+              style={[styles.menuItem, focused && styles.menuItemActive]}
+              activeOpacity={0.85}
+              onPress={() => props.navigation.navigate(route.name as never)}
+            >
+              <View style={[styles.menuIconWrap, focused && styles.menuIconActive]}>
+                {drawerIcon &&
+                  drawerIcon({ color: focused ? '#0F172A' : '#94A3B8', size: 24, focused })}
+              </View>
+              <Text style={[styles.menuLabel, focused && styles.menuLabelActive]}>{label}</Text>
+              <MaterialIcon
+                name="chevron-right"
+                size={20}
+                color={focused ? '#0F172A' : '#94A3B8'}
+                style={{ marginLeft: 'auto' }}
+              />
+            </TouchableOpacity>
+          </Animated.View>
+        );
+      }),
+    [props.state.routes, props.state.index, props.descriptors, props.navigation]
+  );
 
   const handleLogout = () => {
     Alert.alert('Log out', 'Are you sure you want to log out?', [
@@ -66,58 +112,73 @@ const CustomDrawerContent = React.memo((props: DrawerContentComponentProps) => {
 
   return (
     <DrawerContentScrollView {...props} contentContainerStyle={styles.container}>
-      {/* HEADER */}
       <Animated.View style={[styles.headerCard, aStyle]}>
-        <View style={styles.headerHeadingWrap}>
+        <View style={styles.brandRow}>
           <Image source={require('../../assets/icon.png')} style={styles.drawerIcon} />
-          <View style={styles.headerHeadingText}>
+          <View>
             <Text style={styles.appHeading}>DhanDiary</Text>
-            <Text style={styles.appSub}>Smart Personal Finance</Text>
+            <Text style={styles.appSub}>Personal finance hub</Text>
+          </View>
+        </View>
+
+        <View style={styles.userRow}>
+          <View style={styles.avatarWrap}>
+            <Text style={styles.avatarText}>{initials}</Text>
+          </View>
+          <View style={styles.userMeta}>
+            <Text style={styles.userName}>{user?.name || 'Guest user'}</Text>
+            <Text style={styles.userEmail}>{user?.email || 'Stay in control of cash'}</Text>
+          </View>
+        </View>
+
+        <View style={styles.userBadges}>
+          <View style={styles.badgePill}>
+            <MaterialIcon name="verified" size={16} color="#34D399" />
+            <Text style={styles.badgeText}>Secure sync</Text>
+          </View>
+          <View style={styles.badgePill}>
+            <MaterialIcon name="schedule" size={16} color="#60A5FA" />
+            <Text style={styles.badgeText}>Realtime updates</Text>
           </View>
         </View>
       </Animated.View>
 
-      {/* DRAWER ITEM LIST */}
-      <View style={styles.menuWrap}>
-        {React.useMemo(
-          () =>
-            props.state.routes.map((route, idx) => {
-              const focused = props.state.index === idx;
-              const { drawerLabel, drawerIcon } = props.descriptors[route.key].options;
-              return (
-                <TouchableOpacity
-                  key={route.key}
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    paddingVertical: 10,
-                    paddingHorizontal: 12,
-                    backgroundColor: focused ? '#e0e7ef' : 'transparent',
-                    borderRadius: 16,
-                    marginBottom: 2,
-                  }}
-                  activeOpacity={0.7}
-                  onPress={() => props.navigation.navigate(route.name)}
-                >
-                  {drawerIcon &&
-                    drawerIcon({ color: focused ? '#1E293B' : '#64748B', size: 26, focused })}
-                  <Text
-                    style={{
-                      marginLeft: 14,
-                      fontSize: 16,
-                      fontWeight: focused ? '700' : '600',
-                      color: focused ? '#1E293B' : '#64748B',
-                    }}
-                  >
-                    {typeof drawerLabel === 'function'
-                      ? drawerLabel({ color: focused ? '#1E293B' : '#64748B', focused })
-                      : drawerLabel || route.name}
-                  </Text>
-                </TouchableOpacity>
-              );
-            }),
-          [props.state.routes, props.state.index, props.descriptors]
-        )}
+      <View style={styles.quickActionsRow}>
+        <TouchableOpacity
+          style={styles.quickAction}
+          onPress={() => props.navigation.navigate('AddEntry' as never)}
+          activeOpacity={0.85}
+        >
+          <View style={[styles.quickIconWrap, { backgroundColor: '#4F46E5' }]}>
+            <MaterialIcon name="add" size={18} color="#fff" />
+          </View>
+          <Text style={styles.quickLabel}>Add entry</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.quickAction}
+          onPress={() => props.navigation.navigate('Stats' as never)}
+          activeOpacity={0.85}
+        >
+          <View style={[styles.quickIconWrap, { backgroundColor: '#0EA5E9' }]}>
+            <MaterialIcon name="insights" size={18} color="#fff" />
+          </View>
+          <Text style={styles.quickLabel}>Insights</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.menuWrap}>{drawerItems}</View>
+
+      <View style={styles.promoCard}>
+        <View>
+          <Text style={styles.promoTitle}>Need detailed reports?</Text>
+          <Text style={styles.promoText}>Jump into Stats to see cash flow analytics.</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.promoBtn}
+          onPress={() => props.navigation.navigate('Stats' as never)}
+        >
+          <Text style={styles.promoBtnText}>Open stats</Text>
+        </TouchableOpacity>
       </View>
 
       {/* LOGOUT */}
@@ -139,101 +200,213 @@ export default CustomDrawerContent;
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: '#020617',
     paddingTop: 0,
+    paddingBottom: 24,
   },
 
   /* Header card */
   headerCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    paddingVertical: 32,
+    backgroundColor: '#0F172A',
+    borderRadius: 28,
+    paddingVertical: 28,
     paddingHorizontal: 20,
     alignItems: 'flex-start',
-    margin: 16,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 14,
-    elevation: 4,
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 18,
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+    elevation: 6,
+    borderWidth: 1,
+    borderColor: '#1E293B',
   },
-
-  headerHeadingWrap: {
-    alignItems: 'center',
+  brandRow: {
     flexDirection: 'row',
-    width: '100%',
+    alignItems: 'center',
+    marginBottom: 20,
   },
-
   appHeading: {
     fontSize: font(20),
     fontWeight: '800',
-    color: '#0F172A',
+    color: '#FFFFFF',
   },
-
   appSub: {
     fontSize: font(12),
-    color: '#475569',
-    marginTop: 6,
+    color: '#94A3B8',
+    marginTop: 4,
     fontWeight: '600',
   },
-
   drawerIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 12,
+    width: 54,
+    height: 54,
+    borderRadius: 16,
     marginRight: 12,
     backgroundColor: '#fff',
-    elevation: 3,
   },
-
-  headerHeadingText: {
-    flexDirection: 'column',
+  userRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  avatarWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 18,
+    backgroundColor: '#1D283A',
+    alignItems: 'center',
     justifyContent: 'center',
-  },
-
-  logo: {
-    borderRadius: 20,
-    marginBottom: 12,
-    backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: '#1E293B',
   },
-
-  appName: {
-    fontSize: font(24),
-    fontWeight: '900',
-    color: '#0F172A',
-    letterSpacing: 0.5,
+  avatarText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: font(18),
   },
-
-  username: {
-    fontSize: font(14),
-    marginTop: 6,
-    color: '#334155',
+  userMeta: {
+    marginLeft: 14,
+    flex: 1,
+  },
+  userName: {
+    color: '#FFFFFF',
+    fontSize: font(16),
+    fontWeight: '700',
+  },
+  userEmail: {
+    color: '#94A3B8',
+    fontSize: font(13),
+    marginTop: 4,
+  },
+  userBadges: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+  },
+  badgePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1E293B',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    marginRight: 10,
+  },
+  badgeText: {
+    color: '#CBD5F5',
+    fontSize: font(11),
     fontWeight: '600',
+    marginLeft: 6,
   },
-
-  // powered: removed
-
-  /* menu items */
-  menuWrap: {
-    flexGrow: 1,
-    paddingHorizontal: 4,
+  quickActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginHorizontal: 16,
+    marginBottom: 18,
+  },
+  quickAction: {
+    flex: 1,
+    backgroundColor: '#0F172A',
+    borderRadius: 18,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: '#1E293B',
+    marginHorizontal: 6,
+  },
+  quickIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 10,
   },
+  quickLabel: {
+    color: '#E2E8F0',
+    fontWeight: '600',
+  },
+  menuWrap: {
+    flexGrow: 1,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+  },
+  menuItemWrapper: {
+    marginBottom: 6,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0B1120',
+    borderRadius: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: '#111827',
+  },
+  menuItemActive: {
+    backgroundColor: '#E0E7FF',
+    borderColor: '#C7D2FE',
+  },
+  menuIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    backgroundColor: '#111827',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  menuIconActive: {
+    backgroundColor: '#EEF2FF',
+  },
+  menuLabel: {
+    color: '#94A3B8',
+    fontSize: font(15),
+    fontWeight: '600',
+  },
+  menuLabelActive: {
+    color: '#0F172A',
+  },
+  promoCard: {
+    backgroundColor: '#0F172A',
+    borderRadius: 20,
+    padding: 18,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#1D2A3F',
+  },
+  promoTitle: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  promoText: {
+    color: '#94A3B8',
+    fontSize: 13,
+    marginBottom: 10,
+  },
+  promoBtn: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  promoBtnText: {
+    color: '#0F172A',
+    fontWeight: '700',
+  },
 
-  /* logout button */
   footer: {
     paddingHorizontal: 16,
-    paddingBottom: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
-    marginTop: 8,
+    paddingBottom: 16,
   },
 
   logoutBtn: {
     backgroundColor: '#EF4444',
-    paddingVertical: 12,
-    borderRadius: 12,
+    paddingVertical: 14,
+    borderRadius: 16,
   },
 });

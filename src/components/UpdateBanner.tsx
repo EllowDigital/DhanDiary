@@ -17,7 +17,9 @@ const UpdateBanner: React.FC<Props> = ({ visible, message, duration = 4000, onPr
     let t: any = null;
     if (visible) {
       t = setTimeout(() => {
-        onClose && onClose();
+        if (onClose) {
+          onClose();
+        }
       }, duration);
     }
     return () => {

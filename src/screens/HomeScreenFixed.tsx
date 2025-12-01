@@ -1,15 +1,5 @@
-import React, { useMemo, useEffect, useState } from 'react';
-import {
-  View,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
-  Platform,
-  StatusBar,
-  useWindowDimensions,
-  FlatList,
-} from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { View, StyleSheet, TouchableOpacity, StatusBar, useWindowDimensions, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
 import SimpleButtonGroup from '../components/SimpleButtonGroup';
@@ -21,14 +11,7 @@ import { useEntries } from '../hooks/useEntries';
 import useDelayedLoading from '../hooks/useDelayedLoading';
 import FullScreenSpinner from '../components/FullScreenSpinner';
 
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  withRepeat,
-  Easing,
-  FadeInDown,
-} from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withRepeat, Easing, FadeInDown } from 'react-native-reanimated';
 
 import { spacing, colors, shadows } from '../utils/design';
 
@@ -79,6 +62,23 @@ const HomeScreen: React.FC = () => {
 
   const balance = totalIn - totalOut;
 
+  const netTrend = useMemo(() => {
+    if (!entries.length) return { current: 0, previous: 0, delta: null as number | null };
+    const now = Date.now();
+    const week = 7 * 24 * 60 * 60 * 1000;
+    let current = 0;
+    let previous = 0;
+    entries.forEach((entry) => {
+      const stamp = new Date(entry.date || entry.created_at).getTime();
+      if (Number.isNaN(stamp)) return;
+      const value = entry.type === 'in' ? Number(entry.amount || 0) : -Number(entry.amount || 0);
+      if (stamp >= now - week) current += value;
+      else if (stamp >= now - week * 2) previous += value;
+    });
+    const delta = previous === 0 ? null : ((current - previous) / Math.abs(previous)) * 100;
+    return { current, previous, delta };
+  }, [entries]);
+
   const filteredByPeriod = useMemo(() => {
     if (!entries) return [];
     const now = new Date();
@@ -105,6 +105,38 @@ const HomeScreen: React.FC = () => {
       }
     });
   }, [entries, period]);
+
+  const periodEntries = filteredByPeriod;
+  const periodLabel = period === 'week' ? 'This week' : 'This month';
+
+  const periodIncome = useMemo(
+    () => periodEntries.filter((e) => e.type === 'in').reduce((s, x) => s + Number(x.amount || 0), 0),
+    [periodEntries]
+  );
+
+  const periodExpense = useMemo(
+    () => periodEntries.filter((e) => e.type === 'out').reduce((s, x) => s + Number(x.amount || 0), 0),
+    [periodEntries]
+  );
+
+  const periodAverageTicket = useMemo(() => {
+    if (!periodEntries.length) return 0;
+    const sum = periodEntries.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+    return sum / periodEntries.length;
+  }, [periodEntries]);
+
+  const periodActiveDays = useMemo(() => {
+    const set = new Set<string>();
+    periodEntries.forEach((entry) => {
+      try {
+        const key = new Date(entry.date || entry.created_at).toISOString().slice(0, 10);
+        if (key) set.add(key);
+      } catch (err) {}
+    });
+    return set.size;
+  }, [periodEntries]);
+
+  const periodNet = periodIncome - periodExpense;
 
   // Pie chart: show both income and expense by category
   const pieByCategory = useMemo(() => {
@@ -155,52 +187,68 @@ const HomeScreen: React.FC = () => {
   // Bar chart: show both income and expense per day/week
   const weeklyBar = useMemo(() => {
     const now = new Date();
+    const source = filteredByPeriod || [];
+
     if (period === 'week') {
       const labels: string[] = [];
+      const orderKeys: string[] = [];
       const incomeMap: Record<string, number> = {};
       const expenseMap: Record<string, number> = {};
+
       for (let i = 6; i >= 0; i--) {
         const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-        labels.push(d.toLocaleDateString(undefined, { weekday: 'short' }));
         const key = d.toISOString().slice(0, 10);
+        const label = d.toLocaleDateString(undefined, { weekday: 'short' });
+        labels.push(label);
+        orderKeys.push(key);
         incomeMap[key] = 0;
         expenseMap[key] = 0;
       }
-      (entries || []).forEach((e: any) => {
+
+      source.forEach((entry) => {
         try {
-          const k = new Date(e.date || e.created_at).toISOString().slice(0, 10);
-          if (k in incomeMap && e.type === 'in') incomeMap[k] += Number(e.amount || 0);
-          if (k in expenseMap && e.type === 'out') expenseMap[k] += Number(e.amount || 0);
+          const key = new Date(entry.date || entry.created_at).toISOString().slice(0, 10);
+          if (!(key in incomeMap)) return;
+          const amount = Number(entry.amount || 0);
+          if (entry.type === 'in') incomeMap[key] += amount;
+          if (entry.type === 'out') expenseMap[key] += amount;
         } catch (err) {}
       });
-      const income = Object.keys(incomeMap).map((k) => incomeMap[k]);
-      const expense = Object.keys(expenseMap).map((k) => expenseMap[k]);
-      return { labels, income, expense };
+
+      return {
+        labels,
+        income: orderKeys.map((key) => incomeMap[key]),
+        expense: orderKeys.map((key) => expenseMap[key]),
+      };
     }
 
-    // month -> aggregate into last 4 weekly buckets
+    const bucketCount = 4;
     const weekLabels: string[] = [];
-    const weekIncome: number[] = [0, 0, 0, 0];
-    const weekExpense: number[] = [0, 0, 0, 0];
-    for (let w = 3; w >= 0; w--) {
+    const weekIncome: number[] = Array(bucketCount).fill(0);
+    const weekExpense: number[] = Array(bucketCount).fill(0);
+
+    for (let w = bucketCount - 1; w >= 0; w--) {
       const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() - w * 7);
       const start = new Date(end.getFullYear(), end.getMonth(), end.getDate() - 6);
       weekLabels.push(`${start.getDate()}-${end.getDate()}`);
     }
-    (entries || []).forEach((e: any) => {
+
+    source.forEach((entry) => {
       try {
-        const d = new Date(e.date || e.created_at);
+        const d = new Date(entry.date || entry.created_at);
         if (isNaN(d.getTime())) return;
         const daysAgo = Math.floor((now.getTime() - d.getTime()) / (24 * 60 * 60 * 1000));
         const bucket = Math.floor(daysAgo / 7);
-        if (bucket >= 0 && bucket < 4) {
-          if (e.type === 'in') weekIncome[3 - bucket] += Number(e.amount || 0);
-          if (e.type === 'out') weekExpense[3 - bucket] += Number(e.amount || 0);
-        }
+        if (bucket < 0 || bucket >= bucketCount) return;
+        const targetIndex = bucketCount - 1 - bucket;
+        const amount = Number(entry.amount || 0);
+        if (entry.type === 'in') weekIncome[targetIndex] += amount;
+        if (entry.type === 'out') weekExpense[targetIndex] += amount;
       } catch (err) {}
     });
+
     return { labels: weekLabels, income: weekIncome, expense: weekExpense };
-  }, [entries, period]);
+  }, [filteredByPeriod, period]);
 
   const recent = (entries || []).slice(0, 5);
 
@@ -212,33 +260,84 @@ const HomeScreen: React.FC = () => {
     backgroundGradientFrom: '#ffffff',
     backgroundGradientTo: '#ffffff',
     decimalPlaces: 0,
-    color: (opacity = 1) => `rgba(79, 70, 229, ${opacity})`, // Primary Brand Color
-    labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+    color: (opacity = 1) => `rgba(79, 70, 229, ${opacity})`,
+    labelColor: (opacity = 1) => `rgba(71, 85, 105, ${opacity})`,
   };
+
+  const heroTrendDetails = useMemo(() => {
+    if (!entries.length) {
+      return {
+        label: 'Start logging to see insights',
+        color: '#38BDF8',
+        icon: 'auto-graph' as const,
+      };
+    }
+    if (netTrend.delta === null) {
+      return { label: 'New activity this week', color: '#38BDF8', icon: 'auto-graph' as const };
+    }
+    const isUp = netTrend.delta >= 0;
+    return {
+      label: `${isUp ? 'Up' : 'Down'} ${Math.abs(netTrend.delta).toFixed(1)}% vs last week`,
+      color: isUp ? '#22C55E' : '#F43F5E',
+      icon: isUp ? ('trending-up' as const) : ('trending-down' as const),
+    };
+  }, [entries.length, netTrend]);
+
+  const highlightCards = useMemo(
+    () => [
+      { label: 'Avg ticket', value: `₹${periodAverageTicket.toFixed(0)}`, icon: 'receipt-long' },
+      { label: 'Active days', value: `${periodActiveDays || 0}`, icon: 'calendar-today' },
+      { label: 'Entries (period)', value: `${periodEntries.length}`, icon: 'fact-check' },
+    ],
+    [periodAverageTicket, periodActiveDays, periodEntries.length]
+  );
+
+  const topExpenseCategory = useMemo(() => {
+    if (!pieExpenseData.length) return 'General';
+    const sorted = [...pieExpenseData].sort((a, b) => b.population - a.population);
+    return sorted[0]?.name || 'General';
+  }, [pieExpenseData]);
+
+  const insightRows = useMemo(
+    () => [
+      { label: 'Top category', value: topExpenseCategory, icon: 'category' },
+      { label: 'Net (7d)', value: `₹${netTrend.current.toFixed(0)}`, icon: 'timeline' },
+      { label: 'Balance', value: `₹${balance.toFixed(0)}`, icon: 'account-balance-wallet' },
+      { label: 'Cash flow', value: `${period === 'week' ? 'Weekly' : 'Monthly'}`, icon: 'insights' },
+    ],
+    [topExpenseCategory, netTrend.current, balance, period]
+  );
+
+  const homeActions = useMemo(
+    () => [
+      {
+        label: 'Add entry',
+        icon: 'flash-on',
+        accent: '#4F46E5',
+        onPress: () => navigation.navigate('AddEntry'),
+      },
+      {
+        label: 'History',
+        icon: 'history',
+        accent: '#0284C7',
+        onPress: () => navigation.navigate('History'),
+      },
+      {
+        label: 'Stats',
+        icon: 'insights',
+        accent: '#10B981',
+        onPress: () => navigation.navigate('Stats'),
+      },
+    ],
+    [navigation]
+  );
 
   /* --- ANIMATIONS --- */
   const shimmer = useSharedValue(0);
   useEffect(() => {
     shimmer.value = withRepeat(withTiming(1, { duration: 900 }), -1, true);
   }, []);
-  const shimmerStyle = useAnimatedStyle(() => ({
-    opacity: 0.3 + 0.7 * shimmer.value,
-  }));
-
-  /* --- ACTIONS --- */
-  const quickAdd = () => {
-    Alert.alert('Quick Add', 'Add Cash (IN) or Cash (OUT)?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Cash (IN)',
-        onPress: () => navigation.navigate('AddEntry', { defaultType: 'in' }),
-      },
-      {
-        text: 'Cash (OUT)',
-        onPress: () => navigation.navigate('AddEntry', { defaultType: 'out' }),
-      },
-    ]);
-  };
+  const shimmerStyle = useAnimatedStyle(() => ({ opacity: 0.3 + 0.7 * shimmer.value }));
 
   return (
     <View style={styles.mainContainer}>
@@ -248,7 +347,12 @@ const HomeScreen: React.FC = () => {
         <FlatList
           data={recent}
           keyExtractor={(item) => item.local_id}
-          renderItem={({ item }) => <TransactionCard item={item} />}
+          showsVerticalScrollIndicator={false}
+          renderItem={({ item, index }) => (
+            <Animated.View entering={FadeInDown.delay(520 + index * 40).springify().damping(16)}>
+              <TransactionCard item={item} />
+            </Animated.View>
+          )}
           initialNumToRender={5}
           maxToRenderPerBatch={5}
           windowSize={6}
@@ -257,74 +361,100 @@ const HomeScreen: React.FC = () => {
             ...styles.scrollContent,
             paddingBottom: spacing(10),
           }}
+          ListHeaderComponentStyle={styles.listHeaderSpacing}
           ListHeaderComponent={
             <Animated.View entering={FadeInDown.delay(100).duration(500)}>
-              {/* HEADER */}
-              <View style={styles.header}>
-                <View>
-                  <Text style={styles.greeting}>
-                    Hi, {user?.name ? user.name.toUpperCase() : 'USER'} 👋
+              <View style={styles.heroCard}>
+                <View style={styles.heroTopRow}>
+                  <View>
+                    <Text style={styles.heroSubtle}>Welcome back</Text>
+                    <Text style={styles.heroGreeting}>
+                      {user?.name ? user.name : 'Guest'} 👋
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.heroSettings}
+                    onPress={() => navigation.navigate('Settings')}
+                  >
+                    <MaterialIcon name="settings" size={20} color="#CBD5F5" />
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.heroLabelRow}>
+                  <Text style={styles.heroLabel}>Period net</Text>
+                  <Text style={styles.heroPeriod}>{periodLabel}</Text>
+                </View>
+                <Text style={styles.heroBalance}>₹{periodNet.toFixed(2)}</Text>
+                <View style={[styles.trendBadge, { backgroundColor: `${heroTrendDetails.color}22` }]}>
+                  <MaterialIcon name={heroTrendDetails.icon} size={18} color={heroTrendDetails.color} />
+                  <Text style={[styles.trendText, { color: heroTrendDetails.color }]}>
+                    {heroTrendDetails.label}
                   </Text>
-                  <Text style={styles.subGreeting}>Track & manage your finances</Text>
                 </View>
-                {/* Optional: Add a profile pic or settings icon here */}
-              </View>
-
-              {/* BALANCE CARD */}
-              <View style={styles.balanceCard}>
-                <Text style={styles.balanceLabel}>Total Balance</Text>
-                <Text style={styles.balanceAmount}>₹{balance.toFixed(2)}</Text>
-
-                <View style={styles.statsRow}>
-                  <View style={styles.statBlock}>
-                    <View style={[styles.iconCircle, { backgroundColor: '#dcfce7' }]}>
-                      <MaterialIcon name="arrow-downward" size={20} color={colors.accentGreen} />
-                    </View>
-                    <View style={styles.statTextWrap}>
-                      <Text style={styles.statLabel}>Income</Text>
-                      <Text style={styles.income}>₹{totalIn.toFixed(2)}</Text>
-                    </View>
+                <View style={styles.heroStatsRow}>
+                  <View style={[styles.heroStatCard, styles.heroStatSpacing]}>
+                    <Text style={styles.heroStatLabel}>Income</Text>
+                    <Text style={[styles.heroStatValue, { color: '#22C55E' }]}>₹{periodIncome.toFixed(2)}</Text>
                   </View>
-
-                  <View style={styles.separator} />
-
-                  <View style={styles.statBlock}>
-                    <View style={[styles.iconCircle, { backgroundColor: '#fee2e2' }]}>
-                      <MaterialIcon name="arrow-upward" size={20} color={colors.accentRed} />
-                    </View>
-                    <View style={styles.statTextWrap}>
-                      <Text style={styles.statLabel}>Expense</Text>
-                      <Text style={styles.expense}>₹{totalOut.toFixed(2)}</Text>
-                    </View>
+                  <View style={[styles.heroStatCard, styles.heroStatSpacing]}>
+                    <Text style={styles.heroStatLabel}>Expense</Text>
+                    <Text style={[styles.heroStatValue, { color: '#F43F5E' }]}>₹{periodExpense.toFixed(2)}</Text>
+                  </View>
+                  <View style={styles.heroStatCard}>
+                    <Text style={styles.heroStatLabel}>Entries</Text>
+                    <Text style={[styles.heroStatValue, { color: '#38BDF8' }]}>{periodEntries.length}</Text>
                   </View>
                 </View>
               </View>
 
-              {/* QUICK ACTIONS ROW: single Add button + Logs */}
-              <View style={styles.actionsContainer}>
-                <TouchableOpacity
-                  style={styles.addActionBtn}
-                  onPress={() => navigation.navigate('AddEntry')}
-                >
-                  <MaterialIcon name="add" size={22} color="#fff" />
-                  <Text style={styles.addActionText}>Add</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.miniActionBtn}
-                  onPress={() => navigation.navigate('History')}
-                >
-                  <MaterialIcon name="list" size={24} color={colors.primary} />
-                  <Text style={styles.miniActionText}>Logs</Text>
-                </TouchableOpacity>
+              <View style={styles.highlightRow}>
+                {highlightCards.map((card, idx) => (
+                  <Animated.View
+                    key={card.label}
+                    entering={FadeInDown.delay(160 + idx * 60).springify().damping(16)}
+                    style={[styles.highlightCard, idx !== highlightCards.length - 1 && styles.horizontalSpacer]}
+                  >
+                    <MaterialIcon name={card.icon as any} size={18} color="#94A3B8" />
+                    <Text style={styles.highlightLabel}>{card.label}</Text>
+                    <Text style={styles.highlightValue}>{card.value}</Text>
+                  </Animated.View>
+                ))}
               </View>
 
-              {/* ANALYTICS SECTION */}
-              <View style={styles.card}>
-                <View style={styles.chartHeader}>
-                  <Text style={styles.cardTitle}>Cash Flow</Text>
+              <View style={styles.actionGrid}>
+                {homeActions.map((action, idx) => (
+                  <Animated.View
+                    key={action.label}
+                    entering={FadeInDown.delay(260 + idx * 60).springify().damping(15)}
+                    style={[styles.actionWrapper, idx !== homeActions.length - 1 && styles.horizontalSpacer]}
+                  >
+                    <TouchableOpacity
+                      style={[styles.actionCard, { backgroundColor: `${action.accent}15` }]}
+                      onPress={action.onPress}
+                    >
+                      <View style={[styles.actionIconWrap, { backgroundColor: action.accent }]}>
+                        <MaterialIcon name={action.icon as any} size={20} color="#fff" />
+                      </View>
+                      <Text style={styles.actionLabel}>{action.label}</Text>
+                    </TouchableOpacity>
+                  </Animated.View>
+                ))}
+              </View>
+
+              <View style={styles.analyticsCard}>
+                <View style={styles.cardHeaderRow}>
+                  <View>
+                    <Text style={styles.cardTitle}>Cash flow</Text>
+                    <Text style={styles.cardSubtitle}>Visualize income vs expense</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => setChartType(chartType === 'pie' ? 'bar' : 'pie')}>
+                    <MaterialIcon
+                      name={chartType === 'pie' ? 'bar-chart' : 'pie-chart'}
+                      size={22}
+                      color="#4F46E5"
+                    />
+                  </TouchableOpacity>
                 </View>
 
-                {/* Controls moved to own row to prevent overlapping */}
                 <View style={styles.controlsRow}>
                   <SimpleButtonGroup
                     buttons={['Week', 'Month']}
@@ -342,9 +472,7 @@ const HomeScreen: React.FC = () => {
 
                 {isLoading ? (
                   <Animated.View style={[styles.skeletonBox, shimmerStyle]} />
-                ) : pieData.length > 0 ||
-                  (weeklyBar.income && weeklyBar.income.length > 0) ||
-                  (weeklyBar.expense && weeklyBar.expense.length > 0) ? (
+                ) : pieData.length > 0 || weeklyBar.income?.some(Boolean) || weeklyBar.expense?.some(Boolean) ? (
                   <View style={styles.chartWrapper}>
                     {chartType === 'pie' && PieChart ? (
                       <PieChart
@@ -354,10 +482,9 @@ const HomeScreen: React.FC = () => {
                         chartConfig={chartConfig}
                         accessor="population"
                         backgroundColor="transparent"
-                        paddingLeft="15"
-                        center={[CHART_WIDTH / 4, 0]}
+                        paddingLeft="18"
                         absolute
-                        hasLegend={true}
+                        hasLegend
                       />
                     ) : chartType === 'bar' && BarChart ? (
                       <BarChart
@@ -365,24 +492,19 @@ const HomeScreen: React.FC = () => {
                           labels: weeklyBar.labels,
                           datasets: [
                             { data: weeklyBar.income, color: () => '#22C55E', label: 'Income' },
-                            { data: weeklyBar.expense, color: () => '#EF4444', label: 'Expense' },
+                            { data: weeklyBar.expense, color: () => '#F43F5E', label: 'Expense' },
                           ],
                         }}
                         width={CHART_WIDTH}
                         height={220}
                         yAxisLabel="₹"
                         chartConfig={chartConfig}
-                        verticalLabelRotation={0}
                         showValuesOnTopOfBars
                         fromZero
-                        style={{
-                          borderRadius: 16,
-                          marginVertical: 8,
-                          paddingRight: 0,
-                        }}
+                        style={{ borderRadius: 18, marginTop: 6, paddingRight: 0 }}
                       />
                     ) : (
-                      <Text style={styles.unavailable}>Chart Library Missing</Text>
+                      <Text style={styles.unavailable}>Chart library missing</Text>
                     )}
                   </View>
                 ) : (
@@ -392,22 +514,47 @@ const HomeScreen: React.FC = () => {
                 )}
               </View>
 
-              {/* RECENT TRANSACTIONS HEADER */}
+              <View style={styles.insightsCard}>
+                <View style={styles.cardHeaderRow}>
+                  <View>
+                    <Text style={styles.cardTitle}>Insights</Text>
+                    <Text style={styles.cardSubtitle}>Auto-curated from your activity</Text>
+                  </View>
+                  <MaterialIcon name="lightbulb" size={22} color="#FBBF24" />
+                </View>
+                <View style={styles.insightGrid}>
+                  {insightRows.map((row) => (
+                    <View key={row.label} style={styles.insightItem}>
+                      <View style={styles.insightIconWrap}>
+                        <MaterialIcon name={row.icon as any} size={18} color="#2563EB" />
+                      </View>
+                      <View style={styles.insightTextWrap}>
+                        <Text style={styles.insightLabel}>{row.label}</Text>
+                        <Text style={styles.insightValue}>{row.value}</Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              </View>
+
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Recent Transactions</Text>
+                <Text style={styles.sectionTitle}>Recent transactions</Text>
                 <TouchableOpacity onPress={() => navigation.navigate('History')}>
-                  <Text style={styles.seeAll}>See All</Text>
+                  <Text style={styles.seeAll}>See all</Text>
                 </TouchableOpacity>
               </View>
             </Animated.View>
           }
           ListEmptyComponent={
-            <View style={styles.card}>
+            <View style={styles.emptyTransactions}>
+              <MaterialIcon name="hourglass-empty" size={36} color="#94A3B8" />
               <Text style={styles.unavailable}>No recent activity</Text>
+              <TouchableOpacity style={styles.emptyCta} onPress={() => navigation.navigate('AddEntry')}>
+                <Text style={styles.emptyCtaText}>Log your first entry</Text>
+              </TouchableOpacity>
             </View>
           }
         />
-        {/* FAB removed from Home screen (Add is available in action row) */}
       </SafeAreaView>
     </View>
   );
@@ -422,244 +569,304 @@ export default HomeScreen;
 const styles = StyleSheet.create({
   mainContainer: {
     flex: 1,
-    backgroundColor: colors.background || '#F9FAFB',
+    backgroundColor: colors.background || '#F8FAFC',
   },
   safeArea: {
     flex: 1,
   },
-  scrollView: {
-    flex: 1,
-  },
   scrollContent: {
     paddingHorizontal: spacing(2),
-    paddingTop: Platform.OS === 'android' ? spacing(4) : spacing(1), // FIX: Status bar overlap
-    paddingBottom: spacing(16), // FIX: Bottom nav overlap
+    paddingTop: spacing(3),
+    paddingBottom: spacing(16),
   },
-
-  /* HEADER */
-  header: {
+  listHeaderSpacing: {
+    paddingBottom: spacing(3),
+  },
+  heroCard: {
+    backgroundColor: '#0F172A',
+    borderRadius: 28,
+    padding: spacing(3),
     marginBottom: spacing(3),
-    marginTop: spacing(1),
+    borderWidth: 1,
+    borderColor: '#1E293B',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  heroTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: spacing(2),
   },
-  greeting: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#1F2937',
-    letterSpacing: -0.5,
-  },
-  subGreeting: {
+  heroSubtle: {
+    color: '#94A3B8',
     fontSize: 14,
-    color: '#6B7280',
-    marginTop: 2,
-    fontWeight: '500',
-  },
-
-  /* BALANCE CARD - Modernized */
-  balanceCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 24,
-    padding: spacing(3),
-    marginBottom: spacing(3),
-    // Modern soft shadow
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.08,
-    shadowRadius: 20,
-    elevation: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.02)',
-  },
-  balanceLabel: {
-    fontSize: 14,
-    color: '#6B7280',
-    textAlign: 'center',
-    fontWeight: '600',
     marginBottom: 4,
   },
-  balanceAmount: {
-    textAlign: 'center',
-    fontSize: 32,
-    fontWeight: '800',
-    color: '#111827',
-    marginBottom: spacing(3),
-    letterSpacing: -1,
+  heroGreeting: {
+    fontSize: 22,
+    color: '#FFFFFF',
+    fontWeight: '700',
+    letterSpacing: -0.5,
   },
-  statsRow: {
+  heroSettings: {
+    backgroundColor: '#1E293B',
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  heroLabel: {
+    color: '#94A3B8',
+    fontSize: 13,
+    marginBottom: 4,
+  },
+  heroLabelRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginTop: spacing(1),
   },
-  statBlock: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 10,
-  },
-  statTextWrap: {
-    justifyContent: 'center',
-  },
-  statLabel: {
+  heroPeriod: {
+    color: '#CBD5F5',
     fontSize: 12,
-    color: '#9CA3AF',
     fontWeight: '600',
   },
-  separator: {
-    width: 1,
-    height: 30,
-    backgroundColor: '#E5E7EB',
-    marginHorizontal: 10,
+  heroBalance: {
+    color: '#FFFFFF',
+    fontSize: 36,
+    fontWeight: '800',
+    letterSpacing: -1,
   },
-  income: {
-    color: '#166534', // Darker green for contrast
-    fontWeight: '700',
-    fontSize: 15,
-  },
-  expense: {
-    color: '#991B1B', // Darker red for contrast
-    fontWeight: '700',
-    fontSize: 15,
-  },
-
-  /* ACTIONS ROW */
-  actionsContainer: {
+  trendBadge: {
+    marginTop: spacing(2),
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: spacing(3),
-  },
-  miniActionBtn: {
-    backgroundColor: '#fff',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 16,
     alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-    gap: 6,
   },
-  miniActionText: {
-    fontSize: 13,
+  trendText: {
     fontWeight: '600',
-    color: '#374151',
-  },
-
-  addActionBtn: {
-    backgroundColor: '#4F46E5',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
-    gap: 8,
-  },
-  addActionText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#fff',
+    fontSize: 12,
     marginLeft: 6,
   },
-
-  /* GENERAL CARD */
-  card: {
-    backgroundColor: '#ffffff',
+  heroStatsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: spacing(3),
+  },
+  heroStatCard: {
+    flex: 1,
+    backgroundColor: '#182232',
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#1F2937',
+  },
+  heroStatSpacing: {
+    marginRight: 12,
+  },
+  heroStatLabel: {
+    color: '#94A3B8',
+    fontSize: 12,
+    marginBottom: 6,
+  },
+  heroStatValue: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  highlightRow: {
+    flexDirection: 'row',
+    marginBottom: spacing(3),
+  },
+  highlightCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  highlightLabel: {
+    marginTop: 8,
+    color: '#94A3B8',
+    fontSize: 12,
+  },
+  highlightValue: {
+    color: '#111827',
+    fontWeight: '700',
+    fontSize: 16,
+    marginTop: 2,
+  },
+  actionGrid: {
+    flexDirection: 'row',
+    marginBottom: spacing(3),
+  },
+  actionWrapper: {
+    flex: 1,
+  },
+  actionCard: {
+    borderRadius: 20,
+    padding: 16,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E0E7FF',
+  },
+  actionIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  actionLabel: {
+    color: '#0F172A',
+    fontWeight: '700',
+  },
+  analyticsCard: {
+    backgroundColor: '#FFFFFF',
     borderRadius: 24,
     padding: spacing(3),
     marginBottom: spacing(3),
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 2,
+    shadowRadius: 14,
+    elevation: 3,
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing(2),
   },
   cardTitle: {
     fontSize: 18,
     fontWeight: '700',
     color: '#111827',
   },
-  chartHeader: {
-    marginBottom: spacing(2),
-    alignItems: 'center',
+  cardSubtitle: {
+    color: '#94A3B8',
+    fontSize: 13,
   },
   controlsRow: {
     flexDirection: 'row',
     marginBottom: spacing(2),
-    justifyContent: 'space-between',
   },
   chartWrapper: {
     alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'visible', // Prevents clipping
   },
   emptyState: {
-    padding: 20,
+    paddingVertical: spacing(4),
     alignItems: 'center',
   },
   unavailable: {
-    color: '#9CA3AF',
-    textAlign: 'center',
-    fontSize: 14,
+    color: '#94A3B8',
+    fontSize: 13,
   },
   skeletonBox: {
-    height: 180,
+    height: 200,
     backgroundColor: '#F3F4F6',
-    borderRadius: 16,
+    borderRadius: 18,
   },
-
-  /* TRANSACTIONS */
+  insightsCard: {
+    backgroundColor: '#0B1120',
+    borderRadius: 24,
+    padding: spacing(3),
+    marginBottom: spacing(3),
+    borderWidth: 1,
+    borderColor: '#1E293B',
+    shadowColor: '#0B1120',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.35,
+    shadowRadius: 18,
+    elevation: 6,
+  },
+  insightGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: spacing(2),
+  },
+  insightItem: {
+    width: '50%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 18,
+  },
+  insightIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: '#1E293B',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  insightTextWrap: {
+    flex: 1,
+  },
+  insightLabel: {
+    color: '#94A3B8',
+    fontSize: 12,
+  },
+  insightValue: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 15,
+  },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: spacing(2),
-    paddingHorizontal: 4,
+    paddingTop: spacing(1),
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
-    color: '#111827',
+    color: '#0F172A',
   },
   seeAll: {
     color: '#4F46E5',
     fontWeight: '600',
     fontSize: 13,
   },
-
-  /* FAB */
-  fab: {
-    position: 'absolute',
-    right: 20,
-    bottom: 30, // FIX: Moved up slightly
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#4F46E5',
-    justifyContent: 'center',
+  emptyTransactions: {
     alignItems: 'center',
-    shadowColor: '#4F46E5',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
+    padding: spacing(4),
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    marginHorizontal: spacing(2),
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  emptyCta: {
+    marginTop: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: '#4F46E5',
+  },
+  emptyCtaText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  horizontalSpacer: {
+    marginRight: 12,
   },
 });
