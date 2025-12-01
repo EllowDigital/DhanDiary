@@ -91,9 +91,9 @@ export const syncPending = async () => {
   if (deletions.length > 0) {
     try {
       await runRemoteTransaction(async () => {
-        // Ensure we cast the incoming id array to uuid[] so Postgres compares types correctly
+        // Soft-delete remotely so other devices can observe deletions via the `deleted` flag.
         const delRes = await safeQ(
-          'DELETE FROM cash_entries WHERE id = ANY($1::uuid[]) RETURNING id',
+          'UPDATE cash_entries SET deleted = true, updated_at = NOW(), need_sync = false WHERE id = ANY($1::uuid[]) RETURNING id',
           [deletions]
         );
         deleted += (delRes && delRes.length) || deletions.length;
@@ -103,8 +103,11 @@ export const syncPending = async () => {
       console.error('Failed to batch delete remote rows, falling back to per-row', err);
       for (const rid of deletions) {
         try {
-          await safeQ('DELETE FROM cash_entries WHERE id = $1', [rid]);
-          deleted += 1;
+          const res = await safeQ(
+            'UPDATE cash_entries SET deleted = true, updated_at = NOW(), need_sync = false WHERE id = $1 RETURNING id',
+            [rid]
+          );
+          deleted += res && res.length ? res.length : 1;
         } catch (e) {
           console.error('Failed to delete remote row', rid, e);
         }
@@ -415,52 +418,62 @@ export const pullRemote = async () => {
           }
 
           // If local exists and still needs sync, treat local as intent-to-keep:
-          // recreate a remote row from the local copy and map it.
+          // revive the remote row (clear deleted flag) using local data.
           if (localForDeleted && (localForDeleted as any).need_sync) {
             try {
-              const insertRes = await Q(
-                `INSERT INTO cash_entries (user_id, type, amount, category, note, currency, created_at, updated_at, need_sync, client_id)
-                   VALUES ($1, $2, $3::numeric, $4, $5, $6, $7::timestamptz, $8::timestamptz, false, $9) RETURNING id, server_version`,
+              const revivedUpdatedAt =
+                localForDeleted.updated_at || localForDeleted.created_at || new Date().toISOString();
+              const revived = await Q(
+                `UPDATE cash_entries
+                   SET deleted = false,
+                       amount = $1::numeric,
+                       type = $2,
+                       category = $3,
+                       note = $4,
+                       currency = $5,
+                       updated_at = $6::timestamptz,
+                       need_sync = false
+                 WHERE id = $7
+                 RETURNING id, server_version`,
                 [
-                  localForDeleted.user_id,
-                  localForDeleted.type,
                   Number(localForDeleted.amount),
+                  localForDeleted.type,
                   localForDeleted.category,
                   localForDeleted.note || null,
                   localForDeleted.currency || 'INR',
-                  localForDeleted.created_at,
-                  localForDeleted.updated_at,
-                  localForDeleted.local_id,
+                  revivedUpdatedAt,
+                  r.id,
                 ]
               );
-              const newRemoteId =
-                insertRes && insertRes[0] && insertRes[0].id ? insertRes[0].id : undefined;
-              const sv =
-                insertRes && insertRes[0] && insertRes[0].server_version
-                  ? Number(insertRes[0].server_version)
-                  : undefined;
-              if (newRemoteId) {
+              const revivedRow = revived && revived[0];
+              if (revivedRow && revivedRow.id) {
+                const sv =
+                  revivedRow.server_version !== undefined
+                    ? Number(revivedRow.server_version)
+                    : undefined;
                 try {
-                  await markEntrySynced(localForDeleted.local_id, String(newRemoteId), sv);
+                  await markEntrySynced(localForDeleted.local_id, String(revivedRow.id), sv);
                 } catch (e) {
                   try {
-                    await queueLocalRemoteMapping(localForDeleted.local_id, String(newRemoteId));
+                    await queueLocalRemoteMapping(localForDeleted.local_id, String(r.id));
                     console.log(
                       'DB not operational, queued local->remote mapping for',
                       localForDeleted.local_id
                     );
                   } catch (q) {
                     console.warn(
-                      'Failed to queue local->remote mapping after recreate',
+                      'Failed to queue local->remote mapping after revive',
                       localForDeleted.local_id,
                       q
                     );
                   }
                 }
+                continue;
               }
+              throw new Error('Revive returned no rows');
             } catch (err) {
               console.error(
-                'Failed to recreate remote row for locally-modified deleted remote',
+                'Failed to revive remote row for locally-modified deleted remote',
                 localForDeleted.local_id,
                 err
               );

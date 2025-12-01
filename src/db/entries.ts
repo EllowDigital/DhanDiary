@@ -81,10 +81,10 @@ export const getEntries = async (userId: string) => {
   );
   const mapped = (rows || []).map((r) => ({
     ...r,
-    created_at: normalizeDate(r.created_at) || new Date().toISOString(),
-    updated_at:
-      normalizeDate(r.updated_at) ||
-      (r.created_at ? normalizeDate(r.created_at) : new Date().toISOString()),
+    // Do NOT silently fall back to `now` here — prefer null so the UI can show a clear
+    // 'unknown' date rather than incorrectly showing today's date when parsing fails.
+    created_at: normalizeDate(r.created_at) || null,
+    updated_at: normalizeDate(r.updated_at) || normalizeDate(r.created_at) || null,
     date: normalizeDate((r as any).date) || normalizeDate(r.created_at) || null,
   })) as LocalEntry[];
 
@@ -237,8 +237,8 @@ export const getEntryByLocalId = async (localId: string) => {
   if (!r) return null;
   return {
     ...r,
-    created_at: normalizeDate(r.created_at) || new Date().toISOString(),
-    updated_at: normalizeDate(r.updated_at) || r.created_at,
+    created_at: normalizeDate(r.created_at) || null,
+    updated_at: normalizeDate(r.updated_at) || normalizeDate(r.created_at) || null,
   } as LocalEntry;
 };
 
@@ -252,7 +252,7 @@ export const getLocalByRemoteId = async (remoteId: string) => {
 export const getUnsyncedEntries = async () => {
   const db = await sqlite.open();
   return await db.all<LocalEntry>(
-    'SELECT * FROM local_entries WHERE need_sync = 1 OR is_deleted = 1 OR (is_synced = 0 AND remote_id IS NULL)'
+    'SELECT * FROM local_entries WHERE need_sync = 1 OR (is_deleted = 1 AND is_synced = 0) OR (is_synced = 0 AND remote_id IS NULL)'
   );
 };
 
@@ -264,7 +264,15 @@ export const upsertLocalFromRemote = async (remote: any) => {
     [String(remote.id)]
   );
   if (existing && existing.local_id) {
-    const preserved = existing.created_at || remote.created_at || now;
+    // Preserve existing created_at if present (normalize it), otherwise normalize remote.created_at
+    const preserved = normalizeDate(existing.created_at) || normalizeDate(remote.created_at) || now;
+    const updatedAt = normalizeDate(remote.updated_at) || normalizeDate(remote.created_at) || now;
+    // Warn when remote timestamps couldn't be normalized so we can detect format issues
+    if (!normalizeDate(remote.created_at)) {
+      try {
+        console.warn('upsertLocalFromRemote: remote.created_at not normalized', remote.id, remote.created_at);
+      } catch (e) {}
+    }
     await db.run(
       `UPDATE local_entries SET user_id = ?, type = ?, amount = ?, category = ?, note = ?, currency = ?, server_version = ?, created_at = ?, updated_at = ?, is_synced = 1, is_deleted = ? WHERE local_id = ?`,
       [
@@ -276,7 +284,7 @@ export const upsertLocalFromRemote = async (remote: any) => {
         remote.currency || 'INR',
         typeof remote.server_version === 'number' ? remote.server_version : 0,
         preserved,
-        remote.updated_at || now,
+        updatedAt,
         remote.deleted ? 1 : 0,
         existing.local_id,
       ]
@@ -298,13 +306,14 @@ export const upsertLocalFromRemote = async (remote: any) => {
       remote.amount,
       remote.category || 'General',
       remote.note || null,
-      remote.client_id && remote.client_id.length
-        ? remote.created_at || now
-        : remote.created_at || now,
+      // Normalize date/created/updated timestamps from remote before storing.
+      (remote.client_id && remote.client_id.length
+        ? normalizeDate(remote.created_at) || remote.created_at || now
+        : normalizeDate(remote.created_at) || remote.created_at || now),
       remote.currency || 'INR',
       typeof remote.server_version === 'number' ? remote.server_version : 0,
-      remote.created_at || now,
-      remote.updated_at || now,
+      normalizeDate(remote.created_at) || remote.created_at || now,
+      normalizeDate(remote.updated_at) || normalizeDate(remote.created_at) || remote.updated_at || now,
       remote.deleted ? 1 : 0,
     ]
   );
@@ -318,7 +327,7 @@ export const markLocalDeletedByRemoteId = async (remoteId: string) => {
   const db = await sqlite.open();
   const now = new Date().toISOString();
   await db.run(
-    'UPDATE local_entries SET is_deleted = 1, is_synced = 1, updated_at = ? WHERE remote_id = ?',
+    'UPDATE local_entries SET is_deleted = 1, is_synced = 1, need_sync = 0, updated_at = ? WHERE remote_id = ?',
     [now, String(remoteId)]
   );
   try {

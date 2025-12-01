@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { View, Platform, Dimensions } from 'react-native';
+import { View, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import HomeScreen from '../screens/HomeScreenFixed';
 import HistoryScreen from '../screens/HistoryScreen';
@@ -10,53 +11,54 @@ import AnimatedTabIcon from '../components/AnimatedTabIcon';
 import TabBarButton from '../components/TabBarButton';
 
 const Tab = createBottomTabNavigator();
-const { width } = Dimensions.get('window');
-
 const BottomTabNavigator = () => {
+  const insets = useSafeAreaInsets();
+
+  const tabBarStyle = useMemo(() => {
+    const insetBottom = Math.max(insets.bottom, Platform.OS === 'android' ? 18 : 24);
+    return {
+      position: 'absolute',
+      bottom: insetBottom,
+      left: 16,
+      right: 16,
+      height: 70 + Math.min(insets.bottom, 16),
+      borderRadius: 26,
+      backgroundColor: '#FFFFFF',
+      paddingBottom: Math.max(insets.bottom / 2, 12),
+      paddingTop: 10,
+      shadowColor: '#0F172A',
+      shadowOpacity: 0.08,
+      shadowOffset: { width: 0, height: 8 },
+      shadowRadius: 20,
+      elevation: 12,
+      borderTopWidth: 0,
+    } as const;
+  }, [insets.bottom]);
+
+  const screenOptions = useMemo(
+    () => ({
+      headerShown: false,
+      tabBarActiveTintColor: '#0F172A',
+      tabBarInactiveTintColor: '#94A3B8',
+      tabBarHideOnKeyboard: true,
+      tabBarStyle,
+      tabBarLabelStyle: {
+        fontSize: 12,
+        fontWeight: '600',
+        marginTop: -4,
+      },
+      tabBarItemStyle: {
+        paddingVertical: 0,
+        marginHorizontal: 6,
+        borderRadius: 18,
+      },
+    }),
+    [tabBarStyle]
+  );
+
   return (
     <View style={{ flex: 1 }}>
-      <Tab.Navigator
-        screenOptions={{
-          headerShown: false,
-
-          // Colors
-          tabBarActiveTintColor: '#1E293B',
-          tabBarInactiveTintColor: '#64748B',
-
-          // Floating tab bar
-          tabBarStyle: {
-            position: 'absolute',
-            bottom: Platform.OS === 'ios' ? 22 : 16,
-            left: 10,
-            right: 10,
-            height: 68,
-            borderRadius: 20,
-
-            backgroundColor: '#FFFFFF',
-            paddingBottom: 10,
-            paddingTop: 6,
-
-            // Soft shadow
-            shadowColor: '#000',
-            shadowOpacity: 0.08,
-            shadowOffset: { width: 0, height: 6 },
-            shadowRadius: 12,
-            elevation: 8,
-
-            borderTopWidth: 0,
-          },
-
-          tabBarLabelStyle: {
-            fontSize: 12,
-            fontWeight: '600',
-            marginTop: -4,
-          },
-
-          tabBarItemStyle: {
-            paddingVertical: 4,
-          },
-        }}
-      >
+      <Tab.Navigator screenOptions={screenOptions}>
         {/* DASHBOARD */}
         <Tab.Screen
           name="Dashboard"

@@ -78,6 +78,7 @@ import { useOfflineSync } from './src/hooks/useOfflineSync';
 import { useAuth } from './src/hooks/useAuth';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   startForegroundSyncScheduler,
   stopForegroundSyncScheduler,
@@ -175,6 +176,19 @@ export default function App() {
   }
 
   React.useEffect(() => {
+    // If an update was pending (we marked it before applying), clear the flag now
+    (async () => {
+      try {
+        const pending = await AsyncStorage.getItem('PENDING_UPDATE');
+        if (pending) {
+          // Successfully booted after an update — clear the pending flag
+          await AsyncStorage.removeItem('PENDING_UPDATE');
+        }
+      } catch (e) {
+        // ignore
+      }
+    })();
+
     const setup = async () => {
       const { init } = require('./src/db/localDb');
       let attempts = 0;

@@ -1,14 +1,20 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { View, StyleSheet, TouchableOpacity, Alert, ScrollView } from 'react-native';
-import { Text, Input, Button } from '@rneui/themed';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import {
+  View,
+  StyleSheet,
+  TouchableOpacity,
+  Alert,
+  ScrollView,
+  Text,
+  SafeAreaView,
+  LayoutAnimation,
+  Platform,
+  UIManager,
+  Animated,
+  Easing,
+} from 'react-native';
+import { Input, Button } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
-
-import Animated, {
-  useSharedValue,
-  withTiming,
-  interpolate,
-  useAnimatedStyle,
-} from 'react-native-reanimated';
 
 import { updateProfile, changePassword, deleteAccount } from '../services/auth';
 import { saveSession } from '../db/session';
@@ -16,6 +22,10 @@ import { retry } from '../utils/retry';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../context/ToastContext';
 import { useNavigation } from '@react-navigation/native';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 const AccountManagementScreen = () => {
   const { user } = useAuth();
@@ -25,27 +35,6 @@ const AccountManagementScreen = () => {
   const [activeCard, setActiveCard] = useState<'username' | 'email' | 'password' | 'delete' | null>(
     null
   );
-
-  /* -------------------------
-        FIXED FLIP ANIMATION
-    -------------------------- */
-  const flip = useSharedValue(0);
-
-  useEffect(() => {
-    flip.value = withTiming(activeCard ? 180 : 0, { duration: 480 });
-  }, [activeCard]);
-
-  const frontStyle = useAnimatedStyle(() => ({
-    transform: [{ rotateY: `${interpolate(flip.value, [0, 180], [0, 180])}deg` }],
-    opacity: flip.value < 90 ? 1 : 0,
-    pointerEvents: flip.value < 90 ? 'auto' : 'none',
-  }));
-
-  const backStyle = useAnimatedStyle(() => ({
-    transform: [{ rotateY: `${interpolate(flip.value, [0, 180], [180, 360])}deg` }],
-    opacity: flip.value > 90 ? 1 : 0,
-    pointerEvents: flip.value > 90 ? 'auto' : 'none',
-  }));
 
   /* -------------------------
         FORM STATES
@@ -65,6 +54,39 @@ const AccountManagementScreen = () => {
   const [savingEmail, setSavingEmail] = useState(false);
   const [savingPasswordState, setSavingPasswordState] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
+
+  const fadeOrder = ['hero', 'username', 'email', 'password', 'delete'] as const;
+  const fadeRefs = useRef(fadeOrder.map(() => new Animated.Value(0))).current;
+
+  useEffect(() => {
+    const animations = fadeRefs.map((val, idx) =>
+      Animated.timing(val, {
+        toValue: 1,
+        duration: 450,
+        delay: idx * 120,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      })
+    );
+    Animated.stagger(120, animations).start();
+  }, [fadeRefs]);
+
+  const animatedStyle = (index: number) => ({
+    opacity: fadeRefs[index],
+    transform: [
+      {
+        translateY: fadeRefs[index].interpolate({
+          inputRange: [0, 1],
+          outputRange: [24, 0],
+        }),
+      },
+    ],
+  });
+
+  const toggleCard = (id: 'username' | 'email' | 'password' | 'delete') => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setActiveCard((prev) => (prev === id ? null : id));
+  };
 
   /* -------------------------
         SAVE USERNAME
@@ -175,136 +197,203 @@ const AccountManagementScreen = () => {
     ]);
   }, []);
 
+  const sectionConfig = useMemo(
+    () => [
+      {
+        id: 'username' as const,
+        title: 'Profile Name',
+        description: 'Update the name shown across the app',
+        icon: 'person',
+        color: '#2563EB',
+        render: () => (
+          <>
+            <Input
+              label="Display Name"
+              value={username}
+              onChangeText={setUsername}
+              placeholder="Enter your name"
+            />
+            <Button
+              title="Save Name"
+              loading={savingUsername}
+              onPress={handleSaveUsername}
+              buttonStyle={styles.primaryBtn}
+            />
+          </>
+        ),
+      },
+      {
+        id: 'email' as const,
+        title: 'Email Address',
+        description: 'Used for login and updates',
+        icon: 'mail',
+        color: '#10B981',
+        render: () => (
+          <>
+            <Input
+              label="Email"
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              placeholder="you@example.com"
+            />
+            <Button
+              title="Save Email"
+              loading={savingEmail}
+              onPress={handleSaveEmail}
+              buttonStyle={styles.primaryBtn}
+            />
+          </>
+        ),
+      },
+      {
+        id: 'password' as const,
+        title: 'Password',
+        description: 'Choose a strong password with at least 8 characters',
+        icon: 'lock',
+        color: '#F59E0B',
+        render: () => (
+          <>
+            <Input
+              label="Current Password"
+              secureTextEntry={!showCur}
+              value={curPass}
+              onChangeText={setCurPass}
+              placeholder="••••••••"
+              rightIcon={
+                <MaterialIcon
+                  name={showCur ? 'visibility' : 'visibility-off'}
+                  size={22}
+                  onPress={() => setShowCur(!showCur)}
+                />
+              }
+            />
+            <Input
+              label="New Password"
+              secureTextEntry={!showNew}
+              value={newPass}
+              onChangeText={setNewPass}
+              placeholder="••••••••"
+              rightIcon={
+                <MaterialIcon
+                  name={showNew ? 'visibility' : 'visibility-off'}
+                  size={22}
+                  onPress={() => setShowNew(!showNew)}
+                />
+              }
+            />
+            <Input
+              label="Confirm Password"
+              secureTextEntry={!showConfirm}
+              value={confirmPass}
+              onChangeText={setConfirmPass}
+              placeholder="••••••••"
+              rightIcon={
+                <MaterialIcon
+                  name={showConfirm ? 'visibility' : 'visibility-off'}
+                  size={22}
+                  onPress={() => setShowConfirm(!showConfirm)}
+                />
+              }
+            />
+            <Button
+              title="Update Password"
+              loading={savingPasswordState}
+              onPress={handlePasswordSave}
+              buttonStyle={styles.primaryBtn}
+            />
+          </>
+        ),
+      },
+      {
+        id: 'delete' as const,
+        title: 'Delete Account',
+        description: 'Permanently remove your data from DhanDiary',
+        icon: 'delete-forever',
+        color: '#EF4444',
+        render: () => (
+          <>
+            <Text style={styles.warning}>This action cannot be undone.</Text>
+            <Button
+              title="Delete Account"
+              buttonStyle={styles.destructiveBtn}
+              onPress={handleDelete}
+              loading={deletingAccount}
+            />
+          </>
+        ),
+      },
+    ],
+    [
+      username,
+      savingUsername,
+      handleSaveUsername,
+      email,
+      savingEmail,
+      handleSaveEmail,
+      curPass,
+      newPass,
+      confirmPass,
+      showCur,
+      showNew,
+      showConfirm,
+      savingPasswordState,
+      handlePasswordSave,
+      handleDelete,
+      deletingAccount,
+    ]
+  );
+
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      <View style={{ marginTop: 20, minHeight: 520 }}>
-        {/* FRONT MENU */}
-        <Animated.View style={[styles.card, frontStyle]}>
-          <Text style={styles.header}>Manage Account</Text>
-
-          <TouchableOpacity style={styles.row} onPress={() => setActiveCard('username')}>
-            <MaterialIcon name="person" size={22} color="#1F74E8" />
-            <Text style={styles.rowText}>Change Username</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.row} onPress={() => setActiveCard('email')}>
-            <MaterialIcon name="mail" size={22} color="#4CAF50" />
-            <Text style={styles.rowText}>Change Email</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.row} onPress={() => setActiveCard('password')}>
-            <MaterialIcon name="lock" size={22} color="#F59E0B" />
-            <Text style={styles.rowText}>Change Password</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.row} onPress={() => setActiveCard('delete')}>
-            <MaterialIcon name="delete-forever" size={22} color="#EF4444" />
-            <Text style={[styles.rowText, { color: '#EF4444' }]}>Delete Account</Text>
-          </TouchableOpacity>
+    <SafeAreaView style={styles.safe}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.contentContainer}>
+        <Animated.View style={[styles.heroCard, animatedStyle(0)]}>
+          <Text style={styles.heroTitle}>Account Center</Text>
+          <Text style={styles.heroSubtitle}>Manage your profile and security settings in one place.</Text>
+          <View style={styles.heroRow}>
+            <View style={styles.heroBadge}>
+              <MaterialIcon name="person" size={20} color="#2563EB" />
+              <Text style={styles.heroBadgeText}>{user?.name || 'Guest user'}</Text>
+            </View>
+            <View style={styles.heroBadge}>
+              <MaterialIcon name="email" size={20} color="#2563EB" />
+              <Text style={styles.heroBadgeText}>{user?.email || 'No email'}</Text>
+            </View>
+          </View>
         </Animated.View>
 
-        {/* BACK FORMS */}
-        <Animated.View style={[styles.card, backStyle]}>
-          {/* USERNAME */}
-          {activeCard === 'username' && (
-            <>
-              <Text style={styles.header}>Update Username</Text>
-
-              <Input label="Username" value={username} onChangeText={setUsername} />
-
-              <Button title="Save Username" loading={savingUsername} onPress={handleSaveUsername} />
-              <Button title="Back" type="clear" onPress={() => setActiveCard(null)} />
-            </>
-          )}
-
-          {/* EMAIL */}
-          {activeCard === 'email' && (
-            <>
-              <Text style={styles.header}>Update Email</Text>
-
-              <Input label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" />
-
-              <Button title="Save Email" loading={savingEmail} onPress={handleSaveEmail} />
-              <Button title="Back" type="clear" onPress={() => setActiveCard(null)} />
-            </>
-          )}
-
-          {/* PASSWORD */}
-          {activeCard === 'password' && (
-            <>
-              <Text style={styles.header}>Change Password</Text>
-
-              <Input
-                label="Current Password"
-                secureTextEntry={!showCur}
-                value={curPass}
-                onChangeText={setCurPass}
-                rightIcon={
-                  <MaterialIcon
-                    name={showCur ? 'visibility' : 'visibility-off'}
-                    size={22}
-                    onPress={() => setShowCur(!showCur)}
-                  />
-                }
-              />
-
-              <Input
-                label="New Password"
-                secureTextEntry={!showNew}
-                value={newPass}
-                onChangeText={setNewPass}
-                rightIcon={
-                  <MaterialIcon
-                    name={showNew ? 'visibility' : 'visibility-off'}
-                    size={22}
-                    onPress={() => setShowNew(!showNew)}
-                  />
-                }
-              />
-
-              <Input
-                label="Confirm New Password"
-                secureTextEntry={!showConfirm}
-                value={confirmPass}
-                onChangeText={setConfirmPass}
-                rightIcon={
-                  <MaterialIcon
-                    name={showConfirm ? 'visibility' : 'visibility-off'}
-                    size={22}
-                    onPress={() => setShowConfirm(!showConfirm)}
-                  />
-                }
-              />
-
-              <Button
-                title="Save Password"
-                loading={savingPasswordState}
-                onPress={handlePasswordSave}
-              />
-              <Button title="Back" type="clear" onPress={() => setActiveCard(null)} />
-            </>
-          )}
-
-          {/* DELETE */}
-          {activeCard === 'delete' && (
-            <>
-              <Text style={[styles.header, { color: 'red' }]}>Delete Account</Text>
-
-              <Text style={styles.warning}>This action is irreversible.</Text>
-
-              <Button
-                title="Delete Account"
-                buttonStyle={{ backgroundColor: 'red' }}
-                onPress={handleDelete}
-                loading={deletingAccount}
-              />
-
-              <Button title="Back" type="clear" onPress={() => setActiveCard(null)} />
-            </>
-          )}
-        </Animated.View>
-      </View>
-    </ScrollView>
+        {sectionConfig.map((section, idx) => {
+          const expanded = activeCard === section.id;
+          return (
+            <Animated.View
+              key={section.id}
+              style={[styles.card, animatedStyle(idx + 1), expanded && styles.cardExpanded]}
+            >
+              <TouchableOpacity
+                activeOpacity={0.9}
+                style={styles.cardHeader}
+                onPress={() => toggleCard(section.id)}
+              >
+                <View style={[styles.cardIcon, { backgroundColor: `${section.color}15` }]}> 
+                  <MaterialIcon name={section.icon as any} size={22} color={section.color} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.cardTitle}>{section.title}</Text>
+                  <Text style={styles.cardDescription}>{section.description}</Text>
+                </View>
+                <MaterialIcon
+                  name={expanded ? 'keyboard-arrow-up' : 'keyboard-arrow-down'}
+                  size={24}
+                  color="#94A3B8"
+                />
+              </TouchableOpacity>
+              {expanded && <View style={styles.formContent}>{section.render()}</View>}
+            </Animated.View>
+          );
+        })}
+      </ScrollView>
+    </SafeAreaView>
   );
 };
 
@@ -312,42 +401,110 @@ const AccountManagementScreen = () => {
       STYLES
 ----------------------------- */
 const styles = StyleSheet.create({
-  container: {
+  safe: {
     flex: 1,
-    paddingHorizontal: 16,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#EEF2FF',
   },
-  card: {
-    backgroundColor: '#fff',
+  contentContainer: {
     padding: 20,
-    borderRadius: 18,
-    elevation: 4,
-    minHeight: 440,
-    justifyContent: 'center',
-    position: 'absolute',
-    width: '100%',
+    paddingBottom: 40,
   },
-  header: {
-    fontSize: 18,
+  heroCard: {
+    backgroundColor: '#0F172A',
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 20,
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 6,
+  },
+  heroTitle: {
+    color: '#F8FAFC',
+    fontSize: 20,
     fontWeight: '700',
-    marginBottom: 16,
   },
-  row: {
+  heroSubtitle: {
+    color: '#CBD5F5',
+    marginTop: 8,
+    fontSize: 14,
+  },
+  heroRow: {
+    flexDirection: 'row',
+    marginTop: 18,
+    gap: 12,
+    flexWrap: 'wrap',
+  },
+  heroBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    backgroundColor: '#1E243A',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
   },
-  rowText: {
-    marginLeft: 12,
-    fontSize: 15,
-    fontWeight: '500',
+  heroBadgeText: {
+    color: '#E2E8F0',
+    marginLeft: 8,
+    fontSize: 13,
+  },
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    marginBottom: 18,
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  cardExpanded: {
+    paddingBottom: 24,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  cardIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  cardDescription: {
+    fontSize: 13,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  formContent: {
+    marginTop: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#E2E8F0',
+    paddingTop: 16,
   },
   warning: {
     textAlign: 'center',
-    marginBottom: 12,
-    color: '#444',
+    marginBottom: 16,
+    color: '#B45309',
+    fontWeight: '600',
+  },
+  primaryBtn: {
+    borderRadius: 14,
+    paddingVertical: 12,
+    marginTop: 6,
+  },
+  destructiveBtn: {
+    backgroundColor: '#DC2626',
+    borderRadius: 14,
+    paddingVertical: 12,
   },
 });
 
