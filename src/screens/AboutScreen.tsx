@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import Constants from 'expo-constants';
 import {
   View,
@@ -11,6 +11,10 @@ import {
   Share,
 } from 'react-native';
 import { Text, Button } from '@rneui/themed';
+import { Alert, Modal, View as RNView } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import UpdateBanner from '../components/UpdateBanner';
+import * as Updates from 'expo-updates';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -44,6 +48,18 @@ const AboutScreen: React.FC = () => {
     fade.value = withTiming(1, { duration: 600, easing: Easing.out(Easing.cubic) });
   }, []);
 
+  // Load persisted update failure count
+  useEffect(() => {
+    (async () => {
+      try {
+        const v = await AsyncStorage.getItem('UPDATE_FAIL_COUNT');
+        setFailureCount(Number(v || '0'));
+      } catch (e) {
+        // ignore
+      }
+    })();
+  }, []);
+
   const animatedFadeStyle = useAnimatedStyle(() => ({
     opacity: fade.value,
     transform: [{ translateY: (1 - fade.value) * 16 }],
@@ -57,6 +73,75 @@ const AboutScreen: React.FC = () => {
     } catch (err) {
       console.log('Failed to fetch latest link:', err);
       return 'https://ellowdigital.netlify.app'; // fallback link
+    }
+  };
+
+  /* UPDATES: expo-updates integration */
+  const [checking, setChecking] = useState(false);
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<any>(null);
+  const [showBanner, setShowBanner] = useState(false);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [failureCount, setFailureCount] = useState(0);
+
+  const checkForUpdates = async () => {
+    try {
+      setChecking(true);
+      const res = await Updates.checkForUpdateAsync();
+      if (res.isAvailable) {
+        setUpdateAvailable(true);
+        setUpdateInfo(res);
+        // show brief in-app banner for a few seconds
+        setShowBanner(true);
+        // also inform user via alert
+        Alert.alert('Update available', 'A JS update is available and can be downloaded.');
+      } else {
+        setUpdateAvailable(false);
+        setUpdateInfo(null);
+        Alert.alert('No updates', 'Your app is up to date.');
+      }
+    } catch (err) {
+      console.log('Update check failed', err);
+      Alert.alert('Update check failed', String(err));
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const fetchAndApplyUpdate = async () => {
+    try {
+      setChecking(true);
+      // mark pending update for safety; App will clear this on successful boot
+      await AsyncStorage.setItem('PENDING_UPDATE', JSON.stringify({ ts: Date.now() }));
+      const fetchResult = await Updates.fetchUpdateAsync();
+      if (fetchResult.isNew) {
+        // Reload to apply the downloaded update
+        await Updates.reloadAsync();
+      } else {
+        Alert.alert('No new update', 'No new update was downloaded.');
+      }
+    } catch (err) {
+      console.log('Failed to fetch/apply update', err);
+      Alert.alert('Update failed', String(err));
+      // increment failure counter and persist for persistent retry UI
+      try {
+        const cur = Number((await AsyncStorage.getItem('UPDATE_FAIL_COUNT')) || '0');
+        const next = cur + 1;
+        await AsyncStorage.setItem('UPDATE_FAIL_COUNT', String(next));
+        setFailureCount(next);
+      } catch (e) {
+        // ignore
+      }
+      // clear pending flag so user can retry cleanly
+      try {
+        await AsyncStorage.removeItem('PENDING_UPDATE');
+      } catch (_) {}
+    } finally {
+      setChecking(false);
+      setUpdateAvailable(false);
+      setUpdateInfo(null);
+      setShowBanner(false);
+      setShowUpdateModal(false);
     }
   };
 
@@ -96,11 +181,21 @@ const AboutScreen: React.FC = () => {
         {/* MAIN CARD */}
         <View style={styles.card}>
           <InfoRow label="App Version" value={pkg.version} />
+          <InfoRow label="Native Version" value={(Constants as any)?.nativeAppVersion || pkg.version} />
+          <InfoRow label="Runtime Version" value={
+            (Updates as any)?.runtimeVersion || (Constants as any)?.expoConfig?.runtimeVersion || pkg.version
+          } />
           <InfoRow label="Build Type" value={String(BUILD_TYPE)} />
           <InfoRow
             label="Environment"
             value={process.env.NODE_ENV === 'production' ? 'Production' : 'Development'}
           />
+          <View style={{ paddingVertical: 10 }}>
+            <Text style={{ fontSize: font(13), color: '#475569' }}>
+              Note: JS-only updates (over-the-air) do not require a native rebuild. Native plugin
+              or config changes still require an EAS/native build.
+            </Text>
+          </View>
           {/* Commit and build timestamp removed from About screen for privacy/stability */}
 
           <Text style={styles.description}>
@@ -110,6 +205,57 @@ const AboutScreen: React.FC = () => {
         </View>
 
         {/* ACTIONS */}
+        <Button
+          title={checking ? 'Checking…' : 'Check for Updates'}
+          onPress={checkForUpdates}
+          icon={<MaterialIcon name="system-update" color="#fff" size={font(18)} style={{ marginRight: 8 }} />}
+          buttonStyle={styles.actionButton}
+          titleStyle={styles.actionButtonTitle}
+        />
+        {updateAvailable ? (
+          <Button
+            title={checking ? 'Applying…' : 'Download & Apply Update'}
+            onPress={() => setShowUpdateModal(true)}
+            icon={<MaterialIcon name="file-download" color="#fff" size={font(18)} style={{ marginRight: 8 }} />}
+            buttonStyle={[styles.actionButton, { backgroundColor: '#059669' }]}
+            titleStyle={styles.actionButtonTitle}
+          />
+        ) : null}
+
+        {/* inline banner that appears briefly when update found */}
+        <UpdateBanner
+          visible={showBanner}
+          message={`New update available — v${pkg.version}`}
+          duration={4500}
+          onPress={() => setShowUpdateModal(true)}
+          onClose={() => setShowBanner(false)}
+        />
+
+        {/* Update details modal */}
+        <Modal visible={showUpdateModal} transparent animationType="slide" onRequestClose={() => setShowUpdateModal(false)}>
+          <RNView style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: 20 }}>
+            <RNView style={{ backgroundColor: 'white', borderRadius: 12, padding: 18 }}>
+              <Text style={{ fontSize: font(18), fontWeight: '700', marginBottom: 8 }}>New Update</Text>
+              <Text style={{ marginBottom: 10 }}>Version: {pkg.version}</Text>
+              <Text style={{ marginBottom: 14, color: '#475569' }}>
+                {updateInfo && updateInfo?.manifest && updateInfo.manifest?.releaseNotes
+                  ? updateInfo.manifest.releaseNotes
+                  : 'No release notes available.'}
+              </Text>
+              <Button
+                title={checking ? 'Applying…' : 'Download & Install'}
+                onPress={fetchAndApplyUpdate}
+                buttonStyle={{ backgroundColor: '#059669', borderRadius: 10, marginBottom: 8 }}
+              />
+              <Button
+                title="Cancel"
+                onPress={() => setShowUpdateModal(false)}
+                buttonStyle={{ backgroundColor: '#E2E8F0', borderRadius: 10 }}
+                titleStyle={{ color: '#334155' }}
+              />
+            </RNView>
+          </RNView>
+        </Modal>
         <Button
           title="Share with Friends"
           onPress={handleShare}
@@ -130,6 +276,31 @@ const AboutScreen: React.FC = () => {
           buttonStyle={[styles.actionButton, styles.secondaryActionButton]}
           titleStyle={[styles.actionButtonTitle, styles.secondaryActionButtonTitle]}
         />
+
+        {/* Persistent retry UI shown when updates have failed repeatedly */}
+        {failureCount >= 2 && (
+          <View style={styles.persistentRetry}>
+            <Text style={{ color: '#111827', fontWeight: '600', marginBottom: 6 }}>
+              Update failed previously — you can retry or clear the retry state.
+            </Text>
+            <Button
+              title={checking ? 'Retrying…' : 'Retry Update'}
+              onPress={fetchAndApplyUpdate}
+              buttonStyle={{ backgroundColor: '#2563EB', borderRadius: 10, marginBottom: 8 }}
+            />
+            <Button
+              title="Clear Retry State"
+              onPress={async () => {
+                try {
+                  await AsyncStorage.removeItem('UPDATE_FAIL_COUNT');
+                  setFailureCount(0);
+                } catch (e) {}
+              }}
+              buttonStyle={{ backgroundColor: '#E2E8F0', borderRadius: 10 }}
+              titleStyle={{ color: '#334155' }}
+            />
+          </View>
+        )}
 
         {/* FOOTER */}
         <TouchableOpacity style={styles.footer} onPress={() => Linking.openURL(ELLOW_URL)}>
