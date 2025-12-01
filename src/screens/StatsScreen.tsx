@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -6,8 +6,13 @@ import {
   ScrollView,
   ActivityIndicator,
   PixelRatio,
+  Animated,
+  LayoutAnimation,
+  Platform,
+  UIManager,
+  Pressable,
 } from 'react-native';
-import { Text, Button } from '@rneui/themed';
+import { Text } from '@rneui/themed';
 import { useEntries } from '../hooks/useEntries';
 import { useAuth } from '../hooks/useAuth';
 import { subscribeEntries } from '../utils/dbEvents';
@@ -21,6 +26,10 @@ const font = (size: number) => size / fontScale;
 
 const FILTERS = ['7D', '30D', 'This Month', 'This Year'];
 const CHART_COLORS = ['#3B82F6', '#10B981', '#F97316', '#8B5CF6', '#EC4899', '#F59E0B'];
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 const chartConfig = {
   backgroundColor: '#ffffff',
@@ -36,10 +45,13 @@ const chartConfig = {
 const StatsScreen = () => {
   const { user, loading: authLoading } = useAuth();
   const { entries = [], isLoading, refetch } = useEntries(user?.id);
+  const heroOpacity = useRef(new Animated.Value(0)).current;
+  const heroTranslate = useRef(new Animated.Value(20)).current;
+  const filterTranslate = useRef(new Animated.Value(30)).current;
 
   // Subscribe to DB changes (including background syncs) so stats refresh
   // when entries are inserted/updated by other parts of the app or sync.
-  React.useEffect(() => {
+  useEffect(() => {
     const unsub = subscribeEntries(() => {
       try {
         refetch();
@@ -48,6 +60,24 @@ const StatsScreen = () => {
     return () => unsub();
   }, [refetch]);
   const [filter, setFilter] = useState('7D');
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(heroOpacity, {
+        toValue: 1,
+        duration: 350,
+        useNativeDriver: true,
+      }),
+      Animated.spring(heroTranslate, {
+        toValue: 0,
+        useNativeDriver: true,
+      }),
+      Animated.spring(filterTranslate, {
+        toValue: 0,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [filterTranslate, heroOpacity, heroTranslate]);
 
   const filteredEntries = useMemo(() => {
     const startDate = getStartDateForFilter(filter);
@@ -162,6 +192,35 @@ const StatsScreen = () => {
     };
   }, [filteredEntries, filter]);
 
+  const daysInView = useMemo(() => {
+    return getDaysCountForFilter(filter, dayjs());
+  }, [filter]);
+
+  const averageSpend = useMemo(() => {
+    const safeDays = Math.max(daysInView, 1);
+    return stats.totalOut / safeDays;
+  }, [stats.totalOut, daysInView]);
+
+  const topCategory = pieData[0]?.name || 'General';
+  const periodLabel = useMemo(() => {
+    switch (filter) {
+      case '7D':
+        return 'Last 7 days';
+      case '30D':
+        return 'Last 30 days';
+      default:
+        return filter;
+    }
+  }, [filter]);
+
+  const netPositive = stats.net >= 0;
+
+  const handleFilterPress = (nextFilter: string) => {
+    if (nextFilter === filter) return;
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setFilter(nextFilter);
+  };
+
   if (isLoading || authLoading) {
     return (
       <View style={styles.centered}>
@@ -170,10 +229,26 @@ const StatsScreen = () => {
     );
   }
 
-  const StatCard = ({ title, value, color }: { title: string; value: number; color: string }) => (
-    <View style={styles.statCard}>
+  const StatCard = ({
+    title,
+    value,
+    color,
+    hint,
+    isLast,
+  }: {
+    title: string;
+    value: number;
+    color: string;
+    hint: string;
+    isLast?: boolean;
+  }) => (
+    <View style={[styles.statCard, isLast && styles.statCardLast]}>
+      <View style={[styles.statBadge, { backgroundColor: `${color}20` }]}>
+        <View style={[styles.dot, { backgroundColor: color }]} />
+      </View>
       <Text style={styles.statTitle}>{title}</Text>
       <Text style={[styles.statValue, { color }]}>₹{value.toLocaleString('en-IN')}</Text>
+      <Text style={styles.statHint}>{hint}</Text>
     </View>
   );
 
@@ -226,40 +301,109 @@ const StatsScreen = () => {
     }
   };
 
-  return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
-      <Text style={styles.header}>Statistics</Text>
+  const heroBadgeStyle = (positive: boolean) => ({
+    backgroundColor: positive ? '#0F9D58' : '#EF4444',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+  });
 
-      <View style={styles.filterRow}>
-        {FILTERS.map((f) => (
-          <Button
-            key={f}
-            title={f}
-            type={filter === f ? 'solid' : 'outline'}
-            onPress={() => setFilter(f)}
-            buttonStyle={styles.filterButton}
-            titleStyle={[styles.filterTitle, filter === f && styles.filterTitleActive]}
-            containerStyle={styles.filterContainer}
-          />
+  const quickStats = [
+    { label: 'Avg daily spend', value: `₹${averageSpend.toFixed(0)}` },
+    { label: 'Entries logged', value: filteredEntries.length.toString() },
+    { label: 'Top category', value: topCategory },
+  ];
+
+  const statCards = [
+    { title: 'Total Income', value: stats.totalIn, color: '#10B981', hint: 'Cash in' },
+    { title: 'Total Expenses', value: stats.totalOut, color: '#EF4444', hint: 'Cash out' },
+    {
+      title: 'Net Savings',
+      value: stats.net,
+      color: netPositive ? '#2563EB' : '#EF4444',
+      hint: netPositive ? 'Positive flow' : 'Needs attention',
+    },
+  ];
+
+  return (
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.scrollContent}
+      showsVerticalScrollIndicator={false}
+    >
+      <Animated.View
+        style={[
+          styles.heroCard,
+          styles.sectionBlock,
+          { opacity: heroOpacity, transform: [{ translateY: heroTranslate }] },
+        ]}
+      >
+        <Text style={styles.headerOverline}>Overview</Text>
+        <Text style={styles.header}>Statistics</Text>
+        <Text style={styles.period}>{periodLabel}</Text>
+        <View style={styles.heroStatsRow}>
+          <View>
+            <Text style={styles.heroValue}>₹{stats.totalIn.toLocaleString('en-IN')}</Text>
+            <Text style={styles.heroHint}>Total income</Text>
+          </View>
+          <View style={heroBadgeStyle(netPositive)}>
+            <Text style={styles.heroBadgeText}>{netPositive ? 'Healthy flow' : 'Overspend'}</Text>
+          </View>
+        </View>
+        <View style={styles.heroDivider} />
+        <View style={styles.heroBottomRow}>
+          <View>
+            <Text style={styles.heroBottomLabel}>Net savings</Text>
+            <Text style={[styles.heroBottomValue, { color: netPositive ? '#0F9D58' : '#EF4444' }]}>
+              ₹{stats.net.toLocaleString('en-IN')}
+            </Text>
+          </View>
+          <View>
+            <Text style={styles.heroBottomLabel}>Expenses</Text>
+            <Text style={styles.heroBottomValue}>₹{stats.totalOut.toLocaleString('en-IN')}</Text>
+          </View>
+        </View>
+      </Animated.View>
+
+      <Animated.View style={[styles.sectionBlock, { transform: [{ translateY: filterTranslate }] }]}>
+        <Text style={styles.sectionLabel}>Timeframe</Text>
+        <View style={styles.filterRow}>
+          {FILTERS.map((f) => {
+            const isActive = filter === f;
+            return (
+              <Pressable
+                key={f}
+                style={[styles.filterPill, isActive && styles.filterPillActive]}
+                onPress={() => handleFilterPress(f)}
+              >
+                <Text style={[styles.filterPillText, isActive && styles.filterPillTextActive]}>{f}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </Animated.View>
+
+      <View style={[styles.statsGrid, styles.sectionBlock]}>
+        {statCards.map((card, index) => (
+          <StatCard key={card.title} {...card} isLast={index === statCards.length - 1} />
         ))}
       </View>
 
-      <View style={styles.statsGrid}>
-        <StatCard title="Total Income" value={stats.totalIn} color="#10B981" />
-        <StatCard title="Total Expenses" value={stats.totalOut} color="#EF4444" />
-        <StatCard
-          title="Net Savings"
-          value={stats.net}
-          color={stats.net >= 0 ? '#2563EB' : '#EF4444'}
-        />
+      <View style={[styles.quickStatsCard, styles.sectionBlock]}>
+        {quickStats.map((item) => (
+          <View key={item.label} style={styles.quickStatItem}>
+            <Text style={styles.quickStatLabel}>{item.label}</Text>
+            <Text style={styles.quickStatValue}>{item.value}</Text>
+          </View>
+        ))}
       </View>
 
-      <View style={styles.chartCard}>
+      <View style={[styles.chartCard, styles.sectionBlock]}>
         <Text style={styles.chartTitle}>Expense Breakdown</Text>
         {renderPieChart()}
       </View>
 
-      <View style={styles.chartCard}>
+      <View style={[styles.chartCard, styles.sectionBlock]}> 
         <Text style={styles.chartTitle}>Income vs. Expenses</Text>
         {renderLineChart()}
       </View>
@@ -272,88 +416,205 @@ export default StatsScreen;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#0F172A',
   },
   scrollContent: {
-    padding: 16,
-    paddingBottom: 40,
+    padding: 20,
+    paddingBottom: 60,
   },
+    sectionBlock: {
+      marginBottom: 20,
+    },
   centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
+  headerOverline: {
+    fontSize: font(12),
+    textTransform: 'uppercase',
+    color: '#A5B4FC',
+    letterSpacing: 1,
+  },
   header: {
-    fontSize: font(26),
-    fontWeight: 'bold',
-    color: '#1E293B',
-    marginBottom: 16,
+    fontSize: font(32),
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  period: {
+    fontSize: font(16),
+    color: '#CBD5F5',
+    marginTop: 4,
+  },
+  heroCard: {
+    backgroundColor: '#1E2A4A',
+    borderRadius: 24,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#273559',
+    shadowColor: '#000000',
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 5,
+  },
+  heroStatsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  heroValue: {
+    fontSize: font(28),
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  heroHint: {
+    fontSize: font(14),
+    color: '#94A3B8',
+    marginTop: 4,
+  },
+  heroBadgeText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  heroDivider: {
+    height: 1,
+    backgroundColor: '#273559',
+    marginVertical: 18,
+  },
+  heroBottomRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  heroBottomLabel: {
+    fontSize: font(13),
+    color: '#94A3B8',
+  },
+  heroBottomValue: {
+    fontSize: font(20),
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginTop: 2,
+  },
+  sectionLabel: {
+    fontSize: font(14),
+    color: '#94A3B8',
+    marginBottom: 10,
   },
   filterRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 20,
+    flexWrap: 'wrap',
   },
-  filterContainer: {
-    flex: 1,
-    marginHorizontal: 4,
+  filterPill: {
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#334155',
+    marginRight: 10,
+    marginBottom: 10,
   },
-  filterButton: {
-    borderRadius: 10,
-    borderColor: '#D1D5DB',
+  filterPillActive: {
+    backgroundColor: '#3B82F6',
+    borderColor: '#3B82F6',
   },
-  filterTitle: {
-    fontSize: font(13),
+  filterPillText: {
+    color: '#94A3B8',
     fontWeight: '600',
+    fontSize: font(13),
   },
-  filterTitleActive: {
+  filterPillTextActive: {
     color: '#FFFFFF',
   },
   statsGrid: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 20,
   },
   statCard: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-    padding: 14,
-    borderRadius: 12,
-    marginHorizontal: 4,
-    alignItems: 'center',
+    backgroundColor: '#111827',
+    padding: 16,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: '#1F2937',
+    marginRight: 12,
+  },
+  statCardLast: {
+    marginRight: 0,
+  },
+  statBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  dot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
   statTitle: {
     fontSize: font(13),
-    color: '#64748B',
+    color: '#94A3B8',
     fontWeight: '600',
     marginBottom: 6,
   },
   statValue: {
-    fontSize: font(18),
-    fontWeight: 'bold',
+    fontSize: font(20),
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  statHint: {
+    fontSize: font(12),
+    color: '#94A3B8',
+    marginTop: 4,
+  },
+  quickStatsCard: {
+    backgroundColor: '#111827',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#1F2937',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+  },
+  quickStatItem: {
+    flex: 1,
+    paddingHorizontal: 6,
+  },
+  quickStatLabel: {
+    color: '#94A3B8',
+    fontSize: font(12),
+    marginBottom: 6,
+  },
+  quickStatValue: {
+    color: '#F8FAFC',
+    fontSize: font(16),
+    fontWeight: '600',
   },
   chartCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 20,
+    backgroundColor: '#111827',
+    borderRadius: 24,
+    padding: 20,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: '#1F2937',
   },
   chartTitle: {
-    fontSize: font(17),
-    fontWeight: 'bold',
-    color: '#334155',
+    fontSize: font(16),
+    fontWeight: '600',
+    color: '#E2E8F0',
     alignSelf: 'flex-start',
-    marginBottom: 10,
+    marginBottom: 14,
   },
   noDataText: {
     textAlign: 'center',
     paddingVertical: 40,
-    color: '#64748B',
+    color: '#94A3B8',
     fontSize: font(14),
   },
   chartStyle: {
