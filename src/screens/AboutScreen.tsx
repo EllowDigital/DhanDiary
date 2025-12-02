@@ -13,7 +13,6 @@ import {
 import { Text, Button } from '@rneui/themed';
 import { Alert, Modal, View as RNView } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import UpdateBanner from '../components/UpdateBanner';
 import * as Updates from 'expo-updates';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import Animated, {
@@ -57,6 +56,7 @@ const AboutScreen: React.FC = () => {
   );
   const fade = useSharedValue(0);
   const currentUpdateId = Updates.updateId || 'Embedded build';
+  const isExpoGo = Constants?.appOwnership === 'expo';
 
   /* Fade In Animation */
   useEffect(() => {
@@ -94,18 +94,19 @@ const AboutScreen: React.FC = () => {
   /* UPDATES: expo-updates integration */
   const [checking, setChecking] = useState(false);
   const [updateAvailable, setUpdateAvailable] = useState(false);
-  const [showBanner, setShowBanner] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [failureCount, setFailureCount] = useState(0);
 
   const checkForUpdates = async () => {
+    if (isExpoGo) {
+      Alert.alert('Not supported in Expo Go', 'Build the app or use TestFlight/APK to test OTA.');
+      return;
+    }
     try {
       setChecking(true);
       const res = await Updates.checkForUpdateAsync();
       if (res.isAvailable) {
         setUpdateAvailable(true);
-        // show brief in-app banner for a few seconds
-        setShowBanner(true);
       } else {
         setUpdateAvailable(false);
         Alert.alert('No updates', 'Your app is up to date.');
@@ -119,6 +120,10 @@ const AboutScreen: React.FC = () => {
   };
 
   const fetchAndApplyUpdate = async () => {
+    if (isExpoGo) {
+      Alert.alert('Not supported in Expo Go', 'Install a development or production build to apply updates.');
+      return;
+    }
     try {
       setChecking(true);
       // mark pending update for safety; App will clear this on successful boot
@@ -149,7 +154,6 @@ const AboutScreen: React.FC = () => {
     } finally {
       setChecking(false);
       setUpdateAvailable(false);
-      setShowBanner(false);
       setShowUpdateModal(false);
     }
   };
@@ -235,14 +239,6 @@ const AboutScreen: React.FC = () => {
             titleStyle={styles.actionButtonTitle}
           />
         ) : null}
-
-        {/* inline banner that appears briefly when update found */}
-        <UpdateBanner
-          visible={showBanner}
-          duration={4500}
-          onPress={() => setShowUpdateModal(true)}
-          onClose={() => setShowBanner(false)}
-        />
 
         {/* Update details modal */}
         <Modal

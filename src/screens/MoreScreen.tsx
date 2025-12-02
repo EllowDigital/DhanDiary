@@ -31,7 +31,7 @@ const MoreScreen: React.FC = () => {
         action: () => navigateParent('Stats'),
       },
       {
-        icon: 'manage_accounts',
+        icon: 'admin-panel-settings',
         label: 'Account Management',
         description: 'Profiles, security, device access',
         action: () => navigateParent('Account'),
@@ -55,7 +55,7 @@ const MoreScreen: React.FC = () => {
   const supportLinks = useMemo(
     () => [
       {
-        icon: 'tips_and_updates',
+        icon: 'emoji-objects',
         label: 'Roadmap & Changelog',
         description: 'What shipped and what is next',
         action: () => Linking.openURL('https://ellowdigital.netlify.app'),

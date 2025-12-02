@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Constants from 'expo-constants';
 import {
   View,
   StyleSheet,
@@ -17,6 +18,9 @@ import { useAuth } from '../hooks/useAuth';
 import { useEntries } from '../hooks/useEntries';
 import useDelayedLoading from '../hooks/useDelayedLoading';
 import FullScreenSpinner from '../components/FullScreenSpinner';
+import UpdateBanner from '../components/UpdateBanner';
+import { useInternetStatus } from '../hooks/useInternetStatus';
+import * as Updates from 'expo-updates';
 
 import Animated, {
   useSharedValue,
@@ -28,6 +32,8 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { spacing, colors } from '../utils/design';
+
+const pkg = require('../../package.json');
 
 /* CHART KIT (safe load) */
 let PieChart: any = null;
@@ -64,6 +70,12 @@ const HomeScreen: React.FC = () => {
   const { entries = [], isLoading = false } = useEntries(user?.id);
   const showLoading = useDelayedLoading(Boolean(isLoading), 200);
   const { width: SCREEN_WIDTH } = useWindowDimensions();
+  const isOnline = useInternetStatus();
+  const autoCheckRef = useRef(false);
+  const [updateBannerVisible, setUpdateBannerVisible] = useState(false);
+  const [updateMessage, setUpdateMessage] = useState<string | undefined>();
+  const [applyingUpdate, setApplyingUpdate] = useState(false);
+  const isExpoGo = Constants?.appOwnership === 'expo';
 
   // Dynamic sizing for responsiveness
   const CARD_PADDING = spacing(4);
@@ -375,11 +387,63 @@ const HomeScreen: React.FC = () => {
   }, []);
   const shimmerStyle = useAnimatedStyle(() => ({ opacity: 0.3 + 0.7 * shimmer.value }));
 
+  // Auto-check for OTA updates once per session when we're online
+  useEffect(() => {
+    if (!isOnline || isExpoGo || autoCheckRef.current) return;
+    autoCheckRef.current = true;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const result = await Updates.checkForUpdateAsync();
+        if (!cancelled && result.isAvailable) {
+          const manifest: any = (result as any)?.manifest || {};
+          const version =
+            manifest.version ||
+            manifest.runtimeVersion ||
+            manifest?.extra?.expoGo?.runtimeVersion ||
+            pkg.version;
+          setUpdateMessage(version ? `Version ${version}` : undefined);
+          setUpdateBannerVisible(true);
+        }
+      } catch (err) {
+        // Fail silently per requirement — no UI noise when checks fail
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOnline]);
+
+  const handleBannerPress = useCallback(async () => {
+    setUpdateBannerVisible(false);
+    try {
+      setApplyingUpdate(true);
+      const fetched = await Updates.fetchUpdateAsync();
+      if (fetched.isNew) {
+        await Updates.reloadAsync();
+      }
+    } catch (err) {
+      // Silent failure keeps UI clean; logs still aid debugging
+      console.log('Home auto-update apply failed', err);
+    } finally {
+      setApplyingUpdate(false);
+    }
+  }, []);
+
   return (
     <View style={styles.mainContainer}>
+      <UpdateBanner
+        visible={updateBannerVisible}
+        message={updateMessage}
+        duration={4500}
+        onPress={handleBannerPress}
+        onClose={() => setUpdateBannerVisible(false)}
+      />
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       <SafeAreaView style={styles.safeArea}>
-        <FullScreenSpinner visible={showLoading} />
+        <FullScreenSpinner visible={showLoading || applyingUpdate} />
         <FlatList
           data={recent}
           keyExtractor={(item) => item.local_id}
