@@ -1,16 +1,10 @@
-import React, { useCallback } from 'react';
-import {
-  View,
-  StyleSheet,
-  Dimensions,
-  Platform,
-  Pressable,
-  AccessibilityRole,
-  ScrollView,
-} from 'react-native';
+import React, { useCallback, useMemo } from 'react';
+import { View, StyleSheet, Dimensions, Pressable, ScrollView, Linking } from 'react-native';
 import { Text } from '@rneui/themed';
 import { useNavigation, NavigationProp } from '@react-navigation/native';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import { colors, shadows } from '../utils/design';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const scale = SCREEN_WIDTH / 390;
@@ -28,44 +22,143 @@ const MoreScreen: React.FC = () => {
     [navigation]
   );
 
+  const primaryLinks = useMemo(
+    () => [
+      {
+        icon: 'insights',
+        label: 'Stats & Analytics',
+        description: 'Detailed trends & KPIs',
+        action: () => navigateParent('Stats'),
+      },
+      {
+        icon: 'admin-panel-settings',
+        label: 'Account Management',
+        description: 'Profiles, security, device access',
+        action: () => navigateParent('Account'),
+      },
+      {
+        icon: 'settings',
+        label: 'Settings',
+        description: 'Preferences, categories, backups',
+        action: () => navigateParent('Settings'),
+      },
+      {
+        icon: 'info-outline',
+        label: 'About & Updates',
+        description: 'Version info, OTA releases',
+        action: () => navigateParent('About'),
+      },
+    ],
+    [navigateParent]
+  );
+
+  const supportLinks = useMemo(
+    () => [
+      {
+        icon: 'emoji-objects',
+        label: 'Roadmap & Changelog',
+        description: 'What shipped and what is next',
+        action: () => Linking.openURL('https://ellowdigital.netlify.app'),
+      },
+      {
+        icon: 'support-agent',
+        label: 'Contact Support',
+        description: 'Email the DhanDiary crew',
+        action: () =>
+          Linking.openURL(
+            'mailto:sarwanyadav26@outlook.com?subject=DhanDiary%20Support&body=Hi%20team%2C'
+          ),
+      },
+    ],
+    []
+  );
+
   const Row = ({
     icon,
     label,
+    description,
     onPress,
     isLast = false,
+    index = 0,
   }: {
     icon: string;
     label: string;
+    description?: string;
     onPress: () => void;
     isLast?: boolean;
+    index?: number;
   }) => (
-    <Pressable
-      onPress={onPress}
-      android_ripple={{ color: '#F1F5F9' }}
-      style={({ pressed }) => [styles.row, pressed && styles.rowPressed, isLast && styles.rowLast]}
-      accessibilityRole="button"
-      accessibilityLabel={label}
+    <Animated.View
+      entering={FadeInDown.delay(120 + index * 40)
+        .springify()
+        .damping(18)}
     >
-      <View style={styles.rowLeft}>
-        <View style={styles.iconContainer}>
-          <MaterialIcon name={icon as any} size={font(22)} color="#3B82F6" />
+      <Pressable
+        onPress={onPress}
+        android_ripple={{ color: colors.surfaceMuted }}
+        style={({ pressed }) => [
+          styles.row,
+          pressed && styles.rowPressed,
+          isLast && styles.rowLast,
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+      >
+        <View style={styles.rowLeft}>
+          <View style={styles.iconContainer}>
+            <MaterialIcon name={icon as any} size={font(20)} color={colors.primary} />
+          </View>
+          <View>
+            <Text style={styles.rowText}>{label}</Text>
+            {description ? <Text style={styles.rowDescription}>{description}</Text> : null}
+          </View>
         </View>
-        <Text style={styles.rowText}>{label}</Text>
-      </View>
-      <MaterialIcon name="chevron-right" size={font(24)} color="#94A3B8" />
-    </Pressable>
+        <MaterialIcon name="chevron-right" size={font(22)} color={colors.muted} />
+      </Pressable>
+    </Animated.View>
   );
 
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.headerTitle}>More Options</Text>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <Animated.View entering={FadeInDown.duration(400)} style={styles.headingBlock}>
+        <Text style={styles.headingTitle}>More</Text>
+        <Text style={styles.headingSubtitle}>
+          All the controls you reach for every day, now in one tidy place.
+        </Text>
+      </Animated.View>
 
-      <View style={styles.card}>
-        <Row icon="insights" label="Stats & Analytics" onPress={() => navigateParent('Stats')} />
-        <Row icon="person" label="Account Management" onPress={() => navigateParent('Account')} />
-        <Row icon="settings" label="Settings" onPress={() => navigateParent('Settings')} />
-        <Row icon="info-outline" label="About" onPress={() => navigateParent('About')} />
+      <View style={styles.sectionCard}>
+        <Text style={styles.sectionLabel}>Navigate</Text>
+        {primaryLinks.map((item, index) => (
+          <Row
+            key={item.label}
+            icon={item.icon}
+            label={item.label}
+            description={item.description}
+            onPress={item.action}
+            isLast={index === primaryLinks.length - 1}
+            index={index}
+          />
+        ))}
       </View>
+
+      <View style={styles.sectionCard}>
+        <Text style={styles.sectionLabel}>Support</Text>
+        {supportLinks.map((item, index) => (
+          <Row
+            key={item.label}
+            icon={item.icon}
+            label={item.label}
+            description={item.description}
+            onPress={item.action}
+            isLast={index === supportLinks.length - 1}
+            index={index + primaryLinks.length}
+          />
+        ))}
+      </View>
+      <Text style={styles.footnote}>
+        Need something else? Ping us anytime — we usually reply within a day.
+      </Text>
     </ScrollView>
   );
 };
@@ -73,45 +166,55 @@ const MoreScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
   },
-  headerTitle: {
-    fontSize: font(28),
-    fontWeight: 'bold',
-    color: '#1E293B',
+  content: {
     paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingBottom: 32,
+  },
+  headingBlock: {
+    paddingTop: 28,
     paddingBottom: 12,
   },
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    marginHorizontal: 16,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOpacity: 0.05,
-        shadowRadius: 10,
-        shadowOffset: { width: 0, height: 2 },
-      },
-      android: {
-        elevation: 2,
-        borderWidth: 1,
-        borderColor: '#F1F5F9',
-      },
-    }),
+  headingTitle: {
+    fontSize: font(30),
+    fontWeight: '700',
+    color: colors.text,
+  },
+  headingSubtitle: {
+    fontSize: font(14),
+    color: colors.subtleText,
+    marginTop: 6,
+    lineHeight: 20,
+  },
+  sectionCard: {
+    backgroundColor: colors.card,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 4,
+    marginTop: 20,
+  },
+  sectionLabel: {
+    fontSize: font(13),
+    color: colors.muted,
+    fontWeight: '600',
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 8,
+    textTransform: 'uppercase',
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: font(12),
+    paddingVertical: font(14),
     paddingHorizontal: font(16),
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    borderBottomColor: colors.border,
   },
   rowPressed: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.surfaceMuted,
   },
   rowLast: {
     borderBottomWidth: 0,
@@ -124,15 +227,26 @@ const styles = StyleSheet.create({
     width: font(38),
     height: font(38),
     borderRadius: font(19),
-    backgroundColor: '#EBF3FF',
+    backgroundColor: colors.primarySoft,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: font(16),
   },
   rowText: {
     fontSize: font(16),
-    color: '#1E293B',
+    color: colors.text,
     fontWeight: '500',
+  },
+  rowDescription: {
+    fontSize: font(13),
+    color: colors.subtleText,
+    marginTop: 2,
+  },
+  footnote: {
+    fontSize: font(12),
+    color: colors.muted,
+    textAlign: 'center',
+    marginTop: 20,
   },
 });
 

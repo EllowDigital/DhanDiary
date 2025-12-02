@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { View, Platform } from 'react-native';
+import { View, Platform, TextStyle, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import HomeScreen from '../screens/HomeScreenFixed';
@@ -9,8 +9,22 @@ import MoreScreen from '../screens/MoreScreen';
 
 import AnimatedTabIcon from '../components/AnimatedTabIcon';
 import TabBarButton from '../components/TabBarButton';
+import { colors } from '../utils/design';
 
 const Tab = createBottomTabNavigator();
+
+const labelStyle: TextStyle = {
+  fontSize: 12,
+  fontWeight: '600' as TextStyle['fontWeight'],
+  marginTop: -4,
+};
+
+const itemStyle: ViewStyle = {
+  paddingVertical: 0,
+  marginHorizontal: 6,
+  borderRadius: 18,
+};
+
 const BottomTabNavigator = () => {
   const insets = useSafeAreaInsets();
 
@@ -23,35 +37,28 @@ const BottomTabNavigator = () => {
       right: 16,
       height: 70 + Math.min(insets.bottom, 16),
       borderRadius: 26,
-      backgroundColor: '#FFFFFF',
+      backgroundColor: colors.card,
       paddingBottom: Math.max(insets.bottom / 2, 12),
       paddingTop: 10,
-      shadowColor: '#0F172A',
-      shadowOpacity: 0.08,
+      shadowColor: colors.text,
+      shadowOpacity: 0.07,
       shadowOffset: { width: 0, height: 8 },
       shadowRadius: 20,
       elevation: 12,
-      borderTopWidth: 0,
+      borderWidth: 1,
+      borderColor: colors.border,
     } as const;
   }, [insets.bottom]);
 
   const screenOptions = useMemo(
     () => ({
       headerShown: false,
-      tabBarActiveTintColor: '#0F172A',
-      tabBarInactiveTintColor: '#94A3B8',
+      tabBarActiveTintColor: colors.primary,
+      tabBarInactiveTintColor: colors.muted,
       tabBarHideOnKeyboard: true,
       tabBarStyle,
-      tabBarLabelStyle: {
-        fontSize: 12,
-        fontWeight: '600',
-        marginTop: -4,
-      },
-      tabBarItemStyle: {
-        paddingVertical: 0,
-        marginHorizontal: 6,
-        borderRadius: 18,
-      },
+      tabBarLabelStyle: labelStyle,
+      tabBarItemStyle: itemStyle,
     }),
     [tabBarStyle]
   );

@@ -9,7 +9,6 @@ import {
   SafeAreaView,
   LayoutAnimation,
   Platform,
-  UIManager,
   Animated,
   Easing,
 } from 'react-native';
@@ -22,9 +21,11 @@ import { retry } from '../utils/retry';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../context/ToastContext';
 import { useNavigation } from '@react-navigation/native';
+import { colors } from '../utils/design';
+import { enableLegacyLayoutAnimations } from '../utils/layoutAnimation';
 
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
+if (Platform.OS === 'android') {
+  enableLegacyLayoutAnimations();
 }
 
 const AccountManagementScreen = () => {
@@ -204,7 +205,7 @@ const AccountManagementScreen = () => {
         title: 'Profile Name',
         description: 'Update the name shown across the app',
         icon: 'person',
-        color: '#2563EB',
+        color: colors.primary,
         render: () => (
           <>
             <Input
@@ -227,7 +228,7 @@ const AccountManagementScreen = () => {
         title: 'Email Address',
         description: 'Used for login and updates',
         icon: 'mail',
-        color: '#10B981',
+        color: colors.accentGreen,
         render: () => (
           <>
             <Input
@@ -252,7 +253,7 @@ const AccountManagementScreen = () => {
         title: 'Password',
         description: 'Choose a strong password with at least 8 characters',
         icon: 'lock',
-        color: '#F59E0B',
+        color: colors.accentOrange,
         render: () => (
           <>
             <Input
@@ -311,7 +312,7 @@ const AccountManagementScreen = () => {
         title: 'Delete Account',
         description: 'Permanently remove your data from DhanDiary',
         icon: 'delete-forever',
-        color: '#EF4444',
+        color: colors.accentRed,
         render: () => (
           <>
             <Text style={styles.warning}>This action cannot be undone.</Text>
@@ -347,17 +348,22 @@ const AccountManagementScreen = () => {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.contentContainer}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.contentContainer}
+      >
         <Animated.View style={[styles.heroCard, animatedStyle(0)]}>
           <Text style={styles.heroTitle}>Account Center</Text>
-          <Text style={styles.heroSubtitle}>Manage your profile and security settings in one place.</Text>
+          <Text style={styles.heroSubtitle}>
+            Manage your profile and security settings in one place.
+          </Text>
           <View style={styles.heroRow}>
             <View style={styles.heroBadge}>
-              <MaterialIcon name="person" size={20} color="#2563EB" />
+              <MaterialIcon name="person" size={20} color={colors.primary} />
               <Text style={styles.heroBadgeText}>{user?.name || 'Guest user'}</Text>
             </View>
             <View style={styles.heroBadge}>
-              <MaterialIcon name="email" size={20} color="#2563EB" />
+              <MaterialIcon name="email" size={20} color={colors.primary} />
               <Text style={styles.heroBadgeText}>{user?.email || 'No email'}</Text>
             </View>
           </View>
@@ -375,7 +381,7 @@ const AccountManagementScreen = () => {
                 style={styles.cardHeader}
                 onPress={() => toggleCard(section.id)}
               >
-                <View style={[styles.cardIcon, { backgroundColor: `${section.color}15` }]}> 
+                <View style={[styles.cardIcon, { backgroundColor: `${section.color}15` }]}>
                   <MaterialIcon name={section.icon as any} size={22} color={section.color} />
                 </View>
                 <View style={{ flex: 1 }}>
@@ -385,7 +391,7 @@ const AccountManagementScreen = () => {
                 <MaterialIcon
                   name={expanded ? 'keyboard-arrow-up' : 'keyboard-arrow-down'}
                   size={24}
-                  color="#94A3B8"
+                  color={colors.mutedSoft}
                 />
               </TouchableOpacity>
               {expanded && <View style={styles.formContent}>{section.render()}</View>}
@@ -403,29 +409,31 @@ const AccountManagementScreen = () => {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#EEF2FF',
+    backgroundColor: colors.background,
   },
   contentContainer: {
     padding: 20,
     paddingBottom: 40,
   },
   heroCard: {
-    backgroundColor: '#0F172A',
+    backgroundColor: colors.softCard,
     borderRadius: 24,
     padding: 20,
     marginBottom: 20,
-    shadowColor: '#0F172A',
-    shadowOpacity: 0.2,
-    shadowRadius: 16,
-    elevation: 6,
+    shadowColor: colors.shadow,
+    shadowOpacity: 1,
+    shadowRadius: 18,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   heroTitle: {
-    color: '#F8FAFC',
+    color: colors.text,
     fontSize: 20,
     fontWeight: '700',
   },
   heroSubtitle: {
-    color: '#CBD5F5',
+    color: colors.muted,
     marginTop: 8,
     fontSize: 14,
   },
@@ -438,26 +446,28 @@ const styles = StyleSheet.create({
   heroBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1E243A',
+    backgroundColor: colors.primarySoft,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 12,
   },
   heroBadgeText: {
-    color: '#E2E8F0',
+    color: colors.primary,
     marginLeft: 8,
     fontSize: 13,
   },
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderRadius: 20,
     paddingHorizontal: 18,
     paddingVertical: 14,
     marginBottom: 18,
-    shadowColor: '#0F172A',
-    shadowOpacity: 0.06,
+    shadowColor: colors.shadow,
+    shadowOpacity: 1,
     shadowRadius: 12,
-    elevation: 4,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   cardExpanded: {
     paddingBottom: 24,
@@ -477,32 +487,33 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#0F172A',
+    color: colors.text,
   },
   cardDescription: {
     fontSize: 13,
-    color: '#64748B',
+    color: colors.muted,
     marginTop: 2,
   },
   formContent: {
     marginTop: 16,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#E2E8F0',
+    borderTopColor: colors.border,
     paddingTop: 16,
   },
   warning: {
     textAlign: 'center',
     marginBottom: 16,
-    color: '#B45309',
+    color: colors.accentOrange,
     fontWeight: '600',
   },
   primaryBtn: {
     borderRadius: 14,
     paddingVertical: 12,
     marginTop: 6,
+    backgroundColor: colors.primary,
   },
   destructiveBtn: {
-    backgroundColor: '#DC2626',
+    backgroundColor: colors.accentRed,
     borderRadius: 14,
     paddingVertical: 12,
   },

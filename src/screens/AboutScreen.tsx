@@ -9,25 +9,26 @@ import {
   ScrollView,
   useWindowDimensions,
   Share,
+  Alert,
+  Modal,
 } from 'react-native';
 import { Text, Button } from '@rneui/themed';
-import { Alert, Modal, View as RNView } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import UpdateBanner from '../components/UpdateBanner';
 import * as Updates from 'expo-updates';
+import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import Animated, {
-  useSharedValue,
+  FadeInDown,
   useAnimatedStyle,
+  useSharedValue,
   withTiming,
   Easing,
 } from 'react-native-reanimated';
-
-const ELLOW_URL = 'https://ellowdigital.netlify.app';
+import { colors } from '../utils/design';
 import getLatestShareLink from '../utils/shareLink';
 
 const pkg = require('../../package.json');
 
-// Build / runtime metadata (set via EAS config or CI env)
+const ELLOW_URL = 'https://ellowdigital.netlify.app';
 const extra: any = (Constants as any)?.expoConfig?.extra || {};
 const BUILD_TYPE =
   process.env.BUILD_TYPE ||
@@ -42,125 +43,77 @@ const useResponsiveMetrics = () => {
   const scale = clamp(normalizedWidth / 390, 0.85, 1.2);
   const outerPadding = clamp(normalizedWidth * 0.06, 16, 36);
   const cardPadding = clamp(normalizedWidth * 0.045, 14, 28);
-  const fontSize = useCallback((size: number) => Math.round(size * scale), [scale]);
   const gap = clamp(normalizedWidth * 0.04, 16, 28);
-  return { fontSize, outerPadding, cardPadding, gap } as const;
+  const fontSize = useCallback((size: number) => Math.round(size * scale), [scale]);
+  const isCompact = normalizedWidth < 380;
+  return { fontSize, outerPadding, cardPadding, gap, isCompact } as const;
 };
 
 const AboutScreen: React.FC = () => {
-  const { fontSize, outerPadding, cardPadding, gap } = useResponsiveMetrics();
+  const { fontSize, outerPadding, cardPadding, gap, isCompact } = useResponsiveMetrics();
   const styles = useMemo(
-    () => createStyles(fontSize, outerPadding, cardPadding, gap),
-    [fontSize, outerPadding, cardPadding, gap]
+    () => createStyles(fontSize, outerPadding, cardPadding, gap, isCompact),
+    [fontSize, outerPadding, cardPadding, gap, isCompact]
   );
   const fade = useSharedValue(0);
+  const currentUpdateId = Updates.updateId || 'Embedded build';
+  const isExpoGo = Constants?.appOwnership === 'expo';
 
-  /* Fade In Animation */
+  const [checking, setChecking] = useState(false);
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [failureCount, setFailureCount] = useState(0);
+
   useEffect(() => {
-    fade.value = withTiming(1, { duration: 600, easing: Easing.out(Easing.cubic) });
-  }, []);
+    fade.value = withTiming(1, { duration: 650, easing: Easing.out(Easing.cubic) });
+  }, [fade]);
 
-  // Load persisted update failure count
   useEffect(() => {
     (async () => {
       try {
-        const v = await AsyncStorage.getItem('UPDATE_FAIL_COUNT');
-        setFailureCount(Number(v || '0'));
-      } catch (e) {
-        // ignore
+        const stored = await AsyncStorage.getItem('UPDATE_FAIL_COUNT');
+        setFailureCount(Number(stored || '0'));
+      } catch (err) {
+        console.log('Failed to read retry count', err);
       }
     })();
   }, []);
 
   const animatedFadeStyle = useAnimatedStyle(() => ({
     opacity: fade.value,
-    transform: [{ translateY: (1 - fade.value) * 16 }],
+    transform: [{ translateY: (1 - fade.value) * 12 }],
   }));
 
-  /* Fetch latest share link (normalized) */
-  const fetchShareLink = async () => {
+  const shortUpdateId = useMemo(() => {
+    if (!currentUpdateId) return 'Unavailable';
+    if (currentUpdateId === 'Embedded build') return currentUpdateId;
+    return currentUpdateId.length > 10 ? `${currentUpdateId.slice(0, 8)}…` : currentUpdateId;
+  }, [currentUpdateId]);
+
+    const infoTiles = useMemo(
+      () => [
+        { label: 'Version', value: pkg.version },
+        { label: 'Build Type', value: String(BUILD_TYPE) },
+        {
+          label: 'Environment',
+          value: process.env.NODE_ENV === 'production' ? 'Production' : 'Development',
+        },
+        { label: 'Update ID', value: shortUpdateId, raw: currentUpdateId },
+      ],
+      [shortUpdateId, currentUpdateId]
+    );
+
+  const fetchShareLink = useCallback(async () => {
     try {
-      const link = await getLatestShareLink();
-      return link || 'https://ellowdigital.netlify.app';
+      return await getLatestShareLink();
     } catch (err) {
-      console.log('Failed to fetch latest link:', err);
-      return 'https://ellowdigital.netlify.app'; // fallback link
+      console.log('Failed to fetch share link', err);
+      return ELLOW_URL;
     }
-  };
+  }, []);
 
-  /* UPDATES: expo-updates integration */
-  const [checking, setChecking] = useState(false);
-  const [updateAvailable, setUpdateAvailable] = useState(false);
-  const [updateInfo, setUpdateInfo] = useState<any>(null);
-  const [showBanner, setShowBanner] = useState(false);
-  const [showUpdateModal, setShowUpdateModal] = useState(false);
-  const [failureCount, setFailureCount] = useState(0);
-
-  const checkForUpdates = async () => {
-    try {
-      setChecking(true);
-      const res = await Updates.checkForUpdateAsync();
-      if (res.isAvailable) {
-        setUpdateAvailable(true);
-        setUpdateInfo(res);
-        // show brief in-app banner for a few seconds
-        setShowBanner(true);
-        // also inform user via alert
-        Alert.alert('Update available', 'A JS update is available and can be downloaded.');
-      } else {
-        setUpdateAvailable(false);
-        setUpdateInfo(null);
-        Alert.alert('No updates', 'Your app is up to date.');
-      }
-    } catch (err) {
-      console.log('Update check failed', err);
-      Alert.alert('Update check failed', String(err));
-    } finally {
-      setChecking(false);
-    }
-  };
-
-  const fetchAndApplyUpdate = async () => {
-    try {
-      setChecking(true);
-      // mark pending update for safety; App will clear this on successful boot
-      await AsyncStorage.setItem('PENDING_UPDATE', JSON.stringify({ ts: Date.now() }));
-      const fetchResult = await Updates.fetchUpdateAsync();
-      if (fetchResult.isNew) {
-        // Reload to apply the downloaded update
-        await Updates.reloadAsync();
-      } else {
-        Alert.alert('No new update', 'No new update was downloaded.');
-      }
-    } catch (err) {
-      console.log('Failed to fetch/apply update', err);
-      Alert.alert('Update failed', String(err));
-      // increment failure counter and persist for persistent retry UI
-      try {
-        const cur = Number((await AsyncStorage.getItem('UPDATE_FAIL_COUNT')) || '0');
-        const next = cur + 1;
-        await AsyncStorage.setItem('UPDATE_FAIL_COUNT', String(next));
-        setFailureCount(next);
-      } catch (e) {
-        // ignore
-      }
-      // clear pending flag so user can retry cleanly
-      try {
-        await AsyncStorage.removeItem('PENDING_UPDATE');
-      } catch (_) {}
-    } finally {
-      setChecking(false);
-      setUpdateAvailable(false);
-      setUpdateInfo(null);
-      setShowBanner(false);
-      setShowUpdateModal(false);
-    }
-  };
-
-  /* SHARE APP BUTTON */
-  const handleShare = async () => {
+  const handleShare = useCallback(async () => {
     const latestLink = await fetchShareLink();
-
     try {
       await Share.share({
         title: 'DhanDiary – Smart Personal Finance Tracker',
@@ -169,279 +122,544 @@ const AboutScreen: React.FC = () => {
     } catch (err) {
       console.log('Share error:', err);
     }
-  };
+  }, [fetchShareLink]);
 
-  const InfoRow = ({ label, value }: { label: string; value: string }) => (
-    <View style={styles.row}>
-      <Text style={styles.label}>{label}</Text>
-      <Text style={styles.value}>{value}</Text>
-    </View>
-  );
+  const openSupportEmail = useCallback(() => {
+    const mailto = 'mailto:sarwanyadav26@outlook.com?subject=DhanDiary%20Feedback';
+    Linking.openURL(mailto);
+  }, []);
+
+  const checkForUpdates = useCallback(async () => {
+    if (isExpoGo) {
+      Alert.alert('Not supported in Expo Go', 'Use a development or production build to test OTA.');
+      return;
+    }
+    try {
+      setChecking(true);
+      const result = await Updates.checkForUpdateAsync();
+      if (result.isAvailable) {
+        setUpdateAvailable(true);
+      } else {
+        setUpdateAvailable(false);
+        Alert.alert('You are up to date');
+      }
+    } catch (err) {
+      console.log('Update check failed', err);
+      Alert.alert('Update check failed', String(err));
+    } finally {
+      setChecking(false);
+    }
+  }, [isExpoGo]);
+
+  const fetchAndApplyUpdate = useCallback(async () => {
+    if (isExpoGo) {
+      Alert.alert('Not supported in Expo Go', 'Install a dev or production build to apply updates.');
+      return;
+    }
+    try {
+      setChecking(true);
+      await AsyncStorage.setItem('PENDING_UPDATE', JSON.stringify({ ts: Date.now() }));
+      const fetchResult = await Updates.fetchUpdateAsync();
+      if (fetchResult.isNew) {
+        await Updates.reloadAsync();
+      } else {
+        Alert.alert('No new update', 'No update was downloaded.');
+      }
+    } catch (err) {
+      console.log('Failed to fetch/apply update', err);
+      Alert.alert('Update failed', String(err));
+      try {
+        const current = Number((await AsyncStorage.getItem('UPDATE_FAIL_COUNT')) || '0');
+        const next = current + 1;
+        await AsyncStorage.setItem('UPDATE_FAIL_COUNT', String(next));
+        setFailureCount(next);
+      } catch (storeErr) {
+        console.log('Failed to persist retry count', storeErr);
+      }
+      try {
+        await AsyncStorage.removeItem('PENDING_UPDATE');
+      } catch (_) {}
+    } finally {
+      setChecking(false);
+      setUpdateAvailable(false);
+      setShowUpdateModal(false);
+    }
+  }, [isExpoGo]);
+
+  const clearRetryState = useCallback(async () => {
+    try {
+      await AsyncStorage.removeItem('UPDATE_FAIL_COUNT');
+      setFailureCount(0);
+    } catch (err) {
+      console.log('Failed to clear retry state', err);
+    }
+  }, []);
+
+  const [showUpdateIdModal, setShowUpdateIdModal] = useState(false);
+  const handleShowFullId = useCallback(() => {
+    setShowUpdateIdModal(true);
+  }, []);
+  const closeShowFullId = useCallback(() => setShowUpdateIdModal(false), []);
 
   return (
     <Animated.View style={[styles.container, animatedFadeStyle]}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {/* HEADER: horizontal layout - icon left, text right */}
-        <View style={styles.headerContainer}>
-          <Image source={require('../../assets/icon.png')} style={styles.appIcon} />
-          <View style={styles.headerText}>
-            <Text style={styles.appName}>DhanDiary</Text>
-            <Text style={styles.appSubtitle}>Smart Personal Finance Tracker</Text>
+        <Animated.View entering={FadeInDown.delay(80).springify()} style={styles.heroCard}>
+          <View style={styles.heroRow}>
+            <Image source={require('../../assets/icon.png')} style={styles.heroIcon} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.appName}>DhanDiary</Text>
+              <Text style={styles.appSubtitle}>Smart Personal Finance Tracker</Text>
+            </View>
           </View>
-        </View>
-
-        {/* MAIN CARD */}
-        <View style={styles.card}>
-          <InfoRow label="App Version" value={pkg.version} />
-          <InfoRow label="Build Type" value={String(BUILD_TYPE)} />
-          <InfoRow
-            label="Environment"
-            value={process.env.NODE_ENV === 'production' ? 'Production' : 'Development'}
-          />
-          {/* Commit and build timestamp removed from About screen for privacy/stability */}
-
-          <Text style={styles.description}>
-            DhanDiary helps you manage expenses, income, and personal finances with a powerful
-            offline-first system that syncs automatically when you're online.
+          <Text style={styles.heroCopy}>
+            Track incomes, expenses, and sync securely with our offline-first engine and instant OTA
+            updates.
           </Text>
-        </View>
+        </Animated.View>
 
-        {/* ACTIONS */}
-        <Button
-          title={checking ? 'Checking…' : 'Check for Updates'}
-          onPress={checkForUpdates}
-          icon={
-            <MaterialIcon name="system-update" color="#fff" size={fontSize(18)} style={{ marginRight: 8 }} />
-          }
-          buttonStyle={styles.actionButton}
-          titleStyle={styles.actionButtonTitle}
-        />
-        {updateAvailable ? (
-          <Button
-            title={checking ? 'Applying…' : 'Download & Apply Update'}
-            onPress={() => setShowUpdateModal(true)}
-            icon={
-              <MaterialIcon name="file-download" color="#fff" size={fontSize(18)} style={{ marginRight: 8 }} />
-            }
-            buttonStyle={[styles.actionButton, { backgroundColor: '#059669' }]}
-            titleStyle={styles.actionButtonTitle}
-          />
-        ) : null}
-
-        {/* inline banner that appears briefly when update found */}
-        <UpdateBanner
-          visible={showBanner}
-          message={`New update available — v${pkg.version}`}
-          duration={4500}
-          onPress={() => setShowUpdateModal(true)}
-          onClose={() => setShowBanner(false)}
-        />
-
-        {/* Update details modal */}
-        <Modal visible={showUpdateModal} transparent animationType="slide" onRequestClose={() => setShowUpdateModal(false)}>
-          <RNView style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: 20 }}>
-            <RNView style={{ backgroundColor: 'white', borderRadius: 12, padding: 18 }}>
-              <Text style={{ fontSize: fontSize(18), fontWeight: '700', marginBottom: 8 }}>New Update</Text>
-              <Text style={{ marginBottom: 10 }}>Version: {pkg.version}</Text>
-              <Text style={{ marginBottom: 14, color: '#475569' }}>
-                {updateInfo && updateInfo?.manifest && updateInfo.manifest?.releaseNotes
-                  ? updateInfo.manifest.releaseNotes
-                  : 'No release notes available.'}
+        <Animated.View entering={FadeInDown.delay(140).springify()} style={styles.updateCard}>
+          <View style={styles.cardHeaderRow}>
+            <View>
+              <Text style={styles.cardTitle}>Stay Updated</Text>
+              <Text style={styles.cardSubtitle}>
+                Check for new features and apply the latest optimizations instantly.
               </Text>
-              <Button
-                title={checking ? 'Applying…' : 'Download & Install'}
-                onPress={fetchAndApplyUpdate}
-                buttonStyle={{ backgroundColor: '#059669', borderRadius: 10, marginBottom: 8 }}
-              />
-              <Button
-                title="Cancel"
-                onPress={() => setShowUpdateModal(false)}
-                buttonStyle={{ backgroundColor: '#E2E8F0', borderRadius: 10 }}
-                titleStyle={{ color: '#334155' }}
-              />
-            </RNView>
-          </RNView>
-        </Modal>
-        <Button
-          title="Share with Friends"
-          onPress={handleShare}
-          icon={
-            <MaterialIcon name="share" color="#fff" size={fontSize(18)} style={{ marginRight: 8 }} />
-          }
-          buttonStyle={styles.actionButton}
-          titleStyle={styles.actionButtonTitle}
-        />
-        <Button
-          title="Contact Developer"
-          onPress={() =>
-            Linking.openURL(`mailto:sarwanyadav26@outlook.com?subject=DhanDiary%20Feedback`)
-          }
-          icon={
-            <MaterialIcon name="email" color="#334155" size={fontSize(18)} style={{ marginRight: 8 }} />
-          }
-          buttonStyle={[styles.actionButton, styles.secondaryActionButton]}
-          titleStyle={[styles.actionButtonTitle, styles.secondaryActionButtonTitle]}
-        />
-
-        {/* Persistent retry UI shown when updates have failed repeatedly */}
-        {failureCount >= 2 && (
-          <View style={styles.persistentRetry}>
-            <Text style={{ color: '#111827', fontWeight: '600', marginBottom: 6 }}>
-              Update failed previously — you can retry or clear the retry state.
-            </Text>
-            <Button
-              title={checking ? 'Retrying…' : 'Retry Update'}
-              onPress={fetchAndApplyUpdate}
-              buttonStyle={{ backgroundColor: '#2563EB', borderRadius: 10, marginBottom: 8 }}
-            />
-            <Button
-              title="Clear Retry State"
-              onPress={async () => {
-                try {
-                  await AsyncStorage.removeItem('UPDATE_FAIL_COUNT');
-                  setFailureCount(0);
-                } catch (e) {}
-              }}
-              buttonStyle={{ backgroundColor: '#E2E8F0', borderRadius: 10 }}
-              titleStyle={{ color: '#334155' }}
-            />
+            </View>
+            <View style={styles.cardIconWrap}>
+              <MaterialIcon name="system-update" size={22} color={colors.primary} />
+            </View>
           </View>
+          <View style={styles.updateActions}>
+            <TouchableOpacity style={styles.primaryCta} onPress={checkForUpdates} activeOpacity={0.9}>
+              <MaterialIcon name="refresh" size={18} color={colors.white} />
+              <Text style={styles.primaryCtaText}>{checking ? 'Checking…' : 'Check for Updates'}</Text>
+            </TouchableOpacity>
+            {updateAvailable && (
+              <TouchableOpacity
+                style={[styles.primaryCta, styles.secondaryCta]}
+                onPress={() => setShowUpdateModal(true)}
+                activeOpacity={0.9}
+              >
+                <MaterialIcon name="download" size={18} color={colors.primary} />
+                <Text style={[styles.primaryCtaText, { color: colors.primary }]}>Apply Update</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </Animated.View>
+
+        <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.infoCard}>
+          <Text style={styles.infoHeading}>Build details</Text>
+          <View style={styles.infoGrid}>
+            {infoTiles.map((tile) => {
+              const isUpdateTile = tile.label === 'Update ID';
+              if (isUpdateTile) {
+                return (
+                  <TouchableOpacity
+                    key={tile.label}
+                    style={[styles.infoTile, styles.infoTilePressable]}
+                    activeOpacity={0.85}
+                    onPress={handleShowFullId}
+                  >
+                    <Text style={styles.infoLabel}>{tile.label}</Text>
+                    <Text style={styles.infoValue}>{tile.value}</Text>
+                    <Text style={styles.infoHint}>Tap to view full ID</Text>
+                  </TouchableOpacity>
+                );
+              }
+              return (
+                <View key={tile.label} style={styles.infoTile}>
+                  <Text style={styles.infoLabel}>{tile.label}</Text>
+                  <Text style={styles.infoValue}>{tile.value}</Text>
+                </View>
+              );
+            })}
+          </View>
+        </Animated.View>
+
+        <Animated.View entering={FadeInDown.delay(260).springify()} style={styles.quickActions}>
+          <TouchableOpacity style={styles.quickAction} onPress={handleShare} activeOpacity={0.9}>
+            <View style={[styles.quickIcon, { backgroundColor: colors.primary }]}>
+              <MaterialIcon name="share" size={18} color={colors.white} />
+            </View>
+            <View>
+              <Text style={styles.quickTitle}>Share DhanDiary</Text>
+              <Text style={styles.quickSubtitle}>Invite friends in one tap</Text>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quickAction} onPress={openSupportEmail} activeOpacity={0.9}>
+            <View style={[styles.quickIcon, { backgroundColor: colors.accentGreen }]}>
+              <MaterialIcon name="mail" size={18} color={colors.white} />
+            </View>
+            <View>
+              <Text style={styles.quickTitle}>Contact Support</Text>
+              <Text style={styles.quickSubtitle}>We respond within 24 hours</Text>
+            </View>
+          </TouchableOpacity>
+        </Animated.View>
+
+        {failureCount >= 2 && (
+          <Animated.View entering={FadeInDown.delay(320).springify()} style={styles.retryCard}>
+            <MaterialIcon name="warning" size={20} color={colors.accentOrange} />
+            <View style={{ flex: 1, marginHorizontal: 12 }}>
+              <Text style={styles.retryTitle}>Something blocked your last update.</Text>
+              <Text style={styles.retrySubtitle}>Retry now or clear the retry state.</Text>
+            </View>
+            <TouchableOpacity style={styles.retryChip} onPress={fetchAndApplyUpdate}>
+              <Text style={styles.retryChipText}>{checking ? 'Retrying…' : 'Retry'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.retryChip, styles.retryChipMuted]} onPress={clearRetryState}>
+              <Text style={[styles.retryChipText, { color: colors.muted }]}>Clear</Text>
+            </TouchableOpacity>
+          </Animated.View>
         )}
 
-        {/* FOOTER */}
         <TouchableOpacity style={styles.footer} onPress={() => Linking.openURL(ELLOW_URL)}>
           <Text style={styles.footerText}>
             Crafted with ❤️ by <Text style={styles.footerLink}>EllowDigital</Text>
           </Text>
         </TouchableOpacity>
       </ScrollView>
+
+      <Modal
+        visible={showUpdateModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowUpdateModal(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>New Update</Text>
+            <Text style={styles.modalSubtitle}>Install the latest build to stay in sync.</Text>
+            <Button
+              title={checking ? 'Applying…' : 'Download & Install'}
+              onPress={fetchAndApplyUpdate}
+              buttonStyle={styles.modalPrimaryButton}
+              titleStyle={{ fontWeight: '700' }}
+            />
+            <Button
+              title="Cancel"
+              onPress={() => setShowUpdateModal(false)}
+              buttonStyle={styles.modalSecondaryButton}
+              titleStyle={{ color: colors.strongMuted, fontWeight: '600' }}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showUpdateIdModal}
+        transparent
+        animationType="fade"
+        onRequestClose={closeShowFullId}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Update Identifier</Text>
+            <Text style={styles.modalSubtitle}>{currentUpdateId || 'Unavailable'}</Text>
+            <Button
+              title="Close"
+              onPress={closeShowFullId}
+              buttonStyle={styles.modalSecondaryButton}
+              titleStyle={{ color: colors.strongMuted, fontWeight: '600' }}
+            />
+          </View>
+        </View>
+      </Modal>
     </Animated.View>
   );
 };
 
-// Re-import MaterialIcon if it's not already imported
-import MaterialIcon from '@expo/vector-icons/MaterialIcons';
-
 export default AboutScreen;
 
-/* MODERN, CLEAN STYLES */
 const createStyles = (
   font: (size: number) => number,
   outerPadding: number,
   cardPadding: number,
-  gap: number
+  gap: number,
+  isCompact: boolean
 ) =>
   StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: '#F8FAFC',
+      backgroundColor: colors.background,
     },
     scrollContent: {
       paddingHorizontal: outerPadding,
       paddingTop: outerPadding + 6,
       paddingBottom: outerPadding,
+      width: '100%',
+      maxWidth: 640,
+      alignSelf: 'center',
     },
-    headerContainer: {
+    heroCard: {
+      backgroundColor: colors.softCard,
+      borderRadius: 28,
+      padding: cardPadding,
+      marginBottom: gap,
+      borderWidth: 1,
+      borderColor: colors.border,
+      shadowColor: colors.text,
+      shadowOpacity: 0.08,
+      shadowRadius: 18,
+      shadowOffset: { width: 0, height: 10 },
+      elevation: 4,
+      maxWidth: isCompact ? undefined : 520,
+      alignSelf: isCompact ? 'stretch' : 'center',
+      width: '100%',
+    },
+    heroRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: gap * 1.1,
+      marginBottom: 16,
     },
-    appIcon: {
-      width: clamp(cardPadding * 4.8, 72, 96),
-      height: clamp(cardPadding * 4.8, 72, 96),
-      borderRadius: 16,
-      marginRight: gap * 0.9,
-      backgroundColor: '#fff',
-      elevation: 4,
-      shadowColor: '#000',
-      shadowOpacity: 0.1,
-      shadowRadius: 10,
-    },
-    headerText: {
-      flex: 1,
-      justifyContent: 'center',
+    heroIcon: {
+      width: clamp(cardPadding * 4.2, 64, 88),
+      height: clamp(cardPadding * 4.2, 64, 88),
+      borderRadius: 20,
+      marginRight: 18,
+      resizeMode: 'cover',
     },
     appName: {
-      fontSize: font(22),
+      fontSize: font(24),
       fontWeight: '800',
-      color: '#0F172A',
+      color: colors.text,
     },
     appSubtitle: {
       fontSize: font(14),
-      color: '#475569',
-      marginTop: 6,
+      color: colors.subtleText,
+      marginTop: 4,
       fontWeight: '600',
     },
-
-    card: {
-      backgroundColor: '#fff',
+    heroCopy: {
+      color: colors.subtleText,
+      lineHeight: 20,
+      fontSize: font(14),
+    },
+    updateCard: {
+      backgroundColor: colors.card,
+      borderRadius: 24,
       padding: cardPadding,
-      borderRadius: 16,
       marginBottom: gap,
       borderWidth: 1,
-      borderColor: '#E2E8F0',
+      borderColor: colors.border,
     },
-    row: {
+    cardHeaderRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingVertical: 14,
-      borderBottomWidth: 1,
-      borderBottomColor: '#F1F5F9',
+      marginBottom: 18,
     },
-    label: {
-      fontSize: font(15),
-      color: '#64748B',
-    },
-    value: {
-      fontSize: font(15),
-      fontWeight: '600',
-      color: '#1E293B',
-    },
-    description: {
-      paddingTop: 16,
-      fontSize: font(15),
-      color: '#475569',
-      lineHeight: 23,
-    },
-
-    actionButton: {
-      backgroundColor: '#2563EB',
+    cardIconWrap: {
+      width: isCompact ? 36 : 40,
+      height: isCompact ? 36 : 40,
       borderRadius: 12,
-      paddingVertical: clamp(cardPadding * 0.7, 12, 18),
+      backgroundColor: colors.primarySoft,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    cardTitle: {
+      fontSize: font(20),
+      fontWeight: '700',
+      color: colors.text,
+    },
+    cardSubtitle: {
+      color: colors.muted,
+      fontSize: font(13),
+      marginTop: 4,
+    },
+    updateActions: {
+      flexDirection: isCompact ? 'column' : 'row',
+      flexWrap: isCompact ? 'nowrap' : 'wrap',
+      gap: 12,
+    },
+    primaryCta: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.primary,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderRadius: 14,
+      flexGrow: isCompact ? 0 : 1,
+      minWidth: isCompact ? '100%' : 0,
+      justifyContent: 'center',
+    },
+    primaryCtaText: {
+      color: colors.white,
+      fontWeight: '700',
+      marginLeft: 8,
+    },
+    secondaryCta: {
+      backgroundColor: `${colors.primary}1A`,
+      borderWidth: 1,
+      borderColor: `${colors.primary}55`,
+      justifyContent: 'center',
+      minWidth: isCompact ? '100%' : undefined,
+      borderRadius: 14,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      flexGrow: isCompact ? 0 : 1,
+    },
+    infoCard: {
+      backgroundColor: colors.card,
+      borderRadius: 24,
+      padding: cardPadding,
+      marginBottom: gap,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    infoHeading: {
+      fontSize: font(16),
+      fontWeight: '700',
+      color: colors.text,
+      marginBottom: 14,
+    },
+    infoGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      justifyContent: isCompact ? 'flex-start' : 'space-between',
+      rowGap: 14,
+      columnGap: isCompact ? 12 : 0,
+    },
+    infoTile: {
+      width: isCompact ? '100%' : '48%',
+      padding: 14,
+      borderRadius: 16,
+      backgroundColor: colors.softCard,
+      borderWidth: 1,
+      borderColor: colors.border,
       marginBottom: 12,
     },
-    actionButtonTitle: {
-      fontSize: font(16),
+    infoTilePressable: {
+      borderColor: colors.primary,
+      backgroundColor: colors.primarySoft,
+    },
+    infoLabel: {
+      color: colors.muted,
+      fontSize: font(12),
+      marginBottom: 6,
+    },
+    infoValue: {
+      color: colors.text,
+      fontWeight: '700',
+      fontSize: font(15),
+    },
+    infoHint: {
+      marginTop: 6,
+      color: colors.primary,
+      fontSize: font(11),
       fontWeight: '600',
     },
-    secondaryActionButton: {
-      backgroundColor: '#E2E8F0',
+    quickActions: {
+      flexDirection: isCompact ? 'column' : 'row',
+      flexWrap: 'wrap',
+      gap: 12,
+      marginBottom: gap,
     },
-    secondaryActionButtonTitle: {
-      color: '#334155',
-    },
-
-    persistentRetry: {
-      backgroundColor: '#fff',
-      padding: cardPadding,
-      borderRadius: 12,
-      marginTop: gap,
+    quickAction: {
+      flexGrow: 1,
+      minWidth: isCompact ? '100%' : '48%',
+      width: isCompact ? '100%' : undefined,
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.card,
+      borderRadius: 20,
+      padding: 14,
       borderWidth: 1,
-      borderColor: '#E2E8F0',
+      borderColor: colors.border,
     },
-
+    quickIcon: {
+      width: 42,
+      height: 42,
+      borderRadius: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 12,
+    },
+    quickTitle: {
+      color: colors.text,
+      fontWeight: '700',
+      fontSize: font(14),
+    },
+    quickSubtitle: {
+      color: colors.subtleText,
+      fontSize: font(12),
+    },
+    retryCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.card,
+      borderRadius: 18,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: colors.border,
+      marginBottom: gap,
+    },
+    retryTitle: {
+      color: colors.text,
+      fontWeight: '700',
+      marginBottom: 2,
+    },
+    retrySubtitle: {
+      color: colors.subtleText,
+      fontSize: font(12),
+    },
+    retryChip: {
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 16,
+      backgroundColor: `${colors.primary}15`,
+      marginLeft: 6,
+    },
+    retryChipText: {
+      fontWeight: '700',
+      color: colors.primary,
+    },
+    retryChipMuted: {
+      backgroundColor: colors.surfaceMuted,
+    },
     footer: {
-      marginTop: gap * 1.2,
+      marginTop: gap * 0.5,
       alignItems: 'center',
     },
     footerText: {
-      fontSize: font(14),
-      color: '#64748B',
+      fontSize: font(13),
+      color: colors.muted,
       textAlign: 'center',
     },
     footerLink: {
       fontWeight: 'bold',
-      color: '#2563EB',
+      color: colors.primary,
+    },
+    modalBackdrop: {
+      flex: 1,
+      backgroundColor: colors.backdrop,
+      justifyContent: 'center',
+      padding: 20,
+    },
+    modalCard: {
+      backgroundColor: colors.card,
+      borderRadius: 18,
+      padding: 20,
+    },
+    modalTitle: {
+      fontSize: font(18),
+      fontWeight: '700',
+      color: colors.text,
+      marginBottom: 6,
+    },
+    modalSubtitle: {
+      fontSize: font(14),
+      color: colors.subtleText,
+      marginBottom: 16,
+    },
+    modalPrimaryButton: {
+      backgroundColor: colors.accentGreen,
+      borderRadius: 12,
+      marginBottom: 10,
+    },
+    modalSecondaryButton: {
+      backgroundColor: colors.border,
+      borderRadius: 12,
     },
   });

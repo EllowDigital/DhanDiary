@@ -12,10 +12,10 @@ import SettingsScreen from '../screens/SettingsScreen';
 import AccountManagementScreen from '../screens/AccountManagementScreen';
 import AboutScreen from '../screens/AboutScreen';
 
-import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import MaterialCommunityIcon from '@expo/vector-icons/MaterialCommunityIcons';
 
 import CustomDrawerContent from './CustomDrawerContent';
+import { colors } from '../utils/design';
 
 const Drawer = createDrawerNavigator();
 
@@ -27,17 +27,21 @@ const DrawerNavigator = () => {
     <Drawer.Navigator
       drawerContent={(props) => <CustomDrawerContent {...props} />}
       screenOptions={{
-        headerStyle: { backgroundColor: '#1E293B' },
-        headerTintColor: '#fff',
-        drawerActiveTintColor: '#1E293B',
-        drawerInactiveTintColor: '#64748B',
-        drawerLabelStyle: { fontSize: 16, fontWeight: '600', marginLeft: -20 },
+        headerStyle: { backgroundColor: colors.card, elevation: 0, shadowOpacity: 0 },
+        headerTintColor: colors.text,
+        drawerActiveTintColor: colors.primary,
+        drawerInactiveTintColor: colors.muted,
+        drawerActiveBackgroundColor: colors.primarySoft,
+        drawerLabelStyle: { fontSize: 15, fontWeight: '600' as const, marginLeft: -12 },
         drawerStyle: {
-          backgroundColor: '#F1F5F9',
+          backgroundColor: colors.card,
           width: drawerWidth,
-          borderTopRightRadius: 20,
-          borderBottomRightRadius: 20,
+          borderTopRightRadius: 24,
+          borderBottomRightRadius: 24,
+          borderRightWidth: 1,
+          borderColor: colors.border,
         },
+        sceneStyle: { backgroundColor: colors.background },
       }}
     >
       {/* Dashboard Tabs */}

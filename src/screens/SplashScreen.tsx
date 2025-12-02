@@ -4,6 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import { getSession } from '../db/session';
+import { colors, shadows } from '../utils/design';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -92,14 +93,11 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
   },
   logoContainer: {
     marginBottom: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.1,
-    shadowRadius: 16,
+    ...shadows.medium,
   },
   logo: {
     width: 120,
@@ -109,11 +107,11 @@ const styles = StyleSheet.create({
   appName: {
     fontSize: 40,
     fontWeight: 'bold',
-    color: '#1E293B',
+    color: colors.text,
   },
   tagline: {
     fontSize: 18,
-    color: '#475569',
+    color: colors.muted,
     marginTop: 4,
   },
   brandContainer: {
@@ -122,11 +120,11 @@ const styles = StyleSheet.create({
   },
   poweredText: {
     fontSize: 15,
-    color: '#64748B',
+    color: colors.muted,
   },
   brandName: {
     fontWeight: 'bold',
-    color: '#2563EB',
+    color: colors.primary,
   },
 });
 

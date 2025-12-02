@@ -1,20 +1,19 @@
-import React, { useEffect } from 'react';
-import { View, StyleSheet, Image, Alert, Dimensions, TouchableOpacity } from 'react-native';
-import {
-  DrawerContentScrollView,
-  DrawerItemList,
-  DrawerContentComponentProps,
-} from '@react-navigation/drawer';
+import React, { useEffect, useMemo, useCallback } from 'react';
+import { View, StyleSheet, Alert, Dimensions, TouchableOpacity } from 'react-native';
+import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-navigation/drawer';
 import { Text, Button } from '@rneui/themed';
+import { CommonActions } from '@react-navigation/native';
 
 import { logout } from '../services/auth';
 import { useAuth } from '../hooks/useAuth';
+import { colors } from '../utils/design';
 
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
   Easing,
+  FadeInDown,
 } from 'react-native-reanimated';
 
 const { width } = Dimensions.get('window');
@@ -37,8 +36,69 @@ const CustomDrawerContent = React.memo((props: DrawerContentComponentProps) => {
     opacity: fade.value,
     transform: [{ translateY: (1 - fade.value) * 18 }],
   }));
+  const initials = useMemo(() => {
+    if (!user?.name) return 'DD';
+    return user.name
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((chunk) => chunk[0].toUpperCase())
+      .join('');
+  }, [user?.name]);
 
-  const iconSize = width >= 420 ? 90 : width >= 360 ? 78 : 64;
+  const handleNavigate = useCallback(
+    (routeName: string) => {
+      if (routeName === 'HomeTabs') {
+        props.navigation.dispatch(
+          CommonActions.navigate({
+            name: 'HomeTabs',
+            params: { screen: 'Dashboard' },
+          })
+        );
+      } else {
+        props.navigation.navigate(routeName as never);
+      }
+      props.navigation.closeDrawer();
+    },
+    [props.navigation]
+  );
+
+  const drawerItems = useMemo(
+    () =>
+      props.state.routes.map((route, idx) => {
+        const focused = props.state.index === idx;
+        const descriptor = props.descriptors[route.key];
+        const { drawerLabel, drawerIcon } = descriptor.options;
+        const iconColor = focused ? colors.primary : colors.muted;
+        const label =
+          typeof drawerLabel === 'function'
+            ? drawerLabel({ color: iconColor, focused })
+            : drawerLabel || route.name;
+        return (
+          <Animated.View
+            key={route.key}
+            entering={FadeInDown.delay(60 + idx * 50)
+              .springify()
+              .damping(16)}
+            style={styles.menuItemWrapper}
+          >
+            <TouchableOpacity
+              style={[styles.menuItem, focused && styles.menuItemActive]}
+              activeOpacity={0.9}
+              onPress={() => handleNavigate(route.name)}
+            >
+              {drawerIcon ? (
+                <View style={[styles.menuIconWrap, focused && styles.menuIconActive]}>
+                  {drawerIcon({ color: iconColor, size: 22, focused })}
+                </View>
+              ) : null}
+              <Text style={[styles.menuLabel, focused && styles.menuLabelActive]}>{label}</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        );
+      }),
+    [props.state.routes, props.state.index, props.descriptors, handleNavigate]
+  );
 
   const handleLogout = () => {
     Alert.alert('Log out', 'Are you sure you want to log out?', [
@@ -66,59 +126,20 @@ const CustomDrawerContent = React.memo((props: DrawerContentComponentProps) => {
 
   return (
     <DrawerContentScrollView {...props} contentContainerStyle={styles.container}>
-      {/* HEADER */}
       <Animated.View style={[styles.headerCard, aStyle]}>
-        <View style={styles.headerHeadingWrap}>
-          <Image source={require('../../assets/icon.png')} style={styles.drawerIcon} />
-          <View style={styles.headerHeadingText}>
-            <Text style={styles.appHeading}>DhanDiary</Text>
-            <Text style={styles.appSub}>Smart Personal Finance</Text>
+        <View style={styles.userRow}>
+          <View style={styles.avatarWrap}>
+            <Text style={styles.avatarText}>{initials}</Text>
+          </View>
+          <View style={styles.userMeta}>
+            <Text style={styles.userName}>{user?.name || 'Guest user'}</Text>
+            <Text style={styles.userEmail}>{user?.email || 'Stay in control of cash'}</Text>
           </View>
         </View>
+        <Text style={styles.appSub}>Personal finance hub</Text>
       </Animated.View>
 
-      {/* DRAWER ITEM LIST */}
-      <View style={styles.menuWrap}>
-        {React.useMemo(
-          () =>
-            props.state.routes.map((route, idx) => {
-              const focused = props.state.index === idx;
-              const { drawerLabel, drawerIcon } = props.descriptors[route.key].options;
-              return (
-                <TouchableOpacity
-                  key={route.key}
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    paddingVertical: 10,
-                    paddingHorizontal: 12,
-                    backgroundColor: focused ? '#e0e7ef' : 'transparent',
-                    borderRadius: 16,
-                    marginBottom: 2,
-                  }}
-                  activeOpacity={0.7}
-                  onPress={() => props.navigation.navigate(route.name)}
-                >
-                  {drawerIcon &&
-                    drawerIcon({ color: focused ? '#1E293B' : '#64748B', size: 26, focused })}
-                  <Text
-                    style={{
-                      marginLeft: 14,
-                      fontSize: 16,
-                      fontWeight: focused ? '700' : '600',
-                      color: focused ? '#1E293B' : '#64748B',
-                    }}
-                  >
-                    {typeof drawerLabel === 'function'
-                      ? drawerLabel({ color: focused ? '#1E293B' : '#64748B', focused })
-                      : drawerLabel || route.name}
-                  </Text>
-                </TouchableOpacity>
-              );
-            }),
-          [props.state.routes, props.state.index, props.descriptors]
-        )}
-      </View>
+      <View style={styles.menuWrap}>{drawerItems}</View>
 
       {/* LOGOUT */}
       <View style={styles.footer}>
@@ -139,101 +160,109 @@ export default CustomDrawerContent;
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
-    backgroundColor: '#F1F5F9',
-    paddingTop: 0,
+    backgroundColor: colors.background,
+    paddingBottom: 24,
   },
-
-  /* Header card */
   headerCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderRadius: 24,
-    paddingVertical: 32,
-    paddingHorizontal: 20,
-    alignItems: 'flex-start',
-    margin: 16,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 14,
+    padding: 20,
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: colors.text,
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
     elevation: 4,
   },
-
-  headerHeadingWrap: {
-    alignItems: 'center',
+  userRow: {
     flexDirection: 'row',
-    width: '100%',
-  },
-
-  appHeading: {
-    fontSize: font(20),
-    fontWeight: '800',
-    color: '#0F172A',
-  },
-
-  appSub: {
-    fontSize: font(12),
-    color: '#475569',
-    marginTop: 6,
-    fontWeight: '600',
-  },
-
-  drawerIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 12,
-    marginRight: 12,
-    backgroundColor: '#fff',
-    elevation: 3,
-  },
-
-  headerHeadingText: {
-    flexDirection: 'column',
-    justifyContent: 'center',
-  },
-
-  logo: {
-    borderRadius: 20,
-    marginBottom: 12,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-
-  appName: {
-    fontSize: font(24),
-    fontWeight: '900',
-    color: '#0F172A',
-    letterSpacing: 0.5,
-  },
-
-  username: {
-    fontSize: font(14),
-    marginTop: 6,
-    color: '#334155',
-    fontWeight: '600',
-  },
-
-  // powered: removed
-
-  /* menu items */
-  menuWrap: {
-    flexGrow: 1,
-    paddingHorizontal: 4,
+    alignItems: 'center',
     marginBottom: 10,
   },
-
-  /* logout button */
+  avatarWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  avatarText: {
+    color: colors.primary,
+    fontWeight: '700',
+    fontSize: font(18),
+  },
+  userMeta: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  userName: {
+    color: colors.text,
+    fontSize: font(16),
+    fontWeight: '700',
+  },
+  userEmail: {
+    color: colors.muted,
+    fontSize: font(13),
+    marginTop: 2,
+  },
+  appSub: {
+    fontSize: font(12),
+    color: colors.muted,
+    fontWeight: '600',
+  },
+  menuWrap: {
+    paddingHorizontal: 12,
+  },
+  menuItemWrapper: {
+    marginBottom: 8,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  menuItemActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primarySoft,
+  },
+  menuIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+    backgroundColor: colors.softCard,
+  },
+  menuIconActive: {
+    backgroundColor: colors.card,
+  },
+  menuLabel: {
+    color: colors.muted,
+    fontSize: font(15),
+    fontWeight: '600',
+  },
+  menuLabelActive: {
+    color: colors.text,
+  },
   footer: {
     paddingHorizontal: 16,
-    paddingBottom: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
-    marginTop: 8,
+    paddingTop: 12,
   },
-
   logoutBtn: {
-    backgroundColor: '#EF4444',
+    backgroundColor: colors.accentRed,
     paddingVertical: 12,
-    borderRadius: 12,
+    borderRadius: 14,
   },
 });

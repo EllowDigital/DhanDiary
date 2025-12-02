@@ -270,7 +270,11 @@ export const upsertLocalFromRemote = async (remote: any) => {
     // Warn when remote timestamps couldn't be normalized so we can detect format issues
     if (!normalizeDate(remote.created_at)) {
       try {
-        console.warn('upsertLocalFromRemote: remote.created_at not normalized', remote.id, remote.created_at);
+        console.warn(
+          'upsertLocalFromRemote: remote.created_at not normalized',
+          remote.id,
+          remote.created_at
+        );
       } catch (e) {}
     }
     await db.run(
@@ -307,13 +311,16 @@ export const upsertLocalFromRemote = async (remote: any) => {
       remote.category || 'General',
       remote.note || null,
       // Normalize date/created/updated timestamps from remote before storing.
-      (remote.client_id && remote.client_id.length
+      remote.client_id && remote.client_id.length
         ? normalizeDate(remote.created_at) || remote.created_at || now
-        : normalizeDate(remote.created_at) || remote.created_at || now),
+        : normalizeDate(remote.created_at) || remote.created_at || now,
       remote.currency || 'INR',
       typeof remote.server_version === 'number' ? remote.server_version : 0,
       normalizeDate(remote.created_at) || remote.created_at || now,
-      normalizeDate(remote.updated_at) || normalizeDate(remote.created_at) || remote.updated_at || now,
+      normalizeDate(remote.updated_at) ||
+        normalizeDate(remote.created_at) ||
+        remote.updated_at ||
+        now,
       remote.deleted ? 1 : 0,
     ]
   );

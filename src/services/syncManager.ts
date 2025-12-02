@@ -1,5 +1,6 @@
 import NetInfo from '@react-native-community/netinfo';
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 // Use AsyncStorage wrapper which falls back to an in-memory store when native
 // AsyncStorage isn’t available (Expo Go). This prevents crashes in dev.
 import AsyncStorage from '../utils/AsyncStorageWrapper';
@@ -422,7 +423,9 @@ export const pullRemote = async () => {
           if (localForDeleted && (localForDeleted as any).need_sync) {
             try {
               const revivedUpdatedAt =
-                localForDeleted.updated_at || localForDeleted.created_at || new Date().toISOString();
+                localForDeleted.updated_at ||
+                localForDeleted.created_at ||
+                new Date().toISOString();
               const revived = await Q(
                 `UPDATE cash_entries
                    SET deleted = false,
@@ -860,11 +863,12 @@ export const startBackgroundFetch = async () => {
       );
     } else {
       // Only warn about missing/incompatible background-fetch on real native
-      // devices (Android/iOS) and when not running under tests. In dev (Expo
-      // Go) the native module may be absent and this warning is noisy.
+      // devices (Android/iOS) that are NOT running inside Expo Go (which lacks
+      // the native module). In Expo Go we silently no-op to avoid noisy logs.
       const isNative = Platform.OS === 'android' || Platform.OS === 'ios';
+      const isExpoGo = Constants?.appOwnership === 'expo';
       const isTest = typeof process !== 'undefined' && !!process.env.JEST_WORKER_ID;
-      if (isNative && !isTest) {
+      if (isNative && !isExpoGo && !isTest) {
         console.warn(
           'react-native-background-fetch missing or has incompatible API; background fetch disabled'
         );
@@ -872,7 +876,8 @@ export const startBackgroundFetch = async () => {
       // otherwise silently no-op in non-native or test environments
     }
   } catch (e) {
-    if (!_backgroundFetchWarned) {
+    const isExpoGo = Constants?.appOwnership === 'expo';
+    if (!_backgroundFetchWarned && !isExpoGo) {
       _backgroundFetchWarned = true;
       console.warn('react-native-background-fetch not available; background fetch disabled', e);
     }

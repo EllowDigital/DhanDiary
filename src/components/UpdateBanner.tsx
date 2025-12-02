@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
+import { colors } from '../utils/design';
 
 type Props = {
   visible: boolean;
@@ -17,7 +18,9 @@ const UpdateBanner: React.FC<Props> = ({ visible, message, duration = 4000, onPr
     let t: any = null;
     if (visible) {
       t = setTimeout(() => {
-        onClose && onClose();
+        if (onClose) {
+          onClose();
+        }
       }, duration);
     }
     return () => {
@@ -29,15 +32,30 @@ const UpdateBanner: React.FC<Props> = ({ visible, message, duration = 4000, onPr
 
   return (
     <Animated.View
-      style={[styles.container, { transform: [{ translateY: (translateY as any).interpolate({ inputRange: [0, 1], outputRange: [0, 80] }) }] }]}
+      style={[
+        styles.container,
+        {
+          transform: [
+            {
+              translateY: (translateY as any).interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, 80],
+              }),
+            },
+          ],
+        },
+      ]}
       pointerEvents="box-none"
     >
-      <View style={styles.banner}>
-        <Text style={styles.text}>{message || 'A new update is available'}</Text>
-        <TouchableOpacity style={styles.button} onPress={onPress}>
-          <Text style={styles.buttonText}>Update</Text>
-        </TouchableOpacity>
-      </View>
+      <TouchableOpacity style={styles.banner} onPress={onPress} activeOpacity={0.9}>
+        <View style={styles.bannerContent}>
+          <Text style={styles.title}>New update available</Text>
+          <Text style={styles.subtitle}>{message || 'Tap to review and install'}</Text>
+        </View>
+        <View style={styles.ctaPill}>
+          <Text style={styles.ctaText}>Update</Text>
+        </View>
+      </TouchableOpacity>
     </Animated.View>
   );
 };
@@ -45,36 +63,44 @@ const UpdateBanner: React.FC<Props> = ({ visible, message, duration = 4000, onPr
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    top: 40,
-    left: 12,
-    right: 12,
+    top: 32,
+    left: 16,
+    right: 16,
     zIndex: 2000,
-    alignItems: 'center',
   },
   banner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#111827',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 10,
+    backgroundColor: colors.text,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    borderRadius: 16,
     width: '100%',
     justifyContent: 'space-between',
   },
-  text: {
-    color: 'white',
+  bannerContent: {
     flex: 1,
     marginRight: 12,
   },
-  button: {
-    backgroundColor: '#10B981',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
+  title: {
+    color: colors.card,
+    fontWeight: '700',
+    marginBottom: 2,
+    fontSize: 14,
   },
-  buttonText: {
-    color: 'white',
-    fontWeight: '600',
+  subtitle: {
+    color: colors.mutedSoft,
+    fontSize: 13,
+  },
+  ctaPill: {
+    backgroundColor: colors.accentGreen,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 24,
+  },
+  ctaText: {
+    color: colors.white,
+    fontWeight: '700',
   },
 });
 

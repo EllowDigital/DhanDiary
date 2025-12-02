@@ -10,12 +10,100 @@ const pool = NEON_URL ? new Pool({ connectionString: NEON_URL }) : null;
 const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
 const defaultTimeout = 20000; // 20s default timeout per request
+const NETINFO_CACHE_MS = 4000;
+const CIRCUIT_FUSE_MAX_MS = 15000;
 
 const withTimeout = <T>(p: Promise<T>, ms = defaultTimeout): Promise<T> =>
   Promise.race([
     p,
     new Promise<T>((_r, rej) => setTimeout(() => rej(new Error('Request timed out')), ms)),
   ] as any);
+
+let lastHealthyAt: number | null = null;
+let lastLatencyMs: number | null = null;
+let lastErrorMessage: string | null = null;
+let circuitOpenUntil = 0;
+let cachedNetInfoAt = 0;
+let cachedIsConnected: boolean | null = null;
+let warmPromise: Promise<void> | null = null;
+
+const recordSuccess = (latencyMs: number) => {
+  lastHealthyAt = Date.now();
+  lastLatencyMs = latencyMs;
+  lastErrorMessage = null;
+  circuitOpenUntil = 0;
+};
+
+const recordFailure = (err: unknown) => {
+  const message =
+    err instanceof Error ? err.message : typeof err === 'string' ? err : 'Unknown Neon error';
+  lastErrorMessage = message;
+};
+
+const ensureRecentNetState = async () => {
+  const now = Date.now();
+  if (cachedIsConnected !== null && now - cachedNetInfoAt < NETINFO_CACHE_MS) {
+    return cachedIsConnected;
+  }
+
+  cachedNetInfoAt = now;
+  try {
+    if (typeof NetInfo?.fetch === 'function') {
+      const snapshot = await NetInfo.fetch();
+      cachedIsConnected = !!snapshot.isConnected;
+    } else {
+      cachedIsConnected = true;
+    }
+  } catch (err) {
+    // If NetInfo fails (e.g., during tests), assume online so we can still hit Neon.
+    cachedIsConnected = true;
+  }
+  return cachedIsConnected;
+};
+
+const shouldShortCircuit = () => Date.now() < circuitOpenUntil;
+
+const bumpCircuit = (attempt: number) => {
+  const backoff = Math.min(2000 * attempt, CIRCUIT_FUSE_MAX_MS);
+  circuitOpenUntil = Date.now() + backoff;
+};
+
+export type NeonHealthSnapshot = {
+  isConfigured: boolean;
+  lastHealthyAt: number | null;
+  lastLatencyMs: number | null;
+  lastErrorMessage: string | null;
+  circuitOpenUntil: number | null;
+};
+
+export const getNeonHealth = (): NeonHealthSnapshot => ({
+  isConfigured: !!pool,
+  lastHealthyAt,
+  lastLatencyMs,
+  lastErrorMessage,
+  circuitOpenUntil: circuitOpenUntil > Date.now() ? circuitOpenUntil : null,
+});
+
+export const warmNeonConnection = async () => {
+  if (!pool) return;
+  if (warmPromise) return warmPromise;
+
+  warmPromise = (async () => {
+    try {
+      const start = Date.now();
+      await withTimeout(pool.query('SELECT 1'), 6000);
+      recordSuccess(Date.now() - start);
+    } catch (err) {
+      recordFailure(err);
+      bumpCircuit(1);
+      throw err;
+    } finally {
+      warmPromise = null;
+    }
+  })();
+
+  return warmPromise;
+};
 
 /**
  * Robust query wrapper with retries/backoff and timeout.
@@ -31,25 +119,32 @@ export const query = async (
     throw new Error('Neon requires internet + NEON_URL');
   }
 
+  if (shouldShortCircuit()) {
+    throw new Error('Neon temporarily unavailable. Retrying shortly.');
+  }
+
+  const online = await ensureRecentNetState();
+  if (!online) {
+    bumpCircuit(1);
+    const offlineError = new Error('Offline');
+    recordFailure(offlineError);
+    throw offlineError;
+  }
+
   // Treat timeouts as transient and increase retries by default to handle brief network hiccups
   const { retries = 3, timeoutMs = defaultTimeout } = opts || {};
-
-  // short-circuit if offline to avoid waiting on timeouts
-  try {
-    const net = await NetInfo.fetch();
-    if (!net.isConnected) throw new Error('Offline');
-  } catch (e) {
-    // if NetInfo fails for some reason, continue and let pool.query handle it
-  }
 
   let attempt = 0;
   let lastErr: any = null;
   while (attempt <= retries) {
     try {
+      const start = Date.now();
       const result = await withTimeout(pool.query(text, params), timeoutMs);
+      recordSuccess(Date.now() - start);
       return result.rows;
     } catch (error) {
       lastErr = error;
+      recordFailure(error);
       // Normalize potential Event-like errors (e.g. WebSocket error events from the pool)
       // Some environments surface low-level WS errors as Event objects which are not
       // instanceof Error. Inspect and convert to a readable Error so our transient
@@ -119,6 +214,7 @@ export const query = async (
       // transient — retry with exponential backoff
       attempt += 1;
       const backoff = Math.min(2000 * attempt, 8000);
+      bumpCircuit(attempt);
       console.warn(
         `Neon Query transient error, retrying attempt ${attempt}/${retries} after ${backoff}ms`,
         error

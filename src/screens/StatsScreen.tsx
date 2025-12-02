@@ -9,7 +9,6 @@ import {
   Animated,
   LayoutAnimation,
   Platform,
-  UIManager,
   Pressable,
 } from 'react-native';
 import { Text } from '@rneui/themed';
@@ -19,24 +18,44 @@ import { subscribeEntries } from '../utils/dbEvents';
 import dayjs from 'dayjs';
 import { getStartDateForFilter, getDaysCountForFilter } from '../utils/stats';
 import { LineChart, PieChart } from 'react-native-chart-kit';
+import { colors, shadows } from '../utils/design';
+import { enableLegacyLayoutAnimations } from '../utils/layoutAnimation';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const fontScale = PixelRatio.getFontScale();
 const font = (size: number) => size / fontScale;
 
-const FILTERS = ['7D', '30D', 'This Month', 'This Year'];
-const CHART_COLORS = ['#3B82F6', '#10B981', '#F97316', '#8B5CF6', '#EC4899', '#F59E0B'];
+const hexToRgb = (hex: string) => {
+  const normalized = hex.replace('#', '');
+  const bigint = parseInt(normalized, 16);
+  const r = (bigint >> 16) & 255;
+  const g = (bigint >> 8) & 255;
+  const b = bigint & 255;
+  return `${r}, ${g}, ${b}`;
+};
 
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
+const FILTERS = ['7D', '30D', 'This Month', 'This Year'];
+const CHART_COLORS = [
+  colors.primary,
+  colors.accentGreen,
+  colors.accentOrange,
+  colors.accentBlue,
+  colors.accentRed,
+  colors.secondary,
+];
+
+if (Platform.OS === 'android') {
+  enableLegacyLayoutAnimations();
 }
 
+const chartTextColor = hexToRgb(colors.text);
+
 const chartConfig = {
-  backgroundColor: '#ffffff',
-  backgroundGradientFrom: '#ffffff',
-  backgroundGradientTo: '#ffffff',
+  backgroundColor: colors.card,
+  backgroundGradientFrom: colors.card,
+  backgroundGradientTo: colors.card,
   decimalPlaces: 0,
-  color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+  color: (opacity = 1) => `rgba(${chartTextColor}, ${opacity})`,
   style: {
     borderRadius: 16,
   },
@@ -121,7 +140,7 @@ const StatsScreen = () => {
         name,
         population,
         color: CHART_COLORS[index % CHART_COLORS.length],
-        legendFontColor: '#7F7F7F',
+        legendFontColor: colors.muted,
         legendFontSize: font(15),
       }))
       .sort((a, b) => b.population - a.population);
@@ -180,12 +199,12 @@ const StatsScreen = () => {
       datasets: [
         {
           data: inData,
-          color: (opacity = 1) => `rgba(16, 185, 129, ${opacity})`,
+          color: (opacity = 1) => `rgba(${hexToRgb(colors.accentGreen)}, ${opacity})`,
           strokeWidth: 2,
         },
         {
           data: outData,
-          color: (opacity = 1) => `rgba(239, 68, 68, ${opacity})`,
+          color: (opacity = 1) => `rgba(${hexToRgb(colors.accentRed)}, ${opacity})`,
           strokeWidth: 2,
         },
       ],
@@ -224,7 +243,7 @@ const StatsScreen = () => {
   if (isLoading || authLoading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#2563EB" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -302,7 +321,7 @@ const StatsScreen = () => {
   };
 
   const heroBadgeStyle = (positive: boolean) => ({
-    backgroundColor: positive ? '#0F9D58' : '#EF4444',
+    backgroundColor: positive ? colors.accentGreen : colors.accentRed,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 999,
@@ -315,12 +334,12 @@ const StatsScreen = () => {
   ];
 
   const statCards = [
-    { title: 'Total Income', value: stats.totalIn, color: '#10B981', hint: 'Cash in' },
-    { title: 'Total Expenses', value: stats.totalOut, color: '#EF4444', hint: 'Cash out' },
+    { title: 'Total Income', value: stats.totalIn, color: colors.accentGreen, hint: 'Cash in' },
+    { title: 'Total Expenses', value: stats.totalOut, color: colors.accentRed, hint: 'Cash out' },
     {
       title: 'Net Savings',
       value: stats.net,
-      color: netPositive ? '#2563EB' : '#EF4444',
+      color: netPositive ? colors.primary : colors.accentRed,
       hint: netPositive ? 'Positive flow' : 'Needs attention',
     },
   ];
@@ -354,7 +373,12 @@ const StatsScreen = () => {
         <View style={styles.heroBottomRow}>
           <View>
             <Text style={styles.heroBottomLabel}>Net savings</Text>
-            <Text style={[styles.heroBottomValue, { color: netPositive ? '#0F9D58' : '#EF4444' }]}>
+            <Text
+              style={[
+                styles.heroBottomValue,
+                { color: netPositive ? colors.accentGreen : colors.accentRed },
+              ]}
+            >
               ₹{stats.net.toLocaleString('en-IN')}
             </Text>
           </View>
@@ -365,7 +389,9 @@ const StatsScreen = () => {
         </View>
       </Animated.View>
 
-      <Animated.View style={[styles.sectionBlock, { transform: [{ translateY: filterTranslate }] }]}>
+      <Animated.View
+        style={[styles.sectionBlock, { transform: [{ translateY: filterTranslate }] }]}
+      >
         <Text style={styles.sectionLabel}>Timeframe</Text>
         <View style={styles.filterRow}>
           {FILTERS.map((f) => {
@@ -376,7 +402,9 @@ const StatsScreen = () => {
                 style={[styles.filterPill, isActive && styles.filterPillActive]}
                 onPress={() => handleFilterPress(f)}
               >
-                <Text style={[styles.filterPillText, isActive && styles.filterPillTextActive]}>{f}</Text>
+                <Text style={[styles.filterPillText, isActive && styles.filterPillTextActive]}>
+                  {f}
+                </Text>
               </Pressable>
             );
           })}
@@ -403,7 +431,7 @@ const StatsScreen = () => {
         {renderPieChart()}
       </View>
 
-      <View style={[styles.chartCard, styles.sectionBlock]}> 
+      <View style={[styles.chartCard, styles.sectionBlock]}>
         <Text style={styles.chartTitle}>Income vs. Expenses</Text>
         {renderLineChart()}
       </View>
@@ -416,15 +444,15 @@ export default StatsScreen;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0F172A',
+    backgroundColor: colors.background,
   },
   scrollContent: {
     padding: 20,
     paddingBottom: 60,
   },
-    sectionBlock: {
-      marginBottom: 20,
-    },
+  sectionBlock: {
+    marginBottom: 20,
+  },
   centered: {
     flex: 1,
     justifyContent: 'center',
@@ -433,30 +461,26 @@ const styles = StyleSheet.create({
   headerOverline: {
     fontSize: font(12),
     textTransform: 'uppercase',
-    color: '#A5B4FC',
+    color: colors.muted,
     letterSpacing: 1,
   },
   header: {
     fontSize: font(32),
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: colors.text,
   },
   period: {
     fontSize: font(16),
-    color: '#CBD5F5',
+    color: colors.muted,
     marginTop: 4,
   },
   heroCard: {
-    backgroundColor: '#1E2A4A',
+    backgroundColor: colors.card,
     borderRadius: 24,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#273559',
-    shadowColor: '#000000',
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 5,
+    borderColor: colors.border,
+    ...shadows.large,
   },
   heroStatsRow: {
     flexDirection: 'row',
@@ -467,20 +491,20 @@ const styles = StyleSheet.create({
   heroValue: {
     fontSize: font(28),
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: colors.text,
   },
   heroHint: {
     fontSize: font(14),
-    color: '#94A3B8',
+    color: colors.muted,
     marginTop: 4,
   },
   heroBadgeText: {
-    color: '#FFFFFF',
+    color: colors.white,
     fontWeight: '600',
   },
   heroDivider: {
     height: 1,
-    backgroundColor: '#273559',
+    backgroundColor: colors.border,
     marginVertical: 18,
   },
   heroBottomRow: {
@@ -489,17 +513,17 @@ const styles = StyleSheet.create({
   },
   heroBottomLabel: {
     fontSize: font(13),
-    color: '#94A3B8',
+    color: colors.muted,
   },
   heroBottomValue: {
     fontSize: font(20),
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: colors.text,
     marginTop: 2,
   },
   sectionLabel: {
     fontSize: font(14),
-    color: '#94A3B8',
+    color: colors.muted,
     marginBottom: 10,
   },
   filterRow: {
@@ -511,21 +535,21 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: colors.border,
     marginRight: 10,
     marginBottom: 10,
   },
   filterPillActive: {
-    backgroundColor: '#3B82F6',
-    borderColor: '#3B82F6',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   filterPillText: {
-    color: '#94A3B8',
+    color: colors.muted,
     fontWeight: '600',
     fontSize: font(13),
   },
   filterPillTextActive: {
-    color: '#FFFFFF',
+    color: colors.white,
   },
   statsGrid: {
     flexDirection: 'row',
@@ -533,12 +557,13 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    backgroundColor: '#111827',
+    backgroundColor: colors.card,
     padding: 16,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#1F2937',
+    borderColor: colors.border,
     marginRight: 12,
+    ...shadows.small,
   },
   statCardLast: {
     marginRight: 0,
@@ -558,63 +583,65 @@ const styles = StyleSheet.create({
   },
   statTitle: {
     fontSize: font(13),
-    color: '#94A3B8',
+    color: colors.muted,
     fontWeight: '600',
     marginBottom: 6,
   },
   statValue: {
     fontSize: font(20),
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: colors.text,
   },
   statHint: {
     fontSize: font(12),
-    color: '#94A3B8',
+    color: colors.muted,
     marginTop: 4,
   },
   quickStatsCard: {
-    backgroundColor: '#111827',
+    backgroundColor: colors.card,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#1F2937',
+    borderColor: colors.border,
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingVertical: 18,
     paddingHorizontal: 16,
+    ...shadows.small,
   },
   quickStatItem: {
     flex: 1,
     paddingHorizontal: 6,
   },
   quickStatLabel: {
-    color: '#94A3B8',
+    color: colors.muted,
     fontSize: font(12),
     marginBottom: 6,
   },
   quickStatValue: {
-    color: '#F8FAFC',
+    color: colors.text,
     fontSize: font(16),
     fontWeight: '600',
   },
   chartCard: {
-    backgroundColor: '#111827',
+    backgroundColor: colors.card,
     borderRadius: 24,
     padding: 20,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#1F2937',
+    borderColor: colors.border,
+    ...shadows.small,
   },
   chartTitle: {
     fontSize: font(16),
     fontWeight: '600',
-    color: '#E2E8F0',
+    color: colors.text,
     alignSelf: 'flex-start',
     marginBottom: 14,
   },
   noDataText: {
     textAlign: 'center',
     paddingVertical: 40,
-    color: '#94A3B8',
+    color: colors.muted,
     fontSize: font(14),
   },
   chartStyle: {
