@@ -246,10 +246,10 @@ const SettingsScreen = () => {
         </Animated.View>
 
         <Animated.View style={[styles.card, styles.dangerCard, animatedStyle(3)]}>
-          <Text style={[styles.cardTitle, { color: colors.accentOrange }]}>Danger Zone</Text>
+          <Text style={[styles.cardTitle, { color: colors.accentRed }]}>Danger Zone</Text>
           <ActionRow
             icon="delete-forever"
-            iconColor={colors.accentOrange}
+            iconColor={colors.accentRed}
             label="Clear Local Data"
             description="Removes cached entries and logs you out"
             destructive
@@ -414,8 +414,8 @@ const createStyles = (padding: number, radius: number, fontScale: number) =>
       color: colors.white,
     },
     dangerCard: {
-      backgroundColor: `${colors.accentOrange}14`,
+      backgroundColor: `${colors.accentRed}14`,
       borderWidth: 1,
-      borderColor: colors.accentOrange,
+      borderColor: colors.accentRed,
     },
   });
