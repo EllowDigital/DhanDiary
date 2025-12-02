@@ -257,9 +257,7 @@ const SettingsScreen = () => {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.dangerLabel}>Clear Local Data</Text>
-              <Text style={styles.dangerDescription}>
-                Removes cached entries and logs you out
-              </Text>
+              <Text style={styles.dangerDescription}>Removes cached entries and logs you out</Text>
             </View>
             <MaterialIcon name="chevron-right" size={22} color={colors.accentRed} />
           </TouchableOpacity>

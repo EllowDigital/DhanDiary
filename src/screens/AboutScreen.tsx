@@ -56,6 +56,7 @@ const AboutScreen: React.FC = () => {
     [fontSize, outerPadding, cardPadding, gap]
   );
   const fade = useSharedValue(0);
+  const currentUpdateId = Updates.updateId || 'Embedded build';
 
   /* Fade In Animation */
   useEffect(() => {
@@ -189,6 +190,7 @@ const AboutScreen: React.FC = () => {
         {/* MAIN CARD */}
         <View style={styles.card}>
           <InfoRow label="App Version" value={pkg.version} />
+          <InfoRow label="Update ID" value={currentUpdateId} />
           <InfoRow label="Build Type" value={String(BUILD_TYPE)} />
           <InfoRow
             label="Environment"
