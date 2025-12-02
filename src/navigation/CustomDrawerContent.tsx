@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useCallback } from 'react';
 import { View, StyleSheet, Alert, Dimensions, TouchableOpacity } from 'react-native';
 import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-navigation/drawer';
 import { Text, Button } from '@rneui/themed';
+import { CommonActions } from '@react-navigation/native';
 
 import { logout } from '../services/auth';
 import { useAuth } from '../hooks/useAuth';
@@ -45,6 +46,23 @@ const CustomDrawerContent = React.memo((props: DrawerContentComponentProps) => {
       .join('');
   }, [user?.name]);
 
+  const handleNavigate = useCallback(
+    (routeName: string) => {
+      if (routeName === 'HomeTabs') {
+        props.navigation.dispatch(
+          CommonActions.navigate({
+            name: 'HomeTabs',
+            params: { screen: 'Dashboard' },
+          })
+        );
+      } else {
+        props.navigation.navigate(routeName as never);
+      }
+      props.navigation.closeDrawer();
+    },
+    [props.navigation]
+  );
+
   const drawerItems = useMemo(
     () =>
       props.state.routes.map((route, idx) => {
@@ -67,7 +85,7 @@ const CustomDrawerContent = React.memo((props: DrawerContentComponentProps) => {
             <TouchableOpacity
               style={[styles.menuItem, focused && styles.menuItemActive]}
               activeOpacity={0.9}
-              onPress={() => props.navigation.navigate(route.name as never)}
+              onPress={() => handleNavigate(route.name)}
             >
               {drawerIcon ? (
                 <View style={[styles.menuIconWrap, focused && styles.menuIconActive]}>
@@ -79,7 +97,7 @@ const CustomDrawerContent = React.memo((props: DrawerContentComponentProps) => {
           </Animated.View>
         );
       }),
-    [props.state.routes, props.state.index, props.descriptors, props.navigation]
+    [props.state.routes, props.state.index, props.descriptors, handleNavigate]
   );
 
   const handleLogout = () => {
