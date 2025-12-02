@@ -246,15 +246,23 @@ const SettingsScreen = () => {
         </Animated.View>
 
         <Animated.View style={[styles.card, styles.dangerCard, animatedStyle(3)]}>
-          <Text style={[styles.cardTitle, { color: colors.accentRed }]}>Danger Zone</Text>
-          <ActionRow
-            icon="delete-forever"
-            iconColor={colors.accentRed}
-            label="Clear Local Data"
-            description="Removes cached entries and logs you out"
-            destructive
+          <Text style={[styles.cardTitle, styles.dangerTitle]}>Danger Zone</Text>
+          <TouchableOpacity
+            activeOpacity={0.9}
+            style={styles.dangerAction}
             onPress={handleClearData}
-          />
+          >
+            <View style={styles.dangerIconWrap}>
+              <MaterialIcon name="delete-forever" size={24} color={colors.accentRed} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.dangerLabel}>Clear Local Data</Text>
+              <Text style={styles.dangerDescription}>
+                Removes cached entries and logs you out
+              </Text>
+            </View>
+            <MaterialIcon name="chevron-right" size={22} color={colors.accentRed} />
+          </TouchableOpacity>
         </Animated.View>
       </ScrollView>
     </SafeAreaView>
@@ -414,8 +422,41 @@ const createStyles = (padding: number, radius: number, fontScale: number) =>
       color: colors.white,
     },
     dangerCard: {
-      backgroundColor: `${colors.accentRed}14`,
+      backgroundColor: colors.accentRedSoft,
       borderWidth: 1,
       borderColor: colors.accentRed,
+      ...shadows.small,
+    },
+    dangerTitle: {
+      color: colors.accentRed,
+      marginBottom: 12,
+    },
+    dangerAction: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 14,
+      borderRadius: 16,
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: `${colors.accentRed}55`,
+      gap: 12,
+    },
+    dangerIconWrap: {
+      width: 48,
+      height: 48,
+      borderRadius: 16,
+      backgroundColor: `${colors.accentRed}14`,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    dangerLabel: {
+      fontSize: Math.round(15 * fontScale),
+      fontWeight: '700',
+      color: colors.accentRed,
+    },
+    dangerDescription: {
+      marginTop: 2,
+      color: colors.subtleText,
+      fontSize: Math.round(12 * fontScale),
     },
   });

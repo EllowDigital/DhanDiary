@@ -93,7 +93,6 @@ const AboutScreen: React.FC = () => {
   /* UPDATES: expo-updates integration */
   const [checking, setChecking] = useState(false);
   const [updateAvailable, setUpdateAvailable] = useState(false);
-  const [updateInfo, setUpdateInfo] = useState<any>(null);
   const [showBanner, setShowBanner] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [failureCount, setFailureCount] = useState(0);
@@ -104,14 +103,10 @@ const AboutScreen: React.FC = () => {
       const res = await Updates.checkForUpdateAsync();
       if (res.isAvailable) {
         setUpdateAvailable(true);
-        setUpdateInfo(res);
         // show brief in-app banner for a few seconds
         setShowBanner(true);
-        // also inform user via alert
-        Alert.alert('Update available', 'A JS update is available and can be downloaded.');
       } else {
         setUpdateAvailable(false);
-        setUpdateInfo(null);
         Alert.alert('No updates', 'Your app is up to date.');
       }
     } catch (err) {
@@ -153,7 +148,6 @@ const AboutScreen: React.FC = () => {
     } finally {
       setChecking(false);
       setUpdateAvailable(false);
-      setUpdateInfo(null);
       setShowBanner(false);
       setShowUpdateModal(false);
     }
@@ -243,7 +237,6 @@ const AboutScreen: React.FC = () => {
         {/* inline banner that appears briefly when update found */}
         <UpdateBanner
           visible={showBanner}
-          message={`New update available — v${pkg.version}`}
           duration={4500}
           onPress={() => setShowUpdateModal(true)}
           onClose={() => setShowBanner(false)}
@@ -274,14 +267,6 @@ const AboutScreen: React.FC = () => {
                 }}
               >
                 New Update
-              </Text>
-              <Text style={{ marginBottom: 10, color: colors.subtleText }}>
-                Version: {pkg.version}
-              </Text>
-              <Text style={{ marginBottom: 14, color: colors.subtleText }}>
-                {updateInfo && updateInfo?.manifest && updateInfo.manifest?.releaseNotes
-                  ? updateInfo.manifest.releaseNotes
-                  : 'No release notes available.'}
               </Text>
               <Button
                 title={checking ? 'Applying…' : 'Download & Install'}
