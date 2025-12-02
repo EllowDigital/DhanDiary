@@ -30,10 +30,13 @@ const pkg = require('../../package.json');
 
 const ELLOW_URL = 'https://ellowdigital.netlify.app';
 const extra: any = (Constants as any)?.expoConfig?.extra || {};
+const BRAND_NAME = 'EllowDigital';
 const BUILD_TYPE =
   process.env.BUILD_TYPE ||
   extra.BUILD_TYPE ||
   (pkg.version.includes('-beta') ? 'Beta' : 'Release');
+const CREDIT_LINE = extra?.creditLine || extra?.CREDIT_LINE;
+const FALLBACK_CREDIT = `Crafted with ❤️ by ${BRAND_NAME}`;
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
@@ -90,18 +93,18 @@ const AboutScreen: React.FC = () => {
     return currentUpdateId.length > 10 ? `${currentUpdateId.slice(0, 8)}…` : currentUpdateId;
   }, [currentUpdateId]);
 
-    const infoTiles = useMemo(
-      () => [
-        { label: 'Version', value: pkg.version },
-        { label: 'Build Type', value: String(BUILD_TYPE) },
-        {
-          label: 'Environment',
-          value: process.env.NODE_ENV === 'production' ? 'Production' : 'Development',
-        },
-        { label: 'Update ID', value: shortUpdateId, raw: currentUpdateId },
-      ],
-      [shortUpdateId, currentUpdateId]
-    );
+  const infoTiles = useMemo(
+    () => [
+      { label: 'Version', value: pkg.version },
+      { label: 'Build Type', value: String(BUILD_TYPE) },
+      {
+        label: 'Environment',
+        value: process.env.NODE_ENV === 'production' ? 'Production' : 'Development',
+      },
+      { label: 'Update ID', value: shortUpdateId, raw: currentUpdateId },
+    ],
+    [shortUpdateId, currentUpdateId]
+  );
 
   const fetchShareLink = useCallback(async () => {
     try {
@@ -153,7 +156,10 @@ const AboutScreen: React.FC = () => {
 
   const fetchAndApplyUpdate = useCallback(async () => {
     if (isExpoGo) {
-      Alert.alert('Not supported in Expo Go', 'Install a dev or production build to apply updates.');
+      Alert.alert(
+        'Not supported in Expo Go',
+        'Install a dev or production build to apply updates.'
+      );
       return;
     }
     try {
@@ -201,6 +207,19 @@ const AboutScreen: React.FC = () => {
   }, []);
   const closeShowFullId = useCallback(() => setShowUpdateIdModal(false), []);
 
+  const creditLineSegments = useMemo(() => {
+    const displayText = CREDIT_LINE?.trim().length ? CREDIT_LINE : FALLBACK_CREDIT;
+    const highlightIndex = displayText.indexOf(BRAND_NAME);
+    if (highlightIndex === -1) {
+      return { prefix: displayText, suffix: '', highlight: false };
+    }
+    return {
+      prefix: displayText.slice(0, highlightIndex),
+      suffix: displayText.slice(highlightIndex + BRAND_NAME.length),
+      highlight: true,
+    };
+  }, []);
+
   return (
     <Animated.View style={[styles.container, animatedFadeStyle]}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
@@ -216,6 +235,19 @@ const AboutScreen: React.FC = () => {
             Track incomes, expenses, and sync securely with our offline-first engine and instant OTA
             updates.
           </Text>
+          <TouchableOpacity
+            onPress={() => Linking.openURL(ELLOW_URL)}
+            activeOpacity={0.8}
+            style={styles.creditLineButton}
+          >
+            <Text style={styles.creditLineText}>
+              {creditLineSegments.prefix}
+              {creditLineSegments.highlight && (
+                <Text style={styles.creditLineHighlight}>{BRAND_NAME}</Text>
+              )}
+              {creditLineSegments.highlight && creditLineSegments.suffix}
+            </Text>
+          </TouchableOpacity>
         </Animated.View>
 
         <Animated.View entering={FadeInDown.delay(140).springify()} style={styles.updateCard}>
@@ -231,9 +263,15 @@ const AboutScreen: React.FC = () => {
             </View>
           </View>
           <View style={styles.updateActions}>
-            <TouchableOpacity style={styles.primaryCta} onPress={checkForUpdates} activeOpacity={0.9}>
+            <TouchableOpacity
+              style={styles.primaryCta}
+              onPress={checkForUpdates}
+              activeOpacity={0.9}
+            >
               <MaterialIcon name="refresh" size={18} color={colors.white} />
-              <Text style={styles.primaryCtaText}>{checking ? 'Checking…' : 'Check for Updates'}</Text>
+              <Text style={styles.primaryCtaText}>
+                {checking ? 'Checking…' : 'Check for Updates'}
+              </Text>
             </TouchableOpacity>
             {updateAvailable && (
               <TouchableOpacity
@@ -287,7 +325,11 @@ const AboutScreen: React.FC = () => {
               <Text style={styles.quickSubtitle}>Invite friends in one tap</Text>
             </View>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.quickAction} onPress={openSupportEmail} activeOpacity={0.9}>
+          <TouchableOpacity
+            style={styles.quickAction}
+            onPress={openSupportEmail}
+            activeOpacity={0.9}
+          >
             <View style={[styles.quickIcon, { backgroundColor: colors.accentGreen }]}>
               <MaterialIcon name="mail" size={18} color={colors.white} />
             </View>
@@ -308,17 +350,14 @@ const AboutScreen: React.FC = () => {
             <TouchableOpacity style={styles.retryChip} onPress={fetchAndApplyUpdate}>
               <Text style={styles.retryChipText}>{checking ? 'Retrying…' : 'Retry'}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.retryChip, styles.retryChipMuted]} onPress={clearRetryState}>
+            <TouchableOpacity
+              style={[styles.retryChip, styles.retryChipMuted]}
+              onPress={clearRetryState}
+            >
               <Text style={[styles.retryChipText, { color: colors.muted }]}>Clear</Text>
             </TouchableOpacity>
           </Animated.View>
         )}
-
-        <TouchableOpacity style={styles.footer} onPress={() => Linking.openURL(ELLOW_URL)}>
-          <Text style={styles.footerText}>
-            Crafted with ❤️ by <Text style={styles.footerLink}>EllowDigital</Text>
-          </Text>
-        </TouchableOpacity>
       </ScrollView>
 
       <Modal
@@ -435,6 +474,30 @@ const createStyles = (
       color: colors.subtleText,
       lineHeight: 20,
       fontSize: font(14),
+    },
+    creditLineButton: {
+      marginTop: 18,
+      alignSelf: 'stretch',
+      width: '100%',
+      paddingHorizontal: 18,
+      paddingVertical: 8,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surfaceMuted,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    creditLineText: {
+      color: colors.muted,
+      fontSize: font(12),
+      fontWeight: '600',
+      textAlign: 'center',
+      lineHeight: 18,
+    },
+    creditLineHighlight: {
+      color: colors.primary,
+      fontWeight: '800',
     },
     updateCard: {
       backgroundColor: colors.card,
@@ -617,19 +680,6 @@ const createStyles = (
     },
     retryChipMuted: {
       backgroundColor: colors.surfaceMuted,
-    },
-    footer: {
-      marginTop: gap * 0.5,
-      alignItems: 'center',
-    },
-    footerText: {
-      fontSize: font(13),
-      color: colors.muted,
-      textAlign: 'center',
-    },
-    footerLink: {
-      fontWeight: 'bold',
-      color: colors.primary,
     },
     modalBackdrop: {
       flex: 1,
