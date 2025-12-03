@@ -2,6 +2,7 @@ import sqlite from './sqlite';
 import { notifyEntriesChanged } from '../utils/dbEvents';
 import dayjs from 'dayjs';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
+import { ensureCategory, FALLBACK_CATEGORY } from '../constants/categories';
 
 dayjs.extend(customParseFormat);
 
@@ -81,6 +82,7 @@ export const getEntries = async (userId: string) => {
   );
   const mapped = (rows || []).map((r) => ({
     ...r,
+    category: ensureCategory(r.category || FALLBACK_CATEGORY),
     // Do NOT silently fall back to `now` here — prefer null so the UI can show a clear
     // 'unknown' date rather than incorrectly showing today's date when parsing fails.
     created_at: normalizeDate(r.created_at) || null,
@@ -126,6 +128,7 @@ export const addLocalEntry = async (entry: Omit<LocalEntry, 'is_synced' | 'is_de
   const now = new Date().toISOString();
   const created = normalizeDate((entry as any).created_at) || now;
   const updated = normalizeDate((entry as any).updated_at) || created;
+  const category = ensureCategory(entry.category);
   await db.run(
     `INSERT INTO local_entries (local_id, remote_id, user_id, type, amount, category, note, date, currency, server_version, created_at, updated_at, is_synced, need_sync, is_deleted)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1, 0)`,
@@ -135,7 +138,7 @@ export const addLocalEntry = async (entry: Omit<LocalEntry, 'is_synced' | 'is_de
       entry.user_id,
       entry.type,
       entry.amount,
-      entry.category,
+      category,
       entry.note || null,
       normalizeDate((entry as any).date) || created,
       entry.currency || 'INR',
@@ -171,7 +174,7 @@ export const updateLocalEntry = async (
     `UPDATE local_entries SET amount = ?, category = ?, note = ?, type = ?, currency = ?, date = ?, updated_at = ?, need_sync = 1, is_synced = 0 WHERE local_id = ?`,
     [
       updates.amount,
-      updates.category,
+      ensureCategory(updates.category),
       updates.note || null,
       updates.type,
       updates.currency || 'INR',
@@ -283,7 +286,7 @@ export const upsertLocalFromRemote = async (remote: any) => {
         remote.user_id,
         remote.type,
         remote.amount,
-        remote.category || 'General',
+        ensureCategory(remote.category || FALLBACK_CATEGORY),
         remote.note || null,
         remote.currency || 'INR',
         typeof remote.server_version === 'number' ? remote.server_version : 0,
@@ -308,7 +311,7 @@ export const upsertLocalFromRemote = async (remote: any) => {
       remote.user_id,
       remote.type,
       remote.amount,
-      remote.category || 'General',
+      ensureCategory(remote.category || FALLBACK_CATEGORY),
       remote.note || null,
       // Normalize date/created/updated timestamps from remote before storing.
       remote.client_id && remote.client_id.length

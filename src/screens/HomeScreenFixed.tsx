@@ -32,6 +32,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { spacing, colors } from '../utils/design';
+import { ensureCategory, FALLBACK_CATEGORY } from '../constants/categories';
 
 const pkg = require('../../package.json');
 
@@ -179,7 +180,7 @@ const HomeScreen: React.FC = () => {
   const pieByCategory = useMemo(() => {
     const map: Record<string, { in: number; out: number }> = {};
     filteredByPeriod.forEach((e) => {
-      const cat = e.category || 'Other';
+      const cat = ensureCategory(e.category);
       if (!map[cat]) map[cat] = { in: 0, out: 0 };
       if (e.type === 'in') map[cat].in += Number(e.amount || 0);
       if (e.type === 'out') map[cat].out += Number(e.amount || 0);
@@ -337,9 +338,9 @@ const HomeScreen: React.FC = () => {
   );
 
   const topExpenseCategory = useMemo(() => {
-    if (!pieExpenseData.length) return 'General';
+    if (!pieExpenseData.length) return FALLBACK_CATEGORY;
     const sorted = [...pieExpenseData].sort((a, b) => b.population - a.population);
-    return sorted[0]?.name || 'General';
+    return sorted[0]?.name || FALLBACK_CATEGORY;
   }, [pieExpenseData]);
 
   const insightRows = useMemo(

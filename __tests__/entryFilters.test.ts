@@ -1,12 +1,13 @@
 import { buildEntryDisplay, summarizeEntries } from '../src/utils/entryFilters';
 import { LocalEntry } from '../src/db/entries';
+import { DEFAULT_CATEGORY } from '../src/constants/categories';
 
 const makeEntry = (overrides: Partial<LocalEntry> & { local_id: string }): LocalEntry => ({
   local_id: overrides.local_id,
   user_id: overrides.user_id || 'user-1',
   type: overrides.type || 'out',
   amount: overrides.amount ?? 0,
-  category: overrides.category || 'General',
+  category: overrides.category || DEFAULT_CATEGORY,
   note: overrides.note ?? null,
   currency: overrides.currency || 'INR',
   remote_id: overrides.remote_id ?? null,
@@ -26,14 +27,14 @@ const entries: LocalEntry[] = [
     local_id: 'out_recent',
     type: 'out',
     amount: 1200,
-    category: 'Rent',
+    category: 'Bills',
     date: '2025-01-29T00:00:00.000Z',
   }),
   makeEntry({
     local_id: 'out_missing_date',
     type: 'out',
     amount: 600,
-    category: 'Rent',
+    category: 'Bills',
     date: null,
     created_at: '2025-01-28T00:00:00.000Z',
   }),
@@ -41,21 +42,21 @@ const entries: LocalEntry[] = [
     local_id: 'out_old',
     type: 'out',
     amount: 800,
-    category: 'Travel',
+    category: 'Transport',
     date: '2024-12-20T00:00:00.000Z',
   }),
   makeEntry({
     local_id: 'in_high',
     type: 'in',
     amount: 5000,
-    category: 'Salary',
+    category: 'SALARY',
     date: '2025-01-10T00:00:00.000Z',
   }),
   makeEntry({
     local_id: 'in_low',
     type: 'in',
     amount: 200,
-    category: 'Gift',
+    category: 'Shopping',
     date: null,
     created_at: '2025-01-05T00:00:00.000Z',
   }),
@@ -94,7 +95,7 @@ describe('entryFilters utilities', () => {
     expect(summary.count).toBe(2);
     expect(summary.total).toBe(1800);
     expect(summary.avg).toBe(900);
-    expect(summary.topCategory).toBe('Rent');
+    expect(summary.topCategory).toBe('Bills');
     expect(summary.lastTimestamp).toBe(new Date('2025-01-29T00:00:00.000Z').getTime());
   });
 });

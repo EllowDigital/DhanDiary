@@ -19,6 +19,7 @@ import dayjs from 'dayjs';
 import { getStartDateForFilter, getDaysCountForFilter } from '../utils/stats';
 import { LineChart, PieChart } from 'react-native-chart-kit';
 import { colors, shadows } from '../utils/design';
+import { ensureCategory, FALLBACK_CATEGORY } from '../constants/categories';
 import { enableLegacyLayoutAnimations } from '../utils/layoutAnimation';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -127,7 +128,7 @@ const StatsScreen = () => {
       .filter((e) => e.type === 'out')
       .reduce(
         (acc, e) => {
-          const category = e.category || 'General';
+          const category = ensureCategory(e.category);
           const amount = Number(e.amount) || 0;
           acc[category] = (acc[category] || 0) + amount;
           return acc;
@@ -220,7 +221,7 @@ const StatsScreen = () => {
     return stats.totalOut / safeDays;
   }, [stats.totalOut, daysInView]);
 
-  const topCategory = pieData[0]?.name || 'General';
+  const topCategory = pieData[0]?.name || FALLBACK_CATEGORY;
   const periodLabel = useMemo(() => {
     switch (filter) {
       case '7D':

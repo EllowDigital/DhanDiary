@@ -26,6 +26,7 @@ import { Animated as RNAnimated } from 'react-native';
 import useDelayedLoading from '../hooks/useDelayedLoading';
 import FullScreenSpinner from '../components/FullScreenSpinner';
 import { colors, shadows } from '../utils/design';
+import { DEFAULT_CATEGORY, FALLBACK_CATEGORY, ensureCategory } from '../constants/categories';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const scale = SCREEN_WIDTH / 390;
@@ -99,7 +100,7 @@ const HistoryScreen = () => {
 
   const [editingEntry, setEditingEntry] = useState<any | null>(null);
   const [editAmount, setEditAmount] = useState('');
-  const [editCategory, setEditCategory] = useState('');
+  const [editCategory, setEditCategory] = useState(DEFAULT_CATEGORY);
   // guard against multiple openEdit calls (double-tap / multiple navigations)
   const isOpeningRef = React.useRef(false);
   const setEditingSafely = (item: any | null) => {
@@ -207,12 +208,12 @@ const HistoryScreen = () => {
         latestTs = timestamp;
       }
 
-      const category = entry.category || 'General';
+      const category = ensureCategory(entry.category);
       categoryTotals[category] = (categoryTotals[category] || 0) + amount;
     });
 
     const topCategory =
-      Object.entries(categoryTotals).sort((a, b) => b[1] - a[1])[0]?.[0] || 'General';
+      Object.entries(categoryTotals).sort((a, b) => b[1] - a[1])[0]?.[0] || FALLBACK_CATEGORY;
     const latestLabel = latestTs ? new Date(latestTs).toLocaleDateString() : 'No activity yet';
     return {
       totalIn,
@@ -313,7 +314,7 @@ const HistoryScreen = () => {
   const openEdit = (item: any) => {
     setEditingSafely(item);
     setEditAmount(String(item.amount));
-    setEditCategory(item.category || 'General');
+    setEditCategory(ensureCategory(item.category));
     setEditNote(item.note || '');
     setEditTypeIndex(item.type === 'in' ? 1 : 0);
     // initialize date but don't mark as changed until user picks a new value
@@ -359,7 +360,7 @@ const HistoryScreen = () => {
       try {
         const updates: any = {
           amount: amt,
-          category: editCategory,
+          category: ensureCategory(editCategory),
           note: editNote,
           type: editTypeIndex === 1 ? 'in' : 'out',
         };
@@ -679,7 +680,7 @@ const HistoryScreen = () => {
                   visible={showCategoryPicker}
                   onClose={() => setShowCategoryPicker(false)}
                   onSelect={(c) => {
-                    setEditCategory(c);
+                    setEditCategory(ensureCategory(c));
                     setShowCategoryPicker(false);
                   }}
                 />
