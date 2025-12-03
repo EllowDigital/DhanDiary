@@ -218,7 +218,8 @@ export const syncPending = async () => {
           if (remoteId) {
             const sv = remoteServerVersion;
             try {
-              const syncedAt = remoteUpdatedAt || (insertRes && insertRes[0] && insertRes[0].updated_at);
+              const syncedAt =
+                remoteUpdatedAt || (insertRes && insertRes[0] && insertRes[0].updated_at);
               await markEntrySynced(it.local_id, String(remoteId), sv, syncedAt);
               pushed += 1;
             } catch (e) {
@@ -608,18 +609,10 @@ export const pullRemote = async () => {
           const localVersion =
             typeof local.server_version === 'number' ? Number(local.server_version) : null;
 
-          if (
-            remoteVersion !== null &&
-            localVersion !== null &&
-            remoteVersion > localVersion
-          ) {
+          if (remoteVersion !== null && localVersion !== null && remoteVersion > localVersion) {
             // Remote copy is strictly newer; fall through to upsert.
           } else {
-            if (
-              remoteVersion !== null &&
-              localVersion !== null &&
-              localVersion > remoteVersion
-            ) {
+            if (remoteVersion !== null && localVersion !== null && localVersion > remoteVersion) {
               await pushLocalToRemote();
               continue;
             }

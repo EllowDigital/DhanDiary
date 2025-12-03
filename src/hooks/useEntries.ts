@@ -159,8 +159,7 @@ export const useEntries = (userId?: string | null) => {
 
       await updateLocalEntry(local_id, {
         ...updates,
-        category:
-          updates.category !== undefined ? ensureCategory(updates.category) : undefined,
+        category: updates.category !== undefined ? ensureCategory(updates.category) : undefined,
         date: dateVal,
       } as any);
     },
@@ -180,9 +179,7 @@ export const useEntries = (userId?: string | null) => {
               ...item,
               ...updates,
               category:
-                updates.category !== undefined
-                  ? ensureCategory(updates.category)
-                  : item.category,
+                updates.category !== undefined ? ensureCategory(updates.category) : item.category,
               updated_at: now,
             }
           : item

@@ -98,7 +98,7 @@ const MoreScreen: React.FC = () => {
   );
 
   const chunkedPrimary = useMemo(() => {
-    const chunks: typeof primaryLinks[][] = [];
+    const chunks: (typeof primaryLinks)[][] = [];
     for (let i = 0; i < primaryLinks.length; i += 2) {
       chunks.push(primaryLinks.slice(i, i + 2));
     }
@@ -214,8 +214,8 @@ const MoreScreen: React.FC = () => {
           <Text style={styles.heroEyebrow}>Control Center</Text>
           <Text style={styles.heroTitle}>Everything you need, now tidy.</Text>
           <Text style={styles.heroSubtitle}>
-            Jump into stats, accounts, or preferences without hunting through menus. All the backstage
-            tools live here.
+            Jump into stats, accounts, or preferences without hunting through menus. All the
+            backstage tools live here.
           </Text>
           <View style={styles.heroHighlightRow}>
             {heroHighlights.map((item) => (
@@ -245,7 +245,9 @@ const MoreScreen: React.FC = () => {
                   ]}
                 />
               ))}
-              {row.length === 1 ? <View style={[styles.quickTileWrapper, styles.quickGhost]} /> : null}
+              {row.length === 1 ? (
+                <View style={[styles.quickTileWrapper, styles.quickGhost]} />
+              ) : null}
             </View>
           ))}
         </View>

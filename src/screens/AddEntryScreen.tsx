@@ -200,10 +200,7 @@ const AddEntryScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <ScreenHeader
-        title={editingLocalId ? 'Edit entry' : 'Add entry'}
-        subtitle={subtitleLabel}
-      />
+      <ScreenHeader title={editingLocalId ? 'Edit entry' : 'Add entry'} subtitle={subtitleLabel} />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}

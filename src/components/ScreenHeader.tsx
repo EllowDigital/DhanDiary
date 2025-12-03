@@ -68,7 +68,8 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
     <View
       style={[styles.wrapper, { paddingTop: insets.top + spacing(1) }, style]}
       accessibilityRole="header"
-      accessibilityLabel={`${title} header`}>
+      accessibilityLabel={`${title} header`}
+    >
       <View style={styles.row}>
         <TouchableOpacity
           style={styles.iconButton}
@@ -82,7 +83,11 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
           <Text style={styles.title}>{title}</Text>
           {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
         </View>
-        {rightSlot ? <View style={styles.rightSlot}>{rightSlot}</View> : <View style={styles.rightSpacer} />}
+        {rightSlot ? (
+          <View style={styles.rightSlot}>{rightSlot}</View>
+        ) : (
+          <View style={styles.rightSpacer} />
+        )}
       </View>
       {hintVisible && (
         <TouchableOpacity

@@ -236,140 +236,142 @@ const AboutScreen: React.FC = () => {
         >
           <View style={styles.headerInset} />
           <Animated.View entering={FadeInDown.delay(80).springify()} style={styles.heroCard}>
-          <View style={styles.heroRow}>
-            <Image source={require('../../assets/icon.png')} style={styles.heroIcon} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.appName}>DhanDiary</Text>
-              <Text style={styles.appSubtitle}>Smart Personal Finance Tracker</Text>
+            <View style={styles.heroRow}>
+              <Image source={require('../../assets/icon.png')} style={styles.heroIcon} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.appName}>DhanDiary</Text>
+                <Text style={styles.appSubtitle}>Smart Personal Finance Tracker</Text>
+              </View>
             </View>
-          </View>
-          <Text style={styles.heroCopy}>
-            Track incomes, expenses, and sync securely with our offline-first engine and instant OTA
-            updates.
-          </Text>
-          <TouchableOpacity
-            onPress={() => Linking.openURL(ELLOW_URL)}
-            activeOpacity={0.8}
-            style={styles.creditLineButton}
-          >
-            <Text style={styles.creditLineText}>
-              {creditLineSegments.prefix}
-              {creditLineSegments.highlight && (
-                <Text style={styles.creditLineHighlight}>{BRAND_NAME}</Text>
-              )}
-              {creditLineSegments.highlight && creditLineSegments.suffix}
+            <Text style={styles.heroCopy}>
+              Track incomes, expenses, and sync securely with our offline-first engine and instant
+              OTA updates.
             </Text>
-          </TouchableOpacity>
-        </Animated.View>
-
-        <Animated.View entering={FadeInDown.delay(140).springify()} style={styles.updateCard}>
-          <View style={styles.cardHeaderRow}>
-            <View>
-              <Text style={styles.cardTitle}>Stay Updated</Text>
-              <Text style={styles.cardSubtitle}>
-                Check for new features and apply the latest optimizations instantly.
-              </Text>
-            </View>
-            <View style={styles.cardIconWrap}>
-              <MaterialIcon name="system-update" size={22} color={colors.primary} />
-            </View>
-          </View>
-          <View style={styles.updateActions}>
             <TouchableOpacity
-              style={styles.primaryCta}
-              onPress={checkForUpdates}
-              activeOpacity={0.9}
+              onPress={() => Linking.openURL(ELLOW_URL)}
+              activeOpacity={0.8}
+              style={styles.creditLineButton}
             >
-              <MaterialIcon name="refresh" size={18} color={colors.white} />
-              <Text style={styles.primaryCtaText}>
-                {checking ? 'Checking…' : 'Check for Updates'}
+              <Text style={styles.creditLineText}>
+                {creditLineSegments.prefix}
+                {creditLineSegments.highlight && (
+                  <Text style={styles.creditLineHighlight}>{BRAND_NAME}</Text>
+                )}
+                {creditLineSegments.highlight && creditLineSegments.suffix}
               </Text>
-            </TouchableOpacity>
-            {updateAvailable && (
-              <TouchableOpacity
-                style={[styles.primaryCta, styles.secondaryCta]}
-                onPress={() => setShowUpdateModal(true)}
-                activeOpacity={0.9}
-              >
-                <MaterialIcon name="download" size={18} color={colors.primary} />
-                <Text style={[styles.primaryCtaText, { color: colors.primary }]}>Apply Update</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </Animated.View>
-
-        <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.infoCard}>
-          <Text style={styles.infoHeading}>Build details</Text>
-          <View style={styles.infoGrid}>
-            {infoTiles.map((tile) => {
-              const isUpdateTile = tile.label === 'Update ID';
-              if (isUpdateTile) {
-                return (
-                  <TouchableOpacity
-                    key={tile.label}
-                    style={[styles.infoTile, styles.infoTilePressable]}
-                    activeOpacity={0.85}
-                    onPress={handleShowFullId}
-                  >
-                    <Text style={styles.infoLabel}>{tile.label}</Text>
-                    <Text style={styles.infoValue}>{tile.value}</Text>
-                    <Text style={styles.infoHint}>Tap to view full ID</Text>
-                  </TouchableOpacity>
-                );
-              }
-              return (
-                <View key={tile.label} style={styles.infoTile}>
-                  <Text style={styles.infoLabel}>{tile.label}</Text>
-                  <Text style={styles.infoValue}>{tile.value}</Text>
-                </View>
-              );
-            })}
-          </View>
-        </Animated.View>
-
-        <Animated.View entering={FadeInDown.delay(260).springify()} style={styles.quickActions}>
-          <TouchableOpacity style={styles.quickAction} onPress={handleShare} activeOpacity={0.9}>
-            <View style={[styles.quickIcon, { backgroundColor: colors.primary }]}>
-              <MaterialIcon name="share" size={18} color={colors.white} />
-            </View>
-            <View>
-              <Text style={styles.quickTitle}>Share DhanDiary</Text>
-              <Text style={styles.quickSubtitle}>Invite friends in one tap</Text>
-            </View>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.quickAction}
-            onPress={openSupportEmail}
-            activeOpacity={0.9}
-          >
-            <View style={[styles.quickIcon, { backgroundColor: colors.accentGreen }]}>
-              <MaterialIcon name="mail" size={18} color={colors.white} />
-            </View>
-            <View>
-              <Text style={styles.quickTitle}>Contact Support</Text>
-              <Text style={styles.quickSubtitle}>We respond within 24 hours</Text>
-            </View>
-          </TouchableOpacity>
-        </Animated.View>
-
-        {failureCount >= 2 && (
-          <Animated.View entering={FadeInDown.delay(320).springify()} style={styles.retryCard}>
-            <MaterialIcon name="warning" size={20} color={colors.accentOrange} />
-            <View style={{ flex: 1, marginHorizontal: 12 }}>
-              <Text style={styles.retryTitle}>Something blocked your last update.</Text>
-              <Text style={styles.retrySubtitle}>Retry now or clear the retry state.</Text>
-            </View>
-            <TouchableOpacity style={styles.retryChip} onPress={fetchAndApplyUpdate}>
-              <Text style={styles.retryChipText}>{checking ? 'Retrying…' : 'Retry'}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.retryChip, styles.retryChipMuted]}
-              onPress={clearRetryState}
-            >
-              <Text style={[styles.retryChipText, { color: colors.muted }]}>Clear</Text>
             </TouchableOpacity>
           </Animated.View>
-        )}
+
+          <Animated.View entering={FadeInDown.delay(140).springify()} style={styles.updateCard}>
+            <View style={styles.cardHeaderRow}>
+              <View>
+                <Text style={styles.cardTitle}>Stay Updated</Text>
+                <Text style={styles.cardSubtitle}>
+                  Check for new features and apply the latest optimizations instantly.
+                </Text>
+              </View>
+              <View style={styles.cardIconWrap}>
+                <MaterialIcon name="system-update" size={22} color={colors.primary} />
+              </View>
+            </View>
+            <View style={styles.updateActions}>
+              <TouchableOpacity
+                style={styles.primaryCta}
+                onPress={checkForUpdates}
+                activeOpacity={0.9}
+              >
+                <MaterialIcon name="refresh" size={18} color={colors.white} />
+                <Text style={styles.primaryCtaText}>
+                  {checking ? 'Checking…' : 'Check for Updates'}
+                </Text>
+              </TouchableOpacity>
+              {updateAvailable && (
+                <TouchableOpacity
+                  style={[styles.primaryCta, styles.secondaryCta]}
+                  onPress={() => setShowUpdateModal(true)}
+                  activeOpacity={0.9}
+                >
+                  <MaterialIcon name="download" size={18} color={colors.primary} />
+                  <Text style={[styles.primaryCtaText, { color: colors.primary }]}>
+                    Apply Update
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </Animated.View>
+
+          <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.infoCard}>
+            <Text style={styles.infoHeading}>Build details</Text>
+            <View style={styles.infoGrid}>
+              {infoTiles.map((tile) => {
+                const isUpdateTile = tile.label === 'Update ID';
+                if (isUpdateTile) {
+                  return (
+                    <TouchableOpacity
+                      key={tile.label}
+                      style={[styles.infoTile, styles.infoTilePressable]}
+                      activeOpacity={0.85}
+                      onPress={handleShowFullId}
+                    >
+                      <Text style={styles.infoLabel}>{tile.label}</Text>
+                      <Text style={styles.infoValue}>{tile.value}</Text>
+                      <Text style={styles.infoHint}>Tap to view full ID</Text>
+                    </TouchableOpacity>
+                  );
+                }
+                return (
+                  <View key={tile.label} style={styles.infoTile}>
+                    <Text style={styles.infoLabel}>{tile.label}</Text>
+                    <Text style={styles.infoValue}>{tile.value}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          </Animated.View>
+
+          <Animated.View entering={FadeInDown.delay(260).springify()} style={styles.quickActions}>
+            <TouchableOpacity style={styles.quickAction} onPress={handleShare} activeOpacity={0.9}>
+              <View style={[styles.quickIcon, { backgroundColor: colors.primary }]}>
+                <MaterialIcon name="share" size={18} color={colors.white} />
+              </View>
+              <View>
+                <Text style={styles.quickTitle}>Share DhanDiary</Text>
+                <Text style={styles.quickSubtitle}>Invite friends in one tap</Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.quickAction}
+              onPress={openSupportEmail}
+              activeOpacity={0.9}
+            >
+              <View style={[styles.quickIcon, { backgroundColor: colors.accentGreen }]}>
+                <MaterialIcon name="mail" size={18} color={colors.white} />
+              </View>
+              <View>
+                <Text style={styles.quickTitle}>Contact Support</Text>
+                <Text style={styles.quickSubtitle}>We respond within 24 hours</Text>
+              </View>
+            </TouchableOpacity>
+          </Animated.View>
+
+          {failureCount >= 2 && (
+            <Animated.View entering={FadeInDown.delay(320).springify()} style={styles.retryCard}>
+              <MaterialIcon name="warning" size={20} color={colors.accentOrange} />
+              <View style={{ flex: 1, marginHorizontal: 12 }}>
+                <Text style={styles.retryTitle}>Something blocked your last update.</Text>
+                <Text style={styles.retrySubtitle}>Retry now or clear the retry state.</Text>
+              </View>
+              <TouchableOpacity style={styles.retryChip} onPress={fetchAndApplyUpdate}>
+                <Text style={styles.retryChipText}>{checking ? 'Retrying…' : 'Retry'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.retryChip, styles.retryChipMuted]}
+                onPress={clearRetryState}
+              >
+                <Text style={[styles.retryChipText, { color: colors.muted }]}>Clear</Text>
+              </TouchableOpacity>
+            </Animated.View>
+          )}
         </ScrollView>
       </Animated.View>
 

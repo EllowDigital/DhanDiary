@@ -361,92 +361,91 @@ const StatsScreen = () => {
       >
         <View style={styles.headerInset} />
         <Animated.View
-        style={[
-          styles.heroCard,
-          styles.sectionBlock,
-          { opacity: heroOpacity, transform: [{ translateY: heroTranslate }] },
-        ]}
-      >
-        <Text style={styles.headerOverline}>Overview</Text>
-        <Text style={styles.header}>Statistics</Text>
-        <Text style={styles.period}>{periodLabel}</Text>
-        <View style={styles.heroStatsRow}>
-          <View>
-            <Text style={styles.heroValue}>₹{stats.totalIn.toLocaleString('en-IN')}</Text>
-            <Text style={styles.heroHint}>Total income</Text>
+          style={[
+            styles.heroCard,
+            styles.sectionBlock,
+            { opacity: heroOpacity, transform: [{ translateY: heroTranslate }] },
+          ]}
+        >
+          <Text style={styles.headerOverline}>Overview</Text>
+          <Text style={styles.header}>Statistics</Text>
+          <Text style={styles.period}>{periodLabel}</Text>
+          <View style={styles.heroStatsRow}>
+            <View>
+              <Text style={styles.heroValue}>₹{stats.totalIn.toLocaleString('en-IN')}</Text>
+              <Text style={styles.heroHint}>Total income</Text>
+            </View>
+            <View style={heroBadgeStyle(netPositive)}>
+              <Text style={styles.heroBadgeText}>{netPositive ? 'Healthy flow' : 'Overspend'}</Text>
+            </View>
           </View>
-          <View style={heroBadgeStyle(netPositive)}>
-            <Text style={styles.heroBadgeText}>{netPositive ? 'Healthy flow' : 'Overspend'}</Text>
-          </View>
-        </View>
-        <View style={styles.heroDivider} />
-        <View style={styles.heroBottomRow}>
-          <View>
-            <Text style={styles.heroBottomLabel}>Net savings</Text>
-            <Text
-              style={[
-                styles.heroBottomValue,
-                { color: netPositive ? colors.accentGreen : colors.accentRed },
-              ]}
-            >
-              ₹{stats.net.toLocaleString('en-IN')}
-            </Text>
-          </View>
-          <View>
-            <Text style={styles.heroBottomLabel}>Expenses</Text>
-            <Text style={styles.heroBottomValue}>₹{stats.totalOut.toLocaleString('en-IN')}</Text>
-          </View>
-        </View>
-      </Animated.View>
-
-      <Animated.View
-        style={[styles.sectionBlock, { transform: [{ translateY: filterTranslate }] }]}
-      >
-        <Text style={styles.sectionLabel}>Timeframe</Text>
-        <View style={styles.filterRow}>
-          {FILTERS.map((f) => {
-            const isActive = filter === f;
-            return (
-              <Pressable
-                key={f}
-                style={[styles.filterPill, isActive && styles.filterPillActive]}
-                onPress={() => handleFilterPress(f)}
+          <View style={styles.heroDivider} />
+          <View style={styles.heroBottomRow}>
+            <View>
+              <Text style={styles.heroBottomLabel}>Net savings</Text>
+              <Text
+                style={[
+                  styles.heroBottomValue,
+                  { color: netPositive ? colors.accentGreen : colors.accentRed },
+                ]}
               >
-                <Text style={[styles.filterPillText, isActive && styles.filterPillTextActive]}>
-                  {f}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </Animated.View>
-
-      <View style={[styles.statsGrid, styles.sectionBlock]}>
-        {statCards.map((card, index) => (
-          <StatCard key={card.title} {...card} isLast={index === statCards.length - 1} />
-        ))}
-      </View>
-
-      <View style={[styles.quickStatsCard, styles.sectionBlock]}>
-        {quickStats.map((item) => (
-          <View key={item.label} style={styles.quickStatItem}>
-            <Text style={styles.quickStatLabel}>{item.label}</Text>
-            <Text style={styles.quickStatValue}>{item.value}</Text>
+                ₹{stats.net.toLocaleString('en-IN')}
+              </Text>
+            </View>
+            <View>
+              <Text style={styles.heroBottomLabel}>Expenses</Text>
+              <Text style={styles.heroBottomValue}>₹{stats.totalOut.toLocaleString('en-IN')}</Text>
+            </View>
           </View>
-        ))}
-      </View>
+        </Animated.View>
 
-      <View style={[styles.chartCard, styles.sectionBlock]}>
-        <Text style={styles.chartTitle}>Expense Breakdown</Text>
-        {renderPieChart()}
-      </View>
+        <Animated.View
+          style={[styles.sectionBlock, { transform: [{ translateY: filterTranslate }] }]}
+        >
+          <Text style={styles.sectionLabel}>Timeframe</Text>
+          <View style={styles.filterRow}>
+            {FILTERS.map((f) => {
+              const isActive = filter === f;
+              return (
+                <Pressable
+                  key={f}
+                  style={[styles.filterPill, isActive && styles.filterPillActive]}
+                  onPress={() => handleFilterPress(f)}
+                >
+                  <Text style={[styles.filterPillText, isActive && styles.filterPillTextActive]}>
+                    {f}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </Animated.View>
 
-      <View style={[styles.chartCard, styles.sectionBlock]}>
-        <Text style={styles.chartTitle}>Income vs. Expenses</Text>
-        {renderLineChart()}
-      </View>
+        <View style={[styles.statsGrid, styles.sectionBlock]}>
+          {statCards.map((card, index) => (
+            <StatCard key={card.title} {...card} isLast={index === statCards.length - 1} />
+          ))}
+        </View>
+
+        <View style={[styles.quickStatsCard, styles.sectionBlock]}>
+          {quickStats.map((item) => (
+            <View key={item.label} style={styles.quickStatItem}>
+              <Text style={styles.quickStatLabel}>{item.label}</Text>
+              <Text style={styles.quickStatValue}>{item.value}</Text>
+            </View>
+          ))}
+        </View>
+
+        <View style={[styles.chartCard, styles.sectionBlock]}>
+          <Text style={styles.chartTitle}>Expense Breakdown</Text>
+          {renderPieChart()}
+        </View>
+
+        <View style={[styles.chartCard, styles.sectionBlock]}>
+          <Text style={styles.chartTitle}>Income vs. Expenses</Text>
+          {renderLineChart()}
+        </View>
       </ScrollView>
-
     </SafeAreaView>
   );
 };

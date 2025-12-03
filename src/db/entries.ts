@@ -230,10 +230,10 @@ export const markEntrySynced = async (
 
   // If no explicit timestamp provided, preserve existing updated_at to avoid
   // falsely treating the row as newer during conflict resolution.
-  await db.run(
-    `UPDATE local_entries SET ${setClauses.join(', ')} WHERE local_id = ?`,
-    [...params, localId]
-  );
+  await db.run(`UPDATE local_entries SET ${setClauses.join(', ')} WHERE local_id = ?`, [
+    ...params,
+    localId,
+  ]);
   try {
     notifyEntriesChanged();
   } catch (e) {}

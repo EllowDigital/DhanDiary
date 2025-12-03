@@ -578,7 +578,9 @@ const HomeScreen: React.FC = () => {
                 </Svg>
 
                 <Animated.View style={[styles.heroBlob, styles.heroBlobLeft, heroBlobLeftStyle]} />
-                <Animated.View style={[styles.heroBlob, styles.heroBlobRight, heroBlobRightStyle]} />
+                <Animated.View
+                  style={[styles.heroBlob, styles.heroBlobRight, heroBlobRightStyle]}
+                />
 
                 <View style={styles.heroChipRow}>
                   <View style={styles.heroChip}>
@@ -587,11 +589,15 @@ const HomeScreen: React.FC = () => {
                       size={16}
                       color={colors.white}
                     />
-                    <Text style={styles.heroChipText}>{isOnline ? 'Live sync on' : 'Offline mode'}</Text>
+                    <Text style={styles.heroChipText}>
+                      {isOnline ? 'Live sync on' : 'Offline mode'}
+                    </Text>
                   </View>
                   <View style={[styles.heroChip, styles.heroChipLight]}>
                     <MaterialIcon name="schedule" size={16} color={colors.primary} />
-                    <Text style={[styles.heroChipText, styles.heroChipTextDark]}>{periodLabel}</Text>
+                    <Text style={[styles.heroChipText, styles.heroChipTextDark]}>
+                      {periodLabel}
+                    </Text>
                   </View>
                 </View>
 
@@ -614,11 +620,7 @@ const HomeScreen: React.FC = () => {
                     <Text style={styles.heroBalance}>₹{periodNet.toFixed(2)}</Text>
                   </View>
                   <View style={[styles.trendBadge, { backgroundColor: 'rgba(255,255,255,0.12)' }]}>
-                    <MaterialIcon
-                      name={heroTrendDetails.icon}
-                      size={18}
-                      color={colors.white}
-                    />
+                    <MaterialIcon name={heroTrendDetails.icon} size={18} color={colors.white} />
                     <Text style={[styles.trendText, { color: colors.white }]}>
                       {heroTrendDetails.label}
                     </Text>
@@ -665,12 +667,7 @@ const HomeScreen: React.FC = () => {
                       idx !== highlightCards.length - 1 && styles.quickStatDivider,
                     ]}
                   >
-                    <View
-                      style={[
-                        styles.quickStatIcon,
-                        { backgroundColor: `${card.tint}1A` },
-                      ]}
-                    >
+                    <View style={[styles.quickStatIcon, { backgroundColor: `${card.tint}1A` }]}>
                       <MaterialIcon name={card.icon as any} size={18} color={card.tint} />
                     </View>
                     <View style={styles.quickStatTextWrap}>
@@ -719,7 +716,9 @@ const HomeScreen: React.FC = () => {
                     <Text style={styles.cardTitle}>Cash intelligence</Text>
                     <Text style={styles.cardSubtitle}>Visualize income vs expense</Text>
                   </View>
-                  <TouchableOpacity onPress={() => setChartType(chartType === 'pie' ? 'bar' : 'pie')}>
+                  <TouchableOpacity
+                    onPress={() => setChartType(chartType === 'pie' ? 'bar' : 'pie')}
+                  >
                     <MaterialIcon
                       name={chartType === 'pie' ? 'bar-chart' : 'pie-chart'}
                       size={22}
