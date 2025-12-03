@@ -872,7 +872,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: spacing(2.5),
+    marginBottom: spacing(3),
+    position: 'relative',
+    zIndex: 2,
   },
   navIconButton: {
     width: 44,
@@ -904,9 +906,11 @@ const styles = StyleSheet.create({
   heroCard: {
     borderRadius: 28,
     padding: spacing(3),
+    marginTop: spacing(0.5),
     marginBottom: spacing(3),
     overflow: 'hidden',
     position: 'relative',
+    zIndex: 1,
   },
   heroBlob: {
     position: 'absolute',
@@ -925,7 +929,10 @@ const styles = StyleSheet.create({
   },
   heroChipRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    columnGap: spacing(1.25),
+    rowGap: spacing(1),
     marginBottom: spacing(2),
   },
   heroChip: {
@@ -936,9 +943,11 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: 'rgba(255,255,255,0.18)',
     gap: 8,
+    flexShrink: 1,
   },
   heroChipLight: {
     backgroundColor: colors.white,
+    marginLeft: 'auto',
   },
   heroChipText: {
     color: colors.white,

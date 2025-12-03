@@ -28,13 +28,13 @@ const TabBarButton = ({ children, onPress, accessibilityState }: Props) => {
         {
           scale: focusAnim.interpolate({
             inputRange: [0, 1],
-            outputRange: [0.7, 1],
+            outputRange: [0.85, 1],
           }),
         },
         {
           translateY: focusAnim.interpolate({
             inputRange: [0, 1],
-            outputRange: [12, 0],
+            outputRange: [10, 0],
           }),
         },
       ],
@@ -44,7 +44,7 @@ const TabBarButton = ({ children, onPress, accessibilityState }: Props) => {
 
   const contentTranslate = focusAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, -4],
+    outputRange: [0, -2],
   });
 
   return (
@@ -66,7 +66,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 6,
+    paddingVertical: 8,
   },
   pressed: {
     transform: [{ scale: 0.97 }],
@@ -78,15 +78,15 @@ const styles = StyleSheet.create({
   },
   cardBehind: {
     position: 'absolute',
-    width: 76,
-    height: 44,
-    borderRadius: 20,
-    backgroundColor: '#E2E8F0',
+    width: 64,
+    height: 40,
+    borderRadius: 18,
+    backgroundColor: 'rgba(37,99,235,0.12)',
     zIndex: 1,
     shadowColor: '#0F172A',
     shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 6,
+    shadowRadius: 12,
+    elevation: 5,
   },
 });
 
