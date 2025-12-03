@@ -22,6 +22,7 @@ import CategoryPickerModal from '../components/CategoryPickerModal';
 import { v4 as uuidv4 } from 'uuid';
 import { colors } from '../utils/design';
 import { ALLOWED_CATEGORIES, DEFAULT_CATEGORY, ensureCategory } from '../constants/categories';
+import ScreenHeader from '../components/ScreenHeader';
 
 import Animated, {
   FadeInDown,
@@ -199,6 +200,10 @@ const AddEntryScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.safe}>
+      <ScreenHeader
+        title={editingLocalId ? 'Edit entry' : 'Add entry'}
+        subtitle={subtitleLabel}
+      />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}

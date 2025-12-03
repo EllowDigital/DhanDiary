@@ -59,6 +59,7 @@ const BottomTabNavigator = () => {
       tabBarStyle,
       tabBarLabelStyle: labelStyle,
       tabBarItemStyle: itemStyle,
+      sceneContainerStyle: { backgroundColor: colors.background },
     }),
     [tabBarStyle]
   );

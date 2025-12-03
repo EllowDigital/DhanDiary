@@ -12,6 +12,7 @@ import {
   Alert,
   Modal,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text, Button } from '@rneui/themed';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Updates from 'expo-updates';
@@ -25,6 +26,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { colors } from '../utils/design';
 import getLatestShareLink from '../utils/shareLink';
+import ScreenHeader from '../components/ScreenHeader';
 
 const pkg = require('../../package.json');
 
@@ -221,9 +223,19 @@ const AboutScreen: React.FC = () => {
   }, []);
 
   return (
-    <Animated.View style={[styles.container, animatedFadeStyle]}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        <Animated.View entering={FadeInDown.delay(80).springify()} style={styles.heroCard}>
+    <SafeAreaView style={styles.safeArea}>
+      <ScreenHeader
+        title="About & Updates"
+        subtitle="Build info, release notes, and support"
+        showScrollHint={false}
+      />
+      <Animated.View style={[styles.container, animatedFadeStyle]}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
+          <View style={styles.headerInset} />
+          <Animated.View entering={FadeInDown.delay(80).springify()} style={styles.heroCard}>
           <View style={styles.heroRow}>
             <Image source={require('../../assets/icon.png')} style={styles.heroIcon} />
             <View style={{ flex: 1 }}>
@@ -358,7 +370,8 @@ const AboutScreen: React.FC = () => {
             </TouchableOpacity>
           </Animated.View>
         )}
-      </ScrollView>
+        </ScrollView>
+      </Animated.View>
 
       <Modal
         visible={showUpdateModal}
@@ -405,7 +418,7 @@ const AboutScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
-    </Animated.View>
+    </SafeAreaView>
   );
 };
 
@@ -419,17 +432,24 @@ const createStyles = (
   isCompact: boolean
 ) =>
   StyleSheet.create({
+    safeArea: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
     container: {
       flex: 1,
       backgroundColor: colors.background,
     },
     scrollContent: {
       paddingHorizontal: outerPadding,
-      paddingTop: outerPadding + 6,
+      paddingTop: outerPadding,
       paddingBottom: outerPadding,
       width: '100%',
       maxWidth: 640,
       alignSelf: 'center',
+    },
+    headerInset: {
+      height: Math.max(12, outerPadding * 0.35),
     },
     heroCard: {
       backgroundColor: colors.softCard,

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, FlatList, Dimensions, TouchableOpacity } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text, Button } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useEntries } from '../hooks/useEntries';
@@ -22,6 +23,7 @@ import Animated, {
   Easing,
   FadeInDown,
 } from 'react-native-reanimated';
+import ScreenHeader from '../components/ScreenHeader';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const scale = SCREEN_WIDTH / 390;
@@ -69,6 +71,9 @@ const CashInList = () => {
   const lastActivityLabel = summary.lastTimestamp
     ? new Date(summary.lastTimestamp).toLocaleDateString()
     : 'No activity';
+  const headerSubtitle = summary.count
+    ? `${summary.count} income entr${summary.count === 1 ? 'y' : 'ies'}`
+    : 'Track every income stream';
   const listVersion = useMemo(
     () =>
       entryView.sortedEntries
@@ -112,82 +117,85 @@ const CashInList = () => {
   };
 
   const renderHeader = () => (
-    <View style={styles.headerSection}>
-      <View style={styles.heroCard}>
-        <Text style={styles.heroOverline}>Cash In</Text>
-        <Text style={styles.heroTitle}>Income</Text>
-        <Text style={styles.heroSubtitle}>
-          ₹{summary.total.toLocaleString('en-IN')} total · {summary.count} item
-          {summary.count === 1 ? '' : 's'}
-        </Text>
-        <View style={styles.heroRow}>
-          <View style={styles.heroCol}>
-            <Text style={styles.heroLabel}>Average</Text>
-            <Text style={styles.heroValue}>₹{summary.avg.toFixed(0)}</Text>
+    <>
+      <View style={styles.headerInset} />
+      <View style={styles.headerSection}>
+        <View style={styles.heroCard}>
+          <Text style={styles.heroOverline}>Cash In</Text>
+          <Text style={styles.heroTitle}>Income</Text>
+          <Text style={styles.heroSubtitle}>
+            ₹{summary.total.toLocaleString('en-IN')} total · {summary.count} item
+            {summary.count === 1 ? '' : 's'}
+          </Text>
+          <View style={styles.heroRow}>
+            <View style={styles.heroCol}>
+              <Text style={styles.heroLabel}>Average</Text>
+              <Text style={styles.heroValue}>₹{summary.avg.toFixed(0)}</Text>
+            </View>
+            <View style={styles.heroCol}>
+              <Text style={styles.heroLabel}>Top source</Text>
+              <Text style={styles.heroValue}>{summary.topCategory}</Text>
+            </View>
+            <View style={[styles.heroCol, styles.heroColLast]}>
+              <Text style={styles.heroLabel}>Last income</Text>
+              <Text style={styles.heroValue}>{lastActivityLabel}</Text>
+            </View>
           </View>
-          <View style={styles.heroCol}>
-            <Text style={styles.heroLabel}>Top source</Text>
-            <Text style={styles.heroValue}>{summary.topCategory}</Text>
+        </View>
+
+        <View style={styles.quickGrid}>
+          {quickStats.map((stat, index) => (
+            <View
+              key={stat.label}
+              style={[styles.quickCard, (index + 1) % 2 === 0 && styles.quickCardEven]}
+            >
+              <Text style={styles.quickLabel}>{stat.label}</Text>
+              <Text style={styles.quickValue}>{stat.value}</Text>
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.pillSection}>
+          <Text style={styles.pillHeading}>Timeframe</Text>
+          <View style={styles.pillRow}>
+            {TIME_FILTERS.map((filter) => {
+              const active = timeFilter === filter.value;
+              return (
+                <TouchableOpacity
+                  key={filter.value}
+                  style={[styles.pill, active && styles.pillActive]}
+                  onPress={() => setTimeFilter(filter.value)}
+                >
+                  <Text style={[styles.pillText, active && styles.pillTextActive]}>
+                    {filter.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
-          <View style={[styles.heroCol, styles.heroColLast]}>
-            <Text style={styles.heroLabel}>Last income</Text>
-            <Text style={styles.heroValue}>{lastActivityLabel}</Text>
+        </View>
+
+        <View style={styles.pillSection}>
+          <Text style={styles.pillHeading}>Sort by</Text>
+          <View style={styles.pillRow}>
+            {SORT_OPTIONS.map((option) => {
+              const active = sortMode === option.value;
+              return (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[styles.pill, active && styles.pillActive]}
+                  onPress={() => setSortMode(option.value)}
+                >
+                  <Text style={[styles.pillText, active && styles.pillTextActive]}>
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
       </View>
-
-      <View style={styles.quickGrid}>
-        {quickStats.map((stat, index) => (
-          <View
-            key={stat.label}
-            style={[styles.quickCard, (index + 1) % 2 === 0 && styles.quickCardEven]}
-          >
-            <Text style={styles.quickLabel}>{stat.label}</Text>
-            <Text style={styles.quickValue}>{stat.value}</Text>
-          </View>
-        ))}
-      </View>
-
-      <View style={styles.pillSection}>
-        <Text style={styles.pillHeading}>Timeframe</Text>
-        <View style={styles.pillRow}>
-          {TIME_FILTERS.map((filter) => {
-            const active = timeFilter === filter.value;
-            return (
-              <TouchableOpacity
-                key={filter.value}
-                style={[styles.pill, active && styles.pillActive]}
-                onPress={() => setTimeFilter(filter.value)}
-              >
-                <Text style={[styles.pillText, active && styles.pillTextActive]}>
-                  {filter.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      </View>
-
-      <View style={styles.pillSection}>
-        <Text style={styles.pillHeading}>Sort by</Text>
-        <View style={styles.pillRow}>
-          {SORT_OPTIONS.map((option) => {
-            const active = sortMode === option.value;
-            return (
-              <TouchableOpacity
-                key={option.value}
-                style={[styles.pill, active && styles.pillActive]}
-                onPress={() => setSortMode(option.value)}
-              >
-                <Text style={[styles.pillText, active && styles.pillTextActive]}>
-                  {option.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      </View>
-    </View>
+    </>
   );
 
   const emptyComponent = !showLoading ? (
@@ -208,42 +216,49 @@ const CashInList = () => {
   ) : null;
 
   return (
-    <Animated.View style={[styles.container, animStyle]}>
-      <FlatList
-        data={entryView.sortedEntries}
-        extraData={listVersion + sortMode + timeFilter}
-        keyExtractor={(item) => item.local_id}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        ListHeaderComponent={renderHeader}
-        ListEmptyComponent={emptyComponent}
-        initialNumToRender={12}
-        maxToRenderPerBatch={12}
-        windowSize={15}
-        removeClippedSubviews={false}
-        renderItem={({ item, index }) => (
-          <Animated.View
-            entering={FadeInDown.delay(index * 40)
-              .springify()
-              .damping(14)}
-            style={styles.transactionWrapper}
-          >
-            <TransactionCard
-              item={item}
-              onEdit={() => handleEdit(item)}
-              onDelete={() => handleDelete(item.local_id)}
-            />
-          </Animated.View>
-        )}
-      />
-      <FullScreenSpinner visible={showLoading} />
-    </Animated.View>
+    <SafeAreaView style={styles.safeArea}>
+      <ScreenHeader title="Cash Inflow" subtitle={headerSubtitle} />
+      <Animated.View style={[styles.container, animStyle]}>
+        <FlatList
+          data={entryView.sortedEntries}
+          extraData={listVersion + sortMode + timeFilter}
+          keyExtractor={(item) => item.local_id}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          ListHeaderComponent={renderHeader}
+          ListEmptyComponent={emptyComponent}
+          initialNumToRender={12}
+          maxToRenderPerBatch={12}
+          windowSize={15}
+          removeClippedSubviews={false}
+          renderItem={({ item, index }) => (
+            <Animated.View
+              entering={FadeInDown.delay(index * 40)
+                .springify()
+                .damping(14)}
+              style={styles.transactionWrapper}
+            >
+              <TransactionCard
+                item={item}
+                onEdit={() => handleEdit(item)}
+                onDelete={() => handleDelete(item.local_id)}
+              />
+            </Animated.View>
+          )}
+        />
+        <FullScreenSpinner visible={showLoading} />
+      </Animated.View>
+    </SafeAreaView>
   );
 };
 
 export default CashInList;
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -251,7 +266,10 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: Math.round(20 * scale),
     paddingBottom: 140,
-    paddingTop: 10,
+    paddingTop: 0,
+  },
+  headerInset: {
+    height: Math.round(8 * scale),
   },
   headerSection: {
     marginBottom: 24,

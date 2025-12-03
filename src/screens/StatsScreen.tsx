@@ -11,6 +11,7 @@ import {
   Platform,
   Pressable,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
 import { useEntries } from '../hooks/useEntries';
 import { useAuth } from '../hooks/useAuth';
@@ -21,6 +22,7 @@ import { LineChart, PieChart } from 'react-native-chart-kit';
 import { colors, shadows } from '../utils/design';
 import { ensureCategory, FALLBACK_CATEGORY } from '../constants/categories';
 import { enableLegacyLayoutAnimations } from '../utils/layoutAnimation';
+import ScreenHeader from '../components/ScreenHeader';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const fontScale = PixelRatio.getFontScale();
@@ -346,12 +348,19 @@ const StatsScreen = () => {
   ];
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.scrollContent}
-      showsVerticalScrollIndicator={false}
-    >
-      <Animated.View
+    <SafeAreaView style={styles.safeArea}>
+      <ScreenHeader
+        title="Stats & Insights"
+        subtitle={`${filter} performance snapshot`}
+        showScrollHint={false}
+      />
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.headerInset} />
+        <Animated.View
         style={[
           styles.heroCard,
           styles.sectionBlock,
@@ -436,13 +445,19 @@ const StatsScreen = () => {
         <Text style={styles.chartTitle}>Income vs. Expenses</Text>
         {renderLineChart()}
       </View>
-    </ScrollView>
+      </ScrollView>
+
+    </SafeAreaView>
   );
 };
 
 export default StatsScreen;
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -450,6 +465,9 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 20,
     paddingBottom: 60,
+  },
+  headerInset: {
+    height: 8,
   },
   sectionBlock: {
     marginBottom: 20,

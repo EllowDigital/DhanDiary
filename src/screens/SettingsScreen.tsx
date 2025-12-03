@@ -23,6 +23,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '../context/ToastContext';
 import { colors, shadows } from '../utils/design';
+import ScreenHeader from '../components/ScreenHeader';
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 const sections = ['hero', 'quick', 'sync', 'danger'] as const;
@@ -163,10 +164,16 @@ const SettingsScreen = () => {
 
   return (
     <SafeAreaView style={styles.safe}>
+      <ScreenHeader
+        title="Settings"
+        subtitle="Manage account, sync, and privacy"
+        showScrollHint={false}
+      />
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.contentContainer}
       >
+        <View style={styles.headerInset} />
         <Animated.View style={[styles.heroCard, animatedStyle(0)]}>
           <View style={styles.heroHeader}>
             <View style={{ flex: 1 }}>
@@ -280,6 +287,9 @@ const createStyles = (padding: number, radius: number, fontScale: number) =>
     contentContainer: {
       padding: padding,
       paddingBottom: padding * 1.5,
+    },
+    headerInset: {
+      height: Math.max(12, padding * 0.5),
     },
     heroCard: {
       backgroundColor: colors.card,

@@ -6,12 +6,12 @@ import {
   Alert,
   ScrollView,
   Text,
-  SafeAreaView,
   LayoutAnimation,
   Platform,
   Animated,
   Easing,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Input, Button } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 
@@ -23,6 +23,7 @@ import { useToast } from '../context/ToastContext';
 import { useNavigation } from '@react-navigation/native';
 import { colors } from '../utils/design';
 import { enableLegacyLayoutAnimations } from '../utils/layoutAnimation';
+import ScreenHeader from '../components/ScreenHeader';
 
 if (Platform.OS === 'android') {
   enableLegacyLayoutAnimations();
@@ -348,10 +349,16 @@ const AccountManagementScreen = () => {
 
   return (
     <SafeAreaView style={styles.safe}>
+      <ScreenHeader
+        title="Account Center"
+        subtitle="Profile, security, and data controls"
+        showScrollHint={false}
+      />
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.contentContainer}
       >
+        <View style={styles.headerInset} />
         <Animated.View style={[styles.heroCard, animatedStyle(0)]}>
           <Text style={styles.heroTitle}>Account Center</Text>
           <Text style={styles.heroSubtitle}>
@@ -414,6 +421,9 @@ const styles = StyleSheet.create({
   contentContainer: {
     padding: 20,
     paddingBottom: 40,
+  },
+  headerInset: {
+    height: 12,
   },
   heroCard: {
     backgroundColor: colors.softCard,

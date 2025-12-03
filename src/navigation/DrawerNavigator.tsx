@@ -22,17 +22,29 @@ const Drawer = createDrawerNavigator();
 const DrawerNavigator = () => {
   const { width } = Dimensions.get('window');
   const drawerWidth = Math.min(360, Math.round(width * 0.78));
+  const isLargeScreen = width >= 768;
+  const drawerType = isLargeScreen ? 'permanent' : 'front';
+  const drawerOverlayColor = isLargeScreen ? 'transparent' : colors.overlay;
+  const swipeEdgeWidth = isLargeScreen ? 0 : 45;
 
   return (
     <Drawer.Navigator
       drawerContent={(props) => <CustomDrawerContent {...props} />}
       screenOptions={{
+        headerShown: false,
         headerStyle: { backgroundColor: colors.card, elevation: 0, shadowOpacity: 0 },
         headerTintColor: colors.text,
         drawerActiveTintColor: colors.primary,
         drawerInactiveTintColor: colors.muted,
         drawerActiveBackgroundColor: colors.primarySoft,
+        drawerType,
+        overlayColor: drawerOverlayColor,
+        swipeEdgeWidth,
+        drawerStatusBarAnimation: 'fade',
+        drawerHideStatusBarOnOpen: !isLargeScreen,
         drawerLabelStyle: { fontSize: 15, fontWeight: '600' as const, marginLeft: -12 },
+        drawerItemStyle: { borderRadius: 14, marginVertical: 4 },
+        drawerContentStyle: { paddingVertical: 10 },
         drawerStyle: {
           backgroundColor: colors.card,
           width: drawerWidth,
@@ -41,7 +53,7 @@ const DrawerNavigator = () => {
           borderRightWidth: 1,
           borderColor: colors.border,
         },
-        sceneStyle: { backgroundColor: colors.background },
+        sceneContainerStyle: { backgroundColor: colors.background },
       }}
     >
       {/* Dashboard Tabs */}
