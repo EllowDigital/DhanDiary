@@ -154,7 +154,7 @@ export const syncPending = async () => {
             it.local_id
           );
         }
-        const sql = `INSERT INTO cash_entries (user_id, type, amount, category, note, currency, created_at, updated_at, need_sync, client_id) VALUES ${placeholders.join(',')} ON CONFLICT (client_id) DO NOTHING RETURNING id, client_id, server_version`;
+        const sql = `INSERT INTO cash_entries (user_id, type, amount, category, note, currency, created_at, updated_at, need_sync, client_id) VALUES ${placeholders.join(',')} ON CONFLICT (client_id) DO NOTHING RETURNING id, client_id, server_version, updated_at`;
         const res = await safeQ(sql, values);
         if (res && res.length) {
           for (const r of res) {
@@ -163,7 +163,8 @@ export const syncPending = async () => {
               await markEntrySynced(
                 localId,
                 String(r.id),
-                typeof r.server_version === 'number' ? Number(r.server_version) : undefined
+                typeof r.server_version === 'number' ? Number(r.server_version) : undefined,
+                r.updated_at
               );
               pushed += 1;
             } catch (e) {
@@ -182,7 +183,7 @@ export const syncPending = async () => {
         try {
           const insertRes = await safeQ(
             `INSERT INTO cash_entries (user_id, type, amount, category, note, currency, created_at, updated_at, need_sync, client_id)
-               VALUES ($1, $2, $3::numeric, $4, $5, $6, $7::timestamptz, $8::timestamptz, false, $9) RETURNING id, server_version`,
+               VALUES ($1, $2, $3::numeric, $4, $5, $6, $7::timestamptz, $8::timestamptz, false, $9) RETURNING id, server_version, updated_at`,
             [
               it.user_id,
               it.type,
@@ -196,22 +197,29 @@ export const syncPending = async () => {
             ]
           );
           let remoteId = insertRes && insertRes[0] && insertRes[0].id ? insertRes[0].id : undefined;
+          let remoteUpdatedAt = insertRes && insertRes[0] ? insertRes[0].updated_at : undefined;
+          let remoteServerVersion =
+            insertRes && insertRes[0] && insertRes[0].server_version !== undefined
+              ? Number(insertRes[0].server_version)
+              : undefined;
           if (!remoteId) {
             const found = await safeQ(
-              `SELECT id, server_version FROM cash_entries WHERE client_id = $1 LIMIT 1`,
+              `SELECT id, server_version, updated_at FROM cash_entries WHERE client_id = $1 LIMIT 1`,
               [it.local_id]
             );
             if (found && found[0] && found[0].id) {
               remoteId = found[0].id;
+              remoteUpdatedAt = found[0].updated_at;
+              if (found[0].server_version !== undefined) {
+                remoteServerVersion = Number(found[0].server_version);
+              }
             }
           }
           if (remoteId) {
-            const sv =
-              insertRes && insertRes[0] && insertRes[0].server_version
-                ? Number(insertRes[0].server_version)
-                : undefined;
+            const sv = remoteServerVersion;
             try {
-              await markEntrySynced(it.local_id, String(remoteId), sv);
+              const syncedAt = remoteUpdatedAt || (insertRes && insertRes[0] && insertRes[0].updated_at);
+              await markEntrySynced(it.local_id, String(remoteId), sv, syncedAt);
               pushed += 1;
             } catch (e) {
               try {
@@ -249,7 +257,7 @@ export const syncPending = async () => {
       );
     }
 
-    const updateSql = `UPDATE cash_entries AS c SET amount = v.amount, type = v.type, category = v.category, note = v.note, currency = v.currency, updated_at = v.updated_at::timestamptz, need_sync = true FROM (VALUES ${rowPlaceholders.join(',')}) AS v(id, amount, type, category, note, currency, updated_at) WHERE c.id = v.id RETURNING c.id, server_version`;
+    const updateSql = `UPDATE cash_entries AS c SET amount = v.amount, type = v.type, category = v.category, note = v.note, currency = v.currency, updated_at = v.updated_at::timestamptz, need_sync = true FROM (VALUES ${rowPlaceholders.join(',')}) AS v(id, amount, type, category, note, currency, updated_at) WHERE c.id = v.id RETURNING c.id, c.server_version, c.updated_at`;
 
     // Batch updates (wrapped in transaction to keep consistency)
     try {
@@ -267,7 +275,8 @@ export const syncPending = async () => {
                 await markEntrySynced(
                   localId,
                   String(r.id),
-                  typeof r.server_version === 'number' ? Number(r.server_version) : undefined
+                  typeof r.server_version === 'number' ? Number(r.server_version) : undefined,
+                  r.updated_at
                 );
                 updated += 1;
               } catch (e) {}
@@ -281,7 +290,7 @@ export const syncPending = async () => {
       for (const u of updates) {
         try {
           const res = await safeQ(
-            `UPDATE cash_entries SET amount = $1::numeric, type = $2, category = $3, note = $4, currency = $5, updated_at = $6::timestamptz, need_sync = true WHERE id = $7 RETURNING id, server_version`,
+            `UPDATE cash_entries SET amount = $1::numeric, type = $2, category = $3, note = $4, currency = $5, updated_at = $6::timestamptz, need_sync = true WHERE id = $7 RETURNING id, server_version, updated_at`,
             [
               Number(u.amount),
               u.type,
@@ -296,7 +305,7 @@ export const syncPending = async () => {
             const sv =
               res[0].server_version !== undefined ? Number(res[0].server_version) : undefined;
             try {
-              await markEntrySynced(u.local_id, String(res[0].id), sv);
+              await markEntrySynced(u.local_id, String(res[0].id), sv, res[0].updated_at);
               updated += 1;
             } catch (e) {}
           }
@@ -437,7 +446,7 @@ export const pullRemote = async () => {
                        updated_at = $6::timestamptz,
                        need_sync = false
                  WHERE id = $7
-                 RETURNING id, server_version`,
+                 RETURNING id, server_version, updated_at`,
                 [
                   Number(localForDeleted.amount),
                   localForDeleted.type,
@@ -455,7 +464,12 @@ export const pullRemote = async () => {
                     ? Number(revivedRow.server_version)
                     : undefined;
                 try {
-                  await markEntrySynced(localForDeleted.local_id, String(revivedRow.id), sv);
+                  await markEntrySynced(
+                    localForDeleted.local_id,
+                    String(revivedRow.id),
+                    sv,
+                    revivedRow.updated_at
+                  );
                 } catch (e) {
                   try {
                     await queueLocalRemoteMapping(localForDeleted.local_id, String(r.id));
@@ -502,6 +516,41 @@ export const pullRemote = async () => {
           }
         }
         if (local && local.local_id) {
+          const pushLocalToRemote = async () => {
+            try {
+              const pushed = await Q(
+                `UPDATE cash_entries SET amount = $1::numeric, type = $2, category = $3, note = $4, currency = $5, updated_at = $6::timestamptz WHERE id = $7 RETURNING id, server_version, updated_at`,
+                [
+                  Number(local.amount),
+                  local.type,
+                  local.category,
+                  local.note || null,
+                  local.currency || 'INR',
+                  local.updated_at,
+                  r.id,
+                ]
+              );
+              const pushedRow = pushed && pushed[0];
+              if (pushedRow && pushedRow.id) {
+                try {
+                  await markEntrySynced(
+                    local.local_id,
+                    String(pushedRow.id),
+                    pushedRow.server_version !== undefined
+                      ? Number(pushedRow.server_version)
+                      : undefined,
+                    pushedRow.updated_at
+                  );
+                } catch (e) {}
+              }
+              merged += 1;
+              return true;
+            } catch (err) {
+              console.error('Failed to push local change to remote for', local.local_id, err);
+              return false;
+            }
+          };
+
           // If local explicitly needs sync, it's a local change not yet pushed
           if ((local as any).need_sync) {
             // If timestamps match, consider synced
@@ -509,7 +558,12 @@ export const pullRemote = async () => {
               new Date(local.updated_at || 0).getTime() === new Date(r.updated_at || 0).getTime()
             ) {
               try {
-                await markEntrySynced(local.local_id, String(r.id));
+                await markEntrySynced(
+                  local.local_id,
+                  String(r.id),
+                  typeof r.server_version === 'number' ? Number(r.server_version) : undefined,
+                  r.updated_at
+                );
               } catch (e) {}
               merged += 1;
               continue;
@@ -519,7 +573,7 @@ export const pullRemote = async () => {
             try {
               // Prefer updating the existing remote row (client-wins) instead of creating duplicates.
               const upd = await Q(
-                `UPDATE cash_entries SET amount = $1::numeric, type = $2, category = $3, note = $4, currency = $5, updated_at = $6::timestamptz WHERE id = $7 RETURNING id, server_version`,
+                `UPDATE cash_entries SET amount = $1::numeric, type = $2, category = $3, note = $4, currency = $5, updated_at = $6::timestamptz WHERE id = $7 RETURNING id, server_version, updated_at`,
                 [
                   Number(local.amount),
                   local.type,
@@ -535,7 +589,7 @@ export const pullRemote = async () => {
                 const sv =
                   upd[0].server_version !== undefined ? Number(upd[0].server_version) : undefined;
                 try {
-                  await markEntrySynced(local.local_id, String(newId), sv);
+                  await markEntrySynced(local.local_id, String(newId), sv, upd[0].updated_at);
                   merged += 1;
                 } catch (e) {}
               }
@@ -549,33 +603,35 @@ export const pullRemote = async () => {
             continue;
           }
 
-          // Compare timestamps to prefer latest
-          const localUpdated = new Date(local.updated_at || 0).getTime();
-          const remoteUpdated = new Date(r.updated_at || 0).getTime();
+          const remoteVersion =
+            typeof r.server_version === 'number' ? Number(r.server_version) : null;
+          const localVersion =
+            typeof local.server_version === 'number' ? Number(local.server_version) : null;
 
-          if (localUpdated > remoteUpdated) {
-            // Local is newer -> push local state to remote (client wins)
-            try {
-              await Q(
-                `UPDATE cash_entries SET amount = $1::numeric, type = $2, category = $3, note = $4, currency = $5, updated_at = $6::timestamptz WHERE id = $7`,
-                [
-                  Number(local.amount),
-                  local.type,
-                  local.category,
-                  local.note || null,
-                  local.currency || 'INR',
-                  local.updated_at,
-                  r.id,
-                ]
-              );
-              try {
-                await markEntrySynced(local.local_id, String(r.id));
-              } catch (e) {}
-              merged += 1;
-            } catch (err) {
-              console.error('Failed to push local change to remote for', local.local_id, err);
+          if (
+            remoteVersion !== null &&
+            localVersion !== null &&
+            remoteVersion > localVersion
+          ) {
+            // Remote copy is strictly newer; fall through to upsert.
+          } else {
+            if (
+              remoteVersion !== null &&
+              localVersion !== null &&
+              localVersion > remoteVersion
+            ) {
+              await pushLocalToRemote();
+              continue;
             }
-            continue;
+
+            // Compare timestamps to prefer latest when versions are equal or missing
+            const localUpdated = new Date(local.updated_at || 0).getTime();
+            const remoteUpdated = new Date(r.updated_at || 0).getTime();
+
+            if (localUpdated > remoteUpdated) {
+              await pushLocalToRemote();
+              continue;
+            }
           }
         }
 

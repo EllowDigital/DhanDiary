@@ -205,28 +205,35 @@ export const markEntryDeleted = async (localId: string) => {
 export const markEntrySynced = async (
   localId: string,
   remoteId?: string,
-  serverVersion?: number
+  serverVersion?: number,
+  syncedUpdatedAt?: string | null
 ) => {
   const db = await sqlite.open();
-  const now = new Date().toISOString();
+  const normalized = syncedUpdatedAt ? normalizeDate(syncedUpdatedAt) : null;
+  const setClauses: string[] = ['is_synced = 1', 'need_sync = 0'];
+  const params: any[] = [];
+
   if (remoteId) {
-    if (typeof serverVersion === 'number') {
-      await db.run(
-        'UPDATE local_entries SET is_synced = 1, need_sync = 0, remote_id = ?, server_version = ?, updated_at = ? WHERE local_id = ?',
-        [remoteId, serverVersion, now, localId]
-      );
-    } else {
-      await db.run(
-        'UPDATE local_entries SET is_synced = 1, need_sync = 0, remote_id = ?, updated_at = ? WHERE local_id = ?',
-        [remoteId, now, localId]
-      );
-    }
-  } else {
-    await db.run(
-      'UPDATE local_entries SET is_synced = 1, need_sync = 0, updated_at = ? WHERE local_id = ?',
-      [now, localId]
-    );
+    setClauses.push('remote_id = ?');
+    params.push(remoteId);
   }
+
+  if (typeof serverVersion === 'number' && !Number.isNaN(serverVersion)) {
+    setClauses.push('server_version = ?');
+    params.push(serverVersion);
+  }
+
+  if (normalized) {
+    setClauses.push('updated_at = ?');
+    params.push(normalized);
+  }
+
+  // If no explicit timestamp provided, preserve existing updated_at to avoid
+  // falsely treating the row as newer during conflict resolution.
+  await db.run(
+    `UPDATE local_entries SET ${setClauses.join(', ')} WHERE local_id = ?`,
+    [...params, localId]
+  );
   try {
     notifyEntriesChanged();
   } catch (e) {}
