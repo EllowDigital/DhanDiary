@@ -24,6 +24,7 @@ import Animated, {
   withTiming,
   Easing,
 } from 'react-native-reanimated';
+import Svg, { Defs, LinearGradient as SvgLinearGradient, Stop, Rect } from 'react-native-svg';
 import { colors } from '../utils/design';
 import getLatestShareLink from '../utils/shareLink';
 import ScreenHeader from '../components/ScreenHeader';
@@ -234,33 +235,45 @@ const AboutScreen: React.FC = () => {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
-          <View style={styles.headerInset} />
-          <Animated.View entering={FadeInDown.delay(80).springify()} style={styles.heroCard}>
-            <View style={styles.heroRow}>
-              <Image source={require('../../assets/icon.png')} style={styles.heroIcon} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.appName}>DhanDiary</Text>
-                <Text style={styles.appSubtitle}>Smart Personal Finance Tracker</Text>
+          <View style={styles.contentWrapper}>
+            <View style={styles.headerInset} />
+            <Animated.View entering={FadeInDown.delay(80).springify()} style={styles.heroCard}>
+              <Svg pointerEvents="none" style={StyleSheet.absoluteFill}>
+                <Defs>
+                  <SvgLinearGradient id="aboutHeroGradient" x1="0" y1="0" x2="1" y2="1">
+                    <Stop offset="0%" stopColor={colors.primary} stopOpacity={0.95} />
+                    <Stop offset="100%" stopColor={colors.secondary} stopOpacity={0.85} />
+                  </SvgLinearGradient>
+                </Defs>
+                <Rect width="100%" height="100%" fill="url(#aboutHeroGradient)" />
+              </Svg>
+              <View pointerEvents="none" style={styles.heroGlowOne} />
+              <View pointerEvents="none" style={styles.heroGlowTwo} />
+              <View style={styles.heroRow}>
+                <Image source={require('../../assets/icon.png')} style={styles.heroIcon} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.appName}>DhanDiary</Text>
+                  <Text style={styles.appSubtitle}>Smart Personal Finance Tracker</Text>
+                </View>
               </View>
-            </View>
-            <Text style={styles.heroCopy}>
-              Track incomes, expenses, and sync securely with our offline-first engine and instant
-              OTA updates.
-            </Text>
-            <TouchableOpacity
-              onPress={() => Linking.openURL(ELLOW_URL)}
-              activeOpacity={0.8}
-              style={styles.creditLineButton}
-            >
-              <Text style={styles.creditLineText}>
-                {creditLineSegments.prefix}
-                {creditLineSegments.highlight && (
-                  <Text style={styles.creditLineHighlight}>{BRAND_NAME}</Text>
-                )}
-                {creditLineSegments.highlight && creditLineSegments.suffix}
+              <Text style={styles.heroCopy}>
+                Track incomes, expenses, and sync securely with our offline-first engine and instant
+                OTA updates.
               </Text>
-            </TouchableOpacity>
-          </Animated.View>
+              <TouchableOpacity
+                onPress={() => Linking.openURL(ELLOW_URL)}
+                activeOpacity={0.8}
+                style={styles.creditLineButton}
+              >
+                <Text style={styles.creditLineText}>
+                  {creditLineSegments.prefix}
+                  {creditLineSegments.highlight && (
+                    <Text style={styles.creditLineHighlight}>{BRAND_NAME}</Text>
+                  )}
+                  {creditLineSegments.highlight && creditLineSegments.suffix}
+                </Text>
+              </TouchableOpacity>
+            </Animated.View>
 
           <Animated.View entering={FadeInDown.delay(140).springify()} style={styles.updateCard}>
             <View style={styles.cardHeaderRow}>
@@ -354,24 +367,25 @@ const AboutScreen: React.FC = () => {
             </TouchableOpacity>
           </Animated.View>
 
-          {failureCount >= 2 && (
-            <Animated.View entering={FadeInDown.delay(320).springify()} style={styles.retryCard}>
-              <MaterialIcon name="warning" size={20} color={colors.accentOrange} />
-              <View style={{ flex: 1, marginHorizontal: 12 }}>
-                <Text style={styles.retryTitle}>Something blocked your last update.</Text>
-                <Text style={styles.retrySubtitle}>Retry now or clear the retry state.</Text>
-              </View>
-              <TouchableOpacity style={styles.retryChip} onPress={fetchAndApplyUpdate}>
-                <Text style={styles.retryChipText}>{checking ? 'Retrying…' : 'Retry'}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.retryChip, styles.retryChipMuted]}
-                onPress={clearRetryState}
-              >
-                <Text style={[styles.retryChipText, { color: colors.muted }]}>Clear</Text>
-              </TouchableOpacity>
-            </Animated.View>
-          )}
+            {failureCount >= 2 && (
+              <Animated.View entering={FadeInDown.delay(320).springify()} style={styles.retryCard}>
+                <MaterialIcon name="warning" size={20} color={colors.accentOrange} />
+                <View style={{ flex: 1, marginHorizontal: 12 }}>
+                  <Text style={styles.retryTitle}>Something blocked your last update.</Text>
+                  <Text style={styles.retrySubtitle}>Retry now or clear the retry state.</Text>
+                </View>
+                <TouchableOpacity style={styles.retryChip} onPress={fetchAndApplyUpdate}>
+                  <Text style={styles.retryChipText}>{checking ? 'Retrying…' : 'Retry'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.retryChip, styles.retryChipMuted]}
+                  onPress={clearRetryState}
+                >
+                  <Text style={[styles.retryChipText, { color: colors.muted }]}>Clear</Text>
+                </TouchableOpacity>
+              </Animated.View>
+            )}
+          </View>
         </ScrollView>
       </Animated.View>
 
@@ -447,55 +461,80 @@ const createStyles = (
       paddingTop: outerPadding,
       paddingBottom: outerPadding,
       width: '100%',
-      maxWidth: 640,
+      alignItems: 'center',
+    },
+    contentWrapper: {
+      width: '100%',
+      maxWidth: 720,
       alignSelf: 'center',
     },
     headerInset: {
       height: Math.max(12, outerPadding * 0.35),
     },
     heroCard: {
-      backgroundColor: colors.softCard,
-      borderRadius: 28,
+      backgroundColor: colors.primary,
+      borderRadius: 32,
       padding: cardPadding,
       marginBottom: gap,
-      borderWidth: 1,
-      borderColor: colors.border,
       shadowColor: colors.text,
-      shadowOpacity: 0.08,
-      shadowRadius: 18,
-      shadowOffset: { width: 0, height: 10 },
-      elevation: 4,
-      maxWidth: isCompact ? undefined : 520,
+      shadowOpacity: 0.12,
+      shadowRadius: 22,
+      shadowOffset: { width: 0, height: 14 },
+      elevation: 6,
+      maxWidth: isCompact ? undefined : 560,
       alignSelf: isCompact ? 'stretch' : 'center',
       width: '100%',
+      overflow: 'hidden',
+    },
+    heroGlowOne: {
+      position: 'absolute',
+      width: 200,
+      height: 200,
+      borderRadius: 999,
+      backgroundColor: 'rgba(255,255,255,0.15)',
+      top: -60,
+      right: -30,
+      transform: [{ rotate: '-15deg' }],
+    },
+    heroGlowTwo: {
+      position: 'absolute',
+      width: 160,
+      height: 160,
+      borderRadius: 999,
+      backgroundColor: 'rgba(255,255,255,0.1)',
+      bottom: -40,
+      left: -20,
+      transform: [{ rotate: '25deg' }],
     },
     heroRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: isCompact ? 'column' : 'row',
+      alignItems: isCompact ? 'flex-start' : 'center',
       marginBottom: 16,
+      gap: isCompact ? 12 : 0,
     },
     heroIcon: {
       width: clamp(cardPadding * 4.2, 64, 88),
       height: clamp(cardPadding * 4.2, 64, 88),
       borderRadius: 20,
-      marginRight: 18,
+      marginRight: isCompact ? 0 : 18,
+      marginBottom: isCompact ? 6 : 0,
       resizeMode: 'cover',
     },
     appName: {
       fontSize: font(24),
       fontWeight: '800',
-      color: colors.text,
+      color: colors.white,
     },
     appSubtitle: {
       fontSize: font(14),
-      color: colors.subtleText,
+      color: 'rgba(255,255,255,0.85)',
       marginTop: 4,
       fontWeight: '600',
     },
     heroCopy: {
-      color: colors.subtleText,
-      lineHeight: 20,
-      fontSize: font(14),
+      color: 'rgba(255,255,255,0.92)',
+      lineHeight: 22,
+      fontSize: font(15),
     },
     creditLineButton: {
       marginTop: 18,
@@ -505,20 +544,20 @@ const createStyles = (
       paddingVertical: 8,
       borderRadius: 999,
       borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.surfaceMuted,
+      borderColor: 'rgba(255,255,255,0.35)',
+      backgroundColor: 'rgba(255,255,255,0.15)',
       alignItems: 'center',
       justifyContent: 'center',
     },
     creditLineText: {
-      color: colors.muted,
-      fontSize: font(12),
+      color: colors.white,
+      fontSize: font(13),
       fontWeight: '600',
       textAlign: 'center',
-      lineHeight: 18,
+      lineHeight: 20,
     },
     creditLineHighlight: {
-      color: colors.primary,
+      color: '#FFF4CC',
       fontWeight: '800',
     },
     updateCard: {
