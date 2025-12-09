@@ -13,6 +13,7 @@ import {
   Easing,
   Image,
 } from 'react-native';
+import type { ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
 import SimpleButtonGroup from '../components/SimpleButtonGroup';
@@ -359,12 +360,15 @@ const HomeScreen: React.FC = () => {
     propsForBackgroundLines: { strokeDasharray: '' },
   };
 
-  const responsiveContainerStyle = {
-    width: '100%',
-    maxWidth: maxContentWidth,
-    alignSelf: 'center' as const,
-    paddingHorizontal: horizontalPadding,
-  };
+  const responsiveContainerStyle = useMemo<ViewStyle>(
+    () => ({
+      width: '100%' as const,
+      maxWidth: maxContentWidth,
+      alignSelf: 'center',
+      paddingHorizontal: horizontalPadding,
+    }),
+    [maxContentWidth, horizontalPadding]
+  );
 
   // --- HANDLERS ---
   const handleOpenDrawer = () => {

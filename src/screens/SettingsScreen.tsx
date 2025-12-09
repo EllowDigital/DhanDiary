@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -10,6 +10,7 @@ import {
   useWindowDimensions,
   StatusBar,
 } from 'react-native';
+import type { ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, Text } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
@@ -44,13 +45,17 @@ const SettingsScreen = () => {
   const { width } = useWindowDimensions();
   const isTablet = width >= 768;
   const maxContentWidth = 700;
+  const horizontalPadding = isTablet ? spacing(4) : spacing(2.5);
 
-  const containerStyle = {
-    width: '100%',
-    maxWidth: maxContentWidth,
-    alignSelf: 'center' as const,
-    paddingHorizontal: isTablet ? spacing(4) : spacing(2.5),
-  };
+  const containerStyle = useMemo<ViewStyle>(
+    () => ({
+      width: '100%' as const,
+      maxWidth: maxContentWidth,
+      alignSelf: 'center',
+      paddingHorizontal: horizontalPadding,
+    }),
+    [horizontalPadding]
+  );
 
   // --- SAFE ANIMATION SETUP ---
   // Create an array of 6 Animated Values (enough for all sections + extras)
