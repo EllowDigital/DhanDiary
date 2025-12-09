@@ -10,6 +10,8 @@ import {
   LayoutAnimation,
   Platform,
   Pressable,
+  StatusBar,
+  UIManager,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
@@ -19,25 +21,28 @@ import { subscribeEntries } from '../utils/dbEvents';
 import dayjs from 'dayjs';
 import { getStartDateForFilter, getDaysCountForFilter } from '../utils/stats';
 import { LineChart, PieChart } from 'react-native-chart-kit';
-import { colors, shadows } from '../utils/design';
+import { colors, spacing, shadows } from '../utils/design';
 import { ensureCategory, FALLBACK_CATEGORY } from '../constants/categories';
-import { enableLegacyLayoutAnimations } from '../utils/layoutAnimation';
 import ScreenHeader from '../components/ScreenHeader';
+import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 
+// --- CONFIG ---
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const fontScale = PixelRatio.getFontScale();
 const font = (size: number) => size / fontScale;
 
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
 const hexToRgb = (hex: string) => {
-  const normalized = hex.replace('#', '');
-  const bigint = parseInt(normalized, 16);
-  const r = (bigint >> 16) & 255;
-  const g = (bigint >> 8) & 255;
-  const b = bigint & 255;
-  return `${r}, ${g}, ${b}`;
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result
+    ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}`
+    : '0, 0, 0';
 };
 
-const FILTERS = ['7D', '30D', 'This Month', 'This Year'];
+const FILTERS = ['7D', '30D', 'Month', 'Year'];
 const CHART_COLORS = [
   colors.primary,
   colors.accentGreen,
@@ -47,60 +52,60 @@ const CHART_COLORS = [
   colors.secondary,
 ];
 
-if (Platform.OS === 'android') {
-  enableLegacyLayoutAnimations();
-}
-
 const chartTextColor = hexToRgb(colors.text);
 
 const chartConfig = {
-  backgroundColor: colors.card,
+  backgroundColor: 'transparent',
   backgroundGradientFrom: colors.card,
   backgroundGradientTo: colors.card,
   decimalPlaces: 0,
-  color: (opacity = 1) => `rgba(${chartTextColor}, ${opacity})`,
-  style: {
-    borderRadius: 16,
+  color: (opacity = 1) => `rgba(${hexToRgb(colors.primary)}, ${opacity})`,
+  labelColor: (opacity = 1) => `rgba(${hexToRgb(colors.muted)}, ${opacity})`,
+  propsForDots: {
+    r: "4",
+    strokeWidth: "2",
+    stroke: colors.primary
+  },
+  propsForBackgroundLines: {
+    strokeDasharray: "", // solid lines
+    stroke: colors.border,
+    strokeOpacity: 0.4,
   },
 };
 
 const StatsScreen = () => {
   const { user, loading: authLoading } = useAuth();
   const { entries = [], isLoading, refetch } = useEntries(user?.id);
-  const heroOpacity = useRef(new Animated.Value(0)).current;
-  const heroTranslate = useRef(new Animated.Value(20)).current;
-  const filterTranslate = useRef(new Animated.Value(30)).current;
+  
+  // Animation Refs
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
 
-  // Subscribe to DB changes (including background syncs) so stats refresh
-  // when entries are inserted/updated by other parts of the app or sync.
-  useEffect(() => {
-    const unsub = subscribeEntries(() => {
-      try {
-        refetch();
-      } catch (e) {}
-    });
-    return () => unsub();
-  }, [refetch]);
   const [filter, setFilter] = useState('7D');
 
+  // Load Data & Animate
   useEffect(() => {
+    const unsub = subscribeEntries(() => {
+      try { refetch(); } catch (e) {}
+    });
+    
     Animated.parallel([
-      Animated.timing(heroOpacity, {
+      Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 350,
+        duration: 500,
         useNativeDriver: true,
       }),
-      Animated.spring(heroTranslate, {
+      Animated.spring(slideAnim, {
         toValue: 0,
         useNativeDriver: true,
-      }),
-      Animated.spring(filterTranslate, {
-        toValue: 0,
-        useNativeDriver: true,
+        damping: 15,
       }),
     ]).start();
-  }, [filterTranslate, heroOpacity, heroTranslate]);
 
+    return () => unsub();
+  }, [refetch]);
+
+  // --- DATA PROCESSING ---
   const filteredEntries = useMemo(() => {
     const startDate = getStartDateForFilter(filter);
     return entries.filter((e: any) => {
@@ -128,27 +133,22 @@ const StatsScreen = () => {
   const pieData = useMemo(() => {
     const expenseCategories = filteredEntries
       .filter((e) => e.type === 'out')
-      .reduce(
-        (acc, e) => {
-          const category = ensureCategory(e.category);
-          const amount = Number(e.amount) || 0;
-          acc[category] = (acc[category] || 0) + amount;
-          return acc;
-        },
-        {} as { [key: string]: number }
-      );
+      .reduce((acc, e) => {
+        const category = ensureCategory(e.category);
+        const amount = Number(e.amount) || 0;
+        acc[category] = (acc[category] || 0) + amount;
+        return acc;
+      }, {} as { [key: string]: number });
 
-    const sortedData = Object.entries(expenseCategories)
+    return Object.entries(expenseCategories)
       .map(([name, population], index) => ({
         name,
         population,
         color: CHART_COLORS[index % CHART_COLORS.length],
-        legendFontColor: colors.muted,
-        legendFontSize: font(15),
+        legendFontColor: colors.text,
+        legendFontSize: 12,
       }))
       .sort((a, b) => b.population - a.population);
-
-    return sortedData.length > 0 ? sortedData : [];
   }, [filteredEntries]);
 
   const seriesData = useMemo(() => {
@@ -158,28 +158,26 @@ const StatsScreen = () => {
     const indexByKey = new Map<string, number>();
     const now = dayjs();
 
-    if (filter === 'This Year') {
+    if (filter === 'Year') {
       for (let i = 0; i < 12; i++) {
         const monthLabel = now.month(i).format('MMM');
         labels.push(monthLabel);
-        inData.push(0);
-        outData.push(0);
+        inData.push(0); outData.push(0);
         indexByKey.set(monthLabel, i);
       }
     } else {
       const startDate = getStartDateForFilter(filter, now);
       const days = getDaysCountForFilter(filter, now);
-      const maxLabels = 10;
+      const maxLabels = 7; // Reduce labels for mobile
       const step = Math.max(1, Math.ceil(days / maxLabels));
-      const displayFormat = days > 15 ? 'DD' : 'DD MMM';
+      const displayFormat = days > 15 ? 'D MMM' : 'ddd';
 
       for (let i = 0; i < days; i++) {
         const date = startDate.add(i, 'day');
         const labelKey = date.format('YYYY-MM-DD');
         const labelText = i % step === 0 ? date.format(displayFormat) : '';
         labels.push(labelText);
-        inData.push(0);
-        outData.push(0);
+        inData.push(0); outData.push(0);
         indexByKey.set(labelKey, i);
       }
     }
@@ -187,15 +185,11 @@ const StatsScreen = () => {
     filteredEntries.forEach((entry: any) => {
       const rawDate = dayjs(entry.date || entry.created_at);
       const amount = Number(entry.amount) || 0;
-      const key = filter === 'This Year' ? rawDate.format('MMM') : rawDate.format('YYYY-MM-DD');
+      const key = filter === 'Year' ? rawDate.format('MMM') : rawDate.format('YYYY-MM-DD');
       const targetIndex = indexByKey.get(key);
-      if (targetIndex === undefined) {
-        return;
-      }
-      if (entry.type === 'in') {
-        inData[targetIndex] += amount;
-      } else {
-        outData[targetIndex] += amount;
+      if (targetIndex !== undefined) {
+        if (entry.type === 'in') inData[targetIndex] += amount;
+        else outData[targetIndex] += amount;
       }
     });
 
@@ -205,38 +199,22 @@ const StatsScreen = () => {
         {
           data: inData,
           color: (opacity = 1) => `rgba(${hexToRgb(colors.accentGreen)}, ${opacity})`,
-          strokeWidth: 2,
+          strokeWidth: 3,
         },
         {
           data: outData,
           color: (opacity = 1) => `rgba(${hexToRgb(colors.accentRed)}, ${opacity})`,
-          strokeWidth: 2,
+          strokeWidth: 3,
         },
       ],
+      legend: ['Income', 'Expense'] 
     };
   }, [filteredEntries, filter]);
 
-  const daysInView = useMemo(() => {
-    return getDaysCountForFilter(filter, dayjs());
-  }, [filter]);
-
-  const averageSpend = useMemo(() => {
-    const safeDays = Math.max(daysInView, 1);
-    return stats.totalOut / safeDays;
-  }, [stats.totalOut, daysInView]);
-
+  // --- DERIVED METRICS ---
+  const daysInView = getDaysCountForFilter(filter, dayjs());
+  const averageSpend = stats.totalOut / Math.max(daysInView, 1);
   const topCategory = pieData[0]?.name || FALLBACK_CATEGORY;
-  const periodLabel = useMemo(() => {
-    switch (filter) {
-      case '7D':
-        return 'Last 7 days';
-      case '30D':
-        return 'Last 30 days';
-      default:
-        return filter;
-    }
-  }, [filter]);
-
   const netPositive = stats.net >= 0;
 
   const handleFilterPress = (nextFilter: string) => {
@@ -253,159 +231,24 @@ const StatsScreen = () => {
     );
   }
 
-  const StatCard = ({
-    title,
-    value,
-    color,
-    hint,
-    isLast,
-  }: {
-    title: string;
-    value: number;
-    color: string;
-    hint: string;
-    isLast?: boolean;
-  }) => (
-    <View style={[styles.statCard, isLast && styles.statCardLast]}>
-      <View style={[styles.statBadge, { backgroundColor: `${color}20` }]}>
-        <View style={[styles.dot, { backgroundColor: color }]} />
-      </View>
-      <Text style={styles.statTitle}>{title}</Text>
-      <Text style={[styles.statValue, { color }]}>₹{value.toLocaleString('en-IN')}</Text>
-      <Text style={styles.statHint}>{hint}</Text>
-    </View>
-  );
-
-  const renderPieChart = () => {
-    if (!pieData.length) {
-      return <Text style={styles.noDataText}>No expense data for this period.</Text>;
-    }
-    try {
-      return (
-        <PieChart
-          data={pieData}
-          width={SCREEN_WIDTH - 64}
-          height={220}
-          chartConfig={chartConfig}
-          accessor={'population'}
-          backgroundColor={'transparent'}
-          paddingLeft={'15'}
-          absolute
-        />
-      );
-    } catch (error) {
-      return <Text style={styles.noDataText}>Error rendering chart.</Text>;
-    }
-  };
-
-  const renderLineChart = () => {
-    if (
-      !seriesData.labels.length ||
-      (!seriesData.datasets[0].data.some((d) => d > 0) &&
-        !seriesData.datasets[1].data.some((d) => d > 0))
-    ) {
-      return <Text style={styles.noDataText}>No income or expense data for this period.</Text>;
-    }
-    try {
-      return (
-        <LineChart
-          data={seriesData}
-          width={SCREEN_WIDTH - 48}
-          height={280}
-          chartConfig={chartConfig}
-          style={styles.chartStyle}
-          // shorten x-axis labels and keep spacing predictable
-          formatXLabel={(label) => (typeof label === 'string' ? label : String(label))}
-          withInnerLines={false}
-          withOuterLines={false}
-        />
-      );
-    } catch (error) {
-      return <Text style={styles.noDataText}>Error rendering chart.</Text>;
-    }
-  };
-
-  const heroBadgeStyle = (positive: boolean) => ({
-    backgroundColor: positive ? colors.accentGreen : colors.accentRed,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
-  });
-
-  const quickStats = [
-    { label: 'Avg daily spend', value: `₹${averageSpend.toFixed(0)}` },
-    { label: 'Entries logged', value: filteredEntries.length.toString() },
-    { label: 'Top category', value: topCategory },
-  ];
-
-  const statCards = [
-    { title: 'Total Income', value: stats.totalIn, color: colors.accentGreen, hint: 'Cash in' },
-    { title: 'Total Expenses', value: stats.totalOut, color: colors.accentRed, hint: 'Cash out' },
-    {
-      title: 'Net Savings',
-      value: stats.net,
-      color: netPositive ? colors.primary : colors.accentRed,
-      hint: netPositive ? 'Positive flow' : 'Needs attention',
-    },
-  ];
-
   return (
     <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       <ScreenHeader
-        title="Stats & Insights"
-        subtitle={`${filter} performance snapshot`}
+        title="Analytics"
+        subtitle="Financial health overview"
         showScrollHint={false}
       />
+      
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.headerInset} />
-        <Animated.View
-          style={[
-            styles.heroCard,
-            styles.sectionBlock,
-            { opacity: heroOpacity, transform: [{ translateY: heroTranslate }] },
-          ]}
-        >
-          <Text style={styles.headerOverline}>Overview</Text>
-          <Text style={styles.header}>Statistics</Text>
-          <Text style={styles.period}>{periodLabel}</Text>
-          <View style={styles.heroStatsRow}>
-            <View>
-              <Text style={styles.heroValue}>₹{stats.totalIn.toLocaleString('en-IN')}</Text>
-              <Text style={styles.heroHint}>Total income</Text>
-            </View>
-            <View style={heroBadgeStyle(netPositive)}>
-              <Text style={styles.heroBadgeText}>{netPositive ? 'Healthy flow' : 'Overspend'}</Text>
-            </View>
-          </View>
-          <View style={styles.heroDivider} />
-          <View style={styles.heroBottomRow}>
-            <View>
-              <Text style={styles.heroBottomLabel}>Net savings</Text>
-              <Text
-                style={[
-                  styles.heroBottomValue,
-                  { color: netPositive ? colors.accentGreen : colors.accentRed },
-                ]}
-              >
-                ₹{stats.net.toLocaleString('en-IN')}
-              </Text>
-            </View>
-            <View>
-              <Text style={styles.heroBottomLabel}>Expenses</Text>
-              <Text style={styles.heroBottomValue}>₹{stats.totalOut.toLocaleString('en-IN')}</Text>
-            </View>
-          </View>
-        </Animated.View>
-
-        <Animated.View
-          style={[styles.sectionBlock, { transform: [{ translateY: filterTranslate }] }]}
-        >
-          <Text style={styles.sectionLabel}>Timeframe</Text>
-          <View style={styles.filterRow}>
+        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+          
+          {/* FILTER TABS */}
+          <View style={styles.filterContainer}>
             {FILTERS.map((f) => {
               const isActive = filter === f;
               return (
@@ -414,39 +257,125 @@ const StatsScreen = () => {
                   style={[styles.filterPill, isActive && styles.filterPillActive]}
                   onPress={() => handleFilterPress(f)}
                 >
-                  <Text style={[styles.filterPillText, isActive && styles.filterPillTextActive]}>
+                  <Text style={[styles.filterText, isActive && styles.filterTextActive]}>
                     {f}
                   </Text>
                 </Pressable>
               );
             })}
           </View>
-        </Animated.View>
 
-        <View style={[styles.statsGrid, styles.sectionBlock]}>
-          {statCards.map((card, index) => (
-            <StatCard key={card.title} {...card} isLast={index === statCards.length - 1} />
-          ))}
-        </View>
-
-        <View style={[styles.quickStatsCard, styles.sectionBlock]}>
-          {quickStats.map((item) => (
-            <View key={item.label} style={styles.quickStatItem}>
-              <Text style={styles.quickStatLabel}>{item.label}</Text>
-              <Text style={styles.quickStatValue}>{item.value}</Text>
+          {/* HERO STATS */}
+          <View style={styles.heroCard}>
+            <View style={styles.heroTop}>
+              <View>
+                <Text style={styles.heroLabel}>Net Balance</Text>
+                <Text style={[
+                  styles.heroValue, 
+                  { color: netPositive ? colors.accentGreen : colors.accentRed }
+                ]}>
+                  {netPositive ? '+' : ''}₹{Math.abs(stats.net).toLocaleString()}
+                </Text>
+              </View>
+              <View style={[styles.trendBadge, { backgroundColor: netPositive ? '#DCFCE7' : '#FEE2E2' }]}>
+                <MaterialIcon 
+                  name={netPositive ? 'trending-up' : 'trending-down'} 
+                  size={18} 
+                  color={netPositive ? colors.accentGreen : colors.accentRed} 
+                />
+                <Text style={[styles.trendText, { color: netPositive ? colors.accentGreen : colors.accentRed }]}>
+                  {netPositive ? 'Surplus' : 'Deficit'}
+                </Text>
+              </View>
             </View>
-          ))}
-        </View>
 
-        <View style={[styles.chartCard, styles.sectionBlock]}>
-          <Text style={styles.chartTitle}>Expense Breakdown</Text>
-          {renderPieChart()}
-        </View>
+            <View style={styles.heroDivider} />
 
-        <View style={[styles.chartCard, styles.sectionBlock]}>
-          <Text style={styles.chartTitle}>Income vs. Expenses</Text>
-          {renderLineChart()}
-        </View>
+            <View style={styles.heroRow}>
+              <View style={styles.heroCol}>
+                <Text style={styles.colLabel}>Income</Text>
+                <Text style={styles.colValue}>₹{stats.totalIn.toLocaleString()}</Text>
+              </View>
+              <View style={[styles.heroCol, styles.heroColRight]}>
+                <Text style={styles.colLabel}>Expense</Text>
+                <Text style={styles.colValue}>₹{stats.totalOut.toLocaleString()}</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* QUICK STATS ROW */}
+          <View style={styles.quickStatsContainer}>
+            <View style={styles.quickStatCard}>
+              <MaterialIcon name="receipt-long" size={20} color={colors.primary} />
+              <Text style={styles.quickStatValue}>{filteredEntries.length}</Text>
+              <Text style={styles.quickStatLabel}>Entries</Text>
+            </View>
+            <View style={styles.quickStatCard}>
+              <MaterialIcon name="speed" size={20} color={colors.accentOrange} />
+              <Text style={styles.quickStatValue}>₹{averageSpend.toFixed(0)}</Text>
+              <Text style={styles.quickStatLabel}>Daily Avg</Text>
+            </View>
+            <View style={styles.quickStatCard}>
+              <MaterialIcon name="category" size={20} color={colors.secondary} />
+              <Text style={styles.quickStatValue} numberOfLines={1}>{topCategory}</Text>
+              <Text style={styles.quickStatLabel}>Top Category</Text>
+            </View>
+          </View>
+
+          {/* LINE CHART */}
+          <View style={styles.chartCard}>
+            <View style={styles.cardHeader}>
+              <Text style={styles.cardTitle}>Cash Flow Trend</Text>
+              <MaterialIcon name="show-chart" size={20} color={colors.muted} />
+            </View>
+            
+            {seriesData.datasets[0].data.some(d => d > 0) || seriesData.datasets[1].data.some(d => d > 0) ? (
+              <LineChart
+                data={seriesData}
+                width={SCREEN_WIDTH - 64} // Responsive width
+                height={220}
+                chartConfig={chartConfig}
+                bezier
+                style={styles.chartStyle}
+                withDots={true}
+                withShadow={false}
+                yAxisLabel="₹"
+                yAxisInterval={1000}
+              />
+            ) : (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyText}>No data available for this period</Text>
+              </View>
+            )}
+          </View>
+
+          {/* PIE CHART */}
+          <View style={styles.chartCard}>
+            <View style={styles.cardHeader}>
+              <Text style={styles.cardTitle}>Spending Breakdown</Text>
+              <MaterialIcon name="pie-chart" size={20} color={colors.muted} />
+            </View>
+            
+            {pieData.length > 0 ? (
+              <PieChart
+                data={pieData}
+                width={SCREEN_WIDTH - 64}
+                height={220}
+                chartConfig={chartConfig}
+                accessor="population"
+                backgroundColor="transparent"
+                paddingLeft="0"
+                absolute={false}
+                center={[10, 0]}
+              />
+            ) : (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyText}>No expenses recorded</Text>
+              </View>
+            )}
+          </View>
+
+        </Animated.View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -461,211 +390,181 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    backgroundColor: colors.background,
   },
   scrollContent: {
-    padding: 20,
-    paddingBottom: 60,
-  },
-  headerInset: {
-    height: 8,
-  },
-  sectionBlock: {
-    marginBottom: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 40,
+    paddingTop: 10,
   },
   centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  headerOverline: {
-    fontSize: font(12),
-    textTransform: 'uppercase',
-    color: colors.muted,
-    letterSpacing: 1,
-  },
-  header: {
-    fontSize: font(32),
-    fontWeight: '700',
-    color: colors.text,
-  },
-  period: {
-    fontSize: font(16),
-    color: colors.muted,
-    marginTop: 4,
-  },
-  heroCard: {
-    backgroundColor: colors.card,
-    borderRadius: 24,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadows.large,
-  },
-  heroStatsRow: {
+  
+  /* FILTERS */
+  filterContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    backgroundColor: colors.card,
+    borderRadius: 14,
+    padding: 4,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  filterPill: {
+    flex: 1,
+    paddingVertical: 8,
     alignItems: 'center',
-    marginTop: 16,
+    borderRadius: 10,
+  },
+  filterPillActive: {
+    backgroundColor: colors.primary,
+    shadowColor: colors.primary,
+    shadowOpacity: 0.2,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  filterText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.muted,
+  },
+  filterTextActive: {
+    color: 'white',
+  },
+
+  /* HERO CARD */
+  heroCard: {
+    backgroundColor: colors.card,
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: colors.text,
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  heroTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  heroLabel: {
+    fontSize: 13,
+    color: colors.muted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    fontWeight: '600',
+    marginBottom: 4,
   },
   heroValue: {
-    fontSize: font(28),
+    fontSize: 28,
+    fontWeight: '800',
+  },
+  trendBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    gap: 4,
+  },
+  trendText: {
+    fontSize: 12,
     fontWeight: '700',
-    color: colors.text,
-  },
-  heroHint: {
-    fontSize: font(14),
-    color: colors.muted,
-    marginTop: 4,
-  },
-  heroBadgeText: {
-    color: colors.white,
-    fontWeight: '600',
   },
   heroDivider: {
     height: 1,
     backgroundColor: colors.border,
-    marginVertical: 18,
+    marginVertical: 16,
   },
-  heroBottomRow: {
+  heroRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
   },
-  heroBottomLabel: {
-    fontSize: font(13),
+  heroCol: {
+    flex: 1,
+  },
+  heroColRight: {
+    alignItems: 'flex-end',
+  },
+  colLabel: {
+    fontSize: 12,
     color: colors.muted,
+    marginBottom: 2,
   },
-  heroBottomValue: {
-    fontSize: font(20),
+  colValue: {
+    fontSize: 16,
     fontWeight: '700',
     color: colors.text,
-    marginTop: 2,
   },
-  sectionLabel: {
-    fontSize: font(14),
-    color: colors.muted,
-    marginBottom: 10,
-  },
-  filterRow: {
+
+  /* QUICK STATS */
+  quickStatsContainer: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 20,
   },
-  filterPill: {
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginRight: 10,
-    marginBottom: 10,
-  },
-  filterPillActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  filterPillText: {
-    color: colors.muted,
-    fontWeight: '600',
-    fontSize: font(13),
-  },
-  filterPillTextActive: {
-    color: colors.white,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  statCard: {
+  quickStatCard: {
     flex: 1,
     backgroundColor: colors.card,
-    padding: 16,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginRight: 12,
-    ...shadows.small,
-  },
-  statCardLast: {
-    marginRight: 0,
-  },
-  statBadge: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    justifyContent: 'center',
+    padding: 12,
+    borderRadius: 16,
     alignItems: 'center',
-    marginBottom: 12,
-  },
-  dot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  statTitle: {
-    fontSize: font(13),
-    color: colors.muted,
-    fontWeight: '600',
-    marginBottom: 6,
-  },
-  statValue: {
-    fontSize: font(20),
-    fontWeight: '700',
-    color: colors.text,
-  },
-  statHint: {
-    fontSize: font(12),
-    color: colors.muted,
-    marginTop: 4,
-  },
-  quickStatsCard: {
-    backgroundColor: colors.card,
-    borderRadius: 20,
+    justifyContent: 'center',
     borderWidth: 1,
     borderColor: colors.border,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 18,
-    paddingHorizontal: 16,
-    ...shadows.small,
-  },
-  quickStatItem: {
-    flex: 1,
-    paddingHorizontal: 6,
-  },
-  quickStatLabel: {
-    color: colors.muted,
-    fontSize: font(12),
-    marginBottom: 6,
   },
   quickStatValue: {
+    fontSize: 15,
+    fontWeight: '700',
     color: colors.text,
-    fontSize: font(16),
-    fontWeight: '600',
+    marginTop: 6,
+    marginBottom: 2,
   },
+  quickStatLabel: {
+    fontSize: 11,
+    color: colors.muted,
+  },
+
+  /* CHARTS */
   chartCard: {
     backgroundColor: colors.card,
-    borderRadius: 24,
-    padding: 20,
-    alignItems: 'center',
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 20,
     borderWidth: 1,
     borderColor: colors.border,
-    ...shadows.small,
+    alignItems: 'center',
   },
-  chartTitle: {
-    fontSize: font(16),
-    fontWeight: '600',
+  cardHeader: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingHorizontal: 4,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
     color: colors.text,
-    alignSelf: 'flex-start',
-    marginBottom: 14,
-  },
-  noDataText: {
-    textAlign: 'center',
-    paddingVertical: 40,
-    color: colors.muted,
-    fontSize: font(14),
   },
   chartStyle: {
-    marginVertical: 8,
     borderRadius: 16,
+    paddingRight: 0,
+    paddingLeft: 0,
+  },
+  emptyState: {
+    height: 150,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyText: {
+    color: colors.muted,
+    fontStyle: 'italic',
   },
 });

@@ -9,6 +9,10 @@ import {
   ScrollView,
   TouchableOpacity,
   LayoutAnimation,
+  Platform,
+  UIManager,
+  Animated,
+  StatusBar
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, Button, Input } from '@rneui/themed';
@@ -23,232 +27,137 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useToast } from '../context/ToastContext';
 import runInBackground from '../utils/background';
 import { getEntryByLocalId } from '../db/entries';
-import { Animated as RNAnimated } from 'react-native';
 import useDelayedLoading from '../hooks/useDelayedLoading';
 import FullScreenSpinner from '../components/FullScreenSpinner';
 import { colors, shadows, spacing } from '../utils/design';
 import { DEFAULT_CATEGORY, FALLBACK_CATEGORY, ensureCategory } from '../constants/categories';
 import ScreenHeader from '../components/ScreenHeader';
 
+// Enable LayoutAnimation for Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const scale = SCREEN_WIDTH / 390;
 const font = (s: number) => Math.round(s * scale);
 
-type AnimatedTransactionProps = {
-  item: any;
-  index: number;
-  onEdit: () => void;
-  onDelete: () => void;
-  ready: boolean;
+// --- ANIMATED LIST ITEM ---
+const AnimatedTransaction = ({ item, index, onEdit, onDelete }: any) => {
+  const anim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(anim, {
+      toValue: 1,
+      duration: 300,
+      delay: index * 30, // Stagger effect
+      useNativeDriver: true,
+    }).start();
+  }, []);
+
+  return (
+    <Animated.View
+      style={{
+        opacity: anim,
+        transform: [{
+          translateY: anim.interpolate({
+            inputRange: [0, 1],
+            outputRange: [20, 0],
+          }),
+        }],
+        marginBottom: 12,
+      }}
+    >
+      <TransactionCard item={item} onEdit={onEdit} onDelete={onDelete} />
+    </Animated.View>
+  );
 };
-
-const AnimatedTransaction: React.FC<AnimatedTransactionProps> = React.memo(
-  ({ item, index, onEdit, onDelete, ready }) => {
-    const anim = useRef(new RNAnimated.Value(0)).current;
-
-    useEffect(() => {
-      if (!ready) return;
-      RNAnimated.timing(anim, {
-        toValue: 1,
-        duration: 320,
-        delay: index * 35,
-        useNativeDriver: true,
-      }).start();
-    }, [anim, index, ready]);
-
-    return (
-      <RNAnimated.View
-        style={{
-          opacity: anim,
-          transform: [
-            {
-              translateY: anim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [14, 0],
-              }),
-            },
-          ],
-          marginBottom: 12,
-        }}
-      >
-        <TransactionCard item={item} onEdit={onEdit} onDelete={onDelete} />
-      </RNAnimated.View>
-    );
-  }
-);
-
-AnimatedTransaction.displayName = 'AnimatedTransaction';
 
 const HistoryScreen = () => {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { entries = [], isLoading, updateEntry, deleteEntry } = useEntries(user?.id);
   const navigation = useNavigation<any>();
-  type HistoryRouteParams = { edit_local_id?: string; edit_item?: any } | undefined;
-  type HistoryRouteProp = RouteProp<Record<string, HistoryRouteParams>, string>;
-  const route = useRoute<HistoryRouteProp>();
+  const route = useRoute<any>();
+  const { showToast } = useToast();
 
-  // show spinner only if loading lasts more than a short delay
   const showLoading = useDelayedLoading(Boolean(isLoading));
 
+  // --- FILTERS STATE ---
   const [filtersVisible, setFiltersVisible] = useState(false);
-  const [typeIndex, setTypeIndex] = useState(0); // all / in / out
+  const [typeIndex, setTypeIndex] = useState(0); // 0:All, 1:In, 2:Out
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [amountMin, setAmountMin] = useState<string>('');
   const [amountMax, setAmountMax] = useState<string>('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  
+  // Picker visibility
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
-  const [categoryFilter, setCategoryFilter] = useState('');
 
+  // --- EDIT STATE ---
   const [editingEntry, setEditingEntry] = useState<any | null>(null);
   const [editAmount, setEditAmount] = useState('');
   const [editCategory, setEditCategory] = useState(DEFAULT_CATEGORY);
-  // guard against multiple openEdit calls (double-tap / multiple navigations)
-  const isOpeningRef = React.useRef(false);
-  const setEditingSafely = (item: any | null) => {
-    if (item) {
-      if (isOpeningRef.current) return;
-      isOpeningRef.current = true;
-      setEditingEntry(item);
-      // release guard after brief delay
-      setTimeout(() => {
-        isOpeningRef.current = false;
-      }, 500);
-    } else {
-      // closing
-      setEditingEntry(null);
-      isOpeningRef.current = false;
-    }
-  };
   const [editNote, setEditNote] = useState('');
   const [editTypeIndex, setEditTypeIndex] = useState(0);
   const [editDate, setEditDate] = useState<Date | null>(null);
   const [showEditDatePicker, setShowEditDatePicker] = useState(false);
-  const [editDateChanged, setEditDateChanged] = useState(false);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
-  const heroOpacity = useRef(new RNAnimated.Value(0)).current;
-  const heroTranslate = useRef(new RNAnimated.Value(16)).current;
-  const [listReady, setListReady] = useState(false);
 
-  const types = ['All', 'Cash (IN)', 'Cash (OUT)'];
+  // --- ANIMATIONS ---
+  const heroOpacity = useRef(new Animated.Value(0)).current;
+  const heroTranslate = useRef(new Animated.Value(20)).current;
 
   useEffect(() => {
-    RNAnimated.parallel([
-      RNAnimated.timing(heroOpacity, {
-        toValue: 1,
-        duration: 350,
-        useNativeDriver: true,
-      }),
-      RNAnimated.spring(heroTranslate, {
-        toValue: 0,
-        bounciness: 10,
-        speed: 12,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      setListReady(true);
-    });
-  }, [heroOpacity, heroTranslate]);
+    Animated.parallel([
+      Animated.timing(heroOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
+      Animated.spring(heroTranslate, { toValue: 0, useNativeDriver: true }),
+    ]).start();
+  }, []);
 
-  // -----------------------
-  // FILTER RESULT
-  // -----------------------
+  // --- FILTER LOGIC ---
   const filtered = useMemo(() => {
     let list = entries || [];
 
     if (typeIndex === 1) list = list.filter((e) => e.type === 'in');
     if (typeIndex === 2) list = list.filter((e) => e.type === 'out');
 
-    if (startDate)
-      list = list.filter((e) => {
-        try {
-          return new Date(e.created_at).getTime() >= startDate.getTime();
-        } catch (err) {
-          return false;
-        }
-      });
+    if (startDate) list = list.filter((e) => new Date(e.created_at) >= startDate);
+    if (endDate) list = list.filter((e) => new Date(e.created_at) <= endDate);
 
-    if (endDate)
-      list = list.filter((e) => {
-        try {
-          return new Date(e.created_at).getTime() <= endDate.getTime();
-        } catch (err) {
-          return false;
-        }
-      });
-
-    if (categoryFilter.trim().length > 0) {
+    if (categoryFilter) {
       const q = categoryFilter.toLowerCase();
       list = list.filter((e) => (e.category || '').toLowerCase().includes(q));
     }
 
-    // amount range filter
-    const min = parseFloat(amountMin.replace(/,/g, ''));
-    const max = parseFloat(amountMax.replace(/,/g, ''));
-    if (!isNaN(min)) list = list.filter((e) => Number(e.amount || 0) >= min);
-    if (!isNaN(max)) list = list.filter((e) => Number(e.amount || 0) <= max);
+    const min = parseFloat(amountMin);
+    const max = parseFloat(amountMax);
+    if (!isNaN(min)) list = list.filter((e) => Number(e.amount) >= min);
+    if (!isNaN(max)) list = list.filter((e) => Number(e.amount) <= max);
 
-    return list;
+    return list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }, [entries, typeIndex, startDate, endDate, categoryFilter, amountMin, amountMax]);
 
+  // --- SUMMARY STATS ---
   const summary = useMemo(() => {
     let totalIn = 0;
     let totalOut = 0;
-    let latestTs = 0;
-    const categoryTotals: Record<string, number> = {};
-
-    filtered.forEach((entry) => {
-      const amount = Number(entry.amount) || 0;
-      if (entry.type === 'in') {
-        totalIn += amount;
-      } else {
-        totalOut += amount;
-      }
-
-      const timestamp = new Date(entry.date || entry.created_at).getTime();
-      if (!Number.isNaN(timestamp) && timestamp > latestTs) {
-        latestTs = timestamp;
-      }
-
-      const category = ensureCategory(entry.category);
-      categoryTotals[category] = (categoryTotals[category] || 0) + amount;
+    filtered.forEach((e) => {
+      const val = Number(e.amount) || 0;
+      if (e.type === 'in') totalIn += val;
+      else totalOut += val;
     });
-
-    const topCategory =
-      Object.entries(categoryTotals).sort((a, b) => b[1] - a[1])[0]?.[0] || FALLBACK_CATEGORY;
-    const latestLabel = latestTs ? new Date(latestTs).toLocaleDateString() : 'No activity yet';
     return {
       totalIn,
       totalOut,
       net: totalIn - totalOut,
-      topCategory,
-      latestLabel,
       count: filtered.length,
     };
   }, [filtered]);
 
-  const quickStats = useMemo(
-    () => [
-      { label: 'Showing', value: summary.count ? `${summary.count} entries` : 'No entries' },
-      { label: 'Top category', value: summary.topCategory },
-      { label: 'Last activity', value: summary.latestLabel },
-    ],
-    [summary]
-  );
-
-  // compute active filters count for a small badge
-  const activeFilterCount = useMemo(() => {
-    let c = 0;
-    if (typeIndex !== 0) c += 1;
-    if (startDate) c += 1;
-    if (endDate) c += 1;
-    if (categoryFilter.trim().length > 0) c += 1;
-    if (amountMin.trim().length > 0) c += 1;
-    if (amountMax.trim().length > 0) c += 1;
-    return c;
-  }, [typeIndex, startDate, endDate, categoryFilter, amountMin, amountMax]);
-
+  // --- HANDLERS ---
   const toggleFilters = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setFiltersVisible(!filtersVisible);
@@ -263,508 +172,235 @@ const HistoryScreen = () => {
     setAmountMax('');
   };
 
-  // -----------------------
-  // EDIT ENTRY
-  // -----------------------
-  // If the screen was navigated to with a param to open an editor, do that now.
-  React.useEffect(() => {
-    try {
-      // If the caller passed the full item, open it immediately (fast overlay)
-      const editItem = (route?.params as any)?.edit_item;
-      if (editItem) {
-        openEdit(editItem);
-        try {
-          // clear the navigation params so we don't reopen repeatedly
-          if (navigation.setParams) {
-            navigation.setParams({ edit_item: undefined, edit_local_id: undefined });
-          }
-        } catch (e) {}
-        return;
-      }
-
-      // Fallback: if only local id was passed, try to find it in entries
-      const editId = route?.params?.edit_local_id;
-      if (editId) {
-        const found = entries.find((e) => e.local_id === editId);
-        if (found) {
-          openEdit(found);
-          try {
-            if (navigation.setParams) {
-              navigation.setParams({ edit_item: undefined, edit_local_id: undefined });
-            }
-          } catch (e) {}
-        } else {
-          // try DB lookup to ensure freshest data even if entries not yet loaded
-          (async () => {
-            try {
-              const r = await getEntryByLocalId(String(editId));
-              if (r) {
-                openEdit(r);
-                try {
-                  if (navigation.setParams) {
-                    navigation.setParams({ edit_item: undefined, edit_local_id: undefined });
-                  }
-                } catch (e) {}
-              }
-            } catch (e) {
-              // ignore lookup failures
-            }
-          })();
-        }
-      }
-    } catch (e) {}
-  }, [route?.params, entries]);
   const openEdit = (item: any) => {
-    setEditingSafely(item);
+    setEditingEntry(item);
     setEditAmount(String(item.amount));
     setEditCategory(ensureCategory(item.category));
     setEditNote(item.note || '');
     setEditTypeIndex(item.type === 'in' ? 1 : 0);
-    // initialize date but don't mark as changed until user picks a new value
-    try {
-      const d = (item && (item.date || item.created_at)) || null;
-      setEditDate(d ? new Date(d) : null);
-    } catch (e) {
-      setEditDate(null);
-    }
-    setEditDateChanged(false);
+    setEditDate(new Date(item.date || item.created_at));
   };
 
-  // Focus amount input when editingEntry opens — hold a ref to Input
-  const amountInputRef = React.useRef<any>(null);
-  useEffect(() => {
-    if (editingEntry) {
-      // small timeout to wait for modal animation
-      const t = setTimeout(() => {
-        try {
-          if (amountInputRef.current && amountInputRef.current.focus) {
-            amountInputRef.current.focus();
-          }
-        } catch (e) {}
-      }, 120);
-      return () => clearTimeout(t);
-    }
-  }, [editingEntry]);
-
-  const { showToast } = useToast();
-
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (!editingEntry) return;
-
     const amt = parseFloat(editAmount);
-    if (isNaN(amt) || amt <= 0) return Alert.alert('Validation', 'Enter a valid amount');
+    if (isNaN(amt) || amt <= 0) return Alert.alert('Invalid Amount', 'Please enter a valid number.');
 
-    // Optimistic: close the modal and show immediate feedback.
-    setEditingEntry(null);
-    showToast('Saving...');
+    setEditingEntry(null); // Close optimistic
+    showToast('Updating...');
 
-    // Run actual update in background so UI stays responsive.
     runInBackground(async () => {
       try {
         const updates: any = {
           amount: amt,
-          category: ensureCategory(editCategory),
+          category: editCategory,
           note: editNote,
           type: editTypeIndex === 1 ? 'in' : 'out',
+          date: editDate,
         };
-        if (editDateChanged && editDate) {
-          updates.date = editDate;
-        }
         await updateEntry({ local_id: editingEntry.local_id, updates });
-        showToast('Saved');
+        showToast('Updated successfully');
       } catch (err: any) {
-        showToast(err.message || 'Save failed');
+        showToast('Update failed');
       }
     });
   };
 
-  const handleDelete = (local_id: string) => {
-    Alert.alert('Delete', 'Delete this entry?', [
+  const handleDelete = (id: string) => {
+    Alert.alert('Confirm Delete', 'Are you sure?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
         style: 'destructive',
         onPress: () => {
-          // Immediate UI feedback, run deletion in background.
           showToast('Deleting...');
           runInBackground(async () => {
-            try {
-              await deleteEntry(local_id);
-              showToast('Deleted');
-            } catch (err: any) {
-              showToast(err.message || 'Delete failed');
-            }
+            await deleteEntry(id);
+            showToast('Transaction deleted');
           });
         },
       },
     ]);
   };
 
-  // -----------------------
-  // UI
-  // -----------------------
-  const listContentStyle = useMemo(
-    () => [styles.listContent, { paddingBottom: spacing(12) + insets.bottom }],
-    [insets.bottom]
-  );
-
+  // --- RENDER HEADER ---
   const renderHeader = () => (
     <View style={styles.headerWrapper}>
-      <ScreenHeader
-        title="History"
-        subtitle="Review your cash flow timeline"
-        style={styles.headerInset}
-        rightSlot={
-          <TouchableOpacity
-            style={[styles.filterChip, filtersVisible && styles.filterChipActive]}
-            onPress={toggleFilters}
-            accessibilityRole="button"
-            accessibilityLabel="Toggle filters"
-          >
-            <MaterialIcon
-              name="tune"
-              size={18}
-              color={filtersVisible ? colors.white : colors.text}
-            />
-            <Text style={[styles.filterChipText, filtersVisible && styles.filterChipTextActive]}>
-              {activeFilterCount
-                ? `${activeFilterCount} filter${activeFilterCount > 1 ? 's' : ''}`
-                : 'Filters'}
-            </Text>
-          </TouchableOpacity>
-        }
-      />
-      <RNAnimated.View
-        style={[
-          styles.heroCard,
-          { opacity: heroOpacity, transform: [{ translateY: heroTranslate }] },
-        ]}
-      >
-        <Text style={styles.heroOverline}>Your Activity</Text>
-        <Text style={styles.heroTitle}>History</Text>
-        <Text style={styles.heroSubtitle}>
-          {summary.count ? `${summary.count} records visible now` : 'No records in this view yet'}
-        </Text>
-        <View style={styles.heroStatRow}>
-          <View style={styles.heroColumn}>
-            <Text style={styles.heroLabel}>Cash in</Text>
-            <Text style={[styles.heroValue, { color: colors.accentGreen }]}>
-              ₹{summary.totalIn.toLocaleString('en-IN')}
-            </Text>
+      <Animated.View style={{ opacity: heroOpacity, transform: [{ translateY: heroTranslate }] }}>
+        <View style={styles.heroCard}>
+          <View style={styles.heroRow}>
+            <View>
+              <Text style={styles.heroLabel}>Net Balance</Text>
+              <Text style={[styles.heroValue, { color: summary.net >= 0 ? colors.primary : colors.accentRed }]}>
+                {summary.net >= 0 ? '+' : ''}₹{Math.abs(summary.net).toLocaleString()}
+              </Text>
+            </View>
+            <View style={styles.countBadge}>
+              <Text style={styles.countText}>{summary.count} items</Text>
+            </View>
           </View>
-          <View style={styles.heroColumn}>
-            <Text style={styles.heroLabel}>Cash out</Text>
-            <Text style={[styles.heroValue, { color: colors.accentRed }]}>
-              ₹{summary.totalOut.toLocaleString('en-IN')}
-            </Text>
-          </View>
-          <View style={[styles.heroColumn, styles.heroColumnLast]}>
-            <Text style={styles.heroLabel}>Net</Text>
-            <Text
-              style={[
-                styles.heroValue,
-                { color: summary.net >= 0 ? colors.primary : colors.accentRed },
-              ]}
-            >
-              ₹{summary.net.toLocaleString('en-IN')}
-            </Text>
+
+          <View style={styles.divider} />
+
+          <View style={styles.statsRow}>
+            <View>
+              <Text style={styles.statLabel}>Income</Text>
+              <Text style={[styles.statValue, { color: colors.accentGreen }]}>₹{summary.totalIn.toLocaleString()}</Text>
+            </View>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={styles.statLabel}>Expense</Text>
+              <Text style={[styles.statValue, { color: colors.accentRed }]}>₹{summary.totalOut.toLocaleString()}</Text>
+            </View>
           </View>
         </View>
-      </RNAnimated.View>
+      </Animated.View>
 
-      <View style={styles.quickRow}>
-        {quickStats.map((stat) => (
-          <View key={stat.label} style={styles.quickCard}>
-            <Text style={styles.quickLabel}>{stat.label}</Text>
-            <Text style={styles.quickValue}>{stat.value}</Text>
-          </View>
-        ))}
-      </View>
-
-      <TouchableOpacity style={styles.filterToggle} onPress={toggleFilters}>
-        <MaterialIcon name="filter-list" size={22} color={colors.primary} />
-        <View style={{ flex: 1 }}>
-          <Text style={styles.filterToggleLabel}>Filters</Text>
-          <Text style={styles.filterToggleHint}>
-            {activeFilterCount
-              ? `${activeFilterCount} active filter${activeFilterCount > 1 ? 's' : ''}`
-              : 'Refine your history'}
-          </Text>
+      <TouchableOpacity style={styles.filterBar} onPress={toggleFilters} activeOpacity={0.8}>
+        <View style={styles.filterLeft}>
+          <MaterialIcon name="filter-list" size={20} color={colors.primary} />
+          <Text style={styles.filterTitle}>Filters</Text>
         </View>
-        <MaterialIcon
-          name={filtersVisible ? 'expand-less' : 'expand-more'}
-          size={22}
-          color={colors.muted}
-        />
+        <MaterialIcon name={filtersVisible ? 'expand-less' : 'expand-more'} size={24} color={colors.muted} />
       </TouchableOpacity>
 
       {filtersVisible && (
-        <View style={styles.filterCard}>
+        <View style={styles.filterPanel}>
           <SimpleButtonGroup
-            buttons={types}
+            buttons={['All', 'Income', 'Expense']}
             selectedIndex={typeIndex}
             onPress={setTypeIndex}
-            containerStyle={{ marginVertical: 10 }}
+            containerStyle={{ marginBottom: 12 }}
           />
+          
           <View style={styles.dateRow}>
             <Button
               title={startDate ? startDate.toLocaleDateString() : 'Start Date'}
               type="outline"
-              onPress={() => setShowStartPicker(true)}
               buttonStyle={styles.dateBtn}
-              titleStyle={styles.dateBtnTitle}
+              titleStyle={styles.dateBtnText}
+              onPress={() => setShowStartPicker(true)}
+              icon={<MaterialIcon name="event" size={16} color={colors.primary} style={{ marginRight: 6 }} />}
             />
             <Button
               title={endDate ? endDate.toLocaleDateString() : 'End Date'}
               type="outline"
-              onPress={() => setShowEndPicker(true)}
               buttonStyle={styles.dateBtn}
-              titleStyle={styles.dateBtnTitle}
+              titleStyle={styles.dateBtnText}
+              onPress={() => setShowEndPicker(true)}
+              icon={<MaterialIcon name="event" size={16} color={colors.primary} style={{ marginRight: 6 }} />}
             />
           </View>
 
-          {showStartPicker && (
+          {/* DATE PICKERS (Platform specific handling) */}
+          {(showStartPicker || showEndPicker) && (
             <DateTimePicker
-              value={startDate || new Date()}
+              value={new Date()}
               mode="date"
-              display="default"
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
               onChange={(e, d) => {
-                setShowStartPicker(false);
-                if (d) setStartDate(d);
+                if (showStartPicker) {
+                  setShowStartPicker(false);
+                  if (d) setStartDate(d);
+                } else {
+                  setShowEndPicker(false);
+                  if (d) setEndDate(d);
+                }
               }}
             />
           )}
-
-          {showEndPicker && (
-            <DateTimePicker
-              value={endDate || new Date()}
-              mode="date"
-              display="default"
-              onChange={(e, d) => {
-                setShowEndPicker(false);
-                if (d) setEndDate(d);
-              }}
-            />
-          )}
-
-          <View style={styles.presetRow}>
-            <Button
-              title="Today"
-              type="clear"
-              onPress={() => {
-                const now = new Date();
-                setStartDate(new Date(now.setHours(0, 0, 0, 0)));
-                setEndDate(new Date(now.setHours(23, 59, 59, 999)));
-              }}
-              titleStyle={styles.presetBtnTitle}
-            />
-            <Button
-              title="This Week"
-              type="clear"
-              onPress={() => {
-                const now = new Date();
-                const start = new Date(now.setDate(now.getDate() - now.getDay()));
-                setStartDate(new Date(start.setHours(0, 0, 0, 0)));
-                setEndDate(new Date(now.setHours(23, 59, 59, 999)));
-              }}
-              titleStyle={styles.presetBtnTitle}
-            />
-            <Button
-              title="This Month"
-              type="clear"
-              onPress={() => {
-                const now = new Date();
-                setStartDate(new Date(now.getFullYear(), now.getMonth(), 1));
-                setEndDate(new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999));
-              }}
-              titleStyle={styles.presetBtnTitle}
-            />
-          </View>
 
           <Input
-            placeholder="Filter by category..."
+            placeholder="Search category..."
             value={categoryFilter}
             onChangeText={setCategoryFilter}
-            inputContainerStyle={styles.input}
+            inputContainerStyle={styles.searchInput}
+            leftIcon={<MaterialIcon name="search" size={20} color={colors.muted} />}
           />
 
-          <View style={styles.amountRow}>
-            <Input
-              placeholder="Min amount"
-              value={amountMin}
-              onChangeText={setAmountMin}
-              keyboardType="numeric"
-              containerStyle={{ flex: 1 }}
-              inputContainerStyle={styles.input}
-            />
-            <Input
-              placeholder="Max amount"
-              value={amountMax}
-              onChangeText={setAmountMax}
-              keyboardType="numeric"
-              containerStyle={{ flex: 1 }}
-              inputContainerStyle={styles.input}
-            />
-          </View>
-
-          {activeFilterCount > 0 && (
-            <Button
-              title="Clear Filters"
-              type="outline"
-              onPress={clearFilters}
-              buttonStyle={styles.clearButton}
-              titleStyle={styles.clearButtonTitle}
-            />
-          )}
+          <Button
+            title="Clear All Filters"
+            type="clear"
+            titleStyle={{ color: colors.accentRed, fontSize: 13 }}
+            onPress={clearFilters}
+          />
         </View>
       )}
     </View>
   );
 
-  const emptyComponent = !showLoading ? (
-    <View style={styles.emptyWrap}>
-      <MaterialIcon name="receipt-long" size={80} color={colors.muted} />
-      <Text style={styles.emptyTitle}>No Transactions Found</Text>
-      <Text style={styles.emptySubtitle}>
-        Adjust filters or add a new transaction to get started.
-      </Text>
-      <Button
-        title="Add Transaction"
-        onPress={() => navigation.navigate('AddEntry')}
-        buttonStyle={styles.emptyButton}
-        titleStyle={styles.emptyButtonTitle}
-        containerStyle={{ marginTop: 24 }}
-      />
-    </View>
-  ) : null;
-
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+      <ScreenHeader title="History" subtitle="Detailed transactions log" showScrollHint={false} />
+      
       <FlatList
         data={filtered}
         keyExtractor={(item) => item.local_id}
-        contentContainerStyle={listContentStyle}
-        ListHeaderComponent={renderHeader}
-        ListHeaderComponentStyle={styles.listHeaderComponent}
-        ListFooterComponent={<View style={styles.footerSpacer} />}
-        ListEmptyComponent={emptyComponent}
-        ListEmptyComponentStyle={styles.emptyContent}
-        showsVerticalScrollIndicator={false}
-        refreshing={isLoading}
-        onRefresh={() => {}}
-        initialNumToRender={12}
-        maxToRenderPerBatch={12}
-        windowSize={15}
-        removeClippedSubviews={false}
         renderItem={({ item, index }) => (
           <AnimatedTransaction
             item={item}
             index={index}
             onEdit={() => openEdit(item)}
             onDelete={() => handleDelete(item.local_id)}
-            ready={listReady}
           />
         )}
+        ListHeaderComponent={renderHeader}
+        contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 20 }]}
+        ListEmptyComponent={
+          !showLoading ? (
+            <View style={styles.emptyState}>
+              <MaterialIcon name="history" size={64} color={colors.border} />
+              <Text style={styles.emptyText}>No transactions found</Text>
+            </View>
+          ) : null
+        }
       />
 
       <FullScreenSpinner visible={showLoading} />
 
       {/* EDIT MODAL */}
-      <Modal
-        visible={!!editingEntry}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setEditingEntry(null)}
-      >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalHeader}>Edit Transaction</Text>
+      <Modal visible={!!editingEntry} animationType="slide" transparent onRequestClose={() => setEditingEntry(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Edit Transaction</Text>
+            
             <ScrollView>
               <SimpleButtonGroup
-                buttons={['Cash (OUT)', 'Cash (IN)']}
+                buttons={['Expense', 'Income']}
                 selectedIndex={editTypeIndex}
                 onPress={setEditTypeIndex}
-                containerStyle={{ marginVertical: 10, borderRadius: 12 }}
-                buttonStyle={{ paddingVertical: 10 }}
-                selectedButtonStyle={{
-                  backgroundColor: editTypeIndex === 0 ? colors.accentRed : colors.accentGreen,
-                }}
+                containerStyle={{ marginBottom: 16 }}
               />
 
               <Input
                 label="Amount"
-                placeholder="0.00"
-                keyboardType="numeric"
                 value={editAmount}
                 onChangeText={setEditAmount}
+                keyboardType="numeric"
                 inputContainerStyle={styles.modalInput}
-                labelStyle={styles.modalLabel}
-                ref={amountInputRef}
-              />
-              <View style={{ marginBottom: 10 }}>
-                <Text style={[styles.modalLabel, { marginBottom: 8 }]}>Category</Text>
-                <Button
-                  title={editCategory || 'Select Category'}
-                  type="outline"
-                  onPress={() => setShowCategoryPicker(true)}
-                  buttonStyle={{ borderRadius: 10, paddingVertical: 10 }}
-                />
-                <CategoryPickerModal
-                  visible={showCategoryPicker}
-                  onClose={() => setShowCategoryPicker(false)}
-                  onSelect={(c) => {
-                    setEditCategory(ensureCategory(c));
-                    setShowCategoryPicker(false);
-                  }}
-                />
-              </View>
-              <View style={{ marginBottom: 10 }}>
-                <Button
-                  title={editDate ? editDate.toLocaleDateString() : 'Date'}
-                  type="outline"
-                  onPress={() => setShowEditDatePicker(true)}
-                  buttonStyle={{ borderRadius: 10, paddingVertical: 10 }}
-                />
-                {showEditDatePicker && (
-                  <DateTimePicker
-                    value={editDate || new Date()}
-                    mode="date"
-                    display="default"
-                    onChange={(e, d) => {
-                      setShowEditDatePicker(false);
-                      if (d) {
-                        setEditDate(d);
-                        setEditDateChanged(true);
-                      }
-                    }}
-                  />
-                )}
-              </View>
-              <Input
-                label="Note (Optional)"
-                placeholder="Add a short description"
-                value={editNote}
-                onChangeText={setEditNote}
-                multiline
-                inputContainerStyle={styles.modalInput}
-                labelStyle={styles.modalLabel}
               />
 
-              <View style={styles.modalButtons}>
-                <Button
-                  title="Cancel"
-                  type="outline"
-                  onPress={() => setEditingEntry(null)}
-                  containerStyle={{ flex: 1, marginRight: 10 }}
-                  buttonStyle={styles.modalCancelButton}
-                  titleStyle={styles.modalCancelTitle}
-                />
-                <Button
-                  title="Save Changes"
-                  onPress={handleSaveEdit}
-                  containerStyle={{ flex: 1 }}
-                  buttonStyle={styles.modalSaveButton}
-                />
+              <TouchableOpacity style={styles.modalPickerBtn} onPress={() => setShowCategoryPicker(true)}>
+                <Text style={styles.modalPickerLabel}>Category: <Text style={{fontWeight:'700', color:colors.primary}}>{editCategory}</Text></Text>
+                <MaterialIcon name="arrow-drop-down" size={24} color={colors.text} />
+              </TouchableOpacity>
+
+              <CategoryPickerModal
+                visible={showCategoryPicker}
+                onClose={() => setShowCategoryPicker(false)}
+                onSelect={(c) => { setEditCategory(c); setShowCategoryPicker(false); }}
+              />
+
+              <Input
+                label="Note"
+                value={editNote}
+                onChangeText={setEditNote}
+                inputContainerStyle={styles.modalInput}
+              />
+
+              <View style={styles.modalActions}>
+                <Button title="Cancel" type="outline" onPress={() => setEditingEntry(null)} containerStyle={{ flex: 1, marginRight: 8 }} />
+                <Button title="Save" onPress={handleSaveEdit} containerStyle={{ flex: 1 }} buttonStyle={{ backgroundColor: colors.primary }} />
               </View>
             </ScrollView>
           </View>
@@ -782,266 +418,172 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   listContent: {
-    flexGrow: 1,
-    paddingHorizontal: spacing(2.5),
-    paddingTop: spacing(1),
-    paddingBottom: spacing(10),
-  },
-  listHeaderComponent: {
-    paddingBottom: spacing(2),
-  },
-  footerSpacer: {
-    height: spacing(8),
-  },
-  emptyContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 8,
   },
   headerWrapper: {
-    marginBottom: 26,
+    marginBottom: 16,
   },
-  headerInset: {
-    paddingHorizontal: 0,
-    marginBottom: spacing(2),
-  },
+  /* HERO CARD */
   heroCard: {
     backgroundColor: colors.card,
-    borderRadius: 24,
+    borderRadius: 20,
     padding: 20,
     borderWidth: 1,
     borderColor: colors.border,
-    marginBottom: 20,
-    ...shadows.large,
+    shadowColor: colors.text,
+    shadowOpacity: 0.05,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 10,
+    elevation: 3,
+    marginBottom: 16,
   },
-  heroOverline: {
-    fontSize: font(12),
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    color: colors.muted,
-  },
-  heroTitle: {
-    fontSize: font(30),
-    fontWeight: '700',
-    color: colors.text,
-    marginTop: 6,
-  },
-  heroSubtitle: {
-    fontSize: font(14),
-    color: colors.muted,
-    marginTop: 4,
-  },
-  heroStatRow: {
+  heroRow: {
     flexDirection: 'row',
-    marginTop: 20,
-  },
-  heroColumn: {
-    flex: 1,
-    marginRight: 12,
-  },
-  heroColumnLast: {
-    marginRight: 0,
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
   },
   heroLabel: {
-    fontSize: font(12),
+    fontSize: 12,
     color: colors.muted,
-    marginBottom: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+    fontWeight: '600',
   },
   heroValue: {
-    fontSize: font(18),
-    fontWeight: '700',
-    color: colors.text,
+    fontSize: 28,
+    fontWeight: '800',
   },
-  filterChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing(1.5),
-    paddingVertical: spacing(0.75),
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-    gap: 6,
+  countBadge: {
+    backgroundColor: colors.surfaceMuted,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
-  filterChipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  filterChipText: {
+  countText: {
     fontSize: 12,
     fontWeight: '600',
     color: colors.text,
   },
-  filterChipTextActive: {
-    color: colors.white,
+  divider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: 16,
   },
-  quickRow: {
+  statsRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 20,
+    justifyContent: 'space-between',
   },
-  quickCard: {
-    flexGrow: 1,
-    flexBasis: '48%',
-    minWidth: '48%',
+  statLabel: {
+    fontSize: 12,
+    color: colors.muted,
+    marginBottom: 2,
+  },
+  statValue: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  /* FILTER BAR */
+  filterBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: colors.card,
-    borderRadius: 18,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  filterLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  filterTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  filterPanel: {
+    backgroundColor: colors.card,
+    marginTop: 8,
+    borderRadius: 16,
     padding: 16,
     borderWidth: 1,
     borderColor: colors.border,
-    ...shadows.small,
-  },
-  quickLabel: {
-    fontSize: font(12),
-    color: colors.muted,
-    marginBottom: 6,
-  },
-  quickValue: {
-    fontSize: font(16),
-    fontWeight: '600',
-    color: colors.text,
-  },
-  filterToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.card,
-    borderRadius: 20,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadows.small,
-  },
-  filterToggleLabel: {
-    color: colors.text,
-    fontSize: font(16),
-    fontWeight: '600',
-  },
-  filterToggleHint: {
-    color: colors.muted,
-    fontSize: font(13),
-  },
-  filterCard: {
-    backgroundColor: colors.card,
-    borderRadius: 22,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginTop: 18,
-    ...shadows.small,
   },
   dateRow: {
     flexDirection: 'row',
-    marginVertical: 10,
+    marginBottom: 12,
+    gap: 8,
   },
   dateBtn: {
-    flex: 1,
-    marginHorizontal: 5,
-    borderRadius: 12,
     borderColor: colors.border,
+    borderRadius: 8,
+    paddingVertical: 8,
   },
-  dateBtnTitle: {
+  dateBtnText: {
+    fontSize: 12,
     color: colors.text,
-    fontSize: font(14),
   },
-  presetRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  presetBtnTitle: {
-    color: colors.primary,
-    fontSize: font(13),
-    fontWeight: '600',
-  },
-  input: {
+  searchInput: {
     backgroundColor: colors.surfaceMuted,
     borderBottomWidth: 0,
-    borderRadius: 12,
-    paddingHorizontal: 12,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    height: 40,
   },
-  amountRow: {
-    flexDirection: 'row',
-  },
-  clearButton: {
-    borderColor: colors.accentRed,
-    marginTop: 10,
-  },
-  clearButtonTitle: {
-    color: colors.accentRed,
-    fontWeight: '600',
-  },
-  emptyWrap: {
+  /* EMPTY STATE */
+  emptyState: {
     alignItems: 'center',
-    paddingVertical: 80,
+    paddingVertical: 40,
   },
-  emptyTitle: {
-    marginTop: 16,
-    fontSize: font(20),
-    fontWeight: '700',
-    color: colors.text,
-  },
-  emptySubtitle: {
-    marginTop: 8,
+  emptyText: {
     color: colors.muted,
-    textAlign: 'center',
-    fontSize: font(14),
-    paddingHorizontal: 12,
+    marginTop: 8,
+    fontSize: 14,
   },
-  emptyButton: {
-    backgroundColor: colors.primary,
-    borderRadius: 14,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-  },
-  emptyButtonTitle: {
-    fontSize: font(15),
-    fontWeight: '600',
-    color: colors.white,
-  },
-  modalBackdrop: {
+  /* MODAL */
+  modalOverlay: {
     flex: 1,
-    backgroundColor: colors.backdrop,
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     padding: 20,
   },
-  modalCard: {
+  modalContent: {
     backgroundColor: colors.card,
-    borderRadius: 16,
+    borderRadius: 20,
     padding: 20,
-    ...shadows.medium,
+    maxHeight: '80%',
   },
-  modalHeader: {
-    fontSize: font(20),
-    fontWeight: 'bold',
-    marginBottom: 20,
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 16,
     textAlign: 'center',
     color: colors.text,
   },
-  modalLabel: {
-    fontSize: font(14),
-    color: colors.muted,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
   modalInput: {
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: 10,
-    borderBottomWidth: 0,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    marginTop: 24,
-  },
-  modalCancelButton: {
+    borderBottomWidth: 1,
     borderColor: colors.border,
   },
-  modalCancelTitle: {
-    color: colors.muted,
+  modalPickerBtn: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    marginBottom: 16,
   },
-  modalSaveButton: {
-    backgroundColor: colors.primary,
+  modalPickerLabel: {
+    fontSize: 14,
+    color: colors.text,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    marginTop: 20,
   },
 });

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -6,160 +6,165 @@ import {
   Image,
   StatusBar,
   Text,
+  Animated,
+  Easing,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import { getSession } from '../db/session';
-import { colors, shadows } from '../utils/design';
+import { colors, shadows, spacing } from '../utils/design';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  withDelay,
-  Easing,
-  interpolate,
-  withRepeat,
-} from 'react-native-reanimated';
 
 type SplashNavProp = NativeStackNavigationProp<RootStackParamList, 'Splash'>;
 
-const FEATURE_CARDS = [
-  { icon: 'bolt', title: 'Instant Sync', subtitle: 'Auto secure backup' },
-  { icon: 'shield', title: 'Private Mode', subtitle: 'Offline-first safety' },
-];
-
-const MIN_SPLASH_TIME_MS = 400;
+const MIN_SPLASH_TIME_MS = 1500; // Gave it a bit more time to breathe
 const MAX_SPLASH_WAIT_MS = 8000;
 
 const SplashScreen = () => {
   const navigation = useNavigation<SplashNavProp>();
   const { width, height } = useWindowDimensions();
 
-  const animation = useSharedValue(0);
-  const orbit = useSharedValue(0);
-  const cardLift = useSharedValue(0);
+  // --- ANIMATION REFS (Standard RN Animated) ---
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.85)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+  const progressAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    animation.value = withTiming(1, { duration: 1200, easing: Easing.out(Easing.exp) });
+    // 1. Entrance Animation
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic),
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 6,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 800,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic),
+      }),
+      Animated.timing(progressAnim, {
+        toValue: 1,
+        duration: 1500,
+        useNativeDriver: false, // Width doesn't support native driver
+      }),
+    ]).start();
 
-    orbit.value = withRepeat(withTiming(1, { duration: 2200 }), -1, true);
-    cardLift.value = withRepeat(withDelay(120, withTiming(1, { duration: 5200 })), -1, true);
-
+    // 2. Navigation Logic
     const startedAt = Date.now();
     let hasNavigated = false;
-    const timeoutIds: any[] = [];
+    const timeoutIds: NodeJS.Timeout[] = [];
 
-    const runNavigation = (route: keyof RootStackParamList) => {
+    const runNavigation = (route: 'Auth' | 'Main') => {
       if (!hasNavigated) {
         hasNavigated = true;
-        navigation.replace(route);
+        // Smooth fade out before replacing
+        Animated.timing(fadeAnim, {
+            toValue: 0,
+            duration: 200,
+            useNativeDriver: true
+        }).start(() => {
+            navigation.replace(route);
+        });
       }
     };
 
     const checkSessionAndNavigate = async () => {
       try {
         const session = await getSession();
-        const delay = Math.max(0, MIN_SPLASH_TIME_MS - (Date.now() - startedAt));
-        timeoutIds.push(setTimeout(() => runNavigation(session ? 'Main' : 'Auth'), delay));
-      } catch {
+        const elapsed = Date.now() - startedAt;
+        const delay = Math.max(0, MIN_SPLASH_TIME_MS - elapsed);
+        
+        timeoutIds.push(setTimeout(() => {
+          runNavigation(session ? 'Main' : 'Auth');
+        }, delay));
+      } catch (e) {
         runNavigation('Auth');
       }
     };
 
     checkSessionAndNavigate();
+    
+    // Safety fallback
     timeoutIds.push(setTimeout(() => runNavigation('Auth'), MAX_SPLASH_WAIT_MS));
 
     return () => timeoutIds.forEach(clearTimeout);
   }, []);
 
-  const logoStyle = useAnimatedStyle(() => ({
-    opacity: animation.value,
-    transform: [
-      { translateY: interpolate(animation.value, [0, 1], [30, 0]) },
-      { scale: interpolate(animation.value, [0, 1], [0.85, 1]) },
-    ],
-  }));
-
-  const textStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(animation.value, [0.4, 1], [0, 1]),
-  }));
-
-  const orbStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: interpolate(orbit.value, [0, 1], [-20, 20]) }],
-    opacity: 0.3 + orbit.value * 0.25,
-  }));
-
-  const cardFloat = useAnimatedStyle(() => ({
-    transform: [{ translateY: interpolate(cardLift.value, [0, 1], [0, -8]) }],
-  }));
+  const progressWidth = progressAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0%', '100%'],
+  });
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
-      {/* Background Gradient */}
+      {/* BACKGROUND */}
       <Svg style={StyleSheet.absoluteFill}>
         <Defs>
           <LinearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0%" stopColor={colors.primary} stopOpacity={0.2} />
-            <Stop offset="100%" stopColor={colors.secondary} stopOpacity={0.08} />
+            <Stop offset="0%" stopColor={colors.background} stopOpacity={1} />
+            <Stop offset="100%" stopColor="#F0F4FF" stopOpacity={1} />
           </LinearGradient>
         </Defs>
-        <Rect width="100%" height="100%" fill={colors.background} />
         <Rect width="100%" height="100%" fill="url(#bg)" />
       </Svg>
 
-      {/* Glow Orbs */}
-      <Animated.View style={[styles.orb, { top: height * 0.18, left: 30 }, orbStyle]} />
-      <Animated.View style={[styles.orb, { top: height * 0.48, right: 25 }, orbStyle]} />
+      {/* DECORATIVE ORBS */}
+      <View style={[styles.orb, { top: -100, right: -50, backgroundColor: `${colors.primary}10` }]} />
+      <View style={[styles.orb, { bottom: -100, left: -50, backgroundColor: `${colors.secondary}10` }]} />
 
-      {/* Logo */}
-      <Animated.View style={[styles.logoWrapper, logoStyle]}>
-        <Image
-          source={require('../../assets/icon.png')}
-          style={{ width: width * 0.28, height: width * 0.28, borderRadius: 28 }}
-        />
+      <View style={styles.centerContent}>
+        {/* LOGO */}
+        <Animated.View style={[styles.logoWrapper, { opacity: fadeAnim, transform: [{ scale: scaleAnim }, { translateY: slideAnim }] }]}>
+          <Image
+            source={require('../../assets/icon.png')}
+            style={styles.logo}
+            resizeMode="cover"
+          />
+        </Animated.View>
+
+        {/* TEXT */}
+        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+          <Text style={styles.appName}>DhanDiary</Text>
+          <Text style={styles.tagline}>Intelligent Finance Tracker</Text>
+        </Animated.View>
+
+        {/* PROGRESS BAR */}
+        <View style={styles.progressTrack}>
+          <Animated.View style={[styles.progressFill, { width: progressWidth }]} />
+        </View>
+      </View>
+
+      {/* FOOTER BADGES */}
+      <Animated.View style={[styles.footer, { opacity: fadeAnim }]}>
+        <View style={styles.badgeRow}>
+          <View style={styles.badge}>
+            <MaterialIcon name="bolt" size={16} color={colors.accentOrange} />
+            <Text style={styles.badgeText}>Instant Sync</Text>
+          </View>
+          <View style={styles.divider} />
+          <View style={styles.badge}>
+            <MaterialIcon name="lock" size={16} color={colors.primary} />
+            <Text style={styles.badgeText}>Encrypted</Text>
+          </View>
+        </View>
+        
+        <Text style={styles.powered}>
+          Powered by <Text style={styles.brand}>EllowDigital</Text>
+        </Text>
       </Animated.View>
-
-      {/* App Name */}
-      <Animated.Text style={[styles.appName, textStyle]}>
-        DhanDiary
-      </Animated.Text>
-
-      <Animated.Text style={[styles.tagline, textStyle]}>
-        Faster • Safer • Smarter
-      </Animated.Text>
-
-      {/* Progress Bar */}
-      <View style={styles.progressTrack}>
-        <Animated.View style={styles.progressFill} />
-      </View>
-
-      {/* Feature Cards */}
-      <View style={styles.featureRow}>
-        {FEATURE_CARDS.map((item, index) => (
-          <Animated.View
-            key={index}
-            style={[
-              styles.card,
-              { backgroundColor: index === 0 ? colors.primary : colors.secondary },
-              cardFloat,
-            ]}>
-            <MaterialIcon name={item.icon as any} size={22} color={colors.white} />
-            <Text style={styles.cardTitle}>{item.title}</Text>
-            <Text style={styles.cardSub}>{item.subtitle}</Text>
-          </Animated.View>
-        ))}
-      </View>
-
-      {/* Brand Footer */}
-      <View style={styles.footer}>
-        <Text style={styles.powered}>Powered by <Text style={styles.brand}>EllowDigital</Text></Text>
-        <Text style={styles.loading}>Launching optimized experience…</Text>
-      </View>
     </View>
   );
 };
@@ -167,60 +172,115 @@ const SplashScreen = () => {
 export default SplashScreen;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  container: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.background,
+  },
+  centerContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  
+  /* LOGO */
+  logoWrapper: {
+    marginBottom: 24,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  logo: {
+    width: 120,
+    height: 120,
+    borderRadius: 30,
+    backgroundColor: 'white',
+  },
 
-  logoWrapper: { marginBottom: 22, ...shadows.medium },
+  /* TYPOGRAPHY */
+  appName: {
+    fontSize: 40,
+    fontWeight: '800',
+    color: colors.text,
+    textAlign: 'center',
+    letterSpacing: -1,
+  },
+  tagline: {
+    fontSize: 16,
+    color: colors.muted,
+    marginTop: 8,
+    textAlign: 'center',
+    fontWeight: '500',
+    letterSpacing: 0.5,
+  },
 
-  appName: { fontSize: 36, fontWeight: '800', color: colors.text },
-
-  tagline: { fontSize: 16, color: colors.muted, marginTop: 4 },
-
+  /* PROGRESS */
   progressTrack: {
-    width: 220,
-    height: 6,
-    borderRadius: 10,
-    marginTop: 18,
-    backgroundColor: `${colors.card}66`,
+    width: 180,
+    height: 4,
+    borderRadius: 2,
+    marginTop: 40,
+    backgroundColor: 'rgba(0,0,0,0.05)',
     overflow: 'hidden',
   },
+  progressFill: {
+    height: '100%',
+    backgroundColor: colors.primary,
+    borderRadius: 2,
+  },
 
-  progressFill: { flex: 1, backgroundColor: colors.primary },
-
+  /* DECORATION */
   orb: {
     position: 'absolute',
-    width: 160,
-    height: 160,
-    borderRadius: 120,
-    backgroundColor: colors.secondary,
-    opacity: 0.25,
+    width: 300,
+    height: 300,
+    borderRadius: 150,
   },
 
-  featureRow: {
-    flexDirection: 'row',
-    marginTop: 28,
-    gap: 16,
-  },
-
-  card: {
-    width: 150,
-    padding: 16,
-    borderRadius: 22,
-    ...shadows.small,
-  },
-
-  cardTitle: { marginTop: 10, color: colors.white, fontWeight: '700' },
-
-  cardSub: { marginTop: 4, fontSize: 13, color: `${colors.white}CC` },
-
+  /* FOOTER */
   footer: {
     position: 'absolute',
-    bottom: 32,
+    bottom: 40,
     alignItems: 'center',
+    width: '100%',
   },
-
-  powered: { fontSize: 14, color: colors.muted },
-
-  brand: { fontWeight: 'bold', color: colors.primary },
-
-  loading: { marginTop: 4, fontSize: 12, color: colors.mutedSoft },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+    ...shadows.small,
+  },
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  divider: {
+    width: 1,
+    height: 14,
+    backgroundColor: colors.border,
+    marginHorizontal: 12,
+  },
+  powered: {
+    fontSize: 13,
+    color: colors.muted,
+  },
+  brand: {
+    fontWeight: '700',
+    color: colors.text,
+  },
 });
