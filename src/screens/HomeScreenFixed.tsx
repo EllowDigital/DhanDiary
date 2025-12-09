@@ -74,6 +74,15 @@ const HomeScreen: React.FC = () => {
   const { entries = [], isLoading = false } = useEntries(user?.id);
   const showLoading = useDelayedLoading(Boolean(isLoading), 200);
   const { width: SCREEN_WIDTH } = useWindowDimensions();
+  const isCompact = SCREEN_WIDTH < 360;
+  const isTablet = SCREEN_WIDTH >= 820;
+  const horizontalPadding = isTablet ? spacing(5) : isCompact ? spacing(1.5) : spacing(3);
+  const availableWidth = Math.max(0, SCREEN_WIDTH - horizontalPadding * 2);
+  const contentMaxWidth = Math.min(720, availableWidth > 0 ? availableWidth : SCREEN_WIDTH);
+  const chartHorizontalInset = isTablet ? spacing(2.5) : spacing(1.75);
+  const chartBaseWidth = Math.max(0, contentMaxWidth - chartHorizontalInset * 2);
+  const CHART_WIDTH = Math.min(contentMaxWidth, Math.max(160, chartBaseWidth));
+  const chartHeight = isCompact ? 190 : isTablet ? 260 : 220;
   const isOnline = useInternetStatus();
   const autoCheckRef = useRef(false);
   const [updateBannerVisible, setUpdateBannerVisible] = useState(false);
@@ -87,8 +96,38 @@ const HomeScreen: React.FC = () => {
     }
   }, [navigation]);
 
-  // Dynamic sizing for responsiveness
-  const CHART_WIDTH = SCREEN_WIDTH - spacing(4) * 2 - spacing(4);
+  const responsiveContainerStyle = useMemo(
+    () => ({
+      width: '100%',
+      maxWidth: contentMaxWidth || SCREEN_WIDTH,
+      alignSelf: 'center',
+    }),
+    [contentMaxWidth, SCREEN_WIDTH]
+  );
+  const actionFlexBasis = isTablet ? '30%' : isCompact ? '100%' : '48%';
+  const insightItemWidth = isTablet ? '33.3333%' : isCompact ? '100%' : '50%';
+  const cardPadding = isCompact ? spacing(2) : spacing(3);
+  const heroMetricLayout = {
+    flexDirection: isCompact ? 'column' : 'row',
+    gap: spacing(isCompact ? 1 : 1.5),
+  };
+  const heroActionLayout = {
+    flexDirection: isCompact ? 'column' : 'row',
+    gap: spacing(isCompact ? 1 : 1.5),
+  };
+  const controlsRowLayout = {
+    flexDirection: isCompact ? 'column' : 'row',
+    gap: spacing(isCompact ? 1 : 0.5),
+  };
+  const actionGridLayout = {
+    flexWrap: isTablet ? 'nowrap' : 'wrap',
+    rowGap: spacing(isCompact ? 1 : 1.5),
+    columnGap: spacing(isCompact ? 1 : 1.5),
+  };
+  const insightGridLayout = {
+    rowGap: spacing(isCompact ? 1 : 1.5),
+    columnGap: spacing(isCompact ? 0 : 1),
+  };
 
   const [period, setPeriod] = useState<'week' | 'month'>('month');
   const [chartType, setChartType] = useState<'pie' | 'bar'>('pie');
@@ -538,6 +577,7 @@ const HomeScreen: React.FC = () => {
           showsVerticalScrollIndicator={false}
           renderItem={({ item, index }) => (
             <Animated.View
+              style={[styles.transactionRow, { maxWidth: contentMaxWidth || SCREEN_WIDTH }]}
               entering={FadeInDown.delay(520 + index * 40)
                 .springify()
                 .damping(16)}
@@ -549,13 +589,19 @@ const HomeScreen: React.FC = () => {
           maxToRenderPerBatch={5}
           windowSize={6}
           removeClippedSubviews={true}
-          contentContainerStyle={{
-            ...styles.scrollContent,
-            paddingBottom: spacing(10),
-          }}
+          contentContainerStyle={[
+            styles.scrollContent,
+            {
+              paddingHorizontal: horizontalPadding,
+              paddingBottom: spacing(10),
+            },
+          ]}
           ListHeaderComponentStyle={styles.listHeaderSpacing}
           ListHeaderComponent={
-            <Animated.View entering={FadeInDown.delay(100).duration(500)}>
+            <Animated.View
+              style={[styles.headerBlock, responsiveContainerStyle]}
+              entering={FadeInDown.delay(100).duration(500)}
+            >
               <View style={styles.topNavRow}>
                 <TouchableOpacity style={styles.navIconButton} onPress={handleOpenDrawer}>
                   <MaterialIcon name="menu" size={22} color={colors.text} />
@@ -566,7 +612,7 @@ const HomeScreen: React.FC = () => {
                 </View>
               </View>
 
-              <View style={styles.heroCard}>
+              <View style={[styles.heroCard, { padding: cardPadding }]}>
                 <Svg pointerEvents="none" style={StyleSheet.absoluteFill}>
                   <Defs>
                     <SvgLinearGradient id="heroGradient" x1="0" y1="0" x2="1" y2="1">
@@ -627,7 +673,7 @@ const HomeScreen: React.FC = () => {
                   </View>
                 </View>
 
-                <View style={styles.heroMetricRow}>
+                <View style={[styles.heroMetricRow, heroMetricLayout]}>
                   {heroMetrics.map((metric) => (
                     <View key={metric.label} style={styles.heroMetric}>
                       <View style={[styles.heroMetricDot, { backgroundColor: metric.accent }]} />
@@ -637,7 +683,7 @@ const HomeScreen: React.FC = () => {
                   ))}
                 </View>
 
-                <View style={styles.heroPrimaryActionRow}>
+                <View style={[styles.heroPrimaryActionRow, heroActionLayout]}>
                   <TouchableOpacity
                     style={styles.heroPrimaryCta}
                     onPress={() => navigation.navigate('AddEntry')}
@@ -655,7 +701,15 @@ const HomeScreen: React.FC = () => {
                 </View>
               </View>
 
-              <View style={styles.quickStatsCard}>
+              <View
+                style={[
+                  styles.quickStatsCard,
+                  {
+                    paddingHorizontal: isCompact ? spacing(1.5) : spacing(2),
+                    paddingVertical: isCompact ? spacing(0.75) : spacing(1.25),
+                  },
+                ]}
+              >
                 {highlightCards.map((card, idx) => (
                   <Animated.View
                     key={card.label}
@@ -678,15 +732,20 @@ const HomeScreen: React.FC = () => {
                 ))}
               </View>
 
-              <View style={styles.quickActionsCard}>
-                <View style={styles.actionGrid}>
+              <View
+                style={[
+                  styles.quickActionsCard,
+                  { padding: isCompact ? spacing(2) : spacing(2.5) },
+                ]}
+              >
+                <View style={[styles.actionGrid, actionGridLayout]}>
                   {homeActions.map((action, idx) => (
                     <Animated.View
                       key={action.label}
                       entering={FadeInDown.delay(260 + idx * 60)
                         .springify()
                         .damping(15)}
-                      style={styles.actionWrapper}
+                      style={[styles.actionWrapper, { flexBasis: actionFlexBasis }]}
                     >
                       <TouchableOpacity style={styles.actionCard} onPress={action.onPress}>
                         <View style={styles.actionInner}>
@@ -710,7 +769,7 @@ const HomeScreen: React.FC = () => {
                 </View>
               </View>
 
-              <View style={styles.analyticsCard}>
+              <View style={[styles.analyticsCard, { padding: cardPadding }]}>
                 <View style={styles.cardHeaderRow}>
                   <View>
                     <Text style={styles.cardTitle}>Cash intelligence</Text>
@@ -727,18 +786,25 @@ const HomeScreen: React.FC = () => {
                   </TouchableOpacity>
                 </View>
 
-                <View style={styles.controlsRow}>
+                <View style={[styles.controlsRow, controlsRowLayout]}>
                   <SimpleButtonGroup
                     buttons={['Week', 'Month']}
                     selectedIndex={period === 'week' ? 0 : 1}
                     onPress={(i) => setPeriod(i === 0 ? 'week' : 'month')}
-                    containerStyle={{ flex: 1, marginRight: 8 }}
+                    containerStyle={{
+                      flex: 1,
+                      marginRight: isCompact ? 0 : 8,
+                      marginBottom: isCompact ? spacing(1) : 0,
+                    }}
                   />
                   <SimpleButtonGroup
                     buttons={['Pie', 'Bar']}
                     selectedIndex={chartType === 'pie' ? 0 : 1}
                     onPress={(i) => setChartType(i === 0 ? 'pie' : 'bar')}
-                    containerStyle={{ flex: 1, marginLeft: 8 }}
+                    containerStyle={{
+                      flex: 1,
+                      marginLeft: isCompact ? 0 : 8,
+                    }}
                   />
                 </View>
 
@@ -752,7 +818,7 @@ const HomeScreen: React.FC = () => {
                       <PieChart
                         data={pieData}
                         width={CHART_WIDTH}
-                        height={220}
+                        height={chartHeight}
                         chartConfig={chartConfig}
                         accessor="population"
                         backgroundColor="transparent"
@@ -778,7 +844,7 @@ const HomeScreen: React.FC = () => {
                           ],
                         }}
                         width={CHART_WIDTH}
-                        height={220}
+                        height={chartHeight}
                         yAxisLabel="₹"
                         chartConfig={chartConfig}
                         showValuesOnTopOfBars
@@ -796,7 +862,7 @@ const HomeScreen: React.FC = () => {
                 )}
               </View>
 
-              <View style={styles.insightsCard}>
+              <View style={[styles.insightsCard, { padding: cardPadding }]}>
                 <View style={styles.cardHeaderRow}>
                   <View>
                     <Text style={styles.cardTitle}>Insights</Text>
@@ -804,9 +870,9 @@ const HomeScreen: React.FC = () => {
                   </View>
                   <MaterialIcon name="lightbulb" size={22} color={colors.accentOrange} />
                 </View>
-                <View style={styles.insightGrid}>
+                <View style={[styles.insightGrid, insightGridLayout]}>
                   {insightRows.map((row) => (
-                    <View key={row.label} style={styles.insightItem}>
+                    <View key={row.label} style={[styles.insightItem, { width: insightItemWidth }]}>
                       <View style={styles.insightIconWrap}>
                         <MaterialIcon name={row.icon as any} size={18} color={colors.primary} />
                       </View>
@@ -828,7 +894,9 @@ const HomeScreen: React.FC = () => {
             </Animated.View>
           }
           ListEmptyComponent={
-            <View style={styles.emptyTransactions}>
+            <View
+              style={[styles.emptyTransactions, responsiveContainerStyle, { marginHorizontal: 0 }]}
+            >
               <MaterialIcon name="hourglass-empty" size={36} color={colors.muted} />
               <Text style={styles.unavailable}>No recent activity</Text>
               <TouchableOpacity
@@ -863,6 +931,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing(2),
     paddingTop: spacing(3),
     paddingBottom: spacing(16),
+  },
+  headerBlock: {
+    width: '100%',
+  },
+  transactionRow: {
+    width: '100%',
+    alignSelf: 'center',
   },
   listHeaderSpacing: {
     paddingBottom: spacing(3),

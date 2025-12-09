@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, StyleSheet, FlatList, Dimensions, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, FlatList, Dimensions, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text, Button } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
@@ -47,6 +47,22 @@ const CashOutList = () => {
   const showLoading = useDelayedLoading(Boolean(isLoading), 200);
   const [timeFilter, setTimeFilter] = useState<EntryTimeframe>('all');
   const [sortMode, setSortMode] = useState<EntrySortMode>('recent');
+  const { width: screenWidth } = useWindowDimensions();
+  const isCompact = screenWidth < 360;
+  const isTablet = screenWidth >= 820;
+  const horizontalPadding = isTablet ? 48 : isCompact ? 16 : 26;
+  const availableWidth = Math.max(0, screenWidth - horizontalPadding * 2);
+  const contentMaxWidth = Math.min(760, availableWidth > 0 ? availableWidth : screenWidth);
+  const heroCardPadding = isTablet ? 28 : isCompact ? 16 : 20;
+  const quickCardWidth = isTablet ? '25%' : isCompact ? '100%' : '50%';
+  const responsiveContainerStyle = useMemo(
+    () => ({ width: '100%', maxWidth: contentMaxWidth || screenWidth, alignSelf: 'center' }),
+    [contentMaxWidth, screenWidth]
+  );
+  const listPaddingStyle = useMemo(
+    () => ({ paddingHorizontal: horizontalPadding }),
+    [horizontalPadding]
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -119,24 +135,24 @@ const CashOutList = () => {
   const renderHeader = () => (
     <>
       <View style={styles.headerInset} />
-      <View style={styles.headerSection}>
-        <View style={styles.heroCard}>
+      <View style={[styles.headerSection, responsiveContainerStyle]}>
+        <View style={[styles.heroCard, { padding: heroCardPadding }]}>
           <Text style={styles.heroOverline}>Spending</Text>
           <Text style={styles.heroTitle}>Expenses</Text>
           <Text style={styles.heroSubtitle}>
             ₹{summary.total.toLocaleString('en-IN')} total · {summary.count} item
             {summary.count === 1 ? '' : 's'}
           </Text>
-          <View style={styles.heroRow}>
-            <View style={styles.heroCol}>
+          <View style={[styles.heroRow, isCompact && { flexDirection: 'column' }]}>
+            <View style={[styles.heroCol, isCompact && { marginRight: 0, marginBottom: 12 }]}>
               <Text style={styles.heroLabel}>Average</Text>
               <Text style={styles.heroValue}>₹{summary.avg.toFixed(0)}</Text>
             </View>
-            <View style={styles.heroCol}>
+            <View style={[styles.heroCol, isCompact && { marginRight: 0, marginBottom: 12 }]}>
               <Text style={styles.heroLabel}>Top category</Text>
               <Text style={styles.heroValue}>{summary.topCategory}</Text>
             </View>
-            <View style={[styles.heroCol, styles.heroColLast]}>
+            <View style={[styles.heroCol, styles.heroColLast, isCompact && { marginRight: 0 }]}>
               <Text style={styles.heroLabel}>Last expense</Text>
               <Text style={styles.heroValue}>{lastActivityLabel}</Text>
             </View>
@@ -147,7 +163,21 @@ const CashOutList = () => {
           {quickStats.map((stat, index) => (
             <View
               key={stat.label}
-              style={[styles.quickCard, (index + 1) % 2 === 0 && styles.quickCardEven]}
+              style={[
+                styles.quickCard,
+                (index + 1) % 2 === 0 && !isTablet && styles.quickCardEven,
+                {
+                  width: quickCardWidth,
+                  flexBasis: quickCardWidth,
+                  paddingHorizontal: isTablet ? 24 : isCompact ? 12 : 16,
+                  marginRight:
+                    isTablet && (index + 1) % 4 !== 0
+                      ? 12
+                      : !isTablet && (index + 1) % 2 !== 0
+                      ? 8
+                      : 0,
+                },
+              ]}
             >
               <Text style={styles.quickLabel}>{stat.label}</Text>
               <Text style={styles.quickValue}>{stat.value}</Text>
@@ -157,7 +187,7 @@ const CashOutList = () => {
 
         <View style={styles.pillSection}>
           <Text style={styles.pillHeading}>Timeframe</Text>
-          <View style={styles.pillRow}>
+          <View style={[styles.pillRow, isCompact && { justifyContent: 'flex-start' }]}>
             {TIME_FILTERS.map((filter) => {
               const active = timeFilter === filter.value;
               return (
@@ -177,7 +207,7 @@ const CashOutList = () => {
 
         <View style={styles.pillSection}>
           <Text style={styles.pillHeading}>Sort by</Text>
-          <View style={styles.pillRow}>
+          <View style={[styles.pillRow, isCompact && { justifyContent: 'flex-start' }]}>
             {SORT_OPTIONS.map((option) => {
               const active = sortMode === option.value;
               return (
@@ -199,7 +229,7 @@ const CashOutList = () => {
   );
 
   const emptyComponent = !showLoading ? (
-    <View style={styles.emptyWrap}>
+    <View style={[styles.emptyWrap, responsiveContainerStyle]}>
       <View style={styles.emptyIconContainer}>
         <MaterialIcon name="trending-down" size={font(40)} color={colors.accentRed} />
       </View>
@@ -225,7 +255,7 @@ const CashOutList = () => {
           data={entryView.sortedEntries}
           extraData={listVersion + sortMode + timeFilter}
           keyExtractor={(item) => item.local_id}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, listPaddingStyle]}
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={renderHeader}
           ListEmptyComponent={emptyComponent}
@@ -238,7 +268,10 @@ const CashOutList = () => {
               entering={FadeInDown.delay(index * 40)
                 .springify()
                 .damping(14)}
-              style={styles.transactionWrapper}
+              style={[
+                styles.transactionWrapper,
+                { maxWidth: contentMaxWidth || screenWidth, alignSelf: 'center', width: '100%' },
+              ]}
             >
               <TransactionCard
                 item={item}

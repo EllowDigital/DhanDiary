@@ -33,8 +33,8 @@ const FEATURE_CARDS = [
   },
 ];
 
-const MIN_SPLASH_TIME_MS = 900;
-const MAX_SPLASH_WAIT_MS = 10500;
+const MIN_SPLASH_TIME_MS = 4600;
+const MAX_SPLASH_WAIT_MS = 8000;
 
 const SplashScreen = () => {
   const navigation = useNavigation<SplashNavProp>();
