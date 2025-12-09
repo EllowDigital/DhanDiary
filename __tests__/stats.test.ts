@@ -23,10 +23,10 @@ describe('stats helpers', () => {
     expect(getDaysCountForFilter('This Month', now)).toBe(15);
   });
 
-  test('This Year start', () => {
+  test('This Year covers elapsed days', () => {
     const now = dayjs('2025-08-10');
     const start = getStartDateForFilter('This Year', now);
     expect(start.format('YYYY-MM-DD')).toBe('2025-01-01');
-    expect(getDaysCountForFilter('This Year', now)).toBe(12);
+    expect(getDaysCountForFilter('This Year', now)).toBe(222);
   });
 });

@@ -66,10 +66,12 @@ export const markPendingProfileProcessed = async (id: number) => {
   await db.run('UPDATE pending_profile_updates SET processed = 1 WHERE id = ?', [id]);
 };
 
-export const clearAllData = async () => {
+export const clearAllData = async (opts?: { includeSession?: boolean }) => {
   const db = await sqlite.open();
   try {
-    await db.run('DELETE FROM local_users');
+    if (opts?.includeSession !== false) {
+      await db.run('DELETE FROM local_users');
+    }
     await db.run('DELETE FROM local_entries');
     await db.run('DELETE FROM pending_profile_updates');
     await db.run('DELETE FROM queued_remote_rows');

@@ -7,7 +7,13 @@ import {
   StatusBar,
   useWindowDimensions,
   FlatList,
+  ScrollView,
+  Platform,
+  Animated,
+  Easing,
+  Image,
 } from 'react-native';
+import type { ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
 import SimpleButtonGroup from '../components/SimpleButtonGroup';
@@ -21,24 +27,23 @@ import FullScreenSpinner from '../components/FullScreenSpinner';
 import UpdateBanner from '../components/UpdateBanner';
 import { useInternetStatus } from '../hooks/useInternetStatus';
 import * as Updates from 'expo-updates';
+import dayjs from 'dayjs';
 
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  withRepeat,
-  Easing,
-  FadeInDown,
-  interpolate,
-} from 'react-native-reanimated';
-
-import Svg, { Defs, LinearGradient as SvgLinearGradient, Stop, Rect } from 'react-native-svg';
-import { spacing, colors } from '../utils/design';
+// SVG & Design
+import Svg, {
+  Defs,
+  LinearGradient as SvgLinearGradient,
+  Stop,
+  Rect,
+  Circle,
+} from 'react-native-svg';
+import { spacing, colors, shadows } from '../utils/design';
 import { ensureCategory, FALLBACK_CATEGORY } from '../constants/categories';
 
+// --- CONFIG ---
 const pkg = require('../../package.json');
 
-/* CHART KIT (safe load) */
+/* CHART KIT SAFE LOAD */
 let PieChart: any = null;
 let BarChart: any = null;
 try {
@@ -72,7 +77,17 @@ const HomeScreen: React.FC = () => {
   const { user } = useAuth();
   const { entries = [], isLoading = false } = useEntries(user?.id);
   const showLoading = useDelayedLoading(Boolean(isLoading), 200);
+
+  // --- RESPONSIVE LOGIC ---
   const { width: SCREEN_WIDTH } = useWindowDimensions();
+  const isCompact = SCREEN_WIDTH < 380;
+  const isTablet = SCREEN_WIDTH >= 768;
+  const horizontalPadding = isTablet ? spacing(5) : spacing(2.5);
+  const maxContentWidth = 800;
+  const containerWidth = Math.min(SCREEN_WIDTH, maxContentWidth);
+  const chartWidth = Math.min(containerWidth - horizontalPadding * 2 - spacing(4), 600);
+  const chartHeight = 220;
+
   const isOnline = useInternetStatus();
   const autoCheckRef = useRef(false);
   const [updateBannerVisible, setUpdateBannerVisible] = useState(false);
@@ -80,33 +95,53 @@ const HomeScreen: React.FC = () => {
   const [applyingUpdate, setApplyingUpdate] = useState(false);
   const isExpoGo = Constants?.appOwnership === 'expo';
 
-  useLayoutEffect(() => {
-    if (typeof navigation?.setOptions === 'function') {
-      navigation.setOptions({ headerShown: false });
-    }
-  }, [navigation]);
+  // --- ANIMATIONS ---
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
 
-  // Dynamic sizing for responsiveness
-  const CHART_WIDTH = SCREEN_WIDTH - spacing(4) * 2 - spacing(4);
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic),
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 600,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic),
+      }),
+    ]).start();
 
+    // Subtle decoration pulse
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1.05, duration: 3000, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 3000, useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
+
+  // Filters
   const [period, setPeriod] = useState<'week' | 'month'>('month');
   const [chartType, setChartType] = useState<'pie' | 'bar'>('pie');
 
-  /* --- DATA LOGIC --- */
+  // --- DATA LOGIC ---
   const totalIn = useMemo(
     () => entries.filter((e) => e.type === 'in').reduce((s, x) => s + Number(x.amount || 0), 0),
     [entries]
   );
-
   const totalOut = useMemo(
     () => entries.filter((e) => e.type === 'out').reduce((s, x) => s + Number(x.amount || 0), 0),
     [entries]
   );
-
   const balance = totalIn - totalOut;
 
   const netTrend = useMemo(() => {
-    if (!entries.length) return { current: 0, previous: 0, delta: null as number | null };
+    if (!entries.length) return { current: 0, previous: 0, delta: null };
     const now = Date.now();
     const week = 7 * 24 * 60 * 60 * 1000;
     let current = 0;
@@ -122,42 +157,30 @@ const HomeScreen: React.FC = () => {
     return { current, previous, delta };
   }, [entries]);
 
-  const filteredByPeriod = useMemo(() => {
-    if (!entries) return [];
-    const now = new Date();
-    if (period === 'week') {
-      const cutoff = now.getTime() - 7 * 24 * 60 * 60 * 1000;
-      return (entries || []).filter((e: any) => {
-        try {
-          const t = new Date(e.date || e.created_at).getTime();
-          return !isNaN(t) && t >= cutoff;
-        } catch (err) {
-          return false;
-        }
-      });
-    }
+  const periodStart = useMemo(
+    () =>
+      period === 'week' ? dayjs().startOf('day').subtract(6, 'day') : dayjs().startOf('month'),
+    [period]
+  );
 
-    // month -> use calendar month start
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-    return (entries || []).filter((e: any) => {
-      try {
-        const t = new Date(e.date || e.created_at).getTime();
-        return !isNaN(t) && t >= startOfMonth;
-      } catch (err) {
-        return false;
-      }
-    });
-  }, [entries, period]);
+  const periodEntries = useMemo(() => {
+    const startValue = periodStart.valueOf();
+    return (entries || [])
+      .filter((entry: any) => {
+        const entryDate = dayjs(entry.date || entry.created_at).startOf('day');
+        return entryDate.isValid() && entryDate.valueOf() >= startValue;
+      })
+      .sort(
+        (a, b) => dayjs(b.date || b.created_at).valueOf() - dayjs(a.date || a.created_at).valueOf()
+      );
+  }, [entries, periodStart]);
 
-  const periodEntries = filteredByPeriod;
-  const periodLabel = period === 'week' ? 'This week' : 'This month';
-
+  const periodLabel = period === 'week' ? 'Last 7 Days' : 'This Month';
   const periodIncome = useMemo(
     () =>
       periodEntries.filter((e) => e.type === 'in').reduce((s, x) => s + Number(x.amount || 0), 0),
     [periodEntries]
   );
-
   const periodExpense = useMemo(
     () =>
       periodEntries.filter((e) => e.type === 'out').reduce((s, x) => s + Number(x.amount || 0), 0),
@@ -166,8 +189,9 @@ const HomeScreen: React.FC = () => {
 
   const periodAverageTicket = useMemo(() => {
     if (!periodEntries.length) return 0;
-    const sum = periodEntries.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
-    return sum / periodEntries.length;
+    return (
+      periodEntries.reduce((acc, curr) => acc + Number(curr.amount || 0), 0) / periodEntries.length
+    );
   }, [periodEntries]);
 
   const periodActiveDays = useMemo(() => {
@@ -181,12 +205,10 @@ const HomeScreen: React.FC = () => {
     return set.size;
   }, [periodEntries]);
 
-  const periodNet = periodIncome - periodExpense;
-
-  // Pie chart: show both income and expense by category
+  // Charts Data
   const pieByCategory = useMemo(() => {
     const map: Record<string, { in: number; out: number }> = {};
-    filteredByPeriod.forEach((e) => {
+    periodEntries.forEach((e) => {
       const cat = ensureCategory(e.category);
       if (!map[cat]) map[cat] = { in: 0, out: 0 };
       if (e.type === 'in') map[cat].in += Number(e.amount || 0);
@@ -197,9 +219,8 @@ const HomeScreen: React.FC = () => {
       income: vals.in,
       expense: vals.out,
     }));
-  }, [filteredByPeriod]);
+  }, [periodEntries]);
 
-  // For pie chart, show total expense by category
   const pieExpenseData = useMemo(
     () =>
       pieByCategory
@@ -214,629 +235,442 @@ const HomeScreen: React.FC = () => {
     [pieByCategory]
   );
 
-  // For pie chart, show total income by category (optional, for toggling)
-  const pieIncomeData = useMemo(
-    () =>
-      pieByCategory
-        .filter((x) => x.income > 0)
-        .map((x, i) => ({
-          name: x.category,
-          population: x.income,
-          color: PIE_COLORS[i % PIE_COLORS.length],
-          legendFontColor: colors.text,
-          legendFontSize: 12,
-        })),
-    [pieByCategory]
-  );
-
-  // Bar chart: show both income and expense per day/week
   const weeklyBar = useMemo(() => {
-    const now = new Date();
-    const source = filteredByPeriod || [];
+    const source = periodEntries || [];
+    const labels: string[] = [];
+    const incomeData: number[] = [];
+    const expenseData: number[] = [];
 
     if (period === 'week') {
-      const labels: string[] = [];
-      const orderKeys: string[] = [];
-      const incomeMap: Record<string, number> = {};
-      const expenseMap: Record<string, number> = {};
-
       for (let i = 6; i >= 0; i--) {
-        const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-        const key = d.toISOString().slice(0, 10);
-        const label = d.toLocaleDateString(undefined, { weekday: 'short' });
-        labels.push(label);
-        orderKeys.push(key);
-        incomeMap[key] = 0;
-        expenseMap[key] = 0;
+        const d = dayjs().subtract(i, 'day');
+        labels.push(d.format('ddd'));
+        const dayStr = d.format('YYYY-MM-DD');
+        const dayEntries = source.filter(
+          (e) => dayjs(e.date || e.created_at).format('YYYY-MM-DD') === dayStr
+        );
+        incomeData.push(
+          dayEntries.filter((e) => e.type === 'in').reduce((s, x) => s + Number(x.amount), 0)
+        );
+        expenseData.push(
+          dayEntries.filter((e) => e.type === 'out').reduce((s, x) => s + Number(x.amount), 0)
+        );
       }
-
-      source.forEach((entry) => {
-        try {
-          const key = new Date(entry.date || entry.created_at).toISOString().slice(0, 10);
-          if (!(key in incomeMap)) return;
-          const amount = Number(entry.amount || 0);
-          if (entry.type === 'in') incomeMap[key] += amount;
-          if (entry.type === 'out') expenseMap[key] += amount;
-        } catch (err) {}
+    } else {
+      const buckets = 4;
+      for (let i = 0; i < buckets; i++) labels.push(`W${i + 1}`);
+      for (let i = 0; i < buckets; i++) {
+        incomeData.push(0);
+        expenseData.push(0);
+      }
+      source.forEach((e) => {
+        const day = dayjs(e.date).date();
+        const idx = Math.min(Math.floor((day - 1) / 7), 3);
+        if (e.type === 'in') incomeData[idx] += Number(e.amount);
+        else expenseData[idx] += Number(e.amount);
       });
-
-      return {
-        labels,
-        income: orderKeys.map((key) => incomeMap[key]),
-        expense: orderKeys.map((key) => expenseMap[key]),
-      };
     }
-
-    const bucketCount = 4;
-    const weekLabels: string[] = [];
-    const weekIncome: number[] = Array(bucketCount).fill(0);
-    const weekExpense: number[] = Array(bucketCount).fill(0);
-
-    for (let w = bucketCount - 1; w >= 0; w--) {
-      const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() - w * 7);
-      const start = new Date(end.getFullYear(), end.getMonth(), end.getDate() - 6);
-      weekLabels.push(`${start.getDate()}-${end.getDate()}`);
-    }
-
-    source.forEach((entry) => {
-      try {
-        const d = new Date(entry.date || entry.created_at);
-        if (isNaN(d.getTime())) return;
-        const daysAgo = Math.floor((now.getTime() - d.getTime()) / (24 * 60 * 60 * 1000));
-        const bucket = Math.floor(daysAgo / 7);
-        if (bucket < 0 || bucket >= bucketCount) return;
-        const targetIndex = bucketCount - 1 - bucket;
-        const amount = Number(entry.amount || 0);
-        if (entry.type === 'in') weekIncome[targetIndex] += amount;
-        if (entry.type === 'out') weekExpense[targetIndex] += amount;
-      } catch (err) {}
-    });
-
-    return { labels: weekLabels, income: weekIncome, expense: weekExpense };
-  }, [filteredByPeriod, period]);
+    return { labels, income: incomeData, expense: expenseData };
+  }, [periodEntries, period]);
 
   const recent = (entries || []).slice(0, 5);
-
-  // Use pieExpenseData for pie chart (can toggle to pieIncomeData if needed)
-  const pieData = pieExpenseData;
-
-  const chartPrimaryRgb = hexToRgb(colors.primary);
-  const chartLabelRgb = hexToRgb(colors.muted);
-
-  const chartConfig = {
-    backgroundColor: colors.card,
-    backgroundGradientFrom: colors.card,
-    backgroundGradientTo: colors.card,
-    decimalPlaces: 0,
-    color: (opacity = 1) => `rgba(${chartPrimaryRgb}, ${opacity})`,
-    labelColor: (opacity = 1) => `rgba(${chartLabelRgb}, ${opacity})`,
-  };
-
-  const userInitial = (() => {
-    if (typeof user?.name === 'string') {
-      const trimmed = user.name.trim();
-      if (trimmed.length) return trimmed.charAt(0).toUpperCase();
-    }
-    return 'D';
-  })();
+  const userInitial = user?.name?.trim().charAt(0).toUpperCase() || 'U';
 
   const heroTrendDetails = useMemo(() => {
-    if (!entries.length) {
-      return {
-        label: 'Start logging to see insights',
-        color: colors.secondary,
-        icon: 'auto-graph' as const,
-      };
-    }
-    if (netTrend.delta === null) {
-      return {
-        label: 'New activity this week',
-        color: colors.secondary,
-        icon: 'auto-graph' as const,
-      };
-    }
+    if (!entries.length) return { label: 'No data', color: colors.muted, icon: 'auto-graph' };
+    if (netTrend.delta === null)
+      return { label: 'New', color: colors.secondary, icon: 'auto-graph' };
     const isUp = netTrend.delta >= 0;
     return {
-      label: `${isUp ? 'Up' : 'Down'} ${Math.abs(netTrend.delta).toFixed(1)}% vs last week`,
+      label: `${Math.abs(netTrend.delta).toFixed(1)}%`,
       color: isUp ? colors.accentGreen : colors.accentRed,
-      icon: isUp ? ('trending-up' as const) : ('trending-down' as const),
+      icon: isUp ? 'trending-up' : 'trending-down',
     };
   }, [entries.length, netTrend]);
 
-  const highlightCards = useMemo(
-    () => [
-      {
-        label: 'Avg ticket',
-        value: `₹${periodAverageTicket.toFixed(0)}`,
-        icon: 'receipt-long',
-        tint: colors.accentBlue,
-      },
-      {
-        label: 'Active days',
-        value: `${periodActiveDays || 0}`,
-        icon: 'calendar-today',
-        tint: colors.accentGreen,
-      },
-      {
-        label: 'Entries (period)',
-        value: `${periodEntries.length}`,
-        icon: 'fact-check',
-        tint: colors.secondary,
-      },
-    ],
-    [periodAverageTicket, periodActiveDays, periodEntries.length]
-  );
-
   const topExpenseCategory = useMemo(() => {
     if (!pieExpenseData.length) return FALLBACK_CATEGORY;
-    const sorted = [...pieExpenseData].sort((a, b) => b.population - a.population);
-    return sorted[0]?.name || FALLBACK_CATEGORY;
+    return (
+      [...pieExpenseData].sort((a, b) => b.population - a.population)[0]?.name || FALLBACK_CATEGORY
+    );
   }, [pieExpenseData]);
 
-  const heroMetrics = useMemo(
+  // Actions
+  const quickActions = useMemo(
     () => [
       {
-        label: 'Cash in',
-        value: `₹${Math.round(periodIncome).toLocaleString('en-IN')}`,
-        accent: colors.accentGreen,
-      },
-      {
-        label: 'Cash out',
-        value: `₹${Math.round(periodExpense).toLocaleString('en-IN')}`,
-        accent: colors.accentRed,
-      },
-      {
-        label: 'Top category',
-        value: topExpenseCategory,
-        accent: colors.accentOrange,
-      },
-    ],
-    [periodIncome, periodExpense, topExpenseCategory]
-  );
-
-  const insightRows = useMemo(
-    () => [
-      { label: 'Top category', value: topExpenseCategory, icon: 'category' },
-      { label: 'Net (7d)', value: `₹${netTrend.current.toFixed(0)}`, icon: 'timeline' },
-      { label: 'Balance', value: `₹${balance.toFixed(0)}`, icon: 'account-balance-wallet' },
-      {
-        label: 'Cash flow',
-        value: `${period === 'week' ? 'Weekly' : 'Monthly'}`,
-        icon: 'insights',
-      },
-    ],
-    [topExpenseCategory, netTrend.current, balance, period]
-  );
-
-  const homeActions = useMemo(
-    () => [
-      {
-        label: 'Add entry',
-        icon: 'flash-on',
-        accent: colors.primary,
+        label: 'Add Entry',
+        icon: 'add-circle-outline',
         onPress: () => navigation.navigate('AddEntry'),
+        primary: true,
+      },
+      {
+        label: 'Stats',
+        icon: 'bar-chart',
+        onPress: () => navigation.navigate('Stats'),
+        primary: false,
       },
       {
         label: 'History',
         icon: 'history',
-        accent: colors.secondary,
         onPress: () => navigation.navigate('History'),
+        primary: false,
       },
       {
-        label: 'Stats',
-        icon: 'insights',
-        accent: colors.accentGreen,
-        onPress: () => navigation.navigate('Stats'),
+        label: 'Settings',
+        icon: 'settings',
+        onPress: () => navigation.navigate('Settings'),
+        primary: false,
       },
     ],
     [navigation]
   );
 
-  const heroPulse = useSharedValue(0);
-  useEffect(() => {
-    heroPulse.value = withRepeat(
-      withTiming(1, { duration: 4200, easing: Easing.inOut(Easing.quad) }),
-      -1,
-      true
-    );
-  }, [heroPulse]);
-
-  const heroBlobLeftStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: interpolate(heroPulse.value, [0, 1], [0, -12]) },
-      { translateX: interpolate(heroPulse.value, [0, 1], [0, 10]) },
-      { scale: 0.95 + heroPulse.value * 0.08 },
+  const highlightCards = useMemo(
+    () => [
+      {
+        label: 'Avg Ticket',
+        value: `₹${periodAverageTicket.toFixed(0)}`,
+        icon: 'receipt',
+        color: colors.accentBlue,
+      },
+      {
+        label: 'Active Days',
+        value: `${periodActiveDays}`,
+        icon: 'event-available',
+        color: colors.accentGreen,
+      },
+      {
+        label: 'Top Spend',
+        value: topExpenseCategory,
+        icon: 'category',
+        color: colors.accentOrange,
+      },
     ],
-    opacity: 0.45,
-  }));
+    [periodAverageTicket, periodActiveDays, topExpenseCategory]
+  );
 
-  const heroBlobRightStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: interpolate(heroPulse.value, [0, 1], [-6, 8]) },
-      { translateX: interpolate(heroPulse.value, [0, 1], [12, -8]) },
-      { scale: 0.9 + heroPulse.value * 0.1 },
-    ],
-    opacity: 0.35,
-  }));
+  const chartConfig = {
+    backgroundColor: 'transparent',
+    backgroundGradientFrom: colors.card,
+    backgroundGradientTo: colors.card,
+    decimalPlaces: 0,
+    color: (opacity = 1) => `rgba(${hexToRgb(colors.primary)}, ${opacity})`,
+    labelColor: (opacity = 1) => `rgba(${hexToRgb(colors.muted)}, ${opacity})`,
+    propsForBackgroundLines: { strokeDasharray: '' },
+  };
 
-  /* --- ANIMATIONS --- */
-  const shimmer = useSharedValue(0);
-  useEffect(() => {
-    shimmer.value = withRepeat(withTiming(1, { duration: 900 }), -1, true);
-  }, []);
-  const shimmerStyle = useAnimatedStyle(() => ({ opacity: 0.3 + 0.7 * shimmer.value }));
+  const responsiveContainerStyle = useMemo<ViewStyle>(
+    () => ({
+      width: '100%' as const,
+      maxWidth: maxContentWidth,
+      alignSelf: 'center',
+      paddingHorizontal: horizontalPadding,
+    }),
+    [maxContentWidth, horizontalPadding]
+  );
 
-  // Auto-check for OTA updates once per session when we're online
-  useEffect(() => {
-    if (!isOnline || isExpoGo || autoCheckRef.current) return;
-    autoCheckRef.current = true;
+  // --- HANDLERS ---
+  const handleOpenDrawer = () => {
+    navigation.openDrawer();
+  };
 
-    let cancelled = false;
-    (async () => {
-      try {
-        const result = await Updates.checkForUpdateAsync();
-        if (!cancelled && result.isAvailable) {
-          const manifest: any = (result as any)?.manifest || {};
-          const version =
-            manifest.version ||
-            manifest.runtimeVersion ||
-            manifest?.extra?.expoGo?.runtimeVersion ||
-            pkg.version;
-          setUpdateMessage(version ? `Version ${version}` : undefined);
-          setUpdateBannerVisible(true);
-        }
-      } catch (err) {
-        // Fail silently per requirement — no UI noise when checks fail
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isOnline]);
-
-  const handleBannerPress = useCallback(async () => {
+  const handleBannerPress = async () => {
     setUpdateBannerVisible(false);
     try {
       setApplyingUpdate(true);
       const fetched = await Updates.fetchUpdateAsync();
-      if (fetched.isNew) {
-        await Updates.reloadAsync();
-      }
-    } catch (err) {
-      // Silent failure keeps UI clean; logs still aid debugging
-      console.log('Home auto-update apply failed', err);
+      if (fetched.isNew) await Updates.reloadAsync();
+    } catch (e) {
     } finally {
       setApplyingUpdate(false);
     }
-  }, []);
+  };
 
-  const handleOpenDrawer = useCallback(() => {
-    const anyNav: any = navigation;
-    if (typeof anyNav?.openDrawer === 'function') {
-      anyNav.openDrawer();
-    } else if (typeof anyNav?.toggleDrawer === 'function') {
-      anyNav.toggleDrawer();
-    }
-  }, [navigation]);
+  // Update Checker
+  useEffect(() => {
+    if (!isOnline || isExpoGo || autoCheckRef.current) return;
+    autoCheckRef.current = true;
+    (async () => {
+      try {
+        const result = await Updates.checkForUpdateAsync();
+        if (result.isAvailable) {
+          setUpdateMessage('New version available');
+          setUpdateBannerVisible(true);
+        }
+      } catch (e) {}
+    })();
+  }, [isOnline]);
 
   return (
     <View style={styles.mainContainer}>
       <UpdateBanner
         visible={updateBannerVisible}
         message={updateMessage}
-        duration={4500}
         onPress={handleBannerPress}
         onClose={() => setUpdateBannerVisible(false)}
       />
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       <SafeAreaView style={styles.safeArea}>
         <FullScreenSpinner visible={showLoading || applyingUpdate} />
+
         <FlatList
           data={recent}
           keyExtractor={(item) => item.local_id}
           showsVerticalScrollIndicator={false}
-          renderItem={({ item, index }) => (
-            <Animated.View
-              entering={FadeInDown.delay(520 + index * 40)
-                .springify()
-                .damping(16)}
-            >
-              <TransactionCard item={item} />
-            </Animated.View>
-          )}
-          initialNumToRender={5}
-          maxToRenderPerBatch={5}
-          windowSize={6}
-          removeClippedSubviews={true}
-          contentContainerStyle={{
-            ...styles.scrollContent,
-            paddingBottom: spacing(10),
-          }}
-          ListHeaderComponentStyle={styles.listHeaderSpacing}
+          contentContainerStyle={{ paddingBottom: spacing(16) }}
           ListHeaderComponent={
-            <Animated.View entering={FadeInDown.delay(100).duration(500)}>
-              <View style={styles.topNavRow}>
-                <TouchableOpacity style={styles.navIconButton} onPress={handleOpenDrawer}>
-                  <MaterialIcon name="menu" size={22} color={colors.text} />
-                </TouchableOpacity>
-                <Text style={styles.topNavTitle}>Dashboard</Text>
-                <View style={styles.topNavAvatar}>
-                  <Text style={styles.topNavAvatarText}>{userInitial}</Text>
+            <View style={responsiveContainerStyle}>
+              {/* --- HEADER --- */}
+              <Animated.View
+                style={[
+                  styles.headerRow,
+                  { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+                ]}
+              >
+                <View style={styles.headerLeft}>
+                  <TouchableOpacity style={styles.menuButton} onPress={handleOpenDrawer}>
+                    <MaterialIcon name="menu" size={24} color={colors.text} />
+                  </TouchableOpacity>
+                  <View>
+                    <Text style={styles.greetingSub}>Welcome back,</Text>
+                    <Text style={styles.greetingName}>
+                      {user?.name?.split(' ')[0] || 'Guest'} 👋
+                    </Text>
+                  </View>
                 </View>
-              </View>
 
-              <View style={styles.heroCard}>
+                <View style={styles.profileBtn}>
+                  <Text style={styles.profileInitial}>{userInitial}</Text>
+                </View>
+              </Animated.View>
+
+              {/* --- HERO CARD (Decorated) --- */}
+              <Animated.View
+                style={[
+                  styles.heroContainer,
+                  { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+                ]}
+              >
                 <Svg pointerEvents="none" style={StyleSheet.absoluteFill}>
                   <Defs>
-                    <SvgLinearGradient id="heroGradient" x1="0" y1="0" x2="1" y2="1">
-                      <Stop offset="0%" stopColor={colors.primary} stopOpacity={0.9} />
-                      <Stop offset="90%" stopColor={colors.secondary} stopOpacity={0.85} />
+                    <SvgLinearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
+                      <Stop offset="0" stopColor={colors.primary} stopOpacity="1" />
+                      <Stop offset="1" stopColor={colors.secondary} stopOpacity="1" />
                     </SvgLinearGradient>
                   </Defs>
-                  <Rect width="100%" height="100%" rx={28} fill="url(#heroGradient)" />
+                  <Rect width="100%" height="100%" rx={26} fill="url(#grad)" />
+                  {/* Decorations */}
+                  <Circle cx="85%" cy="20%" r="60" fill="white" fillOpacity="0.1" />
+                  <Circle cx="10%" cy="90%" r="80" fill="white" fillOpacity="0.05" />
                 </Svg>
 
-                <Animated.View style={[styles.heroBlob, styles.heroBlobLeft, heroBlobLeftStyle]} />
-                <Animated.View
-                  style={[styles.heroBlob, styles.heroBlobRight, heroBlobRightStyle]}
-                />
+                {/* Pulsing Glow */}
+                <Animated.View style={[styles.heroGlow, { transform: [{ scale: pulseAnim }] }]} />
 
-                <View style={styles.heroChipRow}>
-                  <View style={styles.heroChip}>
-                    <MaterialIcon
-                      name={isOnline ? 'wifi' : 'wifi-off'}
-                      size={16}
-                      color={colors.white}
-                    />
-                    <Text style={styles.heroChipText}>
-                      {isOnline ? 'Live sync on' : 'Offline mode'}
-                    </Text>
-                  </View>
-                  <View style={[styles.heroChip, styles.heroChipLight]}>
-                    <MaterialIcon name="schedule" size={16} color={colors.primary} />
-                    <Text style={[styles.heroChipText, styles.heroChipTextDark]}>
-                      {periodLabel}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.heroTopRow}>
-                  <View>
-                    <Text style={styles.heroSubtle}>Welcome back</Text>
-                    <Text style={styles.heroGreeting}>{user?.name ? user.name : 'Guest'} 👋</Text>
-                  </View>
-                  <TouchableOpacity
-                    style={styles.heroSettings}
-                    onPress={() => navigation.navigate('Settings')}
-                  >
-                    <MaterialIcon name="settings" size={20} color={colors.primary} />
-                  </TouchableOpacity>
-                </View>
-
-                <View style={styles.heroBalanceRow}>
-                  <View>
-                    <Text style={styles.heroOverline}>Net this period</Text>
-                    <Text style={styles.heroBalance}>₹{periodNet.toFixed(2)}</Text>
-                  </View>
-                  <View style={[styles.trendBadge, { backgroundColor: 'rgba(255,255,255,0.12)' }]}>
-                    <MaterialIcon name={heroTrendDetails.icon} size={18} color={colors.white} />
-                    <Text style={[styles.trendText, { color: colors.white }]}>
-                      {heroTrendDetails.label}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.heroMetricRow}>
-                  {heroMetrics.map((metric) => (
-                    <View key={metric.label} style={styles.heroMetric}>
-                      <View style={[styles.heroMetricDot, { backgroundColor: metric.accent }]} />
-                      <Text style={styles.heroMetricLabel}>{metric.label}</Text>
-                      <Text style={styles.heroMetricValue}>{metric.value}</Text>
+                <View style={styles.heroContent}>
+                  <View style={styles.heroHeader}>
+                    <View style={styles.periodBadge}>
+                      <MaterialIcon name="calendar-today" size={12} color={colors.white} />
+                      <Text style={styles.periodText}>{periodLabel}</Text>
                     </View>
-                  ))}
-                </View>
+                    <View style={[styles.trendPill, { backgroundColor: 'rgba(0,0,0,0.2)' }]}>
+                      <MaterialIcon
+                        name={heroTrendDetails.icon as any}
+                        size={14}
+                        color={heroTrendDetails.color}
+                      />
+                      <Text style={[styles.trendText, { color: heroTrendDetails.color }]}>
+                        {heroTrendDetails.label}
+                      </Text>
+                    </View>
+                  </View>
 
-                <View style={styles.heroPrimaryActionRow}>
-                  <TouchableOpacity
-                    style={styles.heroPrimaryCta}
-                    onPress={() => navigation.navigate('AddEntry')}
-                  >
-                    <MaterialIcon name="flash-on" size={18} color={colors.white} />
-                    <Text style={styles.heroPrimaryCtaText}>Log entry</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.heroSecondaryCta}
-                    onPress={() => navigation.navigate('Stats')}
-                  >
-                    <MaterialIcon name="insights" size={18} color={colors.primary} />
-                    <Text style={styles.heroSecondaryCtaText}>Open stats</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
+                  <View style={styles.balanceBlock}>
+                    <Text style={styles.balanceLabel}>Total Balance</Text>
+                    <Text style={styles.balanceAmount}>₹{balance.toLocaleString('en-IN')}</Text>
+                  </View>
 
-              <View style={styles.quickStatsCard}>
-                {highlightCards.map((card, idx) => (
-                  <Animated.View
-                    key={card.label}
-                    entering={FadeInDown.delay(140 + idx * 40)
-                      .springify()
-                      .damping(18)}
+                  <View style={styles.heroStatsRow}>
+                    <View style={styles.heroStatItem}>
+                      <View
+                        style={[styles.arrowCircle, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
+                      >
+                        <MaterialIcon name="arrow-downward" size={16} color={colors.accentGreen} />
+                      </View>
+                      <View>
+                        <Text style={styles.statLabelLight}>Income</Text>
+                        <Text style={styles.statValueLight}>
+                          ₹{Math.round(periodIncome).toLocaleString()}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.dividerVertical} />
+                    <View style={styles.heroStatItem}>
+                      <View
+                        style={[styles.arrowCircle, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
+                      >
+                        <MaterialIcon name="arrow-upward" size={16} color={colors.accentRed} />
+                      </View>
+                      <View>
+                        <Text style={styles.statLabelLight}>Expenses</Text>
+                        <Text style={styles.statValueLight}>
+                          ₹{Math.round(periodExpense).toLocaleString()}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              </Animated.View>
+
+              {/* --- ACTION GRID --- */}
+              <Animated.View
+                style={[
+                  styles.actionRow,
+                  { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+                ]}
+              >
+                {quickActions.map((action, idx) => (
+                  <TouchableOpacity
+                    key={idx}
                     style={[
-                      styles.quickStatRow,
-                      idx !== highlightCards.length - 1 && styles.quickStatDivider,
+                      styles.actionBtn,
+                      action.primary ? styles.actionBtnPrimary : styles.actionBtnSecondary,
                     ]}
-                  >
-                    <View style={[styles.quickStatIcon, { backgroundColor: `${card.tint}1A` }]}>
-                      <MaterialIcon name={card.icon as any} size={18} color={card.tint} />
-                    </View>
-                    <View style={styles.quickStatTextWrap}>
-                      <Text style={styles.quickStatLabel}>{card.label}</Text>
-                      <Text style={styles.quickStatValue}>{card.value}</Text>
-                    </View>
-                  </Animated.View>
-                ))}
-              </View>
-
-              <View style={styles.quickActionsCard}>
-                <View style={styles.actionGrid}>
-                  {homeActions.map((action, idx) => (
-                    <Animated.View
-                      key={action.label}
-                      entering={FadeInDown.delay(260 + idx * 60)
-                        .springify()
-                        .damping(15)}
-                      style={styles.actionWrapper}
-                    >
-                      <TouchableOpacity style={styles.actionCard} onPress={action.onPress}>
-                        <View style={styles.actionInner}>
-                          <View
-                            style={[
-                              styles.actionIconWrap,
-                              { backgroundColor: `${action.accent}22` },
-                            ]}
-                          >
-                            <MaterialIcon
-                              name={action.icon as any}
-                              size={20}
-                              color={action.accent}
-                            />
-                          </View>
-                          <Text style={styles.actionLabel}>{action.label}</Text>
-                        </View>
-                      </TouchableOpacity>
-                    </Animated.View>
-                  ))}
-                </View>
-              </View>
-
-              <View style={styles.analyticsCard}>
-                <View style={styles.cardHeaderRow}>
-                  <View>
-                    <Text style={styles.cardTitle}>Cash intelligence</Text>
-                    <Text style={styles.cardSubtitle}>Visualize income vs expense</Text>
-                  </View>
-                  <TouchableOpacity
-                    onPress={() => setChartType(chartType === 'pie' ? 'bar' : 'pie')}
+                    onPress={action.onPress}
+                    activeOpacity={0.7}
                   >
                     <MaterialIcon
-                      name={chartType === 'pie' ? 'bar-chart' : 'pie-chart'}
-                      size={22}
-                      color={colors.primary}
+                      name={action.icon as any}
+                      size={24}
+                      color={action.primary ? colors.white : colors.primary}
                     />
+                    <Text
+                      style={[
+                        styles.actionLabel,
+                        { color: action.primary ? colors.white : colors.text },
+                      ]}
+                    >
+                      {action.label}
+                    </Text>
                   </TouchableOpacity>
-                </View>
+                ))}
+              </Animated.View>
 
-                <View style={styles.controlsRow}>
-                  <SimpleButtonGroup
-                    buttons={['Week', 'Month']}
-                    selectedIndex={period === 'week' ? 0 : 1}
-                    onPress={(i) => setPeriod(i === 0 ? 'week' : 'month')}
-                    containerStyle={{ flex: 1, marginRight: 8 }}
-                  />
-                  <SimpleButtonGroup
-                    buttons={['Pie', 'Bar']}
-                    selectedIndex={chartType === 'pie' ? 0 : 1}
-                    onPress={(i) => setChartType(i === 0 ? 'pie' : 'bar')}
-                    containerStyle={{ flex: 1, marginLeft: 8 }}
-                  />
-                </View>
-
-                {isLoading ? (
-                  <Animated.View style={[styles.skeletonBox, shimmerStyle]} />
-                ) : pieData.length > 0 ||
-                  weeklyBar.income?.some(Boolean) ||
-                  weeklyBar.expense?.some(Boolean) ? (
-                  <View style={styles.chartWrapper}>
-                    {chartType === 'pie' && PieChart ? (
-                      <PieChart
-                        data={pieData}
-                        width={CHART_WIDTH}
-                        height={220}
-                        chartConfig={chartConfig}
-                        accessor="population"
-                        backgroundColor="transparent"
-                        paddingLeft="18"
-                        absolute
-                        hasLegend
-                      />
-                    ) : chartType === 'bar' && BarChart ? (
-                      <BarChart
-                        data={{
-                          labels: weeklyBar.labels,
-                          datasets: [
-                            {
-                              data: weeklyBar.income,
-                              color: () => colors.accentGreen,
-                              label: 'Income',
-                            },
-                            {
-                              data: weeklyBar.expense,
-                              color: () => colors.accentRed,
-                              label: 'Expense',
-                            },
-                          ],
-                        }}
-                        width={CHART_WIDTH}
-                        height={220}
-                        yAxisLabel="₹"
-                        chartConfig={chartConfig}
-                        showValuesOnTopOfBars
-                        fromZero
-                        style={{ borderRadius: 18, marginTop: 6, paddingRight: 0 }}
-                      />
-                    ) : (
-                      <Text style={styles.unavailable}>Chart library missing</Text>
-                    )}
-                  </View>
-                ) : (
-                  <View style={styles.emptyState}>
-                    <Text style={styles.unavailable}>No data in this period.</Text>
-                  </View>
-                )}
-              </View>
-
-              <View style={styles.insightsCard}>
-                <View style={styles.cardHeaderRow}>
-                  <View>
-                    <Text style={styles.cardTitle}>Insights</Text>
-                    <Text style={styles.cardSubtitle}>Auto-curated from your activity</Text>
-                  </View>
-                  <MaterialIcon name="lightbulb" size={22} color={colors.accentOrange} />
-                </View>
-                <View style={styles.insightGrid}>
-                  {insightRows.map((row) => (
-                    <View key={row.label} style={styles.insightItem}>
-                      <View style={styles.insightIconWrap}>
-                        <MaterialIcon name={row.icon as any} size={18} color={colors.primary} />
+              {/* --- HIGHLIGHTS --- */}
+              <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+                <Text style={styles.sectionTitle}>Highlights</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.highlightScroll}
+                >
+                  {highlightCards.map((card, idx) => (
+                    <View
+                      key={idx}
+                      style={[styles.highlightCard, { minWidth: isCompact ? 130 : 150 }]}
+                    >
+                      <View style={[styles.highlightIcon, { backgroundColor: `${card.color}15` }]}>
+                        <MaterialIcon name={card.icon as any} size={20} color={card.color} />
                       </View>
-                      <View style={styles.insightTextWrap}>
-                        <Text style={styles.insightLabel}>{row.label}</Text>
-                        <Text style={styles.insightValue}>{row.value}</Text>
-                      </View>
+                      <Text style={styles.highlightValue} numberOfLines={1}>
+                        {card.value}
+                      </Text>
+                      <Text style={styles.highlightLabel}>{card.label}</Text>
                     </View>
                   ))}
-                </View>
-              </View>
+                </ScrollView>
+              </Animated.View>
 
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Recent transactions</Text>
+              {/* --- ANALYTICS --- */}
+              <Animated.View
+                style={[
+                  styles.chartSection,
+                  { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+                ]}
+              >
+                <View style={styles.chartHeader}>
+                  <Text style={styles.sectionTitle}>Overview</Text>
+                  <View style={styles.chartToggle}>
+                    <SimpleButtonGroup
+                      buttons={['Pie', 'Bar']}
+                      selectedIndex={chartType === 'pie' ? 0 : 1}
+                      onPress={(i) => setChartType(i === 0 ? 'pie' : 'bar')}
+                      containerStyle={{ height: 32 }}
+                    />
+                    <View style={{ width: 8 }} />
+                    <SimpleButtonGroup
+                      buttons={['7D', '30D']}
+                      selectedIndex={period === 'week' ? 0 : 1}
+                      onPress={(i) => setPeriod(i === 0 ? 'week' : 'month')}
+                      containerStyle={{ height: 32 }}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.chartContainer}>
+                  {isLoading ? (
+                    <View style={[styles.skeleton, { height: chartHeight }]} />
+                  ) : (
+                    <>
+                      {chartType === 'pie' && PieChart && pieExpenseData.length > 0 && (
+                        <PieChart
+                          data={pieExpenseData}
+                          width={chartWidth}
+                          height={chartHeight}
+                          chartConfig={chartConfig}
+                          accessor="population"
+                          backgroundColor="transparent"
+                          paddingLeft="0"
+                          absolute={false}
+                          center={[isTablet ? chartWidth / 4 : 10, 0]}
+                          hasLegend={true}
+                        />
+                      )}
+                      {chartType === 'bar' && BarChart && (
+                        <BarChart
+                          data={{
+                            labels: weeklyBar.labels,
+                            datasets: [{ data: weeklyBar.income }, { data: weeklyBar.expense }],
+                          }}
+                          width={chartWidth}
+                          height={chartHeight}
+                          yAxisLabel="₹"
+                          chartConfig={chartConfig}
+                          showValuesOnTopOfBars={!isCompact}
+                          fromZero
+                          style={{ borderRadius: 16, paddingRight: 32 }}
+                        />
+                      )}
+                      {pieExpenseData.length === 0 && weeklyBar.income.every((x) => x === 0) && (
+                        <View style={styles.emptyChart}>
+                          <MaterialIcon name="donut-large" size={40} color={colors.border} />
+                          <Text style={styles.emptyText}>No data for this period</Text>
+                        </View>
+                      )}
+                    </>
+                  )}
+                </View>
+              </Animated.View>
+
+              <View style={styles.listHeaderRow}>
+                <Text style={styles.sectionTitle}>Recent Transactions</Text>
                 <TouchableOpacity onPress={() => navigation.navigate('History')}>
-                  <Text style={styles.seeAll}>See all</Text>
+                  <Text style={styles.seeAll}>See All</Text>
                 </TouchableOpacity>
               </View>
-            </Animated.View>
+            </View>
           }
+          renderItem={({ item }) => (
+            <View style={[responsiveContainerStyle, { marginBottom: spacing(1.5) }]}>
+              {/* READ ONLY MODE: No onEdit or onDelete passed */}
+              <TransactionCard item={item} />
+            </View>
+          )}
           ListEmptyComponent={
-            <View style={styles.emptyTransactions}>
-              <MaterialIcon name="hourglass-empty" size={36} color={colors.muted} />
-              <Text style={styles.unavailable}>No recent activity</Text>
-              <TouchableOpacity
-                style={styles.emptyCta}
-                onPress={() => navigation.navigate('AddEntry')}
-              >
-                <Text style={styles.emptyCtaText}>Log your first entry</Text>
-              </TouchableOpacity>
+            <View style={styles.emptyList}>
+              <MaterialIcon name="receipt-long" size={48} color={colors.border} />
+              <Text style={styles.emptyText}>No transactions found.</Text>
             </View>
           }
         />
@@ -847,10 +681,6 @@ const HomeScreen: React.FC = () => {
 
 export default HomeScreen;
 
-/* =======================================================
-   MODERN STYLES
-========================================================= */
-
 const styles = StyleSheet.create({
   mainContainer: {
     flex: 1,
@@ -859,434 +689,292 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
-  scrollContent: {
-    paddingHorizontal: spacing(2),
-    paddingTop: spacing(3),
-    paddingBottom: spacing(16),
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginVertical: spacing(2),
   },
-  listHeaderSpacing: {
-    paddingBottom: spacing(3),
-  },
-  topNavRow: {
+  headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing(3),
-    position: 'relative',
-    zIndex: 2,
+    gap: 12,
   },
-  navIconButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 16,
+  menuButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     backgroundColor: colors.card,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.border,
   },
-  topNavTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  topNavAvatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 16,
-    backgroundColor: colors.primarySoft,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  topNavAvatarText: {
-    fontWeight: '700',
-    color: colors.primary,
-  },
-  heroCard: {
-    borderRadius: 28,
-    padding: spacing(3),
-    marginTop: spacing(0.5),
-    marginBottom: spacing(3),
-    overflow: 'hidden',
-    position: 'relative',
-    zIndex: 1,
-  },
-  heroBlob: {
-    position: 'absolute',
-    width: 180,
-    height: 180,
-    borderRadius: 160,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-  },
-  heroBlobLeft: {
-    top: -30,
-    left: -30,
-  },
-  heroBlobRight: {
-    bottom: -20,
-    right: -10,
-  },
-  heroChipRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    columnGap: spacing(1.25),
-    rowGap: spacing(1),
-    marginBottom: spacing(2),
-  },
-  heroChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    gap: 8,
-    flexShrink: 1,
-  },
-  heroChipLight: {
-    backgroundColor: colors.white,
-    marginLeft: 'auto',
-  },
-  heroChipText: {
-    color: colors.white,
-    fontSize: 13,
+  greetingSub: {
+    fontSize: 12,
+    color: colors.muted,
     fontWeight: '600',
-  },
-  heroChipTextDark: {
-    color: colors.primary,
-  },
-  heroTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing(2),
-  },
-  heroSubtle: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 14,
-    marginBottom: 4,
-  },
-  heroGreeting: {
-    fontSize: 22,
-    color: colors.white,
-    fontWeight: '700',
-    letterSpacing: -0.5,
-  },
-  heroSettings: {
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  heroBalanceRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing(2),
-  },
-  heroOverline: {
-    color: 'rgba(255,255,255,0.65)',
-    fontSize: 13,
-    letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
-  heroBalance: {
+  greetingName: {
+    fontSize: 20,
+    color: colors.text,
+    fontWeight: '800',
+  },
+  profileBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: colors.surfaceMuted,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  profileInitial: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  /* HERO CARD */
+  heroContainer: {
+    height: 240,
+    borderRadius: 30,
+    overflow: 'hidden',
+    marginBottom: spacing(3),
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 6,
+    position: 'relative',
+  },
+  heroGlow: {
+    position: 'absolute',
+    top: -50,
+    right: -50,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
+  heroContent: {
+    flex: 1,
+    padding: spacing(3),
+    justifyContent: 'space-between',
+  },
+  heroHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  periodBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    gap: 6,
+  },
+  periodText: {
+    color: 'rgba(255,255,255,0.95)',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  trendPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    gap: 4,
+  },
+  trendText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  balanceBlock: {
+    alignItems: 'center',
+    marginVertical: spacing(1),
+  },
+  balanceLabel: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 14,
+    fontWeight: '500',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  balanceAmount: {
     color: colors.white,
-    fontSize: 38,
+    fontSize: 36,
     fontWeight: '800',
     letterSpacing: -1,
   },
-  trendBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
+  heroStatsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-  },
-  trendText: {
-    fontWeight: '600',
-    fontSize: 12,
-    marginLeft: 6,
-  },
-  heroMetricRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: spacing(2),
-  },
-  heroMetric: {
-    flex: 1,
-    backgroundColor: 'rgba(15,23,42,0.14)',
-    borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.15)',
+    borderRadius: 20,
     padding: 12,
+    alignItems: 'center',
   },
-  heroMetricDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 6,
-    marginBottom: 8,
+  heroStatItem: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    justifyContent: 'center',
   },
-  heroMetricLabel: {
-    color: 'rgba(255,255,255,0.65)',
-    fontSize: 12,
-    marginBottom: 6,
+  dividerVertical: {
+    width: 1,
+    height: '80%',
+    backgroundColor: 'rgba(255,255,255,0.2)',
   },
-  heroMetricValue: {
+  arrowCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  statLabelLight: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 11,
+  },
+  statValueLight: {
     color: colors.white,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
   },
-  heroPrimaryActionRow: {
+  /* ACTIONS */
+  actionRow: {
     flexDirection: 'row',
     gap: 12,
+    marginBottom: spacing(3),
   },
-  heroPrimaryCta: {
+  actionBtn: {
     flex: 1,
-    backgroundColor: colors.secondary,
-    paddingVertical: 12,
-    borderRadius: 14,
-    flexDirection: 'row',
-    justifyContent: 'center',
+    flexDirection: 'column',
     alignItems: 'center',
-    gap: 8,
-  },
-  heroPrimaryCtaText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: colors.white,
-  },
-  heroSecondaryCta: {
-    flex: 1,
-    backgroundColor: colors.white,
-    paddingVertical: 12,
-    borderRadius: 14,
-    flexDirection: 'row',
     justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-  },
-  heroSecondaryCtaText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: colors.primary,
-  },
-  quickStatsCard: {
-    backgroundColor: colors.card,
+    paddingVertical: 16,
     borderRadius: 24,
-    paddingHorizontal: spacing(2),
-    paddingVertical: spacing(1),
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: spacing(3),
-  },
-  quickStatRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: spacing(1.5),
-  },
-  quickStatDivider: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
-  quickStatIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: spacing(1.5),
-  },
-  quickStatTextWrap: {
-    flex: 1,
-  },
-  quickStatLabel: {
-    color: colors.muted,
-    fontSize: 12,
-    marginBottom: 2,
-  },
-  quickStatValue: {
-    color: colors.text,
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  quickActionsCard: {
-    backgroundColor: colors.card,
-    borderRadius: 28,
-    paddingHorizontal: spacing(2),
-    paddingVertical: spacing(2.5),
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: spacing(3),
-    shadowColor: colors.text,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.04,
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
     shadowRadius: 10,
     elevation: 2,
   },
-  actionGrid: {
-    flexDirection: 'row',
-    gap: spacing(1.5),
+  actionBtnPrimary: {
+    backgroundColor: colors.primary,
+    flexGrow: 1.5,
   },
-  actionWrapper: {
-    flex: 1,
-  },
-  actionCard: {
-    borderRadius: 22,
-    padding: spacing(0.75),
-    backgroundColor: colors.surfaceMuted,
-  },
-  actionInner: {
-    borderRadius: 20,
-    paddingVertical: spacing(2),
-    paddingHorizontal: spacing(1),
-    alignItems: 'center',
-    justifyContent: 'center',
+  actionBtnSecondary: {
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
-  },
-  actionIconWrap: {
-    width: 50,
-    height: 50,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
   },
   actionLabel: {
-    color: colors.text,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '600',
   },
-  analyticsCard: {
-    backgroundColor: colors.card,
-    borderRadius: 24,
-    padding: spacing(3),
+  /* SCROLL */
+  highlightScroll: {
+    gap: 12,
+    paddingVertical: 10,
     marginBottom: spacing(3),
+  },
+  highlightCard: {
+    backgroundColor: colors.card,
+    borderRadius: 22,
+    padding: 16,
     borderWidth: 1,
     borderColor: colors.border,
-    shadowColor: colors.text,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.05,
-    shadowRadius: 14,
-    elevation: 3,
+    justifyContent: 'center',
   },
-  cardHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing(2),
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  cardSubtitle: {
-    color: colors.muted,
-    fontSize: 13,
-  },
-  controlsRow: {
-    flexDirection: 'row',
-    marginBottom: spacing(2),
-  },
-  chartWrapper: {
-    alignItems: 'center',
-  },
-  emptyState: {
-    paddingVertical: spacing(4),
-    alignItems: 'center',
-  },
-  unavailable: {
-    color: colors.muted,
-    fontSize: 13,
-  },
-  skeletonBox: {
-    height: 200,
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: 18,
-  },
-  insightsCard: {
-    backgroundColor: colors.card,
-    borderRadius: 24,
-    padding: spacing(3),
-    marginBottom: spacing(3),
-    borderWidth: 1,
-    borderColor: colors.border,
-    shadowColor: colors.text,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.05,
-    shadowRadius: 18,
-    elevation: 4,
-  },
-  insightGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: spacing(2),
-  },
-  insightItem: {
-    width: '50%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 18,
-  },
-  insightIconWrap: {
+  highlightIcon: {
     width: 36,
     height: 36,
     borderRadius: 12,
-    backgroundColor: colors.primarySoft,
-    alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
+    alignItems: 'center',
+    marginBottom: 10,
   },
-  insightTextWrap: {
-    flex: 1,
-  },
-  insightLabel: {
-    color: colors.muted,
-    fontSize: 12,
-  },
-  insightValue: {
-    color: colors.text,
+  highlightValue: {
+    fontSize: 18,
     fontWeight: '700',
-    fontSize: 15,
+    color: colors.text,
+    marginBottom: 2,
   },
-  sectionHeader: {
+  highlightLabel: {
+    fontSize: 12,
+    color: colors.muted,
+  },
+  /* ANALYTICS */
+  chartSection: {
+    backgroundColor: colors.card,
+    borderRadius: 28,
+    padding: spacing(2.5),
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing(3),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.03,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  chartHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: spacing(2),
-    paddingTop: spacing(1),
+    flexWrap: 'wrap',
+    gap: 10,
   },
+  chartToggle: {
+    flexDirection: 'row',
+  },
+  chartContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 220,
+  },
+  skeleton: {
+    width: '100%',
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: 16,
+  },
+  emptyChart: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  /* LIST */
   sectionTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     color: colors.text,
+    marginBottom: 5,
+  },
+  listHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing(2),
   },
   seeAll: {
+    fontSize: 14,
     color: colors.primary,
     fontWeight: '600',
-    fontSize: 13,
   },
-  emptyTransactions: {
+  emptyList: {
     alignItems: 'center',
-    padding: spacing(4),
-    backgroundColor: colors.card,
-    borderRadius: 20,
-    marginHorizontal: spacing(2),
-    borderWidth: 1,
-    borderColor: colors.border,
+    marginTop: 40,
+    gap: 10,
   },
-  emptyCta: {
-    marginTop: 12,
-    paddingHorizontal: 18,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: colors.primary,
-  },
-  emptyCtaText: {
-    color: colors.white,
-    fontWeight: '600',
+  emptyText: {
+    color: colors.muted,
+    fontSize: 14,
   },
 });

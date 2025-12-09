@@ -1,89 +1,96 @@
 import React, { useMemo } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { View, Platform, TextStyle, ViewStyle } from 'react-native';
+import { View, Platform, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import HomeScreen from '../screens/HomeScreenFixed';
+// Screens
+import HomeScreen from '../screens/HomeScreen';
 import HistoryScreen from '../screens/HistoryScreen';
 import MoreScreen from '../screens/MoreScreen';
 
+// Components
 import AnimatedTabIcon from '../components/AnimatedTabIcon';
 import TabBarButton from '../components/TabBarButton';
-import { colors } from '../utils/design';
+import { colors, shadows } from '../utils/design';
 
 const Tab = createBottomTabNavigator();
-
-const labelStyle: TextStyle = {
-  fontSize: 11,
-  fontWeight: '600' as TextStyle['fontWeight'],
-  marginTop: 4,
-};
-
-const itemStyle: ViewStyle = {
-  paddingVertical: 0,
-  marginHorizontal: 4,
-  borderRadius: 22,
-};
 
 const BottomTabNavigator = () => {
   const insets = useSafeAreaInsets();
 
-  const tabBarStyle = useMemo(() => {
-    const safeBottom = insets.bottom;
-    const floatingOffset = Platform.OS === 'android' ? 12 : 18;
-    const bottomPosition = Math.max(safeBottom * 0.35 + 8, floatingOffset);
-    const extraPadding = Math.max(safeBottom * 0.5, 8);
-    const baseHeight = 54;
-    return {
-      position: 'absolute',
-      bottom: bottomPosition,
-      left: 20,
-      right: 20,
-      height: baseHeight + extraPadding,
-      borderRadius: 28,
-      backgroundColor: colors.card,
-      paddingBottom: extraPadding,
-      paddingTop: 10,
-      paddingHorizontal: 6,
-      shadowColor: colors.shadow,
-      shadowOpacity: 0.15,
-      shadowOffset: { width: 0, height: 10 },
-      shadowRadius: 24,
-      elevation: 10,
-      borderWidth: 1,
-      borderColor: colors.border,
-    } as const;
-  }, [insets.bottom]);
+  const screenOptions = useMemo(() => {
+    // --- POSITIONING LOGIC ---
+    // iOS: Sit exactly on top of the Home Indicator (insets.bottom).
+    // Android: Sit 16px from bottom (standard margin) as insets.bottom is usually 0 or included in navigation bar.
+    // This removes the "floating gap" look while respecting gestures.
+    const isIOS = Platform.OS === 'ios';
+    const bottomPosition = isIOS ? insets.bottom : 16;
+    const tabHeight = 60; // Slightly more compact
 
-  const screenOptions = useMemo(
-    () => ({
+    return {
       headerShown: false,
       tabBarActiveTintColor: colors.primary,
       tabBarInactiveTintColor: colors.muted,
       tabBarHideOnKeyboard: true,
-      tabBarStyle,
-      tabBarLabelStyle: labelStyle,
-      tabBarItemStyle: itemStyle,
-      sceneContainerStyle: { backgroundColor: colors.background },
-    }),
-    [tabBarStyle]
-  );
+
+      // Floating Pill Style
+      tabBarStyle: {
+        position: 'absolute',
+        bottom: bottomPosition,
+        left: 20,
+        right: 20,
+        height: tabHeight,
+        borderRadius: 30,
+        backgroundColor: colors.card,
+        borderWidth: 1,
+        borderColor: colors.border,
+        paddingBottom: 0,
+        paddingTop: 0,
+
+        // Shadow that blends better with the bottom
+        shadowColor: colors.shadow,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+        elevation: 8,
+      },
+
+      // Tab Items
+      tabBarItemStyle: {
+        height: tabHeight,
+        paddingVertical: 8,
+        borderRadius: 30,
+      },
+
+      // Text Labels
+      tabBarLabelStyle: {
+        fontSize: 10,
+        fontWeight: '700',
+        paddingBottom: 4,
+      },
+
+      // Background
+      sceneContainerStyle: {
+        backgroundColor: colors.background,
+      },
+    } as const;
+  }, [insets.bottom]);
 
   return (
-    <View style={{ flex: 1 }}>
-      <Tab.Navigator screenOptions={screenOptions}>
+    <View style={styles.container}>
+      <Tab.Navigator screenOptions={screenOptions as any}>
         {/* DASHBOARD */}
         <Tab.Screen
           name="Dashboard"
           component={HomeScreen}
           options={{
-            tabBarLabel: 'Dashboard',
+            tabBarLabel: 'Home',
             tabBarIcon: ({ color, size, focused }) => (
               <AnimatedTabIcon
                 library="mc"
-                name="view-dashboard"
+                name={focused ? 'view-dashboard' : 'view-dashboard-outline'}
                 color={color}
-                size={size}
+                size={22}
                 focused={focused}
               />
             ),
@@ -102,7 +109,7 @@ const BottomTabNavigator = () => {
                 library="material"
                 name="history"
                 color={color}
-                size={size}
+                size={24}
                 focused={focused}
               />
             ),
@@ -115,13 +122,13 @@ const BottomTabNavigator = () => {
           name="More"
           component={MoreScreen}
           options={{
-            tabBarLabel: 'More',
+            tabBarLabel: 'Menu',
             tabBarIcon: ({ color, size, focused }) => (
               <AnimatedTabIcon
                 library="mc"
-                name="dots-horizontal"
+                name={focused ? 'dots-horizontal-circle' : 'dots-horizontal'}
                 color={color}
-                size={size}
+                size={22}
                 focused={focused}
               />
             ),
@@ -134,3 +141,11 @@ const BottomTabNavigator = () => {
 };
 
 export default BottomTabNavigator;
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+    position: 'relative',
+  },
+});

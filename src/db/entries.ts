@@ -126,7 +126,8 @@ export const getEntries = async (userId: string) => {
 export const addLocalEntry = async (entry: Omit<LocalEntry, 'is_synced' | 'is_deleted'>) => {
   const db = await sqlite.open();
   const now = new Date().toISOString();
-  const created = normalizeDate((entry as any).created_at) || now;
+  const created =
+    normalizeDate((entry as any).date) || normalizeDate((entry as any).created_at) || now;
   const updated = normalizeDate((entry as any).updated_at) || created;
   const category = ensureCategory(entry.category);
   await db.run(

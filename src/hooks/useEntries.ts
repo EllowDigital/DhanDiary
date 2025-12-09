@@ -40,6 +40,7 @@ const normalizeDate = (raw: any, fallback: string) => {
 // Build optimistic entry
 const makeOptimisticEntry = (entry: any, sid: string) => {
   const now = new Date().toISOString();
+  const effectiveDate = normalizeDate(entry.date, now);
   return {
     local_id: entry.local_id || `tmp_${Date.now()}`,
     remote_id: entry.remote_id || null,
@@ -48,9 +49,9 @@ const makeOptimisticEntry = (entry: any, sid: string) => {
     amount: entry.amount || 0,
     category: ensureCategory(entry.category || DEFAULT_CATEGORY),
     note: entry.note || null,
-    date: normalizeDate(entry.date, now),
+    date: effectiveDate,
     currency: entry.currency || 'INR',
-    created_at: now,
+    created_at: effectiveDate,
     updated_at: now,
   };
 };
@@ -107,7 +108,7 @@ export const useEntries = (userId?: string | null) => {
         category: ensureCategory(entry.category),
         user_id: sid,
         date: created,
-        created_at: now,
+        created_at: created,
         updated_at: now,
       };
 

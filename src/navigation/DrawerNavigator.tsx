@@ -1,7 +1,8 @@
 import React from 'react';
-import { Dimensions } from 'react-native';
+import { Dimensions, useWindowDimensions } from 'react-native';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 
+// Navigators & Screens
 import BottomTabNavigator from './BottomTabNavigator';
 import AddEntryScreen from '../screens/AddEntryScreen';
 import CashInList from '../screens/CashInList';
@@ -12,154 +13,156 @@ import SettingsScreen from '../screens/SettingsScreen';
 import AccountManagementScreen from '../screens/AccountManagementScreen';
 import AboutScreen from '../screens/AboutScreen';
 
-import MaterialCommunityIcon from '@expo/vector-icons/MaterialCommunityIcons';
-
+// Components & Theme
 import CustomDrawerContent from './CustomDrawerContent';
+import MaterialCommunityIcon from '@expo/vector-icons/MaterialCommunityIcons';
 import { colors } from '../utils/design';
 
 const Drawer = createDrawerNavigator();
 
 const DrawerNavigator = () => {
-  const { width } = Dimensions.get('window');
-  const drawerWidth = Math.min(360, Math.round(width * 0.78));
+  const { width } = useWindowDimensions();
+
+  // Responsive Drawer Config
   const isLargeScreen = width >= 768;
   const drawerType = isLargeScreen ? 'permanent' : 'front';
-  const drawerOverlayColor = isLargeScreen ? 'transparent' : colors.overlay;
-  const swipeEdgeWidth = isLargeScreen ? 0 : 45;
+  const drawerWidth = Math.min(320, width * 0.75); // Cap width for tablets
 
   return (
     <Drawer.Navigator
       drawerContent={(props) => <CustomDrawerContent {...props} />}
       screenOptions={{
         headerShown: false,
-        headerStyle: { backgroundColor: colors.card, elevation: 0, shadowOpacity: 0 },
-        headerTintColor: colors.text,
-        drawerActiveTintColor: colors.primary,
-        drawerInactiveTintColor: colors.muted,
-        drawerActiveBackgroundColor: colors.primarySoft,
+
+        // Drawer Appearance
         drawerType,
-        overlayColor: drawerOverlayColor,
-        swipeEdgeWidth,
-        drawerStatusBarAnimation: 'fade',
-        drawerHideStatusBarOnOpen: !isLargeScreen,
-        drawerLabelStyle: { fontSize: 15, fontWeight: '600' as const, marginLeft: -12 },
-        drawerItemStyle: { borderRadius: 14, marginVertical: 4 },
-        drawerContentStyle: { paddingVertical: 10 },
         drawerStyle: {
           backgroundColor: colors.card,
           width: drawerWidth,
-          borderTopRightRadius: 24,
-          borderBottomRightRadius: 24,
-          borderRightWidth: 1,
-          borderColor: colors.border,
+          borderTopRightRadius: isLargeScreen ? 0 : 20,
+          borderBottomRightRadius: isLargeScreen ? 0 : 20,
         },
-        sceneContainerStyle: { backgroundColor: colors.background },
+
+        // Item Styling
+        drawerActiveTintColor: colors.primary,
+        drawerInactiveTintColor: colors.text,
+        drawerActiveBackgroundColor: colors.primarySoft,
+        drawerLabelStyle: {
+          fontSize: 14,
+          fontWeight: '600',
+          marginLeft: -10,
+        },
+        drawerItemStyle: {
+          borderRadius: 12,
+          paddingHorizontal: 8,
+          marginVertical: 4,
+        },
+
+        // Overlay
+        overlayColor: 'rgba(0,0,0,0.4)',
+        swipeEdgeWidth: width * 0.2, // Easier to swipe open
       }}
     >
-      {/* Dashboard Tabs */}
+      {/* --- CORE --- */}
       <Drawer.Screen
         name="HomeTabs"
         component={BottomTabNavigator}
         options={{
           title: 'Dashboard',
-          drawerIcon: ({ color }) => (
-            <MaterialCommunityIcon name="view-dashboard-outline" color={color} size={26} />
+          drawerIcon: ({ color, size }) => (
+            <MaterialCommunityIcon name="view-dashboard-outline" color={color} size={size} />
           ),
         }}
       />
 
-      {/* Add New Transaction */}
+      {/* --- TRANSACTIONS --- */}
       <Drawer.Screen
         name="AddEntry"
         component={AddEntryScreen}
         options={{
-          title: 'Add Transaction',
-          drawerIcon: ({ color }) => (
-            <MaterialCommunityIcon name="plus-circle-outline" color={color} size={24} />
+          title: 'New Transaction',
+          drawerIcon: ({ color, size }) => (
+            <MaterialCommunityIcon name="plus-circle-outline" color={color} size={size} />
           ),
         }}
       />
 
-      {/* Income List */}
-      <Drawer.Screen
-        name="Income"
-        component={CashInList}
-        options={{
-          title: 'Cash (IN)',
-          drawerIcon: ({ color }) => (
-            <MaterialCommunityIcon name="cash-plus" color={color} size={24} />
-          ),
-        }}
-      />
-
-      {/* Expense List */}
-      <Drawer.Screen
-        name="Expense"
-        component={CashOutList}
-        options={{
-          title: 'Cash (OUT)',
-          drawerIcon: ({ color }) => (
-            <MaterialCommunityIcon name="cash-minus" color={color} size={24} />
-          ),
-        }}
-      />
-
-      {/* History */}
       <Drawer.Screen
         name="History"
         component={HistoryScreen}
         options={{
-          title: 'History',
-          drawerIcon: ({ color }) => (
-            <MaterialCommunityIcon name="history" color={color} size={24} />
+          title: 'History Log',
+          drawerIcon: ({ color, size }) => (
+            <MaterialCommunityIcon name="history" color={color} size={size} />
           ),
         }}
       />
 
-      {/* Statistics */}
+      {/* --- LISTS --- */}
+      <Drawer.Screen
+        name="Income"
+        component={CashInList}
+        options={{
+          title: 'Income',
+          drawerIcon: ({ color, size }) => (
+            <MaterialCommunityIcon name="arrow-down-bold-box-outline" color={color} size={size} />
+          ),
+        }}
+      />
+
+      <Drawer.Screen
+        name="Expense"
+        component={CashOutList}
+        options={{
+          title: 'Expenses',
+          drawerIcon: ({ color, size }) => (
+            <MaterialCommunityIcon name="arrow-up-bold-box-outline" color={color} size={size} />
+          ),
+        }}
+      />
+
+      {/* --- ANALYTICS --- */}
       <Drawer.Screen
         name="Stats"
         component={StatsScreen}
         options={{
-          title: 'Stats & Analytics',
-          drawerIcon: ({ color }) => (
-            <MaterialCommunityIcon name="chart-bar" color={color} size={24} />
+          title: 'Analytics',
+          drawerIcon: ({ color, size }) => (
+            <MaterialCommunityIcon name="chart-box-outline" color={color} size={size} />
           ),
         }}
       />
 
-      {/* Account / User Settings */}
+      {/* --- SETTINGS GROUP --- */}
       <Drawer.Screen
         name="Account"
         component={AccountManagementScreen}
         options={{
-          title: 'Manage Account',
-          drawerIcon: ({ color }) => (
-            <MaterialCommunityIcon name="account-cog-outline" color={color} size={24} />
+          title: 'My Profile',
+          drawerIcon: ({ color, size }) => (
+            <MaterialCommunityIcon name="account-circle-outline" color={color} size={size} />
           ),
         }}
       />
 
-      {/* App Settings */}
       <Drawer.Screen
         name="Settings"
         component={SettingsScreen}
         options={{
-          title: 'Settings',
-          drawerIcon: ({ color }) => (
-            <MaterialCommunityIcon name="cog-outline" color={color} size={24} />
+          title: 'App Settings',
+          drawerIcon: ({ color, size }) => (
+            <MaterialCommunityIcon name="cog-outline" color={color} size={size} />
           ),
         }}
       />
 
-      {/* About Screen */}
       <Drawer.Screen
         name="About"
         component={AboutScreen}
         options={{
-          title: 'About App',
-          drawerIcon: ({ color }) => (
-            <MaterialCommunityIcon name="information-outline" color={color} size={24} />
+          title: 'About',
+          drawerIcon: ({ color, size }) => (
+            <MaterialCommunityIcon name="information-outline" color={color} size={size} />
           ),
         }}
       />

@@ -24,7 +24,10 @@ export const getDaysCountForFilter = (filter: string, now?: dayjs.Dayjs) => {
     const start = n.startOf('month');
     return n.diff(start, 'day') + 1;
   }
-  if (filter === 'This Year') return 12;
+  if (filter === 'This Year') {
+    const start = n.startOf('year');
+    return n.diff(start, 'day') + 1;
+  }
   return 7;
 };
 

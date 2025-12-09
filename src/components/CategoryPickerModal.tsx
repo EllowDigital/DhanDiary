@@ -3,6 +3,7 @@ import { Modal, View, StyleSheet, FlatList, TouchableOpacity } from 'react-nativ
 import { Text, Button } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { ALLOWED_CATEGORIES } from '../constants/categories';
+import type { Category } from '../constants/categories';
 
 const CategoryPickerModal = ({
   visible,
@@ -11,7 +12,7 @@ const CategoryPickerModal = ({
 }: {
   visible: boolean;
   onClose: () => void;
-  onSelect: (c: string) => void;
+  onSelect: (c: Category) => void;
 }) => {
   return (
     <Modal visible={visible} animationType="slide" transparent>

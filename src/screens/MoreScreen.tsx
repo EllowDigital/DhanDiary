@@ -1,34 +1,51 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import {
   View,
   StyleSheet,
-  Dimensions,
-  Pressable,
+  TouchableOpacity,
   ScrollView,
   Linking,
   NativeSyntheticEvent,
   NativeScrollEvent,
-  type StyleProp,
-  type ViewStyle,
+  Animated,
+  Easing,
+  StatusBar,
+  Platform,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
 import { useNavigation, NavigationProp } from '@react-navigation/native';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
-import Animated, { FadeInDown } from 'react-native-reanimated';
-import { colors, shadows } from '../utils/design';
+import { colors, spacing } from '../utils/design';
 import ScreenHeader from '../components/ScreenHeader';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const scale = SCREEN_WIDTH / 390;
-const font = (s: number) => Math.round(s * scale);
-
-type RouteName = 'Settings' | 'About' | 'Account' | 'Stats' | 'AccountManagementScreen' | string;
+type RouteName = 'Settings' | 'About' | 'Account' | 'Stats' | string;
 
 const MoreScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp<Record<string, object>>>();
   const [scrollOffset, setScrollOffset] = useState(0);
   const insets = useSafeAreaInsets();
+
+  // --- ANIMATION SETUP ---
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic),
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 500,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic),
+      }),
+    ]).start();
+  }, []);
 
   const navigateParent = useCallback(
     (route: RouteName) => {
@@ -37,31 +54,36 @@ const MoreScreen: React.FC = () => {
     [navigation]
   );
 
+  // --- CONFIG ---
   const primaryLinks = useMemo(
     () => [
       {
-        icon: 'insights',
+        icon: 'bar-chart',
         label: 'Stats & Analytics',
-        description: 'Detailed trends & KPIs',
+        description: 'Trends, spending, and reports',
         action: () => navigateParent('Stats'),
+        color: colors.accentOrange,
       },
       {
-        icon: 'admin-panel-settings',
-        label: 'Account Management',
-        description: 'Profiles, security, device access',
+        icon: 'person',
+        label: 'Account & Profile',
+        description: 'Security, personal info',
         action: () => navigateParent('Account'),
+        color: colors.primary,
       },
       {
         icon: 'settings',
         label: 'Settings',
-        description: 'Preferences, categories, backups',
+        description: 'Preferences, data, backups',
         action: () => navigateParent('Settings'),
+        color: colors.secondary,
       },
       {
-        icon: 'info-outline',
+        icon: 'info',
         label: 'About & Updates',
-        description: 'Version info, OTA releases',
+        description: 'Version info, release notes',
         action: () => navigateParent('About'),
+        color: colors.accentBlue,
       },
     ],
     [navigateParent]
@@ -70,209 +92,105 @@ const MoreScreen: React.FC = () => {
   const supportLinks = useMemo(
     () => [
       {
-        icon: 'emoji-objects',
-        label: 'Roadmap & Changelog',
-        description: 'What shipped and what is next',
+        icon: 'map',
+        label: 'Roadmap',
+        description: 'See what is coming next',
         action: () => Linking.openURL('https://ellowdigital.netlify.app'),
+        color: colors.accentGreen,
       },
       {
         icon: 'support-agent',
         label: 'Contact Support',
-        description: 'Email the DhanDiary crew',
+        description: 'Get help or report bugs',
         action: () =>
           Linking.openURL(
             'mailto:sarwanyadav26@outlook.com?subject=DhanDiary%20Support&body=Hi%20team%2C'
           ),
+        color: colors.accentRed,
       },
     ],
     []
   );
-
-  const heroHighlights = useMemo(
-    () => [
-      { icon: 'sync', label: 'Offline ready' },
-      { icon: 'shield', label: 'Secure sessions' },
-      { icon: 'contact-support', label: 'Human support' },
-    ],
-    []
-  );
-
-  const chunkedPrimary = useMemo(() => {
-    const chunks: (typeof primaryLinks)[][] = [];
-    for (let i = 0; i < primaryLinks.length; i += 2) {
-      chunks.push(primaryLinks.slice(i, i + 2));
-    }
-    return chunks;
-  }, [primaryLinks]);
 
   const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     setScrollOffset(event.nativeEvent.contentOffset.y);
   }, []);
 
-  const Row = ({
-    icon,
-    label,
-    description,
-    onPress,
-    isLast = false,
-    index = 0,
-  }: {
-    icon: string;
-    label: string;
-    description?: string;
-    onPress: () => void;
-    isLast?: boolean;
-    index?: number;
-  }) => (
-    <Animated.View
-      entering={FadeInDown.delay(120 + index * 40)
-        .springify()
-        .damping(18)}
-    >
-      <Pressable
-        onPress={onPress}
-        android_ripple={{ color: colors.surfaceMuted }}
-        style={({ pressed }) => [
-          styles.row,
-          pressed && styles.rowPressed,
-          isLast && styles.rowLast,
-        ]}
-        accessibilityRole="button"
-        accessibilityLabel={label}
-      >
-        <View style={styles.rowLeft}>
-          <View style={styles.iconContainer}>
-            <MaterialIcon name={icon as any} size={font(20)} color={colors.primary} />
-          </View>
-          <View>
-            <Text style={styles.rowText}>{label}</Text>
-            {description ? <Text style={styles.rowDescription}>{description}</Text> : null}
-          </View>
-        </View>
-        <MaterialIcon name="chevron-right" size={font(22)} color={colors.muted} />
-      </Pressable>
-    </Animated.View>
-  );
-
-  const QuickTile = ({
-    icon,
-    label,
-    description,
-    onPress,
-    index = 0,
-    wrapperStyle,
-  }: {
-    icon: string;
-    label: string;
-    description?: string;
-    onPress: () => void;
-    index?: number;
-    wrapperStyle?: StyleProp<ViewStyle>;
-  }) => (
-    <Animated.View
-      style={wrapperStyle}
-      entering={FadeInDown.delay(140 + index * 50)
-        .springify()
-        .damping(18)}
-    >
-      <Pressable
-        onPress={onPress}
-        android_ripple={{ color: colors.surfaceMuted }}
-        style={({ pressed }) => [styles.quickTile, pressed && styles.quickTilePressed]}
-        accessibilityRole="button"
-        accessibilityLabel={label}
-      >
-        <View style={styles.quickIconBadge}>
-          <MaterialIcon name={icon as any} size={font(22)} color={colors.primary} />
-        </View>
-        <Text style={styles.quickTileLabel}>{label}</Text>
-        {description ? <Text style={styles.quickTileDescription}>{description}</Text> : null}
-        <View style={styles.quickTileCta}>
-          <Text style={styles.quickTileCtaText}>Open</Text>
-          <MaterialIcon name="trending-flat" size={font(18)} color={colors.primary} />
-        </View>
-      </Pressable>
-    </Animated.View>
-  );
-
   return (
     <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       <ScreenHeader
         title="More"
-        subtitle="Control center & support"
+        subtitle="Menu & Tools"
         scrollOffset={scrollOffset}
         showScrollHint
       />
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={[styles.content, { paddingBottom: 40 + insets.bottom }]}
-        onScroll={handleScroll}
-        scrollEventThrottle={16}
-        showsVerticalScrollIndicator={false}
-      >
-        <Animated.View entering={FadeInDown.duration(400)} style={styles.heroCard}>
-          <Text style={styles.heroEyebrow}>Control Center</Text>
-          <Text style={styles.heroTitle}>Everything you need, now tidy.</Text>
-          <Text style={styles.heroSubtitle}>
-            Jump into stats, accounts, or preferences without hunting through menus. All the
-            backstage tools live here.
-          </Text>
-          <View style={styles.heroHighlightRow}>
-            {heroHighlights.map((item) => (
-              <View key={item.label} style={styles.heroHighlight}>
-                <MaterialIcon name={item.icon as any} size={font(16)} color={colors.primary} />
-                <Text style={styles.heroHighlightText}>{item.label}</Text>
-              </View>
+
+      <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+        <ScrollView
+          style={styles.container}
+          contentContainerStyle={[styles.content, { paddingBottom: 32 + insets.bottom }]}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* HERO CARD */}
+          <View style={styles.heroCard}>
+            <View style={styles.heroContent}>
+              <Text style={styles.heroEyebrow}>DhanDiary Hub</Text>
+              <Text style={styles.heroTitle}>Control Center</Text>
+              <Text style={styles.heroSubtitle}>
+                Manage your analytics, preferences, and account details from one place.
+              </Text>
+            </View>
+            <View style={styles.heroIconBg}>
+              <MaterialIcon name="dashboard" size={80} color="rgba(0,0,0,0.05)" />
+            </View>
+          </View>
+
+          {/* PRIMARY NAVIGATION */}
+          <Text style={styles.sectionLabel}>Essentials</Text>
+          <View style={styles.menuContainer}>
+            {primaryLinks.map((item, index) => (
+              <MenuRow key={item.label} {...item} isLast={index === primaryLinks.length - 1} />
             ))}
           </View>
-        </Animated.View>
 
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionLabel}>Quick controls</Text>
-          {chunkedPrimary.map((row, rowIndex) => (
-            <View key={`row-${rowIndex}`} style={styles.quickRow}>
-              {row.map((item, colIndex) => (
-                <QuickTile
-                  key={item.label}
-                  icon={item.icon}
-                  label={item.label}
-                  description={item.description}
-                  onPress={item.action}
-                  index={rowIndex * 2 + colIndex}
-                  wrapperStyle={[
-                    styles.quickTileWrapper,
-                    colIndex === 0 && row.length > 1 ? styles.quickTileWrapperSpacing : null,
-                  ]}
-                />
-              ))}
-              {row.length === 1 ? (
-                <View style={[styles.quickTileWrapper, styles.quickGhost]} />
-              ) : null}
-            </View>
-          ))}
-        </View>
+          {/* SUPPORT NAVIGATION */}
+          <Text style={styles.sectionLabel}>Help & Info</Text>
+          <View style={styles.menuContainer}>
+            {supportLinks.map((item, index) => (
+              <MenuRow key={item.label} {...item} isLast={index === supportLinks.length - 1} />
+            ))}
+          </View>
 
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionLabel}>Support & resources</Text>
-          {supportLinks.map((item, index) => (
-            <Row
-              key={item.label}
-              icon={item.icon}
-              label={item.label}
-              description={item.description}
-              onPress={item.action}
-              isLast={index === supportLinks.length - 1}
-              index={index + primaryLinks.length}
-            />
-          ))}
-        </View>
-        <Text style={styles.footnote}>
-          Need something else? Ping us anytime — we usually reply within a day.
-        </Text>
-      </ScrollView>
+          <Text style={styles.footnote}>DhanDiary v1.0.2 • Made with ❤️</Text>
+        </ScrollView>
+      </Animated.View>
     </SafeAreaView>
   );
 };
+
+/* --- SUB COMPONENTS --- */
+
+const MenuRow = ({ icon, label, description, action, color, isLast }: any) => (
+  <TouchableOpacity
+    onPress={action}
+    activeOpacity={0.7}
+    style={[styles.row, isLast && styles.rowLast]}
+  >
+    <View style={[styles.iconBox, { backgroundColor: `${color}15` }]}>
+      <MaterialIcon name={icon} size={22} color={color} />
+    </View>
+    <View style={styles.rowTextContainer}>
+      <Text style={styles.rowTitle}>{label}</Text>
+      <Text style={styles.rowDesc}>{description}</Text>
+    </View>
+    <MaterialIcon name="chevron-right" size={22} color={colors.border} />
+  </TouchableOpacity>
+);
+
+/* --- STYLES --- */
 
 const styles = StyleSheet.create({
   safeArea: {
@@ -281,178 +199,119 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    backgroundColor: colors.background,
   },
   content: {
     paddingHorizontal: 20,
-    paddingBottom: 32,
-    paddingTop: 16,
+    paddingTop: 10,
   },
+
+  /* HERO */
   heroCard: {
     backgroundColor: colors.card,
-    borderRadius: 22,
-    padding: 20,
+    borderRadius: 24,
+    padding: 24,
+    marginBottom: 24,
     borderWidth: 1,
     borderColor: colors.border,
-    ...shadows.medium,
-    marginBottom: 20,
+    overflow: 'hidden',
+    position: 'relative',
+    // Shadow
+    shadowColor: colors.text,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  heroContent: {
+    zIndex: 2,
+  },
+  heroIconBg: {
+    position: 'absolute',
+    right: -10,
+    bottom: -10,
+    zIndex: 1,
   },
   heroEyebrow: {
-    fontSize: font(12),
-    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.primary,
     textTransform: 'uppercase',
     letterSpacing: 1,
-    fontWeight: '600',
+    marginBottom: 6,
   },
   heroTitle: {
-    fontSize: font(26),
-    fontWeight: '700',
+    fontSize: 26,
+    fontWeight: '800',
     color: colors.text,
-    marginTop: 6,
+    marginBottom: 6,
   },
   heroSubtitle: {
-    fontSize: font(14),
-    color: colors.subtleText,
-    marginTop: 10,
-    lineHeight: 20,
-  },
-  heroHighlightRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: 16,
-  },
-  heroHighlight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    backgroundColor: colors.surfaceMuted,
-    marginRight: 10,
-    marginBottom: 10,
-  },
-  heroHighlightText: {
-    fontSize: font(12),
-    color: colors.text,
-    marginLeft: 6,
-    fontWeight: '600',
-  },
-  sectionCard: {
-    backgroundColor: colors.card,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 12,
-    marginTop: 20,
-  },
-  sectionLabel: {
-    fontSize: font(13),
+    fontSize: 14,
     color: colors.muted,
-    fontWeight: '600',
-    paddingHorizontal: 14,
-    paddingTop: 14,
-    paddingBottom: 8,
+    lineHeight: 20,
+    maxWidth: '85%',
+  },
+
+  /* SECTION & MENU */
+  sectionLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.muted,
     textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 10,
+    marginLeft: 6,
   },
-  quickRow: {
-    flexDirection: 'row',
-    marginTop: 8,
-  },
-  quickTileWrapper: {
-    flex: 1,
-  },
-  quickTileWrapperSpacing: {
-    marginRight: 12,
-  },
-  quickGhost: {
-    opacity: 0,
-  },
-  quickTile: {
-    backgroundColor: colors.background,
-    borderRadius: 16,
-    padding: 16,
+  menuContainer: {
+    backgroundColor: colors.card,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: colors.border,
-    minHeight: 150,
-    justifyContent: 'space-between',
+    marginBottom: 24,
+    overflow: 'hidden',
   },
-  quickTilePressed: {
-    backgroundColor: colors.surfaceMuted,
-  },
-  quickIconBadge: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
-    backgroundColor: colors.primarySoft,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  quickTileLabel: {
-    fontSize: font(16),
-    color: colors.text,
-    fontWeight: '600',
-  },
-  quickTileDescription: {
-    fontSize: font(13),
-    color: colors.subtleText,
-    marginTop: 4,
-    flex: 1,
-  },
-  quickTileCta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 12,
-  },
-  quickTileCtaText: {
-    fontSize: font(13),
-    color: colors.primary,
-    marginRight: 4,
-    fontWeight: '600',
-  },
+
+  /* ROW */
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: font(14),
-    paddingHorizontal: font(16),
+    padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  rowPressed: {
-    backgroundColor: colors.surfaceMuted,
+    borderBottomColor: colors.border, // Very subtle separator
+    backgroundColor: colors.card,
   },
   rowLast: {
     borderBottomWidth: 0,
   },
-  rowLeft: {
-    flexDirection: 'row',
+  iconBox: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
     alignItems: 'center',
-  },
-  iconContainer: {
-    width: font(38),
-    height: font(38),
-    borderRadius: font(19),
-    backgroundColor: colors.primarySoft,
     justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: font(16),
+    marginRight: 14,
   },
-  rowText: {
-    fontSize: font(16),
+  rowTextContainer: {
+    flex: 1,
+  },
+  rowTitle: {
+    fontSize: 16,
+    fontWeight: '600',
     color: colors.text,
-    fontWeight: '500',
   },
-  rowDescription: {
-    fontSize: font(13),
-    color: colors.subtleText,
+  rowDesc: {
+    fontSize: 13,
+    color: colors.muted,
     marginTop: 2,
   },
+
+  /* FOOTER */
   footnote: {
-    fontSize: font(12),
-    color: colors.muted,
     textAlign: 'center',
-    marginTop: 24,
+    color: colors.muted,
+    fontSize: 12,
+    marginTop: 8,
+    opacity: 0.6,
   },
 });
 
