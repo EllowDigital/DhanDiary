@@ -10,6 +10,7 @@ import {
   StatusBar,
   Platform,
 } from 'react-native';
+import type { ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text, Button } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
@@ -54,11 +55,14 @@ const CashInList = () => {
   const { width } = useWindowDimensions();
   const isTablet = width >= 768;
   const maxContentWidth = 700;
-  const containerStyle = {
-    width: '100%',
-    maxWidth: maxContentWidth,
-    alignSelf: 'center' as const,
-  };
+  const containerStyle = useMemo<ViewStyle>(
+    () => ({
+      width: '100%',
+      maxWidth: maxContentWidth,
+      alignSelf: 'center',
+    }),
+    [maxContentWidth]
+  );
 
   // --- ANIMATIONS ---
   const fadeAnim = useRef(new Animated.Value(0)).current;

@@ -153,7 +153,10 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
                 : route.name;
 
           // Skip hidden routes if any
-          if (options.drawerItemStyle?.display === 'none') return null;
+          const flattenedStyle = options.drawerItemStyle
+            ? StyleSheet.flatten(options.drawerItemStyle)
+            : undefined;
+          if (flattenedStyle?.display === 'none') return null;
 
           // Animation for this item
           const itemAnim = listAnims[index] || new Animated.Value(1);

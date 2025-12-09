@@ -49,7 +49,16 @@ const typeConfigs = [
     accentSoft: 'rgba(34, 197, 94, 0.1)',
     icon: 'arrow-downward',
   },
-];
+] as const;
+
+type EntryPayload = {
+  amount: number;
+  type: 'in' | 'out';
+  category: ReturnType<typeof ensureCategory>;
+  note: string;
+  currency: string;
+  date: string;
+};
 
 const AddEntryScreen: React.FC = () => {
   const navigation = useNavigation();
@@ -142,9 +151,10 @@ const AddEntryScreen: React.FC = () => {
       return Alert.alert('Invalid Amount', 'Please enter a valid number.');
     }
 
-    const payload = {
+    const entryType: EntryPayload['type'] = activeType.value;
+    const payload: EntryPayload = {
       amount: parsed,
-      type: activeType.value,
+      type: entryType,
       category: ensureCategory(category),
       note,
       currency: 'INR',
