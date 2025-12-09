@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -7,28 +7,28 @@ import {
   Platform,
   TouchableOpacity,
   Image,
+  Animated,
+  Easing,
+  ScrollView,
+  StatusBar,
+  useWindowDimensions,
 } from 'react-native';
 import { Button, Text } from '@rneui/themed';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import MaterialIcon from '@expo/vector-icons/MaterialIcons';
+
+// Types & Services
 import { AuthStackParamList } from '../types/navigation';
 import { registerOnline } from '../services/auth';
 import { useToast } from '../context/ToastContext';
-import MaterialIcon from '@expo/vector-icons/MaterialIcons';
-import { SafeAreaView } from 'react-native-safe-area-context';
-
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  Easing,
-  FadeInDown,
-} from 'react-native-reanimated';
-
-import { spacing, colors, shadows, fonts } from '../utils/design';
-import FullScreenSpinner from '../components/FullScreenSpinner';
 import { useInternetStatus } from '../hooks/useInternetStatus';
-import AuthField from '../components/AuthField';
+
+// Components & Utils
+import { colors, spacing, shadows } from '../utils/design';
+import FullScreenSpinner from '../components/FullScreenSpinner';
+import AuthField from '../components/AuthField'; 
 
 type RegisterScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList>;
 
@@ -36,75 +36,89 @@ const RegisterScreen = () => {
   const navigation = useNavigation<RegisterScreenNavigationProp>();
   const { showToast } = useToast();
   const isOnline = useInternetStatus();
+  const { width } = useWindowDimensions();
 
+  // State
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
+  
+  // Validation State
   const [emailError, setEmailError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
 
-  // Animation
-  const anim = useSharedValue(0);
-  React.useEffect(() => {
-    anim.value = withTiming(1, {
-      duration: 450,
-      easing: Easing.out(Easing.cubic),
-    });
+  // Animation Refs
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic),
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 600,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic),
+      }),
+    ]).start();
   }, []);
 
-  const aStyle = useAnimatedStyle(() => ({
-    opacity: anim.value,
-    transform: [{ translateY: (1 - anim.value) * 18 }],
-  }));
+  // Password Strength Logic
+  const getPasswordStrength = (pass: string) => {
+    if (pass.length === 0) return 0;
+    let score = 0;
+    if (pass.length >= 8) score++;
+    if (/[A-Z]/.test(pass)) score++;
+    if (/[0-9]/.test(pass)) score++;
+    return score; // Max 3
+  };
+  const passStrength = getPasswordStrength(password);
 
   const handleRegister = async () => {
     if (loading) return;
-    if (!isOnline) {
-      Alert.alert('Offline', 'Connect to the internet to create an account.');
-      return;
-    }
+    if (!isOnline) return Alert.alert('Offline', 'Internet connection required to create an account.');
 
-    // clear previous inline errors
+    // Clear previous errors
     setEmailError(null);
     setPasswordError(null);
 
-    if (!name || !email || !password) {
-      if (!name) {
-        return Alert.alert('Validation', 'Please complete all fields');
-      }
-      if (!email) setEmailError('Email is required');
-      if (!password) setPasswordError('Password is required');
+    // Validation
+    if (!name.trim()) return Alert.alert('Missing Name', 'Please enter your full name.');
+    if (!email.trim()) {
+      setEmailError('Email is required');
+      return;
+    }
+    
+    // Strict Gmail validation (optional per your previous code, can be relaxed if needed)
+    // const gmailRegex = /^[A-Za-z0-9._%+-]+@gmail\.com$/i;
+    // if (!gmailRegex.test(email.trim())) {
+    //   setEmailError('Please use a Gmail address.');
+    //   return;
+    // }
+
+    if (password.length < 8) {
+      setPasswordError('Must be at least 8 characters');
       return;
     }
 
-    const gmailRegex = /^[A-Za-z0-9._%+-]+@gmail\.com$/i;
-    if (!gmailRegex.test(email.trim())) {
-      setEmailError('Please provide a Gmail address (e.g. user@gmail.com)');
-      return;
-    }
-
-    if ((password || '').length < 8) {
-      setPasswordError('Password must be at least 8 characters');
-      return;
-    }
-
+    setLoading(true);
     try {
-      setLoading(true);
       await registerOnline(name, email, password);
-      showToast('Account created successfully!');
-
+      showToast('Account created!');
       (navigation.getParent() as any)?.replace('Main');
     } catch (err: any) {
-      const msg = err && err.message ? String(err.message) : String(err);
-      if (msg.toLowerCase().includes('timed out')) {
-        Alert.alert('Registration Failed', 'Request timed out', [
-          { text: 'Retry', onPress: () => handleRegister() },
-          { text: 'OK', style: 'cancel' },
-        ]);
+      const msg = err?.message || String(err);
+      if (msg.includes('timed out')) {
+        Alert.alert('Timeout', 'Server took too long to respond. Try again?');
       } else {
-        Alert.alert('Registration Failed', msg || 'Something went wrong');
+        Alert.alert('Registration Failed', msg);
       }
     } finally {
       setLoading(false);
@@ -113,135 +127,129 @@ const RegisterScreen = () => {
 
   return (
     <SafeAreaView style={styles.safe}>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       <KeyboardAvoidingView
-        style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1 }}
       >
-        <Animated.View style={[styles.container, aStyle]}>
-          <View style={styles.card}>
-            <Animated.View entering={FadeInDown.duration(500)} style={styles.heroRow}>
+        <ScrollView 
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Animated.View 
+            style={[
+              styles.container, 
+              { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
+            ]}
+          >
+            {/* HERO SECTION */}
+            <View style={styles.heroSection}>
               <Image source={require('../../assets/icon.png')} style={styles.logo} />
-              <View style={styles.heroCopy}>
-                <Text style={styles.kicker}>Create your vault</Text>
-                <Text style={styles.title}>Join DhanDiary</Text>
-                <Text style={styles.subtitle}>Fresh, fast onboarding with encrypted backups.</Text>
-                <View style={styles.heroBullets}>
-                  <View style={styles.heroBullet}>
-                    <MaterialIcon name="stars" size={16} color={colors.primary} />
-                    <Text style={styles.heroBulletText}>Guided signup in two steps</Text>
-                  </View>
-                  <View style={styles.heroBullet}>
-                    <MaterialIcon name="lock" size={16} color={colors.secondary} />
-                    <Text style={styles.heroBulletText}>Encrypted cloud backups</Text>
-                  </View>
+              <Text style={styles.title}>Join DhanDiary</Text>
+              <Text style={styles.subtitle}>Secure financial tracking starts here.</Text>
+            </View>
+
+            {/* FORM CARD */}
+            <View style={styles.card}>
+              <View style={styles.heroBullets}>
+                <View style={styles.heroBullet}>
+                  <MaterialIcon name="verified-user" size={14} color={colors.accentGreen} />
+                  <Text style={styles.heroBulletText}>Free Forever</Text>
+                </View>
+                <View style={styles.heroBullet}>
+                  <MaterialIcon name="lock" size={14} color={colors.accentBlue} />
+                  <Text style={styles.heroBulletText}>Encrypted Backup</Text>
                 </View>
               </View>
-            </Animated.View>
 
-            {/* Full Name */}
-            <Animated.View entering={FadeInDown.delay(180).springify().damping(16)}>
               <AuthField
-                icon="person"
+                icon="person-outline"
                 placeholder="Full Name"
                 value={name}
                 onChangeText={setName}
-                accessibilityLabel="Full name input"
-                accessible
               />
-            </Animated.View>
 
-            {/* Email */}
-            <Animated.View entering={FadeInDown.delay(220).springify().damping(16)}>
+              <View style={styles.spacer} />
+
               <AuthField
                 icon="mail-outline"
-                placeholder="Email"
+                placeholder="Email Address"
                 value={email}
+                onChangeText={(text) => {
+                  setEmail(text);
+                  if(emailError) setEmailError(null);
+                }}
                 keyboardType="email-address"
                 autoCapitalize="none"
-                autoComplete="email"
-                textContentType="emailAddress"
-                onChangeText={(v) => {
-                  setEmail(v);
-                  if (emailError) setEmailError(null);
-                }}
                 error={emailError}
-                accessibilityLabel="Email input"
-                accessible
               />
-            </Animated.View>
 
-            {/* Password */}
-            <Animated.View entering={FadeInDown.delay(260).springify().damping(16)}>
+              <View style={styles.spacer} />
+
               <AuthField
-                icon="lock"
-                placeholder="Password"
+                icon="lock-outline"
+                placeholder="Create Password"
                 value={password}
                 secureTextEntry={!showPass}
-                autoComplete="password"
-                textContentType="password"
-                onChangeText={(v) => {
-                  setPassword(v);
-                  if (passwordError && v.length >= 8) setPasswordError(null);
+                onChangeText={(text) => {
+                   setPassword(text);
+                   if(passwordError) setPasswordError(null);
                 }}
                 error={passwordError}
-                accessibilityLabel="Password input"
-                accessible
                 rightAccessory={
-                  <View style={styles.passwordActions}>
-                    <TouchableOpacity onPress={() => setShowPass(!showPass)}>
-                      <MaterialIcon
-                        name={showPass ? 'visibility' : 'visibility-off'}
-                        size={22}
-                        color={colors.muted}
-                      />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() =>
-                        Alert.alert(
-                          'Password example',
-                          'Use at least 8 characters. Example: MyP@ssw0rd'
-                        )
-                      }
-                    >
-                      <MaterialIcon name="info-outline" size={20} color={colors.muted} />
-                    </TouchableOpacity>
-                  </View>
+                  <TouchableOpacity onPress={() => setShowPass(!showPass)}>
+                    <MaterialIcon
+                      name={showPass ? 'visibility' : 'visibility-off'}
+                      size={20}
+                      color={colors.muted}
+                    />
+                  </TouchableOpacity>
                 }
               />
-            </Animated.View>
 
-            {/* Register Button */}
-            <Animated.View entering={FadeInDown.delay(300).springify().damping(16)}>
+              {/* Password Strength Indicator */}
+              {password.length > 0 && (
+                <View style={styles.strengthContainer}>
+                   <View style={[styles.strengthBar, { backgroundColor: passStrength >= 1 ? (passStrength >= 2 ? colors.accentGreen : colors.accentOrange) : colors.accentRed, flex: passStrength }]} />
+                   <View style={[styles.strengthBar, { backgroundColor: '#E0E0E0', flex: 3 - passStrength }]} />
+                </View>
+              )}
+              {password.length > 0 && (
+                 <Text style={styles.strengthText}>
+                    {passStrength === 0 ? 'Too short' : passStrength === 1 ? 'Weak' : passStrength === 2 ? 'Good' : 'Strong'}
+                 </Text>
+              )}
+
               <Button
-                title={loading ? 'Creating…' : 'Create Account'}
-                loading={loading}
+                title={loading ? 'Creating...' : 'Create Account'}
                 onPress={handleRegister}
+                loading={loading}
                 disabled={loading || !isOnline}
                 buttonStyle={styles.primaryButton}
-                containerStyle={styles.btnContainer}
-                icon={
-                  <MaterialIcon
-                    name="person-add"
-                    size={18}
-                    color={colors.white}
-                    style={{ marginRight: 6 }}
-                  />
-                }
-                accessibilityLabel="Create account button"
-                accessibilityRole="button"
+                containerStyle={styles.buttonContainer}
+                titleStyle={{ fontWeight: '700', fontSize: 16 }}
+                icon={!loading ? <MaterialIcon name="arrow-forward" size={18} color="white" style={{marginRight:8}} /> : undefined}
               />
-            </Animated.View>
 
-            {/* Back to Login */}
-            <Animated.View entering={FadeInDown.delay(340).springify().damping(16)}>
-              <TouchableOpacity onPress={() => navigation.goBack()}>
-                <Text style={styles.link}>Already have an account? Log in</Text>
+              <View style={styles.termsContainer}>
+                 <Text style={styles.termsText}>
+                    By signing up, you agree to our <Text style={styles.termsLink}>Terms</Text> and <Text style={styles.termsLink}>Privacy Policy</Text>.
+                 </Text>
+              </View>
+            </View>
+
+            {/* FOOTER */}
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>Already have an account?</Text>
+              <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+                <Text style={styles.linkText}>Log In</Text>
               </TouchableOpacity>
-            </Animated.View>
-          </View>
-        </Animated.View>
-        <FullScreenSpinner visible={loading} message="Creating account..." />
+            </View>
+          </Animated.View>
+        </ScrollView>
       </KeyboardAvoidingView>
+      <FullScreenSpinner visible={loading} message="Creating your vault..." />
     </SafeAreaView>
   );
 };
@@ -249,109 +257,141 @@ const RegisterScreen = () => {
 export default RegisterScreen;
 
 /* -----------------------------
-        Modern UI Styles
+   STYLES
 ----------------------------- */
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: colors.background,
   },
-
-  container: {
-    flex: 1,
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: 'center',
-    padding: spacing(2),
-  },
-
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: 20,
     padding: spacing(3),
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'stretch',
-    ...shadows.large,
   },
-
-  heroRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  container: {
     width: '100%',
-    marginBottom: spacing(2),
-    gap: 12,
+    maxWidth: 400,
+    alignSelf: 'center',
   },
-
+  
+  /* HERO */
+  heroSection: {
+    alignItems: 'center',
+    marginBottom: spacing(3),
+  },
   logo: {
     width: 72,
     height: 72,
-    borderRadius: 20,
+    borderRadius: 18,
+    marginBottom: 16,
   },
-
-  heroCopy: {
-    flex: 1,
-  },
-
-  kicker: {
-    color: colors.muted,
-    textTransform: 'uppercase',
-    fontSize: 12,
-    letterSpacing: 1.3,
-    marginBottom: 4,
-    fontWeight: '600',
-  },
-
   title: {
     fontSize: 24,
-    fontWeight: '700',
+    fontWeight: '800',
     color: colors.text,
-    fontFamily: fonts.heading,
+    marginBottom: 4,
   },
-
   subtitle: {
-    color: colors.muted,
-    marginTop: 4,
     fontSize: 15,
+    color: colors.muted,
   },
 
+  /* CARD */
+  card: {
+    backgroundColor: colors.card,
+    borderRadius: 24,
+    padding: spacing(3),
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.medium,
+  },
   heroBullets: {
-    marginTop: spacing(1.5),
-    gap: spacing(1),
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 16,
+    marginBottom: 20,
   },
-
   heroBullet: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
+    backgroundColor: colors.surfaceMuted,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  heroBulletText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.text,
   },
 
-  heroBulletText: {
-    color: colors.subtleText,
-    fontSize: 14,
-    fontWeight: '600',
+  spacer: {
+    height: spacing(2),
+  },
+
+  /* STRENGTH METER */
+  strengthContainer: {
+    flexDirection: 'row',
+    height: 4,
+    borderRadius: 2,
+    marginTop: 10,
+    overflow: 'hidden',
+    gap: 4,
+  },
+  strengthBar: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  strengthText: {
+    fontSize: 12,
+    color: colors.muted,
+    marginTop: 4,
+    marginBottom: 10,
+    textAlign: 'right',
   },
 
   primaryButton: {
     backgroundColor: colors.primary,
-    borderRadius: 12,
     paddingVertical: 14,
+    borderRadius: 14,
+  },
+  buttonContainer: {
+    marginTop: 20,
+    borderRadius: 14,
   },
 
-  btnContainer: {
-    width: '100%',
-    marginTop: spacing(2),
+  /* TERMS */
+  termsContainer: {
+    marginTop: 16,
   },
-
-  link: {
-    color: colors.primary,
+  termsText: {
+    fontSize: 12,
+    color: colors.muted,
     textAlign: 'center',
-    marginTop: spacing(2),
+    lineHeight: 18,
+  },
+  termsLink: {
+    color: colors.primary,
     fontWeight: '600',
-    fontSize: 15,
   },
 
-  passwordActions: {
+  /* FOOTER */
+  footer: {
     flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: spacing(1),
+    marginTop: spacing(3),
+    gap: 6,
+  },
+  footerText: {
+    color: colors.muted,
+    fontSize: 14,
+  },
+  linkText: {
+    color: colors.primary,
+    fontWeight: '700',
+    fontSize: 14,
   },
 });

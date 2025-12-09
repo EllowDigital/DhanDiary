@@ -1,26 +1,51 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import {
   View,
   StyleSheet,
-  Pressable,
+  TouchableOpacity,
   ScrollView,
   Linking,
   NativeSyntheticEvent,
   NativeScrollEvent,
+  Animated,
+  Easing,
+  StatusBar,
+  Platform,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
 import { useNavigation, NavigationProp } from '@react-navigation/native';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
-import { colors, shadows } from '../utils/design';
+import { colors, spacing } from '../utils/design';
 import ScreenHeader from '../components/ScreenHeader';
 
-type RouteName = 'Settings' | 'About' | 'Account' | 'Stats' | 'AccountManagementScreen' | string;
+type RouteName = 'Settings' | 'About' | 'Account' | 'Stats' | string;
 
 const MoreScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp<Record<string, object>>>();
   const [scrollOffset, setScrollOffset] = useState(0);
   const insets = useSafeAreaInsets();
+
+  // --- ANIMATION SETUP ---
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic),
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 500,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic),
+      }),
+    ]).start();
+  }, []);
 
   const navigateParent = useCallback(
     (route: RouteName) => {
@@ -29,31 +54,36 @@ const MoreScreen: React.FC = () => {
     [navigation]
   );
 
+  // --- CONFIG ---
   const primaryLinks = useMemo(
     () => [
       {
-        icon: 'insights',
+        icon: 'bar-chart',
         label: 'Stats & Analytics',
-        description: 'Detailed trends & KPIs',
+        description: 'Trends, spending, and reports',
         action: () => navigateParent('Stats'),
+        color: colors.accentOrange,
       },
       {
-        icon: 'admin-panel-settings',
-        label: 'Account Management',
-        description: 'Profiles, security, device access',
+        icon: 'person',
+        label: 'Account & Profile',
+        description: 'Security, personal info',
         action: () => navigateParent('Account'),
+        color: colors.primary,
       },
       {
         icon: 'settings',
         label: 'Settings',
-        description: 'Preferences, categories, backups',
+        description: 'Preferences, data, backups',
         action: () => navigateParent('Settings'),
+        color: colors.secondary,
       },
       {
-        icon: 'info-outline',
+        icon: 'info',
         label: 'About & Updates',
-        description: 'Version info, OTA releases',
+        description: 'Version info, release notes',
         action: () => navigateParent('About'),
+        color: colors.accentBlue,
       },
     ],
     [navigateParent]
@@ -62,19 +92,21 @@ const MoreScreen: React.FC = () => {
   const supportLinks = useMemo(
     () => [
       {
-        icon: 'emoji-objects',
-        label: 'Roadmap & Changelog',
-        description: 'What shipped and what is next',
+        icon: 'map',
+        label: 'Roadmap',
+        description: 'See what is coming next',
         action: () => Linking.openURL('https://ellowdigital.netlify.app'),
+        color: colors.accentGreen,
       },
       {
         icon: 'support-agent',
         label: 'Contact Support',
-        description: 'Email the DhanDiary crew',
+        description: 'Get help or report bugs',
         action: () =>
           Linking.openURL(
             'mailto:sarwanyadav26@outlook.com?subject=DhanDiary%20Support&body=Hi%20team%2C'
           ),
+        color: colors.accentRed,
       },
     ],
     []
@@ -84,97 +116,91 @@ const MoreScreen: React.FC = () => {
     setScrollOffset(event.nativeEvent.contentOffset.y);
   }, []);
 
-  const Row = ({
-    icon,
-    label,
-    description,
-    onPress,
-    isLast = false,
-  }: {
-    icon: string;
-    label: string;
-    description?: string;
-    onPress: () => void;
-    isLast?: boolean;
-  }) => (
-    <Pressable
-      onPress={onPress}
-      android_ripple={{ color: colors.surfaceMuted }}
-      style={({ pressed }) => [styles.row, pressed && styles.rowPressed, isLast && styles.rowLast]}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-    >
-      <View style={styles.rowLeft}>
-        <View style={styles.iconContainer}>
-          <MaterialIcon name={icon as any} size={18} color={colors.primary} />
-        </View>
-        <View>
-          <Text style={styles.rowText}>{label}</Text>
-          {description ? <Text style={styles.rowDescription}>{description}</Text> : null}
-        </View>
-      </View>
-      <MaterialIcon name="chevron-right" size={20} color={colors.muted} />
-    </Pressable>
-  );
-
   return (
     <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       <ScreenHeader
         title="More"
-        subtitle="Control center & support"
+        subtitle="Menu & Tools"
         scrollOffset={scrollOffset}
         showScrollHint
       />
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={[styles.content, { paddingBottom: 32 + insets.bottom }]}
-        onScroll={handleScroll}
-        scrollEventThrottle={16}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.heroCard}>
-          <Text style={styles.heroEyebrow}>Control center</Text>
-          <Text style={styles.heroTitle}>A calmer More tab</Text>
-          <Text style={styles.heroSubtitle}>
-            Quickly hop into stats, account controls, or support without distracting animations.
+      
+      <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+        <ScrollView
+          style={styles.container}
+          contentContainerStyle={[styles.content, { paddingBottom: 32 + insets.bottom }]}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* HERO CARD */}
+          <View style={styles.heroCard}>
+            <View style={styles.heroContent}>
+              <Text style={styles.heroEyebrow}>DhanDiary Hub</Text>
+              <Text style={styles.heroTitle}>Control Center</Text>
+              <Text style={styles.heroSubtitle}>
+                Manage your analytics, preferences, and account details from one place.
+              </Text>
+            </View>
+            <View style={styles.heroIconBg}>
+               <MaterialIcon name="dashboard" size={80} color="rgba(0,0,0,0.05)" />
+            </View>
+          </View>
+
+          {/* PRIMARY NAVIGATION */}
+          <Text style={styles.sectionLabel}>Essentials</Text>
+          <View style={styles.menuContainer}>
+            {primaryLinks.map((item, index) => (
+              <MenuRow
+                key={item.label}
+                {...item}
+                isLast={index === primaryLinks.length - 1}
+              />
+            ))}
+          </View>
+
+          {/* SUPPORT NAVIGATION */}
+          <Text style={styles.sectionLabel}>Help & Info</Text>
+          <View style={styles.menuContainer}>
+            {supportLinks.map((item, index) => (
+              <MenuRow
+                key={item.label}
+                {...item}
+                isLast={index === supportLinks.length - 1}
+              />
+            ))}
+          </View>
+
+          <Text style={styles.footnote}>
+            DhanDiary v1.0.2 • Made with ❤️
           </Text>
-        </View>
-
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionLabel}>Navigation</Text>
-          {primaryLinks.map((item, index) => (
-            <Row
-              key={item.label}
-              icon={item.icon}
-              label={item.label}
-              description={item.description}
-              onPress={item.action}
-              isLast={index === primaryLinks.length - 1}
-            />
-          ))}
-        </View>
-
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionLabel}>Support</Text>
-          {supportLinks.map((item, index) => (
-            <Row
-              key={item.label}
-              icon={item.icon}
-              label={item.label}
-              description={item.description}
-              onPress={item.action}
-              isLast={index === supportLinks.length - 1}
-            />
-          ))}
-        </View>
-
-        <Text style={styles.footnote}>
-          Need something else? Ping us anytime — replies are fast.
-        </Text>
-      </ScrollView>
+        </ScrollView>
+      </Animated.View>
     </SafeAreaView>
   );
 };
+
+/* --- SUB COMPONENTS --- */
+
+const MenuRow = ({ icon, label, description, action, color, isLast }: any) => (
+  <TouchableOpacity
+    onPress={action}
+    activeOpacity={0.7}
+    style={[styles.row, isLast && styles.rowLast]}
+  >
+    <View style={[styles.iconBox, { backgroundColor: `${color}15` }]}>
+      <MaterialIcon name={icon} size={22} color={color} />
+    </View>
+    <View style={styles.rowTextContainer}>
+      <Text style={styles.rowTitle}>{label}</Text>
+      <Text style={styles.rowDesc}>{description}</Text>
+    </View>
+    <MaterialIcon name="chevron-right" size={22} color={colors.border} />
+  </TouchableOpacity>
+);
+
+/* --- STYLES --- */
 
 const styles = StyleSheet.create({
   safeArea: {
@@ -183,102 +209,119 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    backgroundColor: colors.background,
   },
   content: {
     paddingHorizontal: 20,
-    paddingBottom: 32,
-    paddingTop: 16,
+    paddingTop: 10,
   },
+  
+  /* HERO */
   heroCard: {
     backgroundColor: colors.card,
-    borderRadius: 18,
-    padding: 20,
+    borderRadius: 24,
+    padding: 24,
+    marginBottom: 24,
     borderWidth: 1,
     borderColor: colors.border,
-    ...shadows.small,
-    marginBottom: 16,
+    overflow: 'hidden',
+    position: 'relative',
+    // Shadow
+    shadowColor: colors.text,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  heroContent: {
+    zIndex: 2,
+  },
+  heroIconBg: {
+    position: 'absolute',
+    right: -10,
+    bottom: -10,
+    zIndex: 1,
   },
   heroEyebrow: {
     fontSize: 12,
-    color: colors.muted,
-    letterSpacing: 1,
+    fontWeight: '700',
+    color: colors.primary,
     textTransform: 'uppercase',
-    fontWeight: '600',
+    letterSpacing: 1,
+    marginBottom: 6,
   },
   heroTitle: {
-    fontSize: 24,
-    fontWeight: '700',
+    fontSize: 26,
+    fontWeight: '800',
     color: colors.text,
-    marginTop: 4,
+    marginBottom: 6,
   },
   heroSubtitle: {
     fontSize: 14,
-    color: colors.subtleText,
-    marginTop: 8,
+    color: colors.muted,
     lineHeight: 20,
+    maxWidth: '85%',
   },
-  sectionCard: {
-    backgroundColor: colors.card,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 12,
-    paddingBottom: 4,
-    marginTop: 18,
-  },
+
+  /* SECTION & MENU */
   sectionLabel: {
     fontSize: 13,
+    fontWeight: '700',
     color: colors.muted,
-    fontWeight: '600',
-    paddingHorizontal: 14,
-    paddingTop: 14,
-    paddingBottom: 2,
     textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 10,
+    marginLeft: 6,
   },
+  menuContainer: {
+    backgroundColor: colors.card,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 24,
+    overflow: 'hidden',
+  },
+  
+  /* ROW */
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 14,
-    paddingHorizontal: 12,
+    padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  rowPressed: {
-    backgroundColor: colors.surfaceMuted,
+    borderBottomColor: colors.border, // Very subtle separator
+    backgroundColor: colors.card,
   },
   rowLast: {
     borderBottomWidth: 0,
   },
-  rowLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  iconContainer: {
-    width: 38,
-    height: 38,
+  iconBox: {
+    width: 42,
+    height: 42,
     borderRadius: 12,
-    backgroundColor: colors.primarySoft,
-    justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    justifyContent: 'center',
+    marginRight: 14,
   },
-  rowText: {
+  rowTextContainer: {
+    flex: 1,
+  },
+  rowTitle: {
     fontSize: 16,
+    fontWeight: '600',
     color: colors.text,
-    fontWeight: '500',
   },
-  rowDescription: {
+  rowDesc: {
     fontSize: 13,
-    color: colors.subtleText,
+    color: colors.muted,
     marginTop: 2,
   },
+
+  /* FOOTER */
   footnote: {
-    fontSize: 12,
-    color: colors.muted,
     textAlign: 'center',
-    marginTop: 20,
+    color: colors.muted,
+    fontSize: 12,
+    marginTop: 8,
+    opacity: 0.6,
   },
 });
 
