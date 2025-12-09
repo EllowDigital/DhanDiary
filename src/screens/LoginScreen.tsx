@@ -12,6 +12,7 @@ import {
   ScrollView,
   StatusBar,
   useWindowDimensions,
+  Keyboard,
 } from 'react-native';
 import { Button, Text } from '@rneui/themed';
 import { useNavigation } from '@react-navigation/native';
@@ -29,7 +30,7 @@ import { useInternetStatus } from '../hooks/useInternetStatus';
 // Components & Utils
 import { colors, spacing, shadows } from '../utils/design';
 import FullScreenSpinner from '../components/FullScreenSpinner';
-import AuthField from '../components/AuthField'; // Assuming this exists based on your code
+import AuthField from '../components/AuthField';
 
 type LoginScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList>;
 
@@ -37,8 +38,7 @@ const LoginScreen = () => {
   const navigation = useNavigation<LoginScreenNavigationProp>();
   const { showToast } = useToast();
   const isOnline = useInternetStatus();
-  const { width, height } = useWindowDimensions();
-  const isLandscape = width > height;
+  const { width } = useWindowDimensions();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -46,7 +46,6 @@ const LoginScreen = () => {
   const [loading, setLoading] = useState(false);
 
   // --- ANIMATION SETUP ---
-  // Using standard Animated to prevent Reanimated crashes
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
 
@@ -70,6 +69,10 @@ const LoginScreen = () => {
   // --- HANDLERS ---
   const handleLogin = async () => {
     if (loading) return;
+    
+    // Dismiss keyboard first so spinner is clearly visible
+    Keyboard.dismiss();
+
     if (!email || !password) return Alert.alert('Missing Fields', 'Please enter both email and password.');
     
     if (!isOnline) {
@@ -107,15 +110,19 @@ const LoginScreen = () => {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+      
+      {/* KEYBOARD HANDLING:
+         - behavior="padding" works best on iOS
+         - behavior="height" works best on Android
+         - keyboardVerticalOffset ensures the view doesn't get hidden behind the status bar/header
+      */}
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         <ScrollView 
-          contentContainerStyle={[
-            styles.scrollContent, 
-            isLandscape && { paddingVertical: 10 }
-          ]}
+          contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
@@ -138,7 +145,6 @@ const LoginScreen = () => {
               <Text style={styles.title}>Welcome Back</Text>
               <Text style={styles.subtitle}>Sign in to continue your financial journey.</Text>
 
-              {/* SECURITY BADGES */}
               <View style={styles.badgeRow}>
                 <View style={styles.badge}>
                   <MaterialIcon name="lock" size={12} color={colors.primary} />
@@ -233,8 +239,9 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    justifyContent: 'center',
+    justifyContent: 'center', // Keeps content centered when keyboard is closed
     padding: spacing(3),
+    paddingBottom: spacing(8), // Extra padding at bottom for scrolling when keyboard is open
   },
   container: {
     width: '100%',
