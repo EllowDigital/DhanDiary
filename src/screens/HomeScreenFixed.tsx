@@ -283,7 +283,9 @@ const HomeScreen: React.FC = () => {
         expenseMap[key] = 0;
       }
       source.forEach((entry) => {
-        const entryKey = dayjs(entry.date || entry.created_at).startOf('day').format('YYYY-MM-DD');
+        const entryKey = dayjs(entry.date || entry.created_at)
+          .startOf('day')
+          .format('YYYY-MM-DD');
         if (!(entryKey in incomeMap)) {
           return;
         }

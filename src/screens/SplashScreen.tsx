@@ -98,9 +98,7 @@ const SplashScreen = () => {
     };
 
     checkSessionAndNavigate();
-    timeoutIds.push(
-      setTimeout(() => runNavigation('Auth'), MAX_SPLASH_WAIT_MS)
-    );
+    timeoutIds.push(setTimeout(() => runNavigation('Auth'), MAX_SPLASH_WAIT_MS));
 
     return () => {
       timeoutIds.forEach((id) => clearTimeout(id));
@@ -186,7 +184,9 @@ const SplashScreen = () => {
 
       <Animated.Text style={[styles.appName, textStyle]}>DhanDiary</Animated.Text>
 
-      <Animated.Text style={[styles.tagline, textStyle]}>Now optimized for quicker starts</Animated.Text>
+      <Animated.Text style={[styles.tagline, textStyle]}>
+        Now optimized for quicker starts
+      </Animated.Text>
 
       <Animated.View style={[styles.progressTrack, progressStyle]}>
         <View style={styles.progressFill} />
@@ -210,7 +210,9 @@ const SplashScreen = () => {
         <Animated.Text style={styles.poweredText}>
           Powered by <Animated.Text style={styles.brandName}>EllowDigital</Animated.Text>
         </Animated.Text>
-        <Animated.Text style={styles.loadingText}>Performance boost applied — launching...</Animated.Text>
+        <Animated.Text style={styles.loadingText}>
+          Performance boost applied — launching...
+        </Animated.Text>
       </Animated.View>
     </View>
   );

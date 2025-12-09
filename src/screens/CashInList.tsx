@@ -1,5 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, StyleSheet, FlatList, Dimensions, TouchableOpacity, useWindowDimensions } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  FlatList,
+  Dimensions,
+  TouchableOpacity,
+  useWindowDimensions,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text, Button } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
@@ -174,8 +181,8 @@ const CashInList = () => {
                     isTablet && (index + 1) % 4 !== 0
                       ? 12
                       : !isTablet && (index + 1) % 2 !== 0
-                      ? 8
-                      : 0,
+                        ? 8
+                        : 0,
                 },
               ]}
             >
