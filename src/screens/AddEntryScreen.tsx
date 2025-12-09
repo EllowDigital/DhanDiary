@@ -1,5 +1,4 @@
-// src/screens/AddEntryScreen.tsx
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -9,6 +8,9 @@ import {
   KeyboardAvoidingView,
   Dimensions,
   Alert,
+  Animated,
+  Easing,
+  StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Input, Button, Text } from '@rneui/themed';
@@ -20,19 +22,9 @@ import { useToast } from '../context/ToastContext';
 import runInBackground from '../utils/background';
 import CategoryPickerModal from '../components/CategoryPickerModal';
 import { v4 as uuidv4 } from 'uuid';
-import { colors } from '../utils/design';
+import { colors, spacing, shadows } from '../utils/design';
 import { ALLOWED_CATEGORIES, DEFAULT_CATEGORY, ensureCategory } from '../constants/categories';
 import ScreenHeader from '../components/ScreenHeader';
-
-import Animated, {
-  FadeInDown,
-  FadeInUp,
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-  withTiming,
-  Easing,
-} from 'react-native-reanimated';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const scale = SCREEN_WIDTH / 390;
@@ -42,18 +34,20 @@ const quickCategories = ALLOWED_CATEGORIES;
 
 const typeConfigs = [
   {
+    value: 'out',
     label: 'Cash Out',
-    subtitle: 'Expenses & payouts',
+    subtitle: 'Expense',
     accent: colors.accentRed,
-    accentSoft: colors.accentRedSoft,
-    icon: 'trending-down',
+    accentSoft: 'rgba(239, 68, 68, 0.1)',
+    icon: 'arrow-outward',
   },
   {
+    value: 'in',
     label: 'Cash In',
-    subtitle: 'Income & refunds',
+    subtitle: 'Income',
     accent: colors.accentGreen,
-    accentSoft: colors.accentGreenSoft,
-    icon: 'trending-up',
+    accentSoft: 'rgba(34, 197, 94, 0.1)',
+    icon: 'arrow-downward',
   },
 ];
 
@@ -63,22 +57,59 @@ const AddEntryScreen: React.FC = () => {
   const editingParamId = route?.params?.local_id;
 
   const { addEntry, entries, updateEntry } = useEntries();
+  const { showToast } = useToast();
 
+  // State
   const [editingLocalId, setEditingLocalId] = useState<string | null>(null);
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
-  const [typeIndex, setTypeIndex] = useState(0);
+  const [typeIndex, setTypeIndex] = useState(0); // 0 = out, 1 = in
   const [category, setCategory] = useState(DEFAULT_CATEGORY);
-  const [categoryModalVisible, setCategoryModalVisible] = useState(false);
-
   const [date, setDate] = useState<Date>(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [segmentWidth, setSegmentWidth] = useState(0);
 
-  const types: ('out' | 'in')[] = ['out', 'in'];
-  const typeMeta = typeConfigs[typeIndex];
+  // Modals
+  const [categoryModalVisible, setCategoryModalVisible] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+
+  // Computed
+  const activeType = typeConfigs[typeIndex];
   const noteLength = note.trim().length;
 
+  // --- ANIMATIONS ---
+  // Standard Animated API
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+  const toggleAnim = useRef(new Animated.Value(0)).current; // 0 to 1
+
+  useEffect(() => {
+    // Entrance
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic),
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 500,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic),
+      }),
+    ]).start();
+  }, []);
+
+  useEffect(() => {
+    // Toggle switch animation
+    Animated.timing(toggleAnim, {
+      toValue: typeIndex,
+      duration: 250,
+      useNativeDriver: false, // width/left interpolation needs false sometimes, or transforms
+      easing: Easing.inOut(Easing.ease),
+    }).start();
+  }, [typeIndex]);
+
+  // Load existing data for editing
   useEffect(() => {
     if (editingParamId && entries) {
       const found = entries.find((e: any) => e.local_id === editingParamId);
@@ -94,6 +125,7 @@ const AddEntryScreen: React.FC = () => {
     }
   }, [editingParamId, entries]);
 
+  // Handlers
   const onPickCategory = (c: string) => {
     setCategory(ensureCategory(c));
     setCategoryModalVisible(false);
@@ -104,25 +136,21 @@ const AddEntryScreen: React.FC = () => {
     return Number.isFinite(parsed) ? parsed : NaN;
   };
 
-  const { showToast } = useToast();
-
   const handleSave = () => {
     const parsed = parseAmount();
     if (!amount.trim() || isNaN(parsed) || parsed <= 0) {
-      return Alert.alert('Validation', 'Please enter a valid amount.');
+      return Alert.alert('Invalid Amount', 'Please enter a valid number.');
     }
 
-    // Prepare payload
     const payload = {
       amount: parsed,
-      type: types[typeIndex],
+      type: activeType.value,
       category: ensureCategory(category),
       note,
       currency: 'INR',
       date: date.toISOString(),
     };
 
-    // Optimistic UX: navigate back immediately and run work in background
     showToast(editingLocalId ? 'Updating...' : 'Saving...');
     navigation.goBack();
 
@@ -130,77 +158,31 @@ const AddEntryScreen: React.FC = () => {
       try {
         if (editingLocalId) {
           await updateEntry({ local_id: editingLocalId, updates: payload });
-          showToast('Updated');
+          showToast('Transaction updated');
         } else {
           await addEntry({ local_id: uuidv4(), ...payload });
-          showToast('Saved');
+          showToast('Transaction saved');
         }
       } catch (err: any) {
-        // If background save fails, inform user
         showToast(err?.message || 'Save failed');
       }
     });
   };
 
-  // CARD ANIMATION
-  const scaleValue = useSharedValue(1);
-  const shadowValue = useSharedValue(5);
-  const segmentProgress = useSharedValue(0);
-  const amountFocusProgress = useSharedValue(0);
-
-  const onPressInCard = () => {
-    scaleValue.value = withSpring(1.02);
-    shadowValue.value = withTiming(14);
-  };
-  const onPressOutCard = () => {
-    scaleValue.value = withSpring(1);
-    shadowValue.value = withTiming(5);
-  };
-
-  useEffect(() => {
-    segmentProgress.value = withTiming(typeIndex, {
-      duration: 280,
-      easing: Easing.out(Easing.cubic),
-    });
-  }, [typeIndex, segmentProgress]);
-
-  const handleAmountFocus = () => {
-    amountFocusProgress.value = withTiming(1, { duration: 220, easing: Easing.out(Easing.quad) });
-  };
-
-  const handleAmountBlur = () => {
-    amountFocusProgress.value = withTiming(0, { duration: 220, easing: Easing.out(Easing.quad) });
-  };
-
-  const animatedCardStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scaleValue.value + amountFocusProgress.value * 0.01 }],
-    elevation: shadowValue.value,
-    shadowRadius: shadowValue.value + amountFocusProgress.value * 6,
-    shadowOpacity: 0.08 + amountFocusProgress.value * 0.15,
-  }));
-
-  const indicatorStyle = useAnimatedStyle(() => {
-    if (!segmentWidth) return { opacity: 0 };
-    const buttonWidth = (segmentWidth - 12) / 2;
-    const translateX = segmentProgress.value * (buttonWidth + 6);
-    return {
-      opacity: 1,
-      width: buttonWidth,
-      transform: [{ translateX }],
-    };
+  // Interpolated Styles
+  const toggleTranslate = toggleAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [2, (SCREEN_WIDTH - 48) / 2], // Approx half width
   });
-
-  const subtitleLabel = editingLocalId
-    ? 'Update or adjust an existing movement'
-    : 'Log new income or expense in seconds';
-
-  const handleSegmentLayout = useCallback((event: any) => {
-    setSegmentWidth(event.nativeEvent.layout.width);
-  }, []);
 
   return (
     <SafeAreaView style={styles.safe}>
-      <ScreenHeader title={editingLocalId ? 'Edit entry' : 'Add entry'} subtitle={subtitleLabel} />
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+      <ScreenHeader
+        title={editingLocalId ? 'Edit Entry' : 'New Entry'}
+        subtitle={editingLocalId ? 'Update transaction details' : 'Record a new transaction'}
+      />
+
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -208,194 +190,165 @@ const AddEntryScreen: React.FC = () => {
         <ScrollView
           contentContainerStyle={styles.scrollContainer}
           keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.title}>
-            {editingLocalId ? 'Edit Transaction' : 'Add Transaction'}
-          </Text>
-          <Text style={styles.subtitle}>{subtitleLabel}</Text>
+          <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
 
-          <Animated.View
-            entering={FadeInDown.delay(40).springify().damping(14)}
-            style={styles.segmentWrapper}
-            onLayout={handleSegmentLayout}
-          >
-            <Animated.View style={[styles.segmentIndicator, indicatorStyle]} />
-            {typeConfigs.map((cfg, idx) => {
-              const active = typeIndex === idx;
-              return (
-                <Pressable
-                  key={cfg.label}
-                  style={styles.segmentButton}
-                  onPress={() => setTypeIndex(idx)}
-                >
-                  <View style={styles.segmentContent}>
-                    <View
-                      style={[
-                        styles.segmentIcon,
-                        { backgroundColor: active ? cfg.accent : colors.card },
-                      ]}
-                    >
-                      <MaterialIcon
-                        name={cfg.icon as any}
-                        size={18}
-                        color={active ? colors.white : cfg.accent}
-                      />
-                    </View>
-                    <View>
-                      <Text style={[styles.segmentLabel, active && styles.segmentLabelActive]}>
-                        {cfg.label}
-                      </Text>
-                      <Text style={styles.segmentSubtitle}>{cfg.subtitle}</Text>
-                    </View>
-                  </View>
-                </Pressable>
-              );
-            })}
-          </Animated.View>
-
-          <Pressable onPressIn={onPressInCard} onPressOut={onPressOutCard}>
-            <Animated.View
-              entering={FadeInDown.delay(120).springify().damping(14)}
-              style={[
-                styles.cardWrapper,
-                { borderColor: `${typeMeta.accent}33` },
-                animatedCardStyle,
-              ]}
-            >
-              <View style={styles.cardHeader}>
-                <Text style={styles.cardTitle}>Amount</Text>
-                <View style={[styles.typeBadge, { backgroundColor: typeMeta.accentSoft }]}>
-                  <MaterialIcon name={typeMeta.icon as any} size={16} color={typeMeta.accent} />
-                  <Text style={[styles.typeBadgeText, { color: typeMeta.accent }]}>
-                    {typeMeta.label}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.amountRow}>
-                <Text style={[styles.currency, { color: typeMeta.accent }]}>₹</Text>
-                <Input
-                  placeholder="0.00"
-                  keyboardType="decimal-pad"
-                  value={amount}
-                  onChangeText={setAmount}
-                  onFocus={handleAmountFocus}
-                  onBlur={handleAmountBlur}
-                  containerStyle={{ flex: 1, paddingLeft: 0 }}
-                  inputContainerStyle={{ borderBottomWidth: 0 }}
-                  inputStyle={styles.amountInput}
-                />
-              </View>
-              <Text style={styles.cardHint}>{typeMeta.subtitle}</Text>
-            </Animated.View>
-          </Pressable>
-
-          <Animated.View entering={FadeInDown.delay(200).springify().damping(14)}>
-            <View style={styles.dualRow}>
-              <Pressable style={styles.infoTile} onPress={() => setCategoryModalVisible(true)}>
-                <View style={styles.infoLabelRow}>
-                  <MaterialIcon name="category" size={20} color={colors.subtleText} />
-                  <Text style={styles.infoLabel}>Category</Text>
-                </View>
-                <View style={styles.infoValueRow}>
-                  <Text style={styles.infoValue}>{category}</Text>
-                  <MaterialIcon name="chevron-right" size={20} color={colors.mutedSoft} />
-                </View>
-              </Pressable>
-
-              <Pressable style={styles.infoTile} onPress={() => setShowDatePicker(true)}>
-                <View style={styles.infoLabelRow}>
-                  <MaterialIcon name="event" size={20} color={colors.subtleText} />
-                  <Text style={styles.infoLabel}>Date</Text>
-                </View>
-                <View style={styles.infoValueRow}>
-                  <Text style={styles.infoValue}>{date.toDateString()}</Text>
-                  <MaterialIcon name="chevron-right" size={20} color={colors.mutedSoft} />
-                </View>
-              </Pressable>
-            </View>
-          </Animated.View>
-
-          {showDatePicker && (
-            <DateTimePicker
-              value={date}
-              mode="date"
-              display="default"
-              onChange={(e, d) => {
-                setShowDatePicker(false);
-                if (d) setDate(d);
-              }}
-            />
-          )}
-
-          <Animated.View entering={FadeInDown.delay(280).springify().damping(14)}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Quick categories</Text>
-              <Text style={styles.sectionHint}>Tap to autofill</Text>
-            </View>
-            <View style={styles.chipRow}>
-              {quickCategories.map((item) => {
-                const active = category === item;
+            {/* TOGGLE SWITCH */}
+            <View style={styles.toggleContainer}>
+              <Animated.View
+                style={[
+                  styles.toggleIndicator,
+                  {
+                    left: 0,
+                    transform: [{ translateX: toggleTranslate }],
+                    width: '49%' // slightly less than half to account for padding
+                  }
+                ]}
+              />
+              {typeConfigs.map((cfg, idx) => {
+                const isActive = typeIndex === idx;
                 return (
                   <Pressable
-                    key={item}
-                    style={[styles.chip, active && { backgroundColor: typeMeta.accentSoft }]}
-                    onPress={() => setCategory(item)}
+                    key={cfg.value}
+                    style={styles.toggleBtn}
+                    onPress={() => setTypeIndex(idx)}
                   >
-                    <Text style={[styles.chipText, active && { color: typeMeta.accent }]}>
-                      {item}
+                    <MaterialIcon
+                      name={cfg.icon as any}
+                      size={18}
+                      color={isActive ? colors.text : colors.muted}
+                    />
+                    <Text style={[styles.toggleText, isActive && styles.toggleTextActive]}>
+                      {cfg.label}
                     </Text>
                   </Pressable>
                 );
               })}
             </View>
-          </Animated.View>
 
-          <Animated.View
-            entering={FadeInDown.delay(360).springify().damping(14)}
-            style={styles.noteCard}
-          >
-            <View style={styles.noteHeader}>
-              <Text style={styles.sectionTitle}>Notes</Text>
-              <Text style={styles.sectionHint}>{noteLength}/160</Text>
+            {/* AMOUNT CARD */}
+            <View style={[styles.amountCard, { borderColor: activeType.accent }]}>
+              <View style={styles.amountHeader}>
+                <Text style={styles.cardLabel}>Amount</Text>
+                <View style={[styles.badge, { backgroundColor: activeType.accentSoft }]}>
+                  <Text style={[styles.badgeText, { color: activeType.accent }]}>{activeType.subtitle}</Text>
+                </View>
+              </View>
+
+              <View style={styles.inputRow}>
+                <Text style={[styles.currencySymbol, { color: activeType.accent }]}>₹</Text>
+                <Input
+                  placeholder="0"
+                  value={amount}
+                  onChangeText={setAmount}
+                  keyboardType="numeric"
+                  inputContainerStyle={{ borderBottomWidth: 0 }}
+                  inputStyle={styles.amountInput}
+                  containerStyle={{ paddingHorizontal: 0, flex: 1 }}
+                  placeholderTextColor={colors.mutedSoft}
+                  autoFocus={!editingLocalId}
+                />
+              </View>
             </View>
-            <Input
-              placeholder="Add a short note (optional)"
-              value={note}
-              onChangeText={(text) => setNote(text.slice(0, 160))}
-              multiline
-              numberOfLines={3}
-              inputContainerStyle={styles.noteInput}
-              inputStyle={styles.noteText}
-              placeholderTextColor={colors.mutedSoft}
-            />
-          </Animated.View>
 
-          <Animated.View entering={FadeInUp.delay(420).springify().damping(12)}>
+            {/* DETAILS GRID */}
+            <View style={styles.gridRow}>
+              <Pressable style={styles.gridItem} onPress={() => setCategoryModalVisible(true)}>
+                <Text style={styles.gridLabel}>Category</Text>
+                <View style={styles.gridValueRow}>
+                  <Text style={styles.gridValue} numberOfLines={1}>{category}</Text>
+                  <MaterialIcon name="arrow-drop-down" size={24} color={colors.muted} />
+                </View>
+              </Pressable>
+
+              <Pressable style={styles.gridItem} onPress={() => setShowDatePicker(true)}>
+                <Text style={styles.gridLabel}>Date</Text>
+                <View style={styles.gridValueRow}>
+                  <Text style={styles.gridValue}>{date.toLocaleDateString()}</Text>
+                  <MaterialIcon name="event" size={20} color={colors.muted} />
+                </View>
+              </Pressable>
+            </View>
+
+            {/* QUICK CATEGORIES */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Quick Select</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+                {quickCategories.map((cat) => {
+                  const isSelected = category === cat;
+                  return (
+                    <Pressable
+                      key={cat}
+                      style={[
+                        styles.chip,
+                        isSelected && { backgroundColor: activeType.accentSoft, borderColor: activeType.accent }
+                      ]}
+                      onPress={() => setCategory(cat)}
+                    >
+                      <Text style={[styles.chipText, isSelected && { color: activeType.accent, fontWeight: '700' }]}>
+                        {cat}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
+
+            {/* NOTES */}
+            <View style={styles.section}>
+              <View style={styles.noteHeader}>
+                <Text style={styles.sectionTitle}>Note</Text>
+                <Text style={styles.charCount}>{noteLength}/100</Text>
+              </View>
+              <Input
+                placeholder="Add a description (optional)"
+                value={note}
+                onChangeText={(t) => setNote(t.slice(0, 100))}
+                inputContainerStyle={styles.noteInput}
+                inputStyle={{ fontSize: 15 }}
+                multiline
+              />
+            </View>
+
+            {/* ACTION BUTTON */}
             <Button
               title={editingLocalId ? 'Update Transaction' : 'Save Transaction'}
               onPress={handleSave}
-              buttonStyle={[styles.saveButton, { backgroundColor: typeMeta.accent }]}
-              titleStyle={styles.saveButtonTitle}
+              buttonStyle={[styles.saveBtn, { backgroundColor: activeType.accent }]}
+              titleStyle={styles.saveBtnText}
+              containerStyle={styles.saveBtnContainer}
+              icon={<MaterialIcon name="check" size={20} color="white" style={{ marginRight: 8 }} />}
             />
-          </Animated.View>
 
-          <CategoryPickerModal
-            visible={categoryModalVisible}
-            onClose={() => setCategoryModalVisible(false)}
-            onSelect={onPickCategory}
-          />
+          </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* MODALS */}
+      <CategoryPickerModal
+        visible={categoryModalVisible}
+        onClose={() => setCategoryModalVisible(false)}
+        onSelect={onPickCategory}
+      />
+
+      {showDatePicker && (
+        <DateTimePicker
+          value={date}
+          mode="date"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          onChange={(e, d) => {
+            setShowDatePicker(false);
+            if (d) setDate(d);
+          }}
+        />
+      )}
+
     </SafeAreaView>
   );
 };
 
 export default AddEntryScreen;
-
-/* ------------------------------------
-   MODERN RESPONSIVE STYLES
------------------------------------- */
 
 const styles = StyleSheet.create({
   safe: {
@@ -404,224 +357,186 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     padding: 20,
-    paddingBottom: 60,
-    backgroundColor: colors.background,
+    paddingBottom: 40,
   },
-  title: {
-    textAlign: 'center',
-    fontSize: font(24),
-    fontWeight: '700',
-    marginBottom: 4,
-    color: colors.text,
-  },
-  subtitle: {
-    textAlign: 'center',
-    color: colors.muted,
-    marginBottom: 18,
-    fontSize: font(14),
-  },
-  segmentWrapper: {
+
+  /* TOGGLE */
+  toggleContainer: {
     flexDirection: 'row',
     backgroundColor: colors.surfaceMuted,
-    borderRadius: 22,
-    padding: 6,
-    marginBottom: 18,
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  segmentIndicator: {
-    position: 'absolute',
-    top: 6,
-    bottom: 6,
-    left: 6,
     borderRadius: 16,
+    padding: 4,
+    height: 56,
+    marginBottom: 24,
+    position: 'relative',
+  },
+  toggleIndicator: {
+    position: 'absolute',
+    top: 4,
+    bottom: 4,
     backgroundColor: colors.card,
-    shadowColor: colors.shadow,
-    shadowOpacity: 1,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 6,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  segmentButton: {
+  toggleBtn: {
     flex: 1,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-  },
-  segmentContent: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  segmentIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
     justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
+    gap: 8,
+    zIndex: 1,
   },
-  segmentLabel: {
-    fontSize: font(15),
+  toggleText: {
+    fontSize: 14,
     fontWeight: '600',
     color: colors.muted,
   },
-  segmentLabelActive: {
+  toggleTextActive: {
     color: colors.text,
+    fontWeight: '700',
   },
-  segmentSubtitle: {
-    fontSize: font(12),
-    color: colors.mutedSoft,
-  },
-  cardWrapper: {
+
+  /* AMOUNT CARD */
+  amountCard: {
     backgroundColor: colors.card,
-    borderRadius: 22,
+    borderRadius: 20,
     padding: 20,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 12,
-    elevation: 5,
+    borderWidth: 1.5, // Thicker active border
     marginBottom: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
+    ...shadows.medium,
   },
-  cardHeader: {
+  amountHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 10,
   },
-  cardTitle: {
-    fontSize: font(15),
+  cardLabel: {
+    fontSize: 13,
+    color: colors.muted,
     fontWeight: '600',
-    color: colors.subtleText,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  typeBadge: {
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  badgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
   },
-  typeBadgeText: {
-    fontSize: font(12),
-    fontWeight: '600',
-    marginLeft: 6,
-  },
-  amountRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 6,
-  },
-  currency: {
-    fontSize: font(34),
-    fontWeight: '800',
+  currencySymbol: {
+    fontSize: 32,
+    fontWeight: '700',
     marginRight: 8,
   },
   amountInput: {
-    fontSize: font(40),
-    fontWeight: '800',
+    fontSize: 36,
+    fontWeight: '700',
     color: colors.text,
   },
-  cardHint: {
-    marginTop: 4,
-    color: colors.mutedSoft,
-    fontSize: font(12),
-  },
-  dualRow: {
+
+  /* GRID */
+  gridRow: {
     flexDirection: 'row',
     gap: 12,
-    marginBottom: 20,
-  },
-  infoTile: {
-    flex: 1,
-    backgroundColor: colors.card,
-    borderRadius: 18,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  infoLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  infoLabel: {
-    fontSize: font(13),
-    fontWeight: '600',
-    color: colors.muted,
-    marginLeft: 8,
-  },
-  infoValueRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  infoValue: {
-    fontSize: font(16),
-    fontWeight: '700',
-    color: colors.text,
-  },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  sectionTitle: {
-    fontSize: font(15),
-    fontWeight: '700',
-    color: colors.text,
-  },
-  sectionHint: {
-    fontSize: font(12),
-    color: colors.mutedSoft,
-  },
-  chipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
     marginBottom: 24,
   },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: colors.border,
-    marginRight: 10,
-    marginBottom: 10,
-  },
-  chipText: {
-    fontSize: font(13),
-    fontWeight: '600',
-    color: colors.subtleText,
-  },
-  noteCard: {
+  gridItem: {
+    flex: 1,
     backgroundColor: colors.card,
-    borderRadius: 20,
+    borderRadius: 16,
     padding: 16,
     borderWidth: 1,
     borderColor: colors.border,
-    marginBottom: 26,
   },
+  gridLabel: {
+    fontSize: 12,
+    color: colors.muted,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  gridValueRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  gridValue: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+    flex: 1,
+  },
+
+  /* CHIPS */
+  section: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 12,
+  },
+  chipRow: {
+    paddingRight: 20,
+    gap: 10,
+  },
+  chip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginRight: 8,
+  },
+  chipText: {
+    fontSize: 13,
+    color: colors.text,
+    fontWeight: '500',
+  },
+
+  /* NOTES */
   noteHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 8,
+  },
+  charCount: {
+    fontSize: 12,
+    color: colors.muted,
   },
   noteInput: {
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: 12,
     borderBottomWidth: 0,
-    paddingTop: 4,
+    paddingHorizontal: 12,
+    height: 80,
+    alignItems: 'flex-start', // for multiline top alignment
   },
-  noteText: {
-    fontSize: font(14),
-    color: colors.text,
+
+  /* SAVE BTN */
+  saveBtnContainer: {
+    marginTop: 10,
+    borderRadius: 16,
+    ...shadows.medium,
   },
-  saveButton: {
-    paddingVertical: 16,
+  saveBtn: {
+    paddingVertical: 14,
     borderRadius: 16,
   },
-  saveButtonTitle: {
-    fontSize: font(16),
+  saveBtnText: {
+    fontSize: 16,
     fontWeight: '700',
   },
 });
