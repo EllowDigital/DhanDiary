@@ -12,6 +12,7 @@ import {
   ScrollView,
   StatusBar,
   useWindowDimensions,
+  Keyboard,
 } from 'react-native';
 import { Button, Text } from '@rneui/themed';
 import { useNavigation } from '@react-navigation/native';
@@ -88,6 +89,7 @@ const RegisterScreen = () => {
     // Clear previous errors
     setEmailError(null);
     setPasswordError(null);
+    Keyboard.dismiss();
 
     // Validation
     if (!name.trim()) return Alert.alert('Missing Name', 'Please enter your full name.');
@@ -95,13 +97,6 @@ const RegisterScreen = () => {
       setEmailError('Email is required');
       return;
     }
-    
-    // Strict Gmail validation (optional per your previous code, can be relaxed if needed)
-    // const gmailRegex = /^[A-Za-z0-9._%+-]+@gmail\.com$/i;
-    // if (!gmailRegex.test(email.trim())) {
-    //   setEmailError('Please use a Gmail address.');
-    //   return;
-    // }
 
     if (password.length < 8) {
       setPasswordError('Must be at least 8 characters');
@@ -128,9 +123,11 @@ const RegisterScreen = () => {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+      
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         <ScrollView 
           contentContainerStyle={styles.scrollContent}
@@ -266,8 +263,9 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    justifyContent: 'center',
+    justifyContent: 'center', // Centers when content is small
     padding: spacing(3),
+    paddingBottom: spacing(8), // Extra padding at bottom so keyboard doesn't hide last element
   },
   container: {
     width: '100%',
