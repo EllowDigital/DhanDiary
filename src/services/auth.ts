@@ -1,7 +1,9 @@
 import NetInfo from '@react-native-community/netinfo';
 import { query } from '../api/neonClient';
 import { saveSession, clearSession, getSession } from '../db/session';
-import { addPendingProfileUpdate, clearAllData } from '../db/localDb';
+import { addPendingProfileUpdate, clearAllData, init as initDb } from '../db/localDb';
+import { getOfflineDbOwner, setOfflineDbOwner, clearOfflineDbOwner } from '../db/offlineOwner';
+import sqlite from '../db/sqlite';
 import bcrypt from 'bcryptjs';
 import Constants from 'expo-constants';
 
@@ -23,6 +25,45 @@ export const isOnline = async () => {
   return state.isConnected;
 };
 
+const prepareOfflineWorkspace = async (userId: string) => {
+  await initDb();
+  let owner: string | null = null;
+  try {
+    owner = await getOfflineDbOwner();
+  } catch (e) {
+    owner = null;
+  }
+
+  if (owner && owner !== userId) {
+    await clearAllData({ includeSession: false });
+  }
+
+  if (owner !== userId) {
+    await setOfflineDbOwner(userId);
+  }
+
+  let hasExisting = false;
+  try {
+    const db = await sqlite.open();
+    const row = await db.get<{ total: number }>(
+      'SELECT COUNT(1) as total FROM local_entries WHERE user_id = ?',
+      [userId]
+    );
+    hasExisting = !!(row && Number(row.total) > 0);
+  } catch (e) {
+    hasExisting = false;
+  }
+
+  if (!hasExisting) {
+    try {
+      const { syncBothWays } = require('./syncManager');
+      await syncBothWays();
+    } catch (e) {
+      console.warn('Initial sync after login failed', e);
+    }
+  }
+};
+
 export const registerOnline = async (name: string, email: string, password: string) => {
   const salt = await bcrypt.genSalt(10);
   const hash = await bcrypt.hash(password, salt);
@@ -32,6 +73,7 @@ export const registerOnline = async (name: string, email: string, password: stri
     const { v4: uuidv4 } = require('uuid');
     const id = uuidv4();
     await saveSession(id, name || '', email);
+    await prepareOfflineWorkspace(id);
     return { id, name, email };
   }
 
@@ -57,6 +99,7 @@ export const registerOnline = async (name: string, email: string, password: stri
   const user = result[0];
   // saveSession expects (id, name, email)
   await saveSession(user.id, user.name || '', user.email);
+  await prepareOfflineWorkspace(user.id);
   return user;
 };
 
@@ -93,6 +136,12 @@ export const logout = async () => {
     // ignore if syncManager can't be required
   }
 
+  const session = await getSession();
+  if (session?.id) {
+    try {
+      await setOfflineDbOwner(session.id);
+    } catch (e) {}
+  }
   await clearSession();
 };
 
@@ -130,6 +179,7 @@ export const deleteAccount = async () => {
 
   // Clear local DB
   await clearAllData();
+  await clearOfflineDbOwner();
   return { remoteDeleted, userDeleted };
 };
 

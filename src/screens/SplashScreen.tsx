@@ -1,12 +1,19 @@
 import React, { useEffect } from 'react';
-import { View, StyleSheet, Dimensions, Image, StatusBar, Text } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  useWindowDimensions,
+  Image,
+  StatusBar,
+  Text,
+} from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import { getSession } from '../db/session';
 import { colors, shadows } from '../utils/design';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
-import Svg, { Defs, LinearGradient as SvgLinearGradient, Stop, Rect } from 'react-native-svg';
+import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -19,308 +26,201 @@ import Animated, {
 
 type SplashNavProp = NativeStackNavigationProp<RootStackParamList, 'Splash'>;
 
-const { height } = Dimensions.get('window');
 const FEATURE_CARDS = [
-  {
-    icon: 'bolt',
-    title: 'Instant sync',
-    subtitle: 'Entries backed up securely',
-  },
-  {
-    icon: 'shield',
-    title: 'Private mode',
-    subtitle: 'Offline-first encryption',
-  },
+  { icon: 'bolt', title: 'Instant Sync', subtitle: 'Auto secure backup' },
+  { icon: 'shield', title: 'Private Mode', subtitle: 'Offline-first safety' },
 ];
 
-const MIN_SPLASH_TIME_MS = 4600;
+const MIN_SPLASH_TIME_MS = 400;
 const MAX_SPLASH_WAIT_MS = 8000;
 
 const SplashScreen = () => {
   const navigation = useNavigation<SplashNavProp>();
+  const { width, height } = useWindowDimensions();
 
   const animation = useSharedValue(0);
   const orbit = useSharedValue(0);
   const cardLift = useSharedValue(0);
 
   useEffect(() => {
-    animation.value = withTiming(1, {
-      duration: 1200,
-      easing: Easing.out(Easing.exp),
-    });
+    animation.value = withTiming(1, { duration: 1200, easing: Easing.out(Easing.exp) });
 
-    orbit.value = withRepeat(
-      withTiming(1, {
-        duration: 2200,
-        easing: Easing.inOut(Easing.quad),
-      }),
-      -1,
-      true
-    );
-
-    cardLift.value = withRepeat(
-      withDelay(
-        150,
-        withTiming(1, {
-          duration: 5400,
-          easing: Easing.inOut(Easing.ease),
-        })
-      ),
-      -1,
-      true
-    );
+    orbit.value = withRepeat(withTiming(1, { duration: 2200 }), -1, true);
+    cardLift.value = withRepeat(withDelay(120, withTiming(1, { duration: 5200 })), -1, true);
 
     const startedAt = Date.now();
     let hasNavigated = false;
-    const timeoutIds: ReturnType<typeof setTimeout>[] = [];
+    const timeoutIds: any[] = [];
 
     const runNavigation = (route: keyof RootStackParamList) => {
-      if (hasNavigated) return;
-      hasNavigated = true;
-      navigation.replace(route);
-    };
-
-    const scheduleNavigation = (route: keyof RootStackParamList) => {
-      const elapsed = Date.now() - startedAt;
-      const delay = Math.max(0, MIN_SPLASH_TIME_MS - elapsed);
-      const id = setTimeout(() => runNavigation(route), delay);
-      timeoutIds.push(id);
+      if (!hasNavigated) {
+        hasNavigated = true;
+        navigation.replace(route);
+      }
     };
 
     const checkSessionAndNavigate = async () => {
       try {
         const session = await getSession();
-        scheduleNavigation(session ? 'Main' : 'Auth');
-      } catch (err) {
-        console.error('Session check failed:', err);
-        scheduleNavigation('Auth');
+        const delay = Math.max(0, MIN_SPLASH_TIME_MS - (Date.now() - startedAt));
+        timeoutIds.push(setTimeout(() => runNavigation(session ? 'Main' : 'Auth'), delay));
+      } catch {
+        runNavigation('Auth');
       }
     };
 
     checkSessionAndNavigate();
     timeoutIds.push(setTimeout(() => runNavigation('Auth'), MAX_SPLASH_WAIT_MS));
 
-    return () => {
-      timeoutIds.forEach((id) => clearTimeout(id));
-    };
-  }, [navigation, animation]);
+    return () => timeoutIds.forEach(clearTimeout);
+  }, []);
 
   const logoStyle = useAnimatedStyle(() => ({
     opacity: animation.value,
     transform: [
-      {
-        translateY: interpolate(animation.value, [0, 1], [30, 0]),
-      },
-      {
-        scale: interpolate(animation.value, [0, 1], [0.9, 1]),
-      },
+      { translateY: interpolate(animation.value, [0, 1], [30, 0]) },
+      { scale: interpolate(animation.value, [0, 1], [0.85, 1]) },
     ],
   }));
 
   const textStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(animation.value, [0.5, 1], [0, 1]),
-    transform: [
-      {
-        translateY: interpolate(animation.value, [0.5, 1], [20, 0]),
-      },
-    ],
+    opacity: interpolate(animation.value, [0.4, 1], [0, 1]),
   }));
 
-  const brandStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(animation.value, [0.7, 1], [0, 1]),
+  const orbStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: interpolate(orbit.value, [0, 1], [-20, 20]) }],
+    opacity: 0.3 + orbit.value * 0.25,
   }));
 
-  const orbLeftStyle = useAnimatedStyle(() => ({
-    opacity: 0.35 + orbit.value * 0.2,
-    transform: [
-      { translateX: interpolate(orbit.value, [0, 1], [-18, 18]) },
-      { translateY: interpolate(orbit.value, [0, 1], [12, -12]) },
-      { scale: 0.9 + orbit.value * 0.1 },
-    ],
-  }));
-
-  const orbRightStyle = useAnimatedStyle(() => ({
-    opacity: 0.28 + orbit.value * 0.15,
-    transform: [
-      { translateX: interpolate(orbit.value, [0, 1], [12, -16]) },
-      { translateY: interpolate(orbit.value, [0, 1], [-18, 8]) },
-      { scale: 0.85 + orbit.value * 0.12 },
-    ],
-  }));
-
-  const progressStyle = useAnimatedStyle(() => ({
-    transform: [{ scaleX: 0.45 + animation.value * 0.55 }],
-    opacity: interpolate(animation.value, [0.2, 1], [0, 1]),
-  }));
-
-  const cardFloatStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: interpolate(cardLift.value, [0, 1], [0, -6]) }],
-  }));
-
-  const cardFloatLagStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: interpolate(cardLift.value, [0, 1], [-4, 4]) }],
+  const cardFloat = useAnimatedStyle(() => ({
+    transform: [{ translateY: interpolate(cardLift.value, [0, 1], [0, -8]) }],
   }));
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
+
+      {/* Background Gradient */}
       <Svg style={StyleSheet.absoluteFill}>
         <Defs>
-          <SvgLinearGradient id="splashGradient" x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0%" stopColor={colors.primary} stopOpacity={0.22} />
-            <Stop offset="70%" stopColor={colors.secondary} stopOpacity={0.08} />
-          </SvgLinearGradient>
+          <LinearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+            <Stop offset="0%" stopColor={colors.primary} stopOpacity={0.2} />
+            <Stop offset="100%" stopColor={colors.secondary} stopOpacity={0.08} />
+          </LinearGradient>
         </Defs>
         <Rect width="100%" height="100%" fill={colors.background} />
-        <Rect width="100%" height="100%" fill="url(#splashGradient)" />
+        <Rect width="100%" height="100%" fill="url(#bg)" />
       </Svg>
 
-      <Animated.View style={[styles.glowOrb, orbLeftStyle]} />
-      <Animated.View style={[styles.glowOrb, styles.glowOrbRight, orbRightStyle]} />
+      {/* Glow Orbs */}
+      <Animated.View style={[styles.orb, { top: height * 0.18, left: 30 }, orbStyle]} />
+      <Animated.View style={[styles.orb, { top: height * 0.48, right: 25 }, orbStyle]} />
 
-      <Animated.View style={[styles.logoContainer, logoStyle]}>
-        <Image source={require('../../assets/icon.png')} style={styles.logo} />
+      {/* Logo */}
+      <Animated.View style={[styles.logoWrapper, logoStyle]}>
+        <Image
+          source={require('../../assets/icon.png')}
+          style={{ width: width * 0.28, height: width * 0.28, borderRadius: 28 }}
+        />
       </Animated.View>
 
-      <Animated.Text style={[styles.appName, textStyle]}>DhanDiary</Animated.Text>
-
-      <Animated.Text style={[styles.tagline, textStyle]}>
-        Now optimized for quicker starts
+      {/* App Name */}
+      <Animated.Text style={[styles.appName, textStyle]}>
+        DhanDiary
       </Animated.Text>
 
-      <Animated.View style={[styles.progressTrack, progressStyle]}>
-        <View style={styles.progressFill} />
-      </Animated.View>
+      <Animated.Text style={[styles.tagline, textStyle]}>
+        Faster • Safer • Smarter
+      </Animated.Text>
 
-      <View style={styles.featureRow}>
-        <Animated.View style={[styles.featureCard, cardFloatStyle]}>
-          <MaterialIcon name={FEATURE_CARDS[0].icon as any} size={22} color={colors.white} />
-          <Text style={styles.featureTitle}>{FEATURE_CARDS[0].title}</Text>
-          <Text style={styles.featureSubtitle}>{FEATURE_CARDS[0].subtitle}</Text>
-        </Animated.View>
-
-        <Animated.View style={[styles.featureCard, styles.featureCardOffset, cardFloatLagStyle]}>
-          <MaterialIcon name={FEATURE_CARDS[1].icon as any} size={22} color={colors.white} />
-          <Text style={styles.featureTitle}>{FEATURE_CARDS[1].title}</Text>
-          <Text style={styles.featureSubtitle}>{FEATURE_CARDS[1].subtitle}</Text>
-        </Animated.View>
+      {/* Progress Bar */}
+      <View style={styles.progressTrack}>
+        <Animated.View style={styles.progressFill} />
       </View>
 
-      <Animated.View style={[styles.brandContainer, brandStyle]}>
-        <Animated.Text style={styles.poweredText}>
-          Powered by <Animated.Text style={styles.brandName}>EllowDigital</Animated.Text>
-        </Animated.Text>
-        <Animated.Text style={styles.loadingText}>
-          Performance boost applied — launching...
-        </Animated.Text>
-      </Animated.View>
+      {/* Feature Cards */}
+      <View style={styles.featureRow}>
+        {FEATURE_CARDS.map((item, index) => (
+          <Animated.View
+            key={index}
+            style={[
+              styles.card,
+              { backgroundColor: index === 0 ? colors.primary : colors.secondary },
+              cardFloat,
+            ]}>
+            <MaterialIcon name={item.icon as any} size={22} color={colors.white} />
+            <Text style={styles.cardTitle}>{item.title}</Text>
+            <Text style={styles.cardSub}>{item.subtitle}</Text>
+          </Animated.View>
+        ))}
+      </View>
+
+      {/* Brand Footer */}
+      <View style={styles.footer}>
+        <Text style={styles.powered}>Powered by <Text style={styles.brand}>EllowDigital</Text></Text>
+        <Text style={styles.loading}>Launching optimized experience…</Text>
+      </View>
     </View>
   );
 };
 
+export default SplashScreen;
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-  },
-  logoContainer: {
-    marginBottom: 24,
-    ...shadows.medium,
-  },
-  logo: {
-    width: 120,
-    height: 120,
-    borderRadius: 28,
-  },
-  appName: {
-    fontSize: 40,
-    fontWeight: 'bold',
-    color: colors.text,
-  },
-  tagline: {
-    fontSize: 18,
-    color: colors.muted,
-    marginTop: 4,
-  },
+  container: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+
+  logoWrapper: { marginBottom: 22, ...shadows.medium },
+
+  appName: { fontSize: 36, fontWeight: '800', color: colors.text },
+
+  tagline: { fontSize: 16, color: colors.muted, marginTop: 4 },
+
   progressTrack: {
-    marginTop: 18,
     width: 220,
     height: 6,
+    borderRadius: 10,
+    marginTop: 18,
     backgroundColor: `${colors.card}66`,
-    borderRadius: 999,
     overflow: 'hidden',
   },
-  progressFill: {
-    flex: 1,
-    backgroundColor: colors.primary,
-  },
-  brandContainer: {
+
+  progressFill: { flex: 1, backgroundColor: colors.primary },
+
+  orb: {
     position: 'absolute',
-    bottom: height * 0.06,
-    alignItems: 'center',
-  },
-  poweredText: {
-    fontSize: 15,
-    color: colors.muted,
-  },
-  brandName: {
-    fontWeight: 'bold',
-    color: colors.primary,
-  },
-  loadingText: {
-    marginTop: 4,
-    fontSize: 13,
-    color: colors.mutedSoft,
-  },
-  glowOrb: {
-    position: 'absolute',
-    width: 180,
-    height: 180,
+    width: 160,
+    height: 160,
     borderRadius: 120,
     backgroundColor: colors.secondary,
     opacity: 0.25,
-    top: height * 0.15,
-    left: 40,
-    shadowColor: colors.secondary,
-    shadowOpacity: 0.3,
-    shadowRadius: 40,
-    shadowOffset: { width: 0, height: 0 },
   },
-  glowOrbRight: {
-    width: 140,
-    height: 140,
-    right: 40,
-    left: undefined,
-    top: height * 0.45,
-  },
+
   featureRow: {
     flexDirection: 'row',
-    gap: 18,
-    marginTop: 26,
+    marginTop: 28,
+    gap: 16,
   },
-  featureCard: {
+
+  card: {
     width: 150,
     padding: 16,
-    borderRadius: 20,
-    backgroundColor: colors.primary,
+    borderRadius: 22,
     ...shadows.small,
   },
-  featureCardOffset: {
-    backgroundColor: colors.secondary,
-  },
-  featureTitle: {
-    marginTop: 12,
-    color: colors.white,
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  featureSubtitle: {
-    marginTop: 4,
-    color: `${colors.white}CC`,
-    fontSize: 13,
-  },
-});
 
-export default SplashScreen;
+  cardTitle: { marginTop: 10, color: colors.white, fontWeight: '700' },
+
+  cardSub: { marginTop: 4, fontSize: 13, color: `${colors.white}CC` },
+
+  footer: {
+    position: 'absolute',
+    bottom: 32,
+    alignItems: 'center',
+  },
+
+  powered: { fontSize: 14, color: colors.muted },
+
+  brand: { fontWeight: 'bold', color: colors.primary },
+
+  loading: { marginTop: 4, fontSize: 12, color: colors.mutedSoft },
+});

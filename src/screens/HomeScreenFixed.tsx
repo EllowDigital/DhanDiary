@@ -7,6 +7,8 @@ import {
   StatusBar,
   useWindowDimensions,
   FlatList,
+  ScrollView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
@@ -74,15 +76,18 @@ const HomeScreen: React.FC = () => {
   const { entries = [], isLoading = false } = useEntries(user?.id);
   const showLoading = useDelayedLoading(Boolean(isLoading), 200);
   const { width: SCREEN_WIDTH } = useWindowDimensions();
-  const isCompact = SCREEN_WIDTH < 360;
-  const isTablet = SCREEN_WIDTH >= 820;
-  const horizontalPadding = isTablet ? spacing(5) : isCompact ? spacing(1.5) : spacing(3);
-  const availableWidth = Math.max(0, SCREEN_WIDTH - horizontalPadding * 2);
-  const contentMaxWidth = Math.min(720, availableWidth > 0 ? availableWidth : SCREEN_WIDTH);
-  const chartHorizontalInset = isTablet ? spacing(2.5) : spacing(1.75);
-  const chartBaseWidth = Math.max(0, contentMaxWidth - chartHorizontalInset * 2);
-  const CHART_WIDTH = Math.min(contentMaxWidth, Math.max(160, chartBaseWidth));
-  const chartHeight = isCompact ? 190 : isTablet ? 260 : 220;
+
+  // Responsive Breakpoints
+  const isCompact = SCREEN_WIDTH < 380;
+  const isTablet = SCREEN_WIDTH >= 768;
+
+  // Dynamic Layout Calculations
+  const horizontalPadding = isTablet ? spacing(5) : spacing(2.5);
+  const maxContentWidth = 800; // Constrain width on large tablets
+  const containerWidth = Math.min(SCREEN_WIDTH, maxContentWidth);
+  const chartWidth = Math.min(containerWidth - (horizontalPadding * 2) - spacing(2), 600);
+  const chartHeight = 220;
+
   const isOnline = useInternetStatus();
   const autoCheckRef = useRef(false);
   const [updateBannerVisible, setUpdateBannerVisible] = useState(false);
@@ -96,43 +101,17 @@ const HomeScreen: React.FC = () => {
     }
   }, [navigation]);
 
-  const responsiveContainerStyle = useMemo(
-    () => ({
-      width: '100%',
-      maxWidth: contentMaxWidth || SCREEN_WIDTH,
-      alignSelf: 'center',
-    }),
-    [contentMaxWidth, SCREEN_WIDTH]
-  );
-  const actionFlexBasis = isTablet ? '30%' : isCompact ? '100%' : '48%';
-  const insightItemWidth = isTablet ? '33.3333%' : isCompact ? '100%' : '50%';
-  const cardPadding = isCompact ? spacing(2) : spacing(3);
-  const heroMetricLayout = {
-    flexDirection: isCompact ? 'column' : 'row',
-    gap: spacing(isCompact ? 1 : 1.5),
-  };
-  const heroActionLayout = {
-    flexDirection: isCompact ? 'column' : 'row',
-    gap: spacing(isCompact ? 1 : 1.5),
-  };
-  const controlsRowLayout = {
-    flexDirection: isCompact ? 'column' : 'row',
-    gap: spacing(isCompact ? 1 : 0.5),
-  };
-  const actionGridLayout = {
-    flexWrap: isTablet ? 'nowrap' : 'wrap',
-    rowGap: spacing(isCompact ? 1 : 1.5),
-    columnGap: spacing(isCompact ? 1 : 1.5),
-  };
-  const insightGridLayout = {
-    rowGap: spacing(isCompact ? 1 : 1.5),
-    columnGap: spacing(isCompact ? 0 : 1),
-  };
+  // Animation Refs
+  const shimmer = useSharedValue(0);
+  const heroPulse = useSharedValue(0);
 
+  // Filters
   const [period, setPeriod] = useState<'week' | 'month'>('month');
   const [chartType, setChartType] = useState<'pie' | 'bar'>('pie');
 
-  /* --- DATA LOGIC --- */
+  /* ============================================================
+     DATA PROCESSING LOGIC (Unchanged functionality)
+  ============================================================ */
   const totalIn = useMemo(
     () => entries.filter((e) => e.type === 'in').reduce((s, x) => s + Number(x.amount || 0), 0),
     [entries]
@@ -163,9 +142,7 @@ const HomeScreen: React.FC = () => {
   }, [entries]);
 
   const periodStart = useMemo(() => {
-    if (period === 'week') {
-      return dayjs().startOf('day').subtract(6, 'day');
-    }
+    if (period === 'week') return dayjs().startOf('day').subtract(6, 'day');
     return dayjs().startOf('month');
   }, [period]);
 
@@ -174,10 +151,7 @@ const HomeScreen: React.FC = () => {
     return (entries || [])
       .filter((entry: any) => {
         const entryDate = dayjs(entry.date || entry.created_at).startOf('day');
-        if (!entryDate.isValid()) {
-          return false;
-        }
-        return entryDate.valueOf() >= startValue;
+        return entryDate.isValid() && entryDate.valueOf() >= startValue;
       })
       .sort((a, b) => {
         const aTime = dayjs(a.date || a.created_at).valueOf();
@@ -186,17 +160,15 @@ const HomeScreen: React.FC = () => {
       });
   }, [entries, periodStart]);
 
-  const periodLabel = period === 'week' ? 'This week' : 'This month';
+  const periodLabel = period === 'week' ? 'Last 7 Days' : 'This Month';
 
   const periodIncome = useMemo(
-    () =>
-      periodEntries.filter((e) => e.type === 'in').reduce((s, x) => s + Number(x.amount || 0), 0),
+    () => periodEntries.filter((e) => e.type === 'in').reduce((s, x) => s + Number(x.amount || 0), 0),
     [periodEntries]
   );
 
   const periodExpense = useMemo(
-    () =>
-      periodEntries.filter((e) => e.type === 'out').reduce((s, x) => s + Number(x.amount || 0), 0),
+    () => periodEntries.filter((e) => e.type === 'out').reduce((s, x) => s + Number(x.amount || 0), 0),
     [periodEntries]
   );
 
@@ -212,14 +184,13 @@ const HomeScreen: React.FC = () => {
       try {
         const key = new Date(entry.date || entry.created_at).toISOString().slice(0, 10);
         if (key) set.add(key);
-      } catch (err) {}
+      } catch (err) { }
     });
     return set.size;
   }, [periodEntries]);
 
   const periodNet = periodIncome - periodExpense;
 
-  // Pie chart: show both income and expense by category
   const pieByCategory = useMemo(() => {
     const map: Record<string, { in: number; out: number }> = {};
     periodEntries.forEach((e) => {
@@ -235,7 +206,6 @@ const HomeScreen: React.FC = () => {
     }));
   }, [periodEntries]);
 
-  // For pie chart, show total expense by category
   const pieExpenseData = useMemo(
     () =>
       pieByCategory
@@ -250,25 +220,8 @@ const HomeScreen: React.FC = () => {
     [pieByCategory]
   );
 
-  // For pie chart, show total income by category (optional, for toggling)
-  const pieIncomeData = useMemo(
-    () =>
-      pieByCategory
-        .filter((x) => x.income > 0)
-        .map((x, i) => ({
-          name: x.category,
-          population: x.income,
-          color: PIE_COLORS[i % PIE_COLORS.length],
-          legendFontColor: colors.text,
-          legendFontSize: 12,
-        })),
-    [pieByCategory]
-  );
-
-  // Bar chart: show both income and expense per day/week
   const weeklyBar = useMemo(() => {
     const source = periodEntries || [];
-
     if (period === 'week') {
       const labels: string[] = [];
       const orderKeys: string[] = [];
@@ -283,17 +236,11 @@ const HomeScreen: React.FC = () => {
         expenseMap[key] = 0;
       }
       source.forEach((entry) => {
-        const entryKey = dayjs(entry.date || entry.created_at)
-          .startOf('day')
-          .format('YYYY-MM-DD');
-        if (!(entryKey in incomeMap)) {
-          return;
-        }
-        const amount = Number(entry.amount || 0);
-        if (entry.type === 'in') {
-          incomeMap[entryKey] += amount;
-        } else if (entry.type === 'out') {
-          expenseMap[entryKey] += amount;
+        const entryKey = dayjs(entry.date || entry.created_at).startOf('day').format('YYYY-MM-DD');
+        if (entryKey in incomeMap) {
+          const amount = Number(entry.amount || 0);
+          if (entry.type === 'in') incomeMap[entryKey] += amount;
+          else if (entry.type === 'out') expenseMap[entryKey] += amount;
         }
       });
       return {
@@ -302,7 +249,6 @@ const HomeScreen: React.FC = () => {
         expense: orderKeys.map((key) => expenseMap[key]),
       };
     }
-
     const buckets = 4;
     const labels: string[] = [];
     const incomeTotals: number[] = Array(buckets).fill(0);
@@ -311,602 +257,333 @@ const HomeScreen: React.FC = () => {
     for (let idx = buckets - 1; idx >= 0; idx--) {
       const bucketEnd = now.subtract(idx * 7, 'day');
       const bucketStart = bucketEnd.subtract(6, 'day');
-      labels.push(`${bucketStart.format('DD')} - ${bucketEnd.format('DD')}`);
+      labels.push(`${bucketStart.format('DD')}-${bucketEnd.format('DD')}`);
       source.forEach((entry) => {
         const entryDate = dayjs(entry.date || entry.created_at);
-        if (!entryDate.isValid()) {
-          return;
-        }
-        if (entryDate.isBefore(bucketStart) || entryDate.isAfter(bucketEnd)) {
-          return;
-        }
-        const amount = Number(entry.amount || 0);
-        const targetIndex = buckets - 1 - idx;
-        if (entry.type === 'in') {
-          incomeTotals[targetIndex] += amount;
-        } else if (entry.type === 'out') {
-          expenseTotals[targetIndex] += amount;
+        if (entryDate.isValid() && entryDate.isAfter(bucketStart) && !entryDate.isAfter(bucketEnd)) {
+          const amount = Number(entry.amount || 0);
+          const targetIndex = buckets - 1 - idx;
+          if (entry.type === 'in') incomeTotals[targetIndex] += amount;
+          else if (entry.type === 'out') expenseTotals[targetIndex] += amount;
         }
       });
     }
-    return {
-      labels,
-      income: incomeTotals,
-      expense: expenseTotals,
-    };
+    return { labels, income: incomeTotals, expense: expenseTotals };
   }, [periodEntries, period]);
 
   const recent = (entries || []).slice(0, 5);
-
-  // Use pieExpenseData for pie chart (can toggle to pieIncomeData if needed)
   const pieData = pieExpenseData;
 
-  const chartPrimaryRgb = hexToRgb(colors.primary);
-  const chartLabelRgb = hexToRgb(colors.muted);
+  const userInitial = user?.name?.trim().charAt(0).toUpperCase() || 'U';
 
-  const chartConfig = {
-    backgroundColor: colors.card,
-    backgroundGradientFrom: colors.card,
-    backgroundGradientTo: colors.card,
-    decimalPlaces: 0,
-    color: (opacity = 1) => `rgba(${chartPrimaryRgb}, ${opacity})`,
-    labelColor: (opacity = 1) => `rgba(${chartLabelRgb}, ${opacity})`,
-  };
-
-  const userInitial = (() => {
-    if (typeof user?.name === 'string') {
-      const trimmed = user.name.trim();
-      if (trimmed.length) return trimmed.charAt(0).toUpperCase();
-    }
-    return 'D';
-  })();
-
+  // UI Helper: Trend Data
   const heroTrendDetails = useMemo(() => {
-    if (!entries.length) {
-      return {
-        label: 'Start logging to see insights',
-        color: colors.secondary,
-        icon: 'auto-graph' as const,
-      };
-    }
-    if (netTrend.delta === null) {
-      return {
-        label: 'New activity this week',
-        color: colors.secondary,
-        icon: 'auto-graph' as const,
-      };
-    }
+    if (!entries.length) return { label: 'No data yet', color: colors.muted, icon: 'auto-graph' };
+    if (netTrend.delta === null) return { label: 'New activity', color: colors.secondary, icon: 'auto-graph' };
     const isUp = netTrend.delta >= 0;
     return {
-      label: `${isUp ? 'Up' : 'Down'} ${Math.abs(netTrend.delta).toFixed(1)}% vs last week`,
+      label: `${Math.abs(netTrend.delta).toFixed(1)}%`,
       color: isUp ? colors.accentGreen : colors.accentRed,
-      icon: isUp ? ('trending-up' as const) : ('trending-down' as const),
+      icon: isUp ? 'trending-up' : 'trending-down',
+      isUp
     };
   }, [entries.length, netTrend]);
 
-  const highlightCards = useMemo(
-    () => [
-      {
-        label: 'Avg ticket',
-        value: `₹${periodAverageTicket.toFixed(0)}`,
-        icon: 'receipt-long',
-        tint: colors.accentBlue,
-      },
-      {
-        label: 'Active days',
-        value: `${periodActiveDays || 0}`,
-        icon: 'calendar-today',
-        tint: colors.accentGreen,
-      },
-      {
-        label: 'Entries (period)',
-        value: `${periodEntries.length}`,
-        icon: 'fact-check',
-        tint: colors.secondary,
-      },
-    ],
-    [periodAverageTicket, periodActiveDays, periodEntries.length]
-  );
-
   const topExpenseCategory = useMemo(() => {
     if (!pieExpenseData.length) return FALLBACK_CATEGORY;
-    const sorted = [...pieExpenseData].sort((a, b) => b.population - a.population);
-    return sorted[0]?.name || FALLBACK_CATEGORY;
+    return [...pieExpenseData].sort((a, b) => b.population - a.population)[0]?.name || FALLBACK_CATEGORY;
   }, [pieExpenseData]);
 
-  const heroMetrics = useMemo(
-    () => [
-      {
-        label: 'Cash in',
-        value: `₹${Math.round(periodIncome).toLocaleString('en-IN')}`,
-        accent: colors.accentGreen,
-      },
-      {
-        label: 'Cash out',
-        value: `₹${Math.round(periodExpense).toLocaleString('en-IN')}`,
-        accent: colors.accentRed,
-      },
-      {
-        label: 'Top category',
-        value: topExpenseCategory,
-        accent: colors.accentOrange,
-      },
-    ],
-    [periodIncome, periodExpense, topExpenseCategory]
-  );
+  // Actions Array (Reorganized)
+  const quickActions = useMemo(() => [
+    { label: 'Add Entry', icon: 'add-circle-outline', onPress: () => navigation.navigate('AddEntry'), primary: true },
+    { label: 'Stats', icon: 'bar-chart', onPress: () => navigation.navigate('Stats'), primary: false },
+    { label: 'History', icon: 'history', onPress: () => navigation.navigate('History'), primary: false },
+    { label: 'Settings', icon: 'settings', onPress: () => navigation.navigate('Settings'), primary: false },
+  ], [navigation]);
 
-  const insightRows = useMemo(
-    () => [
-      { label: 'Top category', value: topExpenseCategory, icon: 'category' },
-      { label: 'Net (7d)', value: `₹${netTrend.current.toFixed(0)}`, icon: 'timeline' },
-      { label: 'Balance', value: `₹${balance.toFixed(0)}`, icon: 'account-balance-wallet' },
-      {
-        label: 'Cash flow',
-        value: `${period === 'week' ? 'Weekly' : 'Monthly'}`,
-        icon: 'insights',
-      },
-    ],
-    [topExpenseCategory, netTrend.current, balance, period]
-  );
+  // Highlight Cards
+  const highlightCards = useMemo(() => [
+    { label: 'Avg Ticket', value: `₹${periodAverageTicket.toFixed(0)}`, icon: 'receipt', color: colors.accentBlue },
+    { label: 'Active Days', value: `${periodActiveDays}`, icon: 'event-available', color: colors.accentGreen },
+    { label: 'Top Spend', value: topExpenseCategory, icon: 'category', color: colors.accentOrange },
+  ], [periodAverageTicket, periodActiveDays, topExpenseCategory]);
 
-  const homeActions = useMemo(
-    () => [
-      {
-        label: 'Add entry',
-        icon: 'flash-on',
-        accent: colors.primary,
-        onPress: () => navigation.navigate('AddEntry'),
-      },
-      {
-        label: 'History',
-        icon: 'history',
-        accent: colors.secondary,
-        onPress: () => navigation.navigate('History'),
-      },
-      {
-        label: 'Stats',
-        icon: 'insights',
-        accent: colors.accentGreen,
-        onPress: () => navigation.navigate('Stats'),
-      },
-    ],
-    [navigation]
-  );
-
-  const heroPulse = useSharedValue(0);
+  /* ============================================================
+     ANIMATIONS & EFFECTS
+  ============================================================ */
   useEffect(() => {
-    heroPulse.value = withRepeat(
-      withTiming(1, { duration: 4200, easing: Easing.inOut(Easing.quad) }),
-      -1,
-      true
-    );
-  }, [heroPulse]);
-
-  const heroBlobLeftStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: interpolate(heroPulse.value, [0, 1], [0, -12]) },
-      { translateX: interpolate(heroPulse.value, [0, 1], [0, 10]) },
-      { scale: 0.95 + heroPulse.value * 0.08 },
-    ],
-    opacity: 0.45,
-  }));
-
-  const heroBlobRightStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: interpolate(heroPulse.value, [0, 1], [-6, 8]) },
-      { translateX: interpolate(heroPulse.value, [0, 1], [12, -8]) },
-      { scale: 0.9 + heroPulse.value * 0.1 },
-    ],
-    opacity: 0.35,
-  }));
-
-  /* --- ANIMATIONS --- */
-  const shimmer = useSharedValue(0);
-  useEffect(() => {
-    shimmer.value = withRepeat(withTiming(1, { duration: 900 }), -1, true);
+    shimmer.value = withRepeat(withTiming(1, { duration: 1200 }), -1, true);
+    heroPulse.value = withRepeat(withTiming(1, { duration: 4000, easing: Easing.inOut(Easing.quad) }), -1, true);
   }, []);
-  const shimmerStyle = useAnimatedStyle(() => ({ opacity: 0.3 + 0.7 * shimmer.value }));
 
-  // Auto-check for OTA updates once per session when we're online
+  const shimmerStyle = useAnimatedStyle(() => ({ opacity: 0.3 + 0.5 * shimmer.value }));
+
+  const heroBlobStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: interpolate(heroPulse.value, [0, 1], [0, -10]) },
+      { scale: 1 + heroPulse.value * 0.05 },
+    ],
+  }));
+
+  // OTA Updates Check
   useEffect(() => {
     if (!isOnline || isExpoGo || autoCheckRef.current) return;
     autoCheckRef.current = true;
-
-    let cancelled = false;
     (async () => {
       try {
         const result = await Updates.checkForUpdateAsync();
-        if (!cancelled && result.isAvailable) {
-          const manifest: any = (result as any)?.manifest || {};
-          const version =
-            manifest.version ||
-            manifest.runtimeVersion ||
-            manifest?.extra?.expoGo?.runtimeVersion ||
-            pkg.version;
-          setUpdateMessage(version ? `Version ${version}` : undefined);
+        if (result.isAvailable) {
+          setUpdateMessage('New version available');
           setUpdateBannerVisible(true);
         }
-      } catch (err) {
-        // Fail silently per requirement — no UI noise when checks fail
-      }
+      } catch (e) { }
     })();
-
-    return () => {
-      cancelled = true;
-    };
   }, [isOnline]);
 
-  const handleBannerPress = useCallback(async () => {
+  const handleBannerPress = async () => {
     setUpdateBannerVisible(false);
     try {
       setApplyingUpdate(true);
       const fetched = await Updates.fetchUpdateAsync();
-      if (fetched.isNew) {
-        await Updates.reloadAsync();
-      }
-    } catch (err) {
-      // Silent failure keeps UI clean; logs still aid debugging
-      console.log('Home auto-update apply failed', err);
-    } finally {
-      setApplyingUpdate(false);
-    }
-  }, []);
+      if (fetched.isNew) await Updates.reloadAsync();
+    } catch (e) { console.log(e); } finally { setApplyingUpdate(false); }
+  };
 
-  const handleOpenDrawer = useCallback(() => {
-    const anyNav: any = navigation;
-    if (typeof anyNav?.openDrawer === 'function') {
-      anyNav.openDrawer();
-    } else if (typeof anyNav?.toggleDrawer === 'function') {
-      anyNav.toggleDrawer();
-    }
-  }, [navigation]);
+  const chartConfig = {
+    backgroundColor: 'transparent',
+    backgroundGradientFrom: colors.card,
+    backgroundGradientTo: colors.card,
+    decimalPlaces: 0,
+    color: (opacity = 1) => `rgba(${hexToRgb(colors.primary)}, ${opacity})`,
+    labelColor: (opacity = 1) => `rgba(${hexToRgb(colors.muted)}, ${opacity})`,
+    propsForBackgroundLines: { strokeDasharray: '' }, // Solid lines look cleaner
+  };
 
+  const responsiveContainerStyle = {
+    width: '100%',
+    maxWidth: maxContentWidth,
+    alignSelf: 'center' as const,
+    paddingHorizontal: horizontalPadding,
+  };
+
+  /* ============================================================
+     RENDER
+  ============================================================ */
   return (
     <View style={styles.mainContainer}>
       <UpdateBanner
         visible={updateBannerVisible}
         message={updateMessage}
-        duration={4500}
         onPress={handleBannerPress}
         onClose={() => setUpdateBannerVisible(false)}
       />
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       <SafeAreaView style={styles.safeArea}>
         <FullScreenSpinner visible={showLoading || applyingUpdate} />
+
         <FlatList
           data={recent}
           keyExtractor={(item) => item.local_id}
           showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: spacing(12) }}
+          ListHeaderComponent={
+            <View style={responsiveContainerStyle}>
+
+              {/* --- HEADER --- */}
+              <Animated.View entering={FadeInDown.duration(600)} style={styles.headerRow}>
+                <View>
+                  <Text style={styles.greetingSub}>Welcome back,</Text>
+                  <Text style={styles.greetingName}>{user?.name?.split(' ')[0] || 'Guest'} 👋</Text>
+                </View>
+                <TouchableOpacity style={styles.profileBtn} onPress={() => navigation.openDrawer && navigation.openDrawer()}>
+                  <Text style={styles.profileInitial}>{userInitial}</Text>
+                </TouchableOpacity>
+              </Animated.View>
+
+              {/* --- HERO CARD --- */}
+              <Animated.View entering={FadeInDown.delay(100).duration(600)} style={styles.heroContainer}>
+                <Svg pointerEvents="none" style={StyleSheet.absoluteFill}>
+                  <Defs>
+                    <SvgLinearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
+                      <Stop offset="0" stopColor={colors.primary} stopOpacity="1" />
+                      <Stop offset="1" stopColor={colors.secondary} stopOpacity="1" />
+                    </SvgLinearGradient>
+                  </Defs>
+                  <Rect width="100%" height="100%" rx={26} fill="url(#grad)" />
+                </Svg>
+
+                {/* Background Decoration */}
+                <Animated.View style={[styles.heroBlob, heroBlobStyle]} />
+
+                <View style={styles.heroContent}>
+                  <View style={styles.heroHeader}>
+                    <View style={styles.periodBadge}>
+                      <MaterialIcon name="calendar-today" size={12} color={colors.white} />
+                      <Text style={styles.periodText}>{periodLabel}</Text>
+                    </View>
+                    <View style={[styles.trendPill, { backgroundColor: 'rgba(0,0,0,0.2)' }]}>
+                      <MaterialIcon name={heroTrendDetails.icon as any} size={14} color={heroTrendDetails.color} />
+                      <Text style={[styles.trendText, { color: heroTrendDetails.color }]}>{heroTrendDetails.label}</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.balanceBlock}>
+                    <Text style={styles.balanceLabel}>Total Balance</Text>
+                    <Text style={styles.balanceAmount}>₹{balance.toLocaleString('en-IN')}</Text>
+                  </View>
+
+                  <View style={styles.heroStatsRow}>
+                    <View style={styles.heroStatItem}>
+                      <View style={[styles.arrowCircle, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+                        <MaterialIcon name="arrow-downward" size={16} color={colors.accentGreen} />
+                      </View>
+                      <View>
+                        <Text style={styles.statLabelLight}>Income</Text>
+                        <Text style={styles.statValueLight}>₹{Math.round(periodIncome).toLocaleString()}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.dividerVertical} />
+                    <View style={styles.heroStatItem}>
+                      <View style={[styles.arrowCircle, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+                        <MaterialIcon name="arrow-upward" size={16} color={colors.accentRed} />
+                      </View>
+                      <View>
+                        <Text style={styles.statLabelLight}>Expenses</Text>
+                        <Text style={styles.statValueLight}>₹{Math.round(periodExpense).toLocaleString()}</Text>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              </Animated.View>
+
+              {/* --- ACTION GRID (Moved Up for Accessibility) --- */}
+              <Animated.View entering={FadeInDown.delay(200).duration(600)} style={styles.actionRow}>
+                {quickActions.map((action, idx) => (
+                  <TouchableOpacity
+                    key={idx}
+                    style={[styles.actionBtn, action.primary ? styles.actionBtnPrimary : styles.actionBtnSecondary]}
+                    onPress={action.onPress}
+                    activeOpacity={0.7}
+                  >
+                    <MaterialIcon
+                      name={action.icon as any}
+                      size={24}
+                      color={action.primary ? colors.white : colors.primary}
+                    />
+                    <Text style={[styles.actionLabel, { color: action.primary ? colors.white : colors.text }]}>
+                      {action.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </Animated.View>
+
+              {/* --- HORIZONTAL HIGHLIGHTS SCROLL --- */}
+              <Animated.View entering={FadeInDown.delay(300).duration(600)}>
+                <Text style={styles.sectionTitle}>Highlights</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.highlightScroll}
+                >
+                  {highlightCards.map((card, idx) => (
+                    <View key={idx} style={[styles.highlightCard, { minWidth: isCompact ? 130 : 150 }]}>
+                      <View style={[styles.highlightIcon, { backgroundColor: `${card.color}15` }]}>
+                        <MaterialIcon name={card.icon as any} size={20} color={card.color} />
+                      </View>
+                      <Text style={styles.highlightValue} numberOfLines={1}>{card.value}</Text>
+                      <Text style={styles.highlightLabel}>{card.label}</Text>
+                    </View>
+                  ))}
+                </ScrollView>
+              </Animated.View>
+
+              {/* --- ANALYTICS SECTION --- */}
+              <Animated.View entering={FadeInDown.delay(400).duration(600)} style={styles.chartSection}>
+                <View style={styles.chartHeader}>
+                  <Text style={styles.sectionTitle}>Overview</Text>
+                  <View style={styles.chartToggle}>
+                    <SimpleButtonGroup
+                      buttons={['Pie', 'Bar']}
+                      selectedIndex={chartType === 'pie' ? 0 : 1}
+                      onPress={(i) => setChartType(i === 0 ? 'pie' : 'bar')}
+                      containerStyle={{ height: 32 }}
+                    />
+                    <View style={{ width: 8 }} />
+                    <SimpleButtonGroup
+                      buttons={['7D', '30D']}
+                      selectedIndex={period === 'week' ? 0 : 1}
+                      onPress={(i) => setPeriod(i === 0 ? 'week' : 'month')}
+                      containerStyle={{ height: 32 }}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.chartContainer}>
+                  {isLoading ? (
+                    <Animated.View style={[styles.skeleton, shimmerStyle, { height: chartHeight }]} />
+                  ) : (
+                    <>
+                      {chartType === 'pie' && PieChart && pieData.length > 0 && (
+                        <PieChart
+                          data={pieData}
+                          width={chartWidth}
+                          height={chartHeight}
+                          chartConfig={chartConfig}
+                          accessor="population"
+                          backgroundColor="transparent"
+                          paddingLeft="0"
+                          absolute={false}
+                          center={[isTablet ? chartWidth / 4 : 10, 0]}
+                          hasLegend={true}
+                        />
+                      )}
+                      {chartType === 'bar' && BarChart && (
+                        <BarChart
+                          data={{
+                            labels: weeklyBar.labels,
+                            datasets: [{ data: weeklyBar.income }, { data: weeklyBar.expense }],
+                          }}
+                          width={chartWidth}
+                          height={chartHeight}
+                          yAxisLabel="₹"
+                          chartConfig={chartConfig}
+                          showValuesOnTopOfBars={!isCompact}
+                          fromZero
+                          style={{ borderRadius: 16, paddingRight: 32 }}
+                        />
+                      )}
+                      {pieData.length === 0 && weeklyBar.income.every(x => x === 0) && (
+                        <View style={styles.emptyChart}>
+                          <MaterialIcon name="donut-large" size={40} color={colors.border} />
+                          <Text style={styles.emptyText}>No data for this period</Text>
+                        </View>
+                      )}
+                    </>
+                  )}
+                </View>
+              </Animated.View>
+
+              <View style={styles.listHeaderRow}>
+                <Text style={styles.sectionTitle}>Recent Transactions</Text>
+                <TouchableOpacity onPress={() => navigation.navigate('History')}>
+                  <Text style={styles.seeAll}>See All</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          }
           renderItem={({ item, index }) => (
             <Animated.View
-              style={[styles.transactionRow, { maxWidth: contentMaxWidth || SCREEN_WIDTH }]}
-              entering={FadeInDown.delay(520 + index * 40)
-                .springify()
-                .damping(16)}
+              entering={FadeInDown.delay(500 + (index * 50)).springify()}
+              style={[responsiveContainerStyle, { marginBottom: spacing(1.5) }]}
             >
               <TransactionCard item={item} />
             </Animated.View>
           )}
-          initialNumToRender={5}
-          maxToRenderPerBatch={5}
-          windowSize={6}
-          removeClippedSubviews={true}
-          contentContainerStyle={[
-            styles.scrollContent,
-            {
-              paddingHorizontal: horizontalPadding,
-              paddingBottom: spacing(10),
-            },
-          ]}
-          ListHeaderComponentStyle={styles.listHeaderSpacing}
-          ListHeaderComponent={
-            <Animated.View
-              style={[styles.headerBlock, responsiveContainerStyle]}
-              entering={FadeInDown.delay(100).duration(500)}
-            >
-              <View style={styles.topNavRow}>
-                <TouchableOpacity style={styles.navIconButton} onPress={handleOpenDrawer}>
-                  <MaterialIcon name="menu" size={22} color={colors.text} />
-                </TouchableOpacity>
-                <Text style={styles.topNavTitle}>Dashboard</Text>
-                <View style={styles.topNavAvatar}>
-                  <Text style={styles.topNavAvatarText}>{userInitial}</Text>
-                </View>
-              </View>
-
-              <View style={[styles.heroCard, { padding: cardPadding }]}>
-                <Svg pointerEvents="none" style={StyleSheet.absoluteFill}>
-                  <Defs>
-                    <SvgLinearGradient id="heroGradient" x1="0" y1="0" x2="1" y2="1">
-                      <Stop offset="0%" stopColor={colors.primary} stopOpacity={0.9} />
-                      <Stop offset="90%" stopColor={colors.secondary} stopOpacity={0.85} />
-                    </SvgLinearGradient>
-                  </Defs>
-                  <Rect width="100%" height="100%" rx={28} fill="url(#heroGradient)" />
-                </Svg>
-
-                <Animated.View style={[styles.heroBlob, styles.heroBlobLeft, heroBlobLeftStyle]} />
-                <Animated.View
-                  style={[styles.heroBlob, styles.heroBlobRight, heroBlobRightStyle]}
-                />
-
-                <View style={styles.heroChipRow}>
-                  <View style={styles.heroChip}>
-                    <MaterialIcon
-                      name={isOnline ? 'wifi' : 'wifi-off'}
-                      size={16}
-                      color={colors.white}
-                    />
-                    <Text style={styles.heroChipText}>
-                      {isOnline ? 'Live sync on' : 'Offline mode'}
-                    </Text>
-                  </View>
-                  <View style={[styles.heroChip, styles.heroChipLight]}>
-                    <MaterialIcon name="schedule" size={16} color={colors.primary} />
-                    <Text style={[styles.heroChipText, styles.heroChipTextDark]}>
-                      {periodLabel}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.heroTopRow}>
-                  <View>
-                    <Text style={styles.heroSubtle}>Welcome back</Text>
-                    <Text style={styles.heroGreeting}>{user?.name ? user.name : 'Guest'} 👋</Text>
-                  </View>
-                  <TouchableOpacity
-                    style={styles.heroSettings}
-                    onPress={() => navigation.navigate('Settings')}
-                  >
-                    <MaterialIcon name="settings" size={20} color={colors.primary} />
-                  </TouchableOpacity>
-                </View>
-
-                <View style={styles.heroBalanceRow}>
-                  <View>
-                    <Text style={styles.heroOverline}>Net this period</Text>
-                    <Text style={styles.heroBalance}>₹{periodNet.toFixed(2)}</Text>
-                  </View>
-                  <View style={[styles.trendBadge, { backgroundColor: 'rgba(255,255,255,0.12)' }]}>
-                    <MaterialIcon name={heroTrendDetails.icon} size={18} color={colors.white} />
-                    <Text style={[styles.trendText, { color: colors.white }]}>
-                      {heroTrendDetails.label}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={[styles.heroMetricRow, heroMetricLayout]}>
-                  {heroMetrics.map((metric) => (
-                    <View key={metric.label} style={styles.heroMetric}>
-                      <View style={[styles.heroMetricDot, { backgroundColor: metric.accent }]} />
-                      <Text style={styles.heroMetricLabel}>{metric.label}</Text>
-                      <Text style={styles.heroMetricValue}>{metric.value}</Text>
-                    </View>
-                  ))}
-                </View>
-
-                <View style={[styles.heroPrimaryActionRow, heroActionLayout]}>
-                  <TouchableOpacity
-                    style={styles.heroPrimaryCta}
-                    onPress={() => navigation.navigate('AddEntry')}
-                  >
-                    <MaterialIcon name="flash-on" size={18} color={colors.white} />
-                    <Text style={styles.heroPrimaryCtaText}>Log entry</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.heroSecondaryCta}
-                    onPress={() => navigation.navigate('Stats')}
-                  >
-                    <MaterialIcon name="insights" size={18} color={colors.primary} />
-                    <Text style={styles.heroSecondaryCtaText}>Open stats</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              <View
-                style={[
-                  styles.quickStatsCard,
-                  {
-                    paddingHorizontal: isCompact ? spacing(1.5) : spacing(2),
-                    paddingVertical: isCompact ? spacing(0.75) : spacing(1.25),
-                  },
-                ]}
-              >
-                {highlightCards.map((card, idx) => (
-                  <Animated.View
-                    key={card.label}
-                    entering={FadeInDown.delay(140 + idx * 40)
-                      .springify()
-                      .damping(18)}
-                    style={[
-                      styles.quickStatRow,
-                      idx !== highlightCards.length - 1 && styles.quickStatDivider,
-                    ]}
-                  >
-                    <View style={[styles.quickStatIcon, { backgroundColor: `${card.tint}1A` }]}>
-                      <MaterialIcon name={card.icon as any} size={18} color={card.tint} />
-                    </View>
-                    <View style={styles.quickStatTextWrap}>
-                      <Text style={styles.quickStatLabel}>{card.label}</Text>
-                      <Text style={styles.quickStatValue}>{card.value}</Text>
-                    </View>
-                  </Animated.View>
-                ))}
-              </View>
-
-              <View
-                style={[
-                  styles.quickActionsCard,
-                  { padding: isCompact ? spacing(2) : spacing(2.5) },
-                ]}
-              >
-                <View style={[styles.actionGrid, actionGridLayout]}>
-                  {homeActions.map((action, idx) => (
-                    <Animated.View
-                      key={action.label}
-                      entering={FadeInDown.delay(260 + idx * 60)
-                        .springify()
-                        .damping(15)}
-                      style={[styles.actionWrapper, { flexBasis: actionFlexBasis }]}
-                    >
-                      <TouchableOpacity style={styles.actionCard} onPress={action.onPress}>
-                        <View style={styles.actionInner}>
-                          <View
-                            style={[
-                              styles.actionIconWrap,
-                              { backgroundColor: `${action.accent}22` },
-                            ]}
-                          >
-                            <MaterialIcon
-                              name={action.icon as any}
-                              size={20}
-                              color={action.accent}
-                            />
-                          </View>
-                          <Text style={styles.actionLabel}>{action.label}</Text>
-                        </View>
-                      </TouchableOpacity>
-                    </Animated.View>
-                  ))}
-                </View>
-              </View>
-
-              <View style={[styles.analyticsCard, { padding: cardPadding }]}>
-                <View style={styles.cardHeaderRow}>
-                  <View>
-                    <Text style={styles.cardTitle}>Cash intelligence</Text>
-                    <Text style={styles.cardSubtitle}>Visualize income vs expense</Text>
-                  </View>
-                  <TouchableOpacity
-                    onPress={() => setChartType(chartType === 'pie' ? 'bar' : 'pie')}
-                  >
-                    <MaterialIcon
-                      name={chartType === 'pie' ? 'bar-chart' : 'pie-chart'}
-                      size={22}
-                      color={colors.primary}
-                    />
-                  </TouchableOpacity>
-                </View>
-
-                <View style={[styles.controlsRow, controlsRowLayout]}>
-                  <SimpleButtonGroup
-                    buttons={['Week', 'Month']}
-                    selectedIndex={period === 'week' ? 0 : 1}
-                    onPress={(i) => setPeriod(i === 0 ? 'week' : 'month')}
-                    containerStyle={{
-                      flex: 1,
-                      marginRight: isCompact ? 0 : 8,
-                      marginBottom: isCompact ? spacing(1) : 0,
-                    }}
-                  />
-                  <SimpleButtonGroup
-                    buttons={['Pie', 'Bar']}
-                    selectedIndex={chartType === 'pie' ? 0 : 1}
-                    onPress={(i) => setChartType(i === 0 ? 'pie' : 'bar')}
-                    containerStyle={{
-                      flex: 1,
-                      marginLeft: isCompact ? 0 : 8,
-                    }}
-                  />
-                </View>
-
-                {isLoading ? (
-                  <Animated.View style={[styles.skeletonBox, shimmerStyle]} />
-                ) : pieData.length > 0 ||
-                  weeklyBar.income?.some(Boolean) ||
-                  weeklyBar.expense?.some(Boolean) ? (
-                  <View style={styles.chartWrapper}>
-                    {chartType === 'pie' && PieChart ? (
-                      <PieChart
-                        data={pieData}
-                        width={CHART_WIDTH}
-                        height={chartHeight}
-                        chartConfig={chartConfig}
-                        accessor="population"
-                        backgroundColor="transparent"
-                        paddingLeft="18"
-                        absolute
-                        hasLegend
-                      />
-                    ) : chartType === 'bar' && BarChart ? (
-                      <BarChart
-                        data={{
-                          labels: weeklyBar.labels,
-                          datasets: [
-                            {
-                              data: weeklyBar.income,
-                              color: () => colors.accentGreen,
-                              label: 'Income',
-                            },
-                            {
-                              data: weeklyBar.expense,
-                              color: () => colors.accentRed,
-                              label: 'Expense',
-                            },
-                          ],
-                        }}
-                        width={CHART_WIDTH}
-                        height={chartHeight}
-                        yAxisLabel="₹"
-                        chartConfig={chartConfig}
-                        showValuesOnTopOfBars
-                        fromZero
-                        style={{ borderRadius: 18, marginTop: 6, paddingRight: 0 }}
-                      />
-                    ) : (
-                      <Text style={styles.unavailable}>Chart library missing</Text>
-                    )}
-                  </View>
-                ) : (
-                  <View style={styles.emptyState}>
-                    <Text style={styles.unavailable}>No data in this period.</Text>
-                  </View>
-                )}
-              </View>
-
-              <View style={[styles.insightsCard, { padding: cardPadding }]}>
-                <View style={styles.cardHeaderRow}>
-                  <View>
-                    <Text style={styles.cardTitle}>Insights</Text>
-                    <Text style={styles.cardSubtitle}>Auto-curated from your activity</Text>
-                  </View>
-                  <MaterialIcon name="lightbulb" size={22} color={colors.accentOrange} />
-                </View>
-                <View style={[styles.insightGrid, insightGridLayout]}>
-                  {insightRows.map((row) => (
-                    <View key={row.label} style={[styles.insightItem, { width: insightItemWidth }]}>
-                      <View style={styles.insightIconWrap}>
-                        <MaterialIcon name={row.icon as any} size={18} color={colors.primary} />
-                      </View>
-                      <View style={styles.insightTextWrap}>
-                        <Text style={styles.insightLabel}>{row.label}</Text>
-                        <Text style={styles.insightValue}>{row.value}</Text>
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              </View>
-
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Recent transactions</Text>
-                <TouchableOpacity onPress={() => navigation.navigate('History')}>
-                  <Text style={styles.seeAll}>See all</Text>
-                </TouchableOpacity>
-              </View>
-            </Animated.View>
-          }
           ListEmptyComponent={
-            <View
-              style={[styles.emptyTransactions, responsiveContainerStyle, { marginHorizontal: 0 }]}
-            >
-              <MaterialIcon name="hourglass-empty" size={36} color={colors.muted} />
-              <Text style={styles.unavailable}>No recent activity</Text>
-              <TouchableOpacity
-                style={styles.emptyCta}
-                onPress={() => navigation.navigate('AddEntry')}
-              >
-                <Text style={styles.emptyCtaText}>Log your first entry</Text>
-              </TouchableOpacity>
+            <View style={styles.emptyList}>
+              <MaterialIcon name="receipt-long" size={48} color={colors.border} />
+              <Text style={styles.emptyText}>No transactions found.</Text>
             </View>
           }
         />
@@ -917,453 +594,288 @@ const HomeScreen: React.FC = () => {
 
 export default HomeScreen;
 
-/* =======================================================
-   MODERN STYLES
-========================================================= */
-
+/* ============================================================
+   MODERN STYLESHEET
+============================================================ */
 const styles = StyleSheet.create({
   mainContainer: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.background, // Ensure this color is light gray/white in your design file
   },
   safeArea: {
     flex: 1,
   },
-  scrollContent: {
-    paddingHorizontal: spacing(2),
-    paddingTop: spacing(3),
-    paddingBottom: spacing(16),
-  },
-  headerBlock: {
-    width: '100%',
-  },
-  transactionRow: {
-    width: '100%',
-    alignSelf: 'center',
-  },
-  listHeaderSpacing: {
-    paddingBottom: spacing(3),
-  },
-  topNavRow: {
+  headerRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: spacing(3),
-    position: 'relative',
-    zIndex: 2,
+    alignItems: 'center',
+    marginVertical: spacing(2),
   },
-  navIconButton: {
+  greetingSub: {
+    fontSize: 14,
+    color: colors.muted,
+    fontWeight: '500',
+  },
+  greetingName: {
+    fontSize: 22,
+    color: colors.text,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  profileBtn: {
     width: 44,
     height: 44,
-    borderRadius: 16,
-    backgroundColor: colors.card,
+    borderRadius: 14,
+    backgroundColor: colors.surfaceMuted || '#F1F5F9',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.border,
   },
-  topNavTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  topNavAvatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 16,
-    backgroundColor: colors.primarySoft,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  topNavAvatarText: {
+  profileInitial: {
+    fontSize: 18,
     fontWeight: '700',
     color: colors.primary,
   },
-  heroCard: {
-    borderRadius: 28,
-    padding: spacing(3),
-    marginTop: spacing(0.5),
-    marginBottom: spacing(3),
+  /* HERO CARD */
+  heroContainer: {
+    height: 240,
+    borderRadius: 30,
     overflow: 'hidden',
-    position: 'relative',
-    zIndex: 1,
+    marginBottom: spacing(3),
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 8,
   },
   heroBlob: {
     position: 'absolute',
-    width: 180,
-    height: 180,
-    borderRadius: 160,
+    top: -50,
+    right: -50,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  heroContent: {
+    flex: 1,
+    padding: spacing(3),
+    justifyContent: 'space-between',
+  },
+  heroHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  periodBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    gap: 6,
   },
-  heroBlobLeft: {
-    top: -30,
-    left: -30,
-  },
-  heroBlobRight: {
-    bottom: -20,
-    right: -10,
-  },
-  heroChipRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    columnGap: spacing(1.25),
-    rowGap: spacing(1),
-    marginBottom: spacing(2),
-  },
-  heroChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    gap: 8,
-    flexShrink: 1,
-  },
-  heroChipLight: {
-    backgroundColor: colors.white,
-    marginLeft: 'auto',
-  },
-  heroChipText: {
-    color: colors.white,
-    fontSize: 13,
+  periodText: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 12,
     fontWeight: '600',
   },
-  heroChipTextDark: {
-    color: colors.primary,
-  },
-  heroTopRow: {
+  trendPill: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing(2),
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    gap: 4,
   },
-  heroSubtle: {
+  trendText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  balanceBlock: {
+    alignItems: 'center',
+    marginVertical: spacing(1),
+  },
+  balanceLabel: {
     color: 'rgba(255,255,255,0.7)',
     fontSize: 14,
+    fontWeight: '500',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
     marginBottom: 4,
   },
-  heroGreeting: {
-    fontSize: 22,
+  balanceAmount: {
     color: colors.white,
-    fontWeight: '700',
-    letterSpacing: -0.5,
-  },
-  heroSettings: {
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  heroBalanceRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing(2),
-  },
-  heroOverline: {
-    color: 'rgba(255,255,255,0.65)',
-    fontSize: 13,
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-  },
-  heroBalance: {
-    color: colors.white,
-    fontSize: 38,
+    fontSize: 36,
     fontWeight: '800',
     letterSpacing: -1,
   },
-  trendBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
+  heroStatsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-  },
-  trendText: {
-    fontWeight: '600',
-    fontSize: 12,
-    marginLeft: 6,
-  },
-  heroMetricRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: spacing(2),
-  },
-  heroMetric: {
-    flex: 1,
-    backgroundColor: 'rgba(15,23,42,0.14)',
-    borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.15)',
+    borderRadius: 20,
     padding: 12,
+    alignItems: 'center',
   },
-  heroMetricDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 6,
-    marginBottom: 8,
+  heroStatItem: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    justifyContent: 'center',
   },
-  heroMetricLabel: {
-    color: 'rgba(255,255,255,0.65)',
-    fontSize: 12,
-    marginBottom: 6,
+  dividerVertical: {
+    width: 1,
+    height: '80%',
+    backgroundColor: 'rgba(255,255,255,0.2)',
   },
-  heroMetricValue: {
+  arrowCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  statLabelLight: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 11,
+  },
+  statValueLight: {
     color: colors.white,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
   },
-  heroPrimaryActionRow: {
+  /* ACTION GRID */
+  actionRow: {
     flexDirection: 'row',
     gap: 12,
+    marginBottom: spacing(3),
   },
-  heroPrimaryCta: {
+  actionBtn: {
     flex: 1,
-    backgroundColor: colors.secondary,
-    paddingVertical: 12,
-    borderRadius: 14,
-    flexDirection: 'row',
-    justifyContent: 'center',
+    flexDirection: 'column',
     alignItems: 'center',
-    gap: 8,
-  },
-  heroPrimaryCtaText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: colors.white,
-  },
-  heroSecondaryCta: {
-    flex: 1,
-    backgroundColor: colors.white,
-    paddingVertical: 12,
-    borderRadius: 14,
-    flexDirection: 'row',
     justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-  },
-  heroSecondaryCtaText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: colors.primary,
-  },
-  quickStatsCard: {
-    backgroundColor: colors.card,
+    paddingVertical: 16,
     borderRadius: 24,
-    paddingHorizontal: spacing(2),
-    paddingVertical: spacing(1),
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: spacing(3),
-  },
-  quickStatRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: spacing(1.5),
-  },
-  quickStatDivider: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
-  quickStatIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: spacing(1.5),
-  },
-  quickStatTextWrap: {
-    flex: 1,
-  },
-  quickStatLabel: {
-    color: colors.muted,
-    fontSize: 12,
-    marginBottom: 2,
-  },
-  quickStatValue: {
-    color: colors.text,
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  quickActionsCard: {
-    backgroundColor: colors.card,
-    borderRadius: 28,
-    paddingHorizontal: spacing(2),
-    paddingVertical: spacing(2.5),
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: spacing(3),
-    shadowColor: colors.text,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.04,
+    gap: 8,
+    // Soft shadow
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
     shadowRadius: 10,
     elevation: 2,
   },
-  actionGrid: {
-    flexDirection: 'row',
-    gap: spacing(1.5),
+  actionBtnPrimary: {
+    backgroundColor: colors.primary,
+    flexGrow: 1.5, // Make primary buttons slightly wider if needed
   },
-  actionWrapper: {
-    flex: 1,
-  },
-  actionCard: {
-    borderRadius: 22,
-    padding: spacing(0.75),
-    backgroundColor: colors.surfaceMuted,
-  },
-  actionInner: {
-    borderRadius: 20,
-    paddingVertical: spacing(2),
-    paddingHorizontal: spacing(1),
-    alignItems: 'center',
-    justifyContent: 'center',
+  actionBtnSecondary: {
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
-  },
-  actionIconWrap: {
-    width: 50,
-    height: 50,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
   },
   actionLabel: {
-    color: colors.text,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '600',
   },
-  analyticsCard: {
-    backgroundColor: colors.card,
-    borderRadius: 24,
-    padding: spacing(3),
+  /* HIGHLIGHTS SCROLL */
+  highlightScroll: {
+    gap: 12,
+    paddingVertical: 10,
     marginBottom: spacing(3),
+  },
+  highlightCard: {
+    backgroundColor: colors.card,
+    borderRadius: 22,
+    padding: 16,
     borderWidth: 1,
     borderColor: colors.border,
-    shadowColor: colors.text,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.05,
-    shadowRadius: 14,
-    elevation: 3,
+    justifyContent: 'center',
   },
-  cardHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing(2),
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  cardSubtitle: {
-    color: colors.muted,
-    fontSize: 13,
-  },
-  controlsRow: {
-    flexDirection: 'row',
-    marginBottom: spacing(2),
-  },
-  chartWrapper: {
-    alignItems: 'center',
-  },
-  emptyState: {
-    paddingVertical: spacing(4),
-    alignItems: 'center',
-  },
-  unavailable: {
-    color: colors.muted,
-    fontSize: 13,
-  },
-  skeletonBox: {
-    height: 200,
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: 18,
-  },
-  insightsCard: {
-    backgroundColor: colors.card,
-    borderRadius: 24,
-    padding: spacing(3),
-    marginBottom: spacing(3),
-    borderWidth: 1,
-    borderColor: colors.border,
-    shadowColor: colors.text,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.05,
-    shadowRadius: 18,
-    elevation: 4,
-  },
-  insightGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: spacing(2),
-  },
-  insightItem: {
-    width: '50%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 18,
-  },
-  insightIconWrap: {
+  highlightIcon: {
     width: 36,
     height: 36,
     borderRadius: 12,
-    backgroundColor: colors.primarySoft,
-    alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
+    alignItems: 'center',
+    marginBottom: 10,
   },
-  insightTextWrap: {
-    flex: 1,
-  },
-  insightLabel: {
-    color: colors.muted,
-    fontSize: 12,
-  },
-  insightValue: {
-    color: colors.text,
+  highlightValue: {
+    fontSize: 18,
     fontWeight: '700',
-    fontSize: 15,
+    color: colors.text,
+    marginBottom: 2,
   },
-  sectionHeader: {
+  highlightLabel: {
+    fontSize: 12,
+    color: colors.muted,
+  },
+  /* ANALYTICS */
+  chartSection: {
+    backgroundColor: colors.card,
+    borderRadius: 28,
+    padding: spacing(2.5),
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing(3),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.03,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  chartHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: spacing(2),
-    paddingTop: spacing(1),
+    flexWrap: 'wrap',
+    gap: 10,
   },
+  chartToggle: {
+    flexDirection: 'row',
+  },
+  chartContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 220,
+  },
+  skeleton: {
+    width: '100%',
+    backgroundColor: colors.surfaceMuted || '#f0f0f0',
+    borderRadius: 16,
+  },
+  emptyChart: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  /* LIST */
   sectionTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     color: colors.text,
+    marginBottom: 5,
+  },
+  listHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing(2),
   },
   seeAll: {
+    fontSize: 14,
     color: colors.primary,
     fontWeight: '600',
-    fontSize: 13,
   },
-  emptyTransactions: {
+  emptyList: {
     alignItems: 'center',
-    padding: spacing(4),
-    backgroundColor: colors.card,
-    borderRadius: 20,
-    marginHorizontal: spacing(2),
-    borderWidth: 1,
-    borderColor: colors.border,
+    marginTop: 40,
+    gap: 10,
   },
-  emptyCta: {
-    marginTop: 12,
-    paddingHorizontal: 18,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: colors.primary,
-  },
-  emptyCtaText: {
-    color: colors.white,
-    fontWeight: '600',
+  emptyText: {
+    color: colors.muted,
+    fontSize: 14,
   },
 });
