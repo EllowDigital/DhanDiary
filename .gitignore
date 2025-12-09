@@ -106,9 +106,6 @@ coverage/
 *.pid
 *.seed
 *.pid.lock
-icon.ico
-assets/icon.ico
-assets/icon.png
 *.bak
 *.tmp
 *.orig
