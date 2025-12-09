@@ -21,6 +21,7 @@ import FullScreenSpinner from '../components/FullScreenSpinner';
 import UpdateBanner from '../components/UpdateBanner';
 import { useInternetStatus } from '../hooks/useInternetStatus';
 import * as Updates from 'expo-updates';
+import dayjs from 'dayjs';
 
 import Animated, {
   useSharedValue,
@@ -122,34 +123,30 @@ const HomeScreen: React.FC = () => {
     return { current, previous, delta };
   }, [entries]);
 
-  const filteredByPeriod = useMemo(() => {
-    if (!entries) return [];
-    const now = new Date();
+  const periodStart = useMemo(() => {
     if (period === 'week') {
-      const cutoff = now.getTime() - 7 * 24 * 60 * 60 * 1000;
-      return (entries || []).filter((e: any) => {
-        try {
-          const t = new Date(e.date || e.created_at).getTime();
-          return !isNaN(t) && t >= cutoff;
-        } catch (err) {
+      return dayjs().startOf('day').subtract(6, 'day');
+    }
+    return dayjs().startOf('month');
+  }, [period]);
+
+  const periodEntries = useMemo(() => {
+    const startValue = periodStart.valueOf();
+    return (entries || [])
+      .filter((entry: any) => {
+        const entryDate = dayjs(entry.date || entry.created_at).startOf('day');
+        if (!entryDate.isValid()) {
           return false;
         }
+        return entryDate.valueOf() >= startValue;
+      })
+      .sort((a, b) => {
+        const aTime = dayjs(a.date || a.created_at).valueOf();
+        const bTime = dayjs(b.date || b.created_at).valueOf();
+        return bTime - aTime;
       });
-    }
+  }, [entries, periodStart]);
 
-    // month -> use calendar month start
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-    return (entries || []).filter((e: any) => {
-      try {
-        const t = new Date(e.date || e.created_at).getTime();
-        return !isNaN(t) && t >= startOfMonth;
-      } catch (err) {
-        return false;
-      }
-    });
-  }, [entries, period]);
-
-  const periodEntries = filteredByPeriod;
   const periodLabel = period === 'week' ? 'This week' : 'This month';
 
   const periodIncome = useMemo(
@@ -186,7 +183,7 @@ const HomeScreen: React.FC = () => {
   // Pie chart: show both income and expense by category
   const pieByCategory = useMemo(() => {
     const map: Record<string, { in: number; out: number }> = {};
-    filteredByPeriod.forEach((e) => {
+    periodEntries.forEach((e) => {
       const cat = ensureCategory(e.category);
       if (!map[cat]) map[cat] = { in: 0, out: 0 };
       if (e.type === 'in') map[cat].in += Number(e.amount || 0);
@@ -197,7 +194,7 @@ const HomeScreen: React.FC = () => {
       income: vals.in,
       expense: vals.out,
     }));
-  }, [filteredByPeriod]);
+  }, [periodEntries]);
 
   // For pie chart, show total expense by category
   const pieExpenseData = useMemo(
@@ -231,35 +228,33 @@ const HomeScreen: React.FC = () => {
 
   // Bar chart: show both income and expense per day/week
   const weeklyBar = useMemo(() => {
-    const now = new Date();
-    const source = filteredByPeriod || [];
+    const source = periodEntries || [];
 
     if (period === 'week') {
       const labels: string[] = [];
       const orderKeys: string[] = [];
       const incomeMap: Record<string, number> = {};
       const expenseMap: Record<string, number> = {};
-
       for (let i = 6; i >= 0; i--) {
-        const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-        const key = d.toISOString().slice(0, 10);
-        const label = d.toLocaleDateString(undefined, { weekday: 'short' });
-        labels.push(label);
+        const day = dayjs().startOf('day').subtract(i, 'day');
+        const key = day.format('YYYY-MM-DD');
+        labels.push(day.format('ddd'));
         orderKeys.push(key);
         incomeMap[key] = 0;
         expenseMap[key] = 0;
       }
-
       source.forEach((entry) => {
-        try {
-          const key = new Date(entry.date || entry.created_at).toISOString().slice(0, 10);
-          if (!(key in incomeMap)) return;
-          const amount = Number(entry.amount || 0);
-          if (entry.type === 'in') incomeMap[key] += amount;
-          if (entry.type === 'out') expenseMap[key] += amount;
-        } catch (err) {}
+        const entryKey = dayjs(entry.date || entry.created_at).startOf('day').format('YYYY-MM-DD');
+        if (!(entryKey in incomeMap)) {
+          return;
+        }
+        const amount = Number(entry.amount || 0);
+        if (entry.type === 'in') {
+          incomeMap[entryKey] += amount;
+        } else if (entry.type === 'out') {
+          expenseMap[entryKey] += amount;
+        }
       });
-
       return {
         labels,
         income: orderKeys.map((key) => incomeMap[key]),
@@ -267,33 +262,38 @@ const HomeScreen: React.FC = () => {
       };
     }
 
-    const bucketCount = 4;
-    const weekLabels: string[] = [];
-    const weekIncome: number[] = Array(bucketCount).fill(0);
-    const weekExpense: number[] = Array(bucketCount).fill(0);
-
-    for (let w = bucketCount - 1; w >= 0; w--) {
-      const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() - w * 7);
-      const start = new Date(end.getFullYear(), end.getMonth(), end.getDate() - 6);
-      weekLabels.push(`${start.getDate()}-${end.getDate()}`);
-    }
-
-    source.forEach((entry) => {
-      try {
-        const d = new Date(entry.date || entry.created_at);
-        if (isNaN(d.getTime())) return;
-        const daysAgo = Math.floor((now.getTime() - d.getTime()) / (24 * 60 * 60 * 1000));
-        const bucket = Math.floor(daysAgo / 7);
-        if (bucket < 0 || bucket >= bucketCount) return;
-        const targetIndex = bucketCount - 1 - bucket;
+    const buckets = 4;
+    const labels: string[] = [];
+    const incomeTotals: number[] = Array(buckets).fill(0);
+    const expenseTotals: number[] = Array(buckets).fill(0);
+    const now = dayjs().endOf('day');
+    for (let idx = buckets - 1; idx >= 0; idx--) {
+      const bucketEnd = now.subtract(idx * 7, 'day');
+      const bucketStart = bucketEnd.subtract(6, 'day');
+      labels.push(`${bucketStart.format('DD')} - ${bucketEnd.format('DD')}`);
+      source.forEach((entry) => {
+        const entryDate = dayjs(entry.date || entry.created_at);
+        if (!entryDate.isValid()) {
+          return;
+        }
+        if (entryDate.isBefore(bucketStart) || entryDate.isAfter(bucketEnd)) {
+          return;
+        }
         const amount = Number(entry.amount || 0);
-        if (entry.type === 'in') weekIncome[targetIndex] += amount;
-        if (entry.type === 'out') weekExpense[targetIndex] += amount;
-      } catch (err) {}
-    });
-
-    return { labels: weekLabels, income: weekIncome, expense: weekExpense };
-  }, [filteredByPeriod, period]);
+        const targetIndex = buckets - 1 - idx;
+        if (entry.type === 'in') {
+          incomeTotals[targetIndex] += amount;
+        } else if (entry.type === 'out') {
+          expenseTotals[targetIndex] += amount;
+        }
+      });
+    }
+    return {
+      labels,
+      income: incomeTotals,
+      expense: expenseTotals,
+    };
+  }, [periodEntries, period]);
 
   const recent = (entries || []).slice(0, 5);
 

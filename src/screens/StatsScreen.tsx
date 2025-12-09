@@ -152,48 +152,50 @@ const StatsScreen = () => {
   }, [filteredEntries]);
 
   const seriesData = useMemo(() => {
-    const format = filter === 'This Year' ? 'MMM' : 'DD MMM';
-    const shortFormat = filter === 'This Year' ? 'MMM' : 'DD';
     const labels: string[] = [];
     const inData: number[] = [];
     const outData: number[] = [];
+    const indexByKey = new Map<string, number>();
+    const now = dayjs();
 
-    if (filter !== 'This Year') {
-      const now = dayjs();
+    if (filter === 'This Year') {
+      for (let i = 0; i < 12; i++) {
+        const monthLabel = now.month(i).format('MMM');
+        labels.push(monthLabel);
+        inData.push(0);
+        outData.push(0);
+        indexByKey.set(monthLabel, i);
+      }
+    } else {
       const startDate = getStartDateForFilter(filter, now);
       const days = getDaysCountForFilter(filter, now);
-
-      // Determine label density to avoid overlap (max ~10 labels shown)
       const maxLabels = 10;
       const step = Math.max(1, Math.ceil(days / maxLabels));
+      const displayFormat = days > 15 ? 'DD' : 'DD MMM';
 
       for (let i = 0; i < days; i++) {
         const date = startDate.add(i, 'day');
-        // show abbreviated label (day number) and hide some labels based on step
-        const labelText = i % step === 0 ? date.format(shortFormat) : '';
+        const labelKey = date.format('YYYY-MM-DD');
+        const labelText = i % step === 0 ? date.format(displayFormat) : '';
         labels.push(labelText);
         inData.push(0);
         outData.push(0);
-      }
-    } else {
-      for (let i = 0; i < 12; i++) {
-        labels.push(dayjs().month(i).format('MMM'));
-        inData.push(0);
-        outData.push(0);
+        indexByKey.set(labelKey, i);
       }
     }
 
-    filteredEntries.forEach((e: any) => {
-      const rawDate = dayjs(e.date || e.created_at);
-      const dateKey = filter === 'This Year' ? rawDate.format('MMM') : rawDate.format(format);
-      const amount = Number(e.amount) || 0;
-      const index = labels.indexOf(dateKey);
-      if (index !== -1) {
-        if (e.type === 'in') {
-          inData[index] += amount;
-        } else {
-          outData[index] += amount;
-        }
+    filteredEntries.forEach((entry: any) => {
+      const rawDate = dayjs(entry.date || entry.created_at);
+      const amount = Number(entry.amount) || 0;
+      const key = filter === 'This Year' ? rawDate.format('MMM') : rawDate.format('YYYY-MM-DD');
+      const targetIndex = indexByKey.get(key);
+      if (targetIndex === undefined) {
+        return;
+      }
+      if (entry.type === 'in') {
+        inData[targetIndex] += amount;
+      } else {
+        outData[targetIndex] += amount;
       }
     });
 

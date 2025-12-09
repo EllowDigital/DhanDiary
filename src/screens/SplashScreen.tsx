@@ -33,6 +33,9 @@ const FEATURE_CARDS = [
   },
 ];
 
+const MIN_SPLASH_TIME_MS = 900;
+const MAX_SPLASH_WAIT_MS = 10500;
+
 const SplashScreen = () => {
   const navigation = useNavigation<SplashNavProp>();
 
@@ -48,7 +51,7 @@ const SplashScreen = () => {
 
     orbit.value = withRepeat(
       withTiming(1, {
-        duration: 4200,
+        duration: 2200,
         easing: Easing.inOut(Easing.quad),
       }),
       -1,
@@ -59,7 +62,7 @@ const SplashScreen = () => {
       withDelay(
         150,
         withTiming(1, {
-          duration: 3400,
+          duration: 5400,
           easing: Easing.inOut(Easing.ease),
         })
       ),
@@ -67,19 +70,41 @@ const SplashScreen = () => {
       true
     );
 
+    const startedAt = Date.now();
+    let hasNavigated = false;
+    const timeoutIds: ReturnType<typeof setTimeout>[] = [];
+
+    const runNavigation = (route: keyof RootStackParamList) => {
+      if (hasNavigated) return;
+      hasNavigated = true;
+      navigation.replace(route);
+    };
+
+    const scheduleNavigation = (route: keyof RootStackParamList) => {
+      const elapsed = Date.now() - startedAt;
+      const delay = Math.max(0, MIN_SPLASH_TIME_MS - elapsed);
+      const id = setTimeout(() => runNavigation(route), delay);
+      timeoutIds.push(id);
+    };
+
     const checkSessionAndNavigate = async () => {
       try {
         const session = await getSession();
-        setTimeout(() => {
-          navigation.replace(session ? 'Main' : 'Auth');
-        }, 1800);
+        scheduleNavigation(session ? 'Main' : 'Auth');
       } catch (err) {
         console.error('Session check failed:', err);
-        setTimeout(() => navigation.replace('Auth'), 1800);
+        scheduleNavigation('Auth');
       }
     };
 
     checkSessionAndNavigate();
+    timeoutIds.push(
+      setTimeout(() => runNavigation('Auth'), MAX_SPLASH_WAIT_MS)
+    );
+
+    return () => {
+      timeoutIds.forEach((id) => clearTimeout(id));
+    };
   }, [navigation, animation]);
 
   const logoStyle = useAnimatedStyle(() => ({
@@ -161,7 +186,7 @@ const SplashScreen = () => {
 
       <Animated.Text style={[styles.appName, textStyle]}>DhanDiary</Animated.Text>
 
-      <Animated.Text style={[styles.tagline, textStyle]}>Where cash meets clarity</Animated.Text>
+      <Animated.Text style={[styles.tagline, textStyle]}>Now optimized for quicker starts</Animated.Text>
 
       <Animated.View style={[styles.progressTrack, progressStyle]}>
         <View style={styles.progressFill} />
@@ -185,7 +210,7 @@ const SplashScreen = () => {
         <Animated.Text style={styles.poweredText}>
           Powered by <Animated.Text style={styles.brandName}>EllowDigital</Animated.Text>
         </Animated.Text>
-        <Animated.Text style={styles.loadingText}>Preparing your workspace...</Animated.Text>
+        <Animated.Text style={styles.loadingText}>Performance boost applied — launching...</Animated.Text>
       </Animated.View>
     </View>
   );
