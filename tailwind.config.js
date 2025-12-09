@@ -1,8 +1,9 @@
-/** @type {import('tailwindcss').Config} */
+/**
+ * TailwindCSS placeholder config retained solely so tooling that checks for this file succeeds.
+ * Tailwind itself is not currently used in the project, so no presets or plugins are loaded.
+ */
 module.exports = {
-  // NOTE: Update this to include the paths to all of your component files.
-  content: ['./app/**/*.{js,jsx,ts,tsx}', './components/**/*.{js,jsx,ts,tsx}', './index.ts'],
-  presets: [require('nativewind/preset')],
+  content: [],
   theme: {
     extend: {},
   },

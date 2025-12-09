@@ -1,27 +1,11 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import {
-  View,
-  StyleSheet,
-  Dimensions,
-  Pressable,
-  ScrollView,
-  Linking,
-  NativeSyntheticEvent,
-  NativeScrollEvent,
-  type StyleProp,
-  type ViewStyle,
-} from 'react-native';
+import { View, StyleSheet, Pressable, ScrollView, Linking, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
 import { useNavigation, NavigationProp } from '@react-navigation/native';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
-import Animated, { FadeInDown } from 'react-native-reanimated';
 import { colors, shadows } from '../utils/design';
 import ScreenHeader from '../components/ScreenHeader';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const scale = SCREEN_WIDTH / 390;
-const font = (s: number) => Math.round(s * scale);
 
 type RouteName = 'Settings' | 'About' | 'Account' | 'Stats' | 'AccountManagementScreen' | string;
 
@@ -88,23 +72,6 @@ const MoreScreen: React.FC = () => {
     []
   );
 
-  const heroHighlights = useMemo(
-    () => [
-      { icon: 'sync', label: 'Offline ready' },
-      { icon: 'shield', label: 'Secure sessions' },
-      { icon: 'contact-support', label: 'Human support' },
-    ],
-    []
-  );
-
-  const chunkedPrimary = useMemo(() => {
-    const chunks: (typeof primaryLinks)[][] = [];
-    for (let i = 0; i < primaryLinks.length; i += 2) {
-      chunks.push(primaryLinks.slice(i, i + 2));
-    }
-    return chunks;
-  }, [primaryLinks]);
-
   const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     setScrollOffset(event.nativeEvent.contentOffset.y);
   }, []);
@@ -115,84 +82,31 @@ const MoreScreen: React.FC = () => {
     description,
     onPress,
     isLast = false,
-    index = 0,
   }: {
     icon: string;
     label: string;
     description?: string;
     onPress: () => void;
     isLast?: boolean;
-    index?: number;
   }) => (
-    <Animated.View
-      entering={FadeInDown.delay(120 + index * 40)
-        .springify()
-        .damping(18)}
+    <Pressable
+      onPress={onPress}
+      android_ripple={{ color: colors.surfaceMuted }}
+      style={({ pressed }) => [styles.row, pressed && styles.rowPressed, isLast && styles.rowLast]}
+      accessibilityRole="button"
+      accessibilityLabel={label}
     >
-      <Pressable
-        onPress={onPress}
-        android_ripple={{ color: colors.surfaceMuted }}
-        style={({ pressed }) => [
-          styles.row,
-          pressed && styles.rowPressed,
-          isLast && styles.rowLast,
-        ]}
-        accessibilityRole="button"
-        accessibilityLabel={label}
-      >
-        <View style={styles.rowLeft}>
-          <View style={styles.iconContainer}>
-            <MaterialIcon name={icon as any} size={font(20)} color={colors.primary} />
-          </View>
-          <View>
-            <Text style={styles.rowText}>{label}</Text>
-            {description ? <Text style={styles.rowDescription}>{description}</Text> : null}
-          </View>
+      <View style={styles.rowLeft}>
+        <View style={styles.iconContainer}>
+          <MaterialIcon name={icon as any} size={18} color={colors.primary} />
         </View>
-        <MaterialIcon name="chevron-right" size={font(22)} color={colors.muted} />
-      </Pressable>
-    </Animated.View>
-  );
-
-  const QuickTile = ({
-    icon,
-    label,
-    description,
-    onPress,
-    index = 0,
-    wrapperStyle,
-  }: {
-    icon: string;
-    label: string;
-    description?: string;
-    onPress: () => void;
-    index?: number;
-    wrapperStyle?: StyleProp<ViewStyle>;
-  }) => (
-    <Animated.View
-      style={wrapperStyle}
-      entering={FadeInDown.delay(140 + index * 50)
-        .springify()
-        .damping(18)}
-    >
-      <Pressable
-        onPress={onPress}
-        android_ripple={{ color: colors.surfaceMuted }}
-        style={({ pressed }) => [styles.quickTile, pressed && styles.quickTilePressed]}
-        accessibilityRole="button"
-        accessibilityLabel={label}
-      >
-        <View style={styles.quickIconBadge}>
-          <MaterialIcon name={icon as any} size={font(22)} color={colors.primary} />
+        <View>
+          <Text style={styles.rowText}>{label}</Text>
+          {description ? <Text style={styles.rowDescription}>{description}</Text> : null}
         </View>
-        <Text style={styles.quickTileLabel}>{label}</Text>
-        {description ? <Text style={styles.quickTileDescription}>{description}</Text> : null}
-        <View style={styles.quickTileCta}>
-          <Text style={styles.quickTileCtaText}>Open</Text>
-          <MaterialIcon name="trending-flat" size={font(18)} color={colors.primary} />
-        </View>
-      </Pressable>
-    </Animated.View>
+      </View>
+      <MaterialIcon name="chevron-right" size={20} color={colors.muted} />
+    </Pressable>
   );
 
   return (
@@ -205,55 +119,35 @@ const MoreScreen: React.FC = () => {
       />
       <ScrollView
         style={styles.container}
-        contentContainerStyle={[styles.content, { paddingBottom: 40 + insets.bottom }]}
+        contentContainerStyle={[styles.content, { paddingBottom: 32 + insets.bottom }]}
         onScroll={handleScroll}
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
       >
-        <Animated.View entering={FadeInDown.duration(400)} style={styles.heroCard}>
-          <Text style={styles.heroEyebrow}>Control Center</Text>
-          <Text style={styles.heroTitle}>Everything you need, now tidy.</Text>
+        <View style={styles.heroCard}>
+          <Text style={styles.heroEyebrow}>Control center</Text>
+          <Text style={styles.heroTitle}>A calmer More tab</Text>
           <Text style={styles.heroSubtitle}>
-            Jump into stats, accounts, or preferences without hunting through menus. All the
-            backstage tools live here.
+            Quickly hop into stats, account controls, or support without distracting animations.
           </Text>
-          <View style={styles.heroHighlightRow}>
-            {heroHighlights.map((item) => (
-              <View key={item.label} style={styles.heroHighlight}>
-                <MaterialIcon name={item.icon as any} size={font(16)} color={colors.primary} />
-                <Text style={styles.heroHighlightText}>{item.label}</Text>
-              </View>
-            ))}
-          </View>
-        </Animated.View>
+        </View>
 
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionLabel}>Quick controls</Text>
-          {chunkedPrimary.map((row, rowIndex) => (
-            <View key={`row-${rowIndex}`} style={styles.quickRow}>
-              {row.map((item, colIndex) => (
-                <QuickTile
-                  key={item.label}
-                  icon={item.icon}
-                  label={item.label}
-                  description={item.description}
-                  onPress={item.action}
-                  index={rowIndex * 2 + colIndex}
-                  wrapperStyle={[
-                    styles.quickTileWrapper,
-                    colIndex === 0 && row.length > 1 ? styles.quickTileWrapperSpacing : null,
-                  ]}
-                />
-              ))}
-              {row.length === 1 ? (
-                <View style={[styles.quickTileWrapper, styles.quickGhost]} />
-              ) : null}
-            </View>
+          <Text style={styles.sectionLabel}>Navigation</Text>
+          {primaryLinks.map((item, index) => (
+            <Row
+              key={item.label}
+              icon={item.icon}
+              label={item.label}
+              description={item.description}
+              onPress={item.action}
+              isLast={index === primaryLinks.length - 1}
+            />
           ))}
         </View>
 
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionLabel}>Support & resources</Text>
+          <Text style={styles.sectionLabel}>Support</Text>
           {supportLinks.map((item, index) => (
             <Row
               key={item.label}
@@ -262,13 +156,11 @@ const MoreScreen: React.FC = () => {
               description={item.description}
               onPress={item.action}
               isLast={index === supportLinks.length - 1}
-              index={index + primaryLinks.length}
             />
           ))}
         </View>
-        <Text style={styles.footnote}>
-          Need something else? Ping us anytime — we usually reply within a day.
-        </Text>
+
+        <Text style={styles.footnote}>Need something else? Ping us anytime — replies are fast.</Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -290,132 +182,56 @@ const styles = StyleSheet.create({
   },
   heroCard: {
     backgroundColor: colors.card,
-    borderRadius: 22,
+    borderRadius: 18,
     padding: 20,
     borderWidth: 1,
     borderColor: colors.border,
-    ...shadows.medium,
-    marginBottom: 20,
+    ...shadows.small,
+    marginBottom: 16,
   },
   heroEyebrow: {
-    fontSize: font(12),
+    fontSize: 12,
     color: colors.muted,
-    textTransform: 'uppercase',
     letterSpacing: 1,
+    textTransform: 'uppercase',
     fontWeight: '600',
   },
   heroTitle: {
-    fontSize: font(26),
+    fontSize: 24,
     fontWeight: '700',
     color: colors.text,
-    marginTop: 6,
+    marginTop: 4,
   },
   heroSubtitle: {
-    fontSize: font(14),
+    fontSize: 14,
     color: colors.subtleText,
-    marginTop: 10,
+    marginTop: 8,
     lineHeight: 20,
-  },
-  heroHighlightRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: 16,
-  },
-  heroHighlight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    backgroundColor: colors.surfaceMuted,
-    marginRight: 10,
-    marginBottom: 10,
-  },
-  heroHighlightText: {
-    fontSize: font(12),
-    color: colors.text,
-    marginLeft: 6,
-    fontWeight: '600',
   },
   sectionCard: {
     backgroundColor: colors.card,
     borderRadius: 18,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: 12,
-    marginTop: 20,
+    paddingHorizontal: 12,
+    paddingBottom: 4,
+    marginTop: 18,
   },
   sectionLabel: {
-    fontSize: font(13),
+    fontSize: 13,
     color: colors.muted,
     fontWeight: '600',
     paddingHorizontal: 14,
     paddingTop: 14,
-    paddingBottom: 8,
+    paddingBottom: 2,
     textTransform: 'uppercase',
-  },
-  quickRow: {
-    flexDirection: 'row',
-    marginTop: 8,
-  },
-  quickTileWrapper: {
-    flex: 1,
-  },
-  quickTileWrapperSpacing: {
-    marginRight: 12,
-  },
-  quickGhost: {
-    opacity: 0,
-  },
-  quickTile: {
-    backgroundColor: colors.background,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    minHeight: 150,
-    justifyContent: 'space-between',
-  },
-  quickTilePressed: {
-    backgroundColor: colors.surfaceMuted,
-  },
-  quickIconBadge: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
-    backgroundColor: colors.primarySoft,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  quickTileLabel: {
-    fontSize: font(16),
-    color: colors.text,
-    fontWeight: '600',
-  },
-  quickTileDescription: {
-    fontSize: font(13),
-    color: colors.subtleText,
-    marginTop: 4,
-    flex: 1,
-  },
-  quickTileCta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 12,
-  },
-  quickTileCtaText: {
-    fontSize: font(13),
-    color: colors.primary,
-    marginRight: 4,
-    fontWeight: '600',
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: font(14),
-    paddingHorizontal: font(16),
+    paddingVertical: 14,
+    paddingHorizontal: 12,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
@@ -430,29 +246,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   iconContainer: {
-    width: font(38),
-    height: font(38),
-    borderRadius: font(19),
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     backgroundColor: colors.primarySoft,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: font(16),
+    marginRight: 12,
   },
   rowText: {
-    fontSize: font(16),
+    fontSize: 16,
     color: colors.text,
     fontWeight: '500',
   },
   rowDescription: {
-    fontSize: font(13),
+    fontSize: 13,
     color: colors.subtleText,
     marginTop: 2,
   },
   footnote: {
-    fontSize: font(12),
+    fontSize: 12,
     color: colors.muted,
     textAlign: 'center',
-    marginTop: 24,
+    marginTop: 20,
   },
 });
 
