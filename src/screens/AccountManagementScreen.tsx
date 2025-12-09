@@ -38,12 +38,14 @@ const AccountManagementScreen = () => {
   const navigation = useNavigation<any>();
   const { showToast } = useToast();
 
-  const [activeCard, setActiveCard] = useState<'username' | 'email' | 'password' | 'delete' | null>(null);
+  const [activeCard, setActiveCard] = useState<'username' | 'email' | 'password' | 'delete' | null>(
+    null
+  );
 
   // --- FORM STATE ---
   const [username, setUsername] = useState(user?.name || '');
   const [email, setEmail] = useState(user?.email || '');
-  
+
   // Password State
   const [curPass, setCurPass] = useState('');
   const [newPass, setNewPass] = useState('');
@@ -112,7 +114,7 @@ const AccountManagementScreen = () => {
     setSavingEmail(true);
     try {
       // Optimistic Update
-      
+
       if (user && (user as any).id) {
         await saveSession((user as any).id, user?.name || '', email || '');
       }
@@ -135,22 +137,26 @@ const AccountManagementScreen = () => {
   }, [email, user]);
 
   const handlePasswordSave = useCallback(async () => {
-    if (!curPass || !newPass || !confirmPass) return Alert.alert('Missing Fields', 'Please fill in all password fields.');
+    if (!curPass || !newPass || !confirmPass)
+      return Alert.alert('Missing Fields', 'Please fill in all password fields.');
     if (newPass !== confirmPass) return Alert.alert('Mismatch', 'New passwords do not match.');
-    if (newPass.length < 8) return Alert.alert('Weak Password', 'Password must be at least 8 characters.');
+    if (newPass.length < 8)
+      return Alert.alert('Weak Password', 'Password must be at least 8 characters.');
 
     setSavingPasswordState(true);
-    
+
     // Non-blocking UX
     setTimeout(() => {
-        // Just in case the promise hangs, we unblock the button after 2s
-        if(savingPasswordState) setSavingPasswordState(false);
+      // Just in case the promise hangs, we unblock the button after 2s
+      if (savingPasswordState) setSavingPasswordState(false);
     }, 5000);
 
     try {
       await retry(() => changePassword(curPass, newPass), 3, 300);
       showToast('Password updated successfully');
-      setCurPass(''); setNewPass(''); setConfirmPass('');
+      setCurPass('');
+      setNewPass('');
+      setConfirmPass('');
       toggleCard('password');
     } catch (err: any) {
       Alert.alert('Update Failed', err?.message || 'Could not change password.');
@@ -196,130 +202,176 @@ const AccountManagementScreen = () => {
   );
 
   // --- COMPONENT CONFIG ---
-  const sectionConfig = useMemo(() => [
-    {
-      id: 'username' as const,
-      title: 'Profile Name',
-      description: 'Update how you appear in the app',
-      icon: 'badge',
-      color: colors.primary,
-      content: (
-        <>
-          <CustomInput
-            label="Display Name"
-            value={username}
-            onChangeText={setUsername}
-            placeholder="e.g. John Doe"
-          />
-          <Button
-            title="Save Changes"
-            loading={savingUsername}
-            onPress={handleSaveUsername}
-            buttonStyle={styles.primaryBtn}
-            containerStyle={styles.btnContainer}
-          />
-        </>
-      ),
-    },
-    {
-      id: 'email' as const,
-      title: 'Email Address',
-      description: 'Manage your login email',
-      icon: 'alternate-email',
-      color: colors.accentGreen,
-      content: (
-        <>
-          <CustomInput
-            label="Email"
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-          />
-          <Button
-            title="Update Email"
-            loading={savingEmail}
-            onPress={handleSaveEmail}
-            buttonStyle={styles.primaryBtn}
-            containerStyle={styles.btnContainer}
-          />
-        </>
-      ),
-    },
-    {
-      id: 'password' as const,
-      title: 'Security',
-      description: 'Change your password',
-      icon: 'lock-outline',
-      color: colors.accentOrange,
-      content: (
-        <>
-          <CustomInput
-            label="Current Password"
-            secureTextEntry={!showCur}
-            value={curPass}
-            onChangeText={setCurPass}
-            rightIcon={<MaterialIcon name={showCur ? 'visibility' : 'visibility-off'} size={20} color={colors.muted} onPress={() => setShowCur(!showCur)} />}
-          />
-          <CustomInput
-            label="New Password"
-            secureTextEntry={!showNew}
-            value={newPass}
-            onChangeText={setNewPass}
-            rightIcon={<MaterialIcon name={showNew ? 'visibility' : 'visibility-off'} size={20} color={colors.muted} onPress={() => setShowNew(!showNew)} />}
-          />
-          <CustomInput
-            label="Confirm New Password"
-            secureTextEntry={!showConfirm}
-            value={confirmPass}
-            onChangeText={setConfirmPass}
-            rightIcon={<MaterialIcon name={showConfirm ? 'visibility' : 'visibility-off'} size={20} color={colors.muted} onPress={() => setShowConfirm(!showConfirm)} />}
-          />
-          <Button
-            title="Update Password"
-            loading={savingPasswordState}
-            onPress={handlePasswordSave}
-            buttonStyle={styles.primaryBtn}
-            containerStyle={styles.btnContainer}
-          />
-        </>
-      ),
-    },
-    {
-      id: 'delete' as const,
-      title: 'Delete Account',
-      description: 'Permanently remove your data',
-      icon: 'delete-outline',
-      color: colors.accentRed,
-      content: (
-        <View style={styles.dangerZoneInner}>
-          <Text style={styles.warningText}>
-            Warning: This action will permanently delete your account and all associated data.
-          </Text>
-          <Button
-            title="Delete Account"
-            buttonStyle={styles.destructiveBtn}
-            onPress={handleDelete}
-            loading={deletingAccount}
-            icon={<MaterialIcon name="delete-forever" size={18} color="white" style={{marginRight:8}} />}
-          />
-        </View>
-      ),
-    },
-  ], [username, email, curPass, newPass, confirmPass, showCur, showNew, showConfirm, savingUsername, savingEmail, savingPasswordState, deletingAccount]);
+  const sectionConfig = useMemo(
+    () => [
+      {
+        id: 'username' as const,
+        title: 'Profile Name',
+        description: 'Update how you appear in the app',
+        icon: 'badge',
+        color: colors.primary,
+        content: (
+          <>
+            <CustomInput
+              label="Display Name"
+              value={username}
+              onChangeText={setUsername}
+              placeholder="e.g. John Doe"
+            />
+            <Button
+              title="Save Changes"
+              loading={savingUsername}
+              onPress={handleSaveUsername}
+              buttonStyle={styles.primaryBtn}
+              containerStyle={styles.btnContainer}
+            />
+          </>
+        ),
+      },
+      {
+        id: 'email' as const,
+        title: 'Email Address',
+        description: 'Manage your login email',
+        icon: 'alternate-email',
+        color: colors.accentGreen,
+        content: (
+          <>
+            <CustomInput
+              label="Email"
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+            />
+            <Button
+              title="Update Email"
+              loading={savingEmail}
+              onPress={handleSaveEmail}
+              buttonStyle={styles.primaryBtn}
+              containerStyle={styles.btnContainer}
+            />
+          </>
+        ),
+      },
+      {
+        id: 'password' as const,
+        title: 'Security',
+        description: 'Change your password',
+        icon: 'lock-outline',
+        color: colors.accentOrange,
+        content: (
+          <>
+            <CustomInput
+              label="Current Password"
+              secureTextEntry={!showCur}
+              value={curPass}
+              onChangeText={setCurPass}
+              rightIcon={
+                <MaterialIcon
+                  name={showCur ? 'visibility' : 'visibility-off'}
+                  size={20}
+                  color={colors.muted}
+                  onPress={() => setShowCur(!showCur)}
+                />
+              }
+            />
+            <CustomInput
+              label="New Password"
+              secureTextEntry={!showNew}
+              value={newPass}
+              onChangeText={setNewPass}
+              rightIcon={
+                <MaterialIcon
+                  name={showNew ? 'visibility' : 'visibility-off'}
+                  size={20}
+                  color={colors.muted}
+                  onPress={() => setShowNew(!showNew)}
+                />
+              }
+            />
+            <CustomInput
+              label="Confirm New Password"
+              secureTextEntry={!showConfirm}
+              value={confirmPass}
+              onChangeText={setConfirmPass}
+              rightIcon={
+                <MaterialIcon
+                  name={showConfirm ? 'visibility' : 'visibility-off'}
+                  size={20}
+                  color={colors.muted}
+                  onPress={() => setShowConfirm(!showConfirm)}
+                />
+              }
+            />
+            <Button
+              title="Update Password"
+              loading={savingPasswordState}
+              onPress={handlePasswordSave}
+              buttonStyle={styles.primaryBtn}
+              containerStyle={styles.btnContainer}
+            />
+          </>
+        ),
+      },
+      {
+        id: 'delete' as const,
+        title: 'Delete Account',
+        description: 'Permanently remove your data',
+        icon: 'delete-outline',
+        color: colors.accentRed,
+        content: (
+          <View style={styles.dangerZoneInner}>
+            <Text style={styles.warningText}>
+              Warning: This action will permanently delete your account and all associated data.
+            </Text>
+            <Button
+              title="Delete Account"
+              buttonStyle={styles.destructiveBtn}
+              onPress={handleDelete}
+              loading={deletingAccount}
+              icon={
+                <MaterialIcon
+                  name="delete-forever"
+                  size={18}
+                  color="white"
+                  style={{ marginRight: 8 }}
+                />
+              }
+            />
+          </View>
+        ),
+      },
+    ],
+    [
+      username,
+      email,
+      curPass,
+      newPass,
+      confirmPass,
+      showCur,
+      showNew,
+      showConfirm,
+      savingUsername,
+      savingEmail,
+      savingPasswordState,
+      deletingAccount,
+    ]
+  );
 
   return (
     <View style={styles.mainContainer}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       <SafeAreaView style={styles.safeArea}>
         <ScreenHeader title="Account" subtitle="Profile & Security" showScrollHint={false} />
-        
-        <KeyboardAvoidingView 
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
-            style={{ flex: 1 }}
+
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={{ flex: 1 }}
         >
-          <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-            
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
             {/* HERO SECTION */}
             <Animated.View style={[styles.heroCard, getAnimStyle(0)]}>
               <View style={styles.avatarContainer}>
@@ -333,14 +385,14 @@ const AccountManagementScreen = () => {
             {sectionConfig.map((section, idx) => {
               const isExpanded = activeCard === section.id;
               return (
-                <Animated.View 
-                    key={section.id} 
-                    style={[
-                        styles.card, 
-                        isExpanded && styles.cardExpanded, 
-                        section.id === 'delete' && styles.cardDanger,
-                        getAnimStyle(idx + 1)
-                    ]}
+                <Animated.View
+                  key={section.id}
+                  style={[
+                    styles.card,
+                    isExpanded && styles.cardExpanded,
+                    section.id === 'delete' && styles.cardDanger,
+                    getAnimStyle(idx + 1),
+                  ]}
                 >
                   <TouchableOpacity
                     activeOpacity={0.8}
@@ -351,7 +403,12 @@ const AccountManagementScreen = () => {
                       <MaterialIcon name={section.icon as any} size={22} color={section.color} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.cardTitle, section.id === 'delete' && { color: colors.accentRed }]}>
+                      <Text
+                        style={[
+                          styles.cardTitle,
+                          section.id === 'delete' && { color: colors.accentRed },
+                        ]}
+                      >
                         {section.title}
                       </Text>
                       <Text style={styles.cardDesc}>{section.description}</Text>
@@ -362,16 +419,12 @@ const AccountManagementScreen = () => {
                       color={colors.muted}
                     />
                   </TouchableOpacity>
-                  
-                  {isExpanded && (
-                    <View style={styles.cardBody}>
-                        {section.content}
-                    </View>
-                  )}
+
+                  {isExpanded && <View style={styles.cardBody}>{section.content}</View>}
                 </Animated.View>
               );
             })}
-            
+
             <View style={{ height: 40 }} />
           </ScrollView>
         </KeyboardAvoidingView>

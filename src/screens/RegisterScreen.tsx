@@ -29,7 +29,7 @@ import { useInternetStatus } from '../hooks/useInternetStatus';
 // Components & Utils
 import { colors, spacing, shadows } from '../utils/design';
 import FullScreenSpinner from '../components/FullScreenSpinner';
-import AuthField from '../components/AuthField'; 
+import AuthField from '../components/AuthField';
 
 type RegisterScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList>;
 
@@ -45,7 +45,7 @@ const RegisterScreen = () => {
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
-  
+
   // Validation State
   const [emailError, setEmailError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
@@ -84,7 +84,8 @@ const RegisterScreen = () => {
 
   const handleRegister = async () => {
     if (loading) return;
-    if (!isOnline) return Alert.alert('Offline', 'Internet connection required to create an account.');
+    if (!isOnline)
+      return Alert.alert('Offline', 'Internet connection required to create an account.');
 
     // Clear previous errors
     setEmailError(null);
@@ -123,21 +124,21 @@ const RegisterScreen = () => {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-      
+
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
-        <ScrollView 
+        <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <Animated.View 
+          <Animated.View
             style={[
-              styles.container, 
-              { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
+              styles.container,
+              { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
             ]}
           >
             {/* HERO SECTION */}
@@ -175,7 +176,7 @@ const RegisterScreen = () => {
                 value={email}
                 onChangeText={(text) => {
                   setEmail(text);
-                  if(emailError) setEmailError(null);
+                  if (emailError) setEmailError(null);
                 }}
                 keyboardType="email-address"
                 autoCapitalize="none"
@@ -190,8 +191,8 @@ const RegisterScreen = () => {
                 value={password}
                 secureTextEntry={!showPass}
                 onChangeText={(text) => {
-                   setPassword(text);
-                   if(passwordError) setPasswordError(null);
+                  setPassword(text);
+                  if (passwordError) setPasswordError(null);
                 }}
                 error={passwordError}
                 rightAccessory={
@@ -208,14 +209,38 @@ const RegisterScreen = () => {
               {/* Password Strength Indicator */}
               {password.length > 0 && (
                 <View style={styles.strengthContainer}>
-                   <View style={[styles.strengthBar, { backgroundColor: passStrength >= 1 ? (passStrength >= 2 ? colors.accentGreen : colors.accentOrange) : colors.accentRed, flex: passStrength }]} />
-                   <View style={[styles.strengthBar, { backgroundColor: '#E0E0E0', flex: 3 - passStrength }]} />
+                  <View
+                    style={[
+                      styles.strengthBar,
+                      {
+                        backgroundColor:
+                          passStrength >= 1
+                            ? passStrength >= 2
+                              ? colors.accentGreen
+                              : colors.accentOrange
+                            : colors.accentRed,
+                        flex: passStrength,
+                      },
+                    ]}
+                  />
+                  <View
+                    style={[
+                      styles.strengthBar,
+                      { backgroundColor: '#E0E0E0', flex: 3 - passStrength },
+                    ]}
+                  />
                 </View>
               )}
               {password.length > 0 && (
-                 <Text style={styles.strengthText}>
-                    {passStrength === 0 ? 'Too short' : passStrength === 1 ? 'Weak' : passStrength === 2 ? 'Good' : 'Strong'}
-                 </Text>
+                <Text style={styles.strengthText}>
+                  {passStrength === 0
+                    ? 'Too short'
+                    : passStrength === 1
+                      ? 'Weak'
+                      : passStrength === 2
+                        ? 'Good'
+                        : 'Strong'}
+                </Text>
               )}
 
               <Button
@@ -226,13 +251,23 @@ const RegisterScreen = () => {
                 buttonStyle={styles.primaryButton}
                 containerStyle={styles.buttonContainer}
                 titleStyle={{ fontWeight: '700', fontSize: 16 }}
-                icon={!loading ? <MaterialIcon name="arrow-forward" size={18} color="white" style={{marginRight:8}} /> : undefined}
+                icon={
+                  !loading ? (
+                    <MaterialIcon
+                      name="arrow-forward"
+                      size={18}
+                      color="white"
+                      style={{ marginRight: 8 }}
+                    />
+                  ) : undefined
+                }
               />
 
               <View style={styles.termsContainer}>
-                 <Text style={styles.termsText}>
-                    By signing up, you agree to our <Text style={styles.termsLink}>Terms</Text> and <Text style={styles.termsLink}>Privacy Policy</Text>.
-                 </Text>
+                <Text style={styles.termsText}>
+                  By signing up, you agree to our <Text style={styles.termsLink}>Terms</Text> and{' '}
+                  <Text style={styles.termsLink}>Privacy Policy</Text>.
+                </Text>
               </View>
             </View>
 
@@ -272,7 +307,7 @@ const styles = StyleSheet.create({
     maxWidth: 400,
     alignSelf: 'center',
   },
-  
+
   /* HERO */
   heroSection: {
     alignItems: 'center',

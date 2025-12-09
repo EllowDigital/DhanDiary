@@ -193,7 +193,6 @@ const AddEntryScreen: React.FC = () => {
           showsVerticalScrollIndicator={false}
         >
           <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-
             {/* TOGGLE SWITCH */}
             <View style={styles.toggleContainer}>
               <Animated.View
@@ -202,8 +201,8 @@ const AddEntryScreen: React.FC = () => {
                   {
                     left: 0,
                     transform: [{ translateX: toggleTranslate }],
-                    width: '49%' // slightly less than half to account for padding
-                  }
+                    width: '49%', // slightly less than half to account for padding
+                  },
                 ]}
               />
               {typeConfigs.map((cfg, idx) => {
@@ -232,7 +231,9 @@ const AddEntryScreen: React.FC = () => {
               <View style={styles.amountHeader}>
                 <Text style={styles.cardLabel}>Amount</Text>
                 <View style={[styles.badge, { backgroundColor: activeType.accentSoft }]}>
-                  <Text style={[styles.badgeText, { color: activeType.accent }]}>{activeType.subtitle}</Text>
+                  <Text style={[styles.badgeText, { color: activeType.accent }]}>
+                    {activeType.subtitle}
+                  </Text>
                 </View>
               </View>
 
@@ -257,7 +258,9 @@ const AddEntryScreen: React.FC = () => {
               <Pressable style={styles.gridItem} onPress={() => setCategoryModalVisible(true)}>
                 <Text style={styles.gridLabel}>Category</Text>
                 <View style={styles.gridValueRow}>
-                  <Text style={styles.gridValue} numberOfLines={1}>{category}</Text>
+                  <Text style={styles.gridValue} numberOfLines={1}>
+                    {category}
+                  </Text>
                   <MaterialIcon name="arrow-drop-down" size={24} color={colors.muted} />
                 </View>
               </Pressable>
@@ -274,7 +277,11 @@ const AddEntryScreen: React.FC = () => {
             {/* QUICK CATEGORIES */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Quick Select</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.chipRow}
+              >
                 {quickCategories.map((cat) => {
                   const isSelected = category === cat;
                   return (
@@ -282,11 +289,19 @@ const AddEntryScreen: React.FC = () => {
                       key={cat}
                       style={[
                         styles.chip,
-                        isSelected && { backgroundColor: activeType.accentSoft, borderColor: activeType.accent }
+                        isSelected && {
+                          backgroundColor: activeType.accentSoft,
+                          borderColor: activeType.accent,
+                        },
                       ]}
                       onPress={() => setCategory(cat)}
                     >
-                      <Text style={[styles.chipText, isSelected && { color: activeType.accent, fontWeight: '700' }]}>
+                      <Text
+                        style={[
+                          styles.chipText,
+                          isSelected && { color: activeType.accent, fontWeight: '700' },
+                        ]}
+                      >
                         {cat}
                       </Text>
                     </Pressable>
@@ -318,9 +333,10 @@ const AddEntryScreen: React.FC = () => {
               buttonStyle={[styles.saveBtn, { backgroundColor: activeType.accent }]}
               titleStyle={styles.saveBtnText}
               containerStyle={styles.saveBtnContainer}
-              icon={<MaterialIcon name="check" size={20} color="white" style={{ marginRight: 8 }} />}
+              icon={
+                <MaterialIcon name="check" size={20} color="white" style={{ marginRight: 8 }} />
+              }
             />
-
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -343,7 +359,6 @@ const AddEntryScreen: React.FC = () => {
           }}
         />
       )}
-
     </SafeAreaView>
   );
 };

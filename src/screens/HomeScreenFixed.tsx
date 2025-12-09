@@ -7,8 +7,11 @@ import {
   StatusBar,
   useWindowDimensions,
   FlatList,
-  ScrollView,
+  ScrollView, // Fixed import
   Platform,
+  Animated,   // Fixed import
+  Easing,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
@@ -25,23 +28,14 @@ import { useInternetStatus } from '../hooks/useInternetStatus';
 import * as Updates from 'expo-updates';
 import dayjs from 'dayjs';
 
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  withRepeat,
-  Easing,
-  FadeInDown,
-  interpolate,
-} from 'react-native-reanimated';
-
+// SVG & Design
 import Svg, { Defs, LinearGradient as SvgLinearGradient, Stop, Rect } from 'react-native-svg';
 import { spacing, colors } from '../utils/design';
 import { ensureCategory, FALLBACK_CATEGORY } from '../constants/categories';
 
 const pkg = require('../../package.json');
 
-/* CHART KIT (safe load) */
+/* CHART KIT SAFE LOAD */
 let PieChart: any = null;
 let BarChart: any = null;
 try {
@@ -52,6 +46,7 @@ try {
   console.warn('react-native-chart-kit not installed.');
 }
 
+// --- COLORS & HELPERS ---
 const PIE_COLORS = [
   colors.primary,
   colors.accentBlue,
@@ -75,16 +70,15 @@ const HomeScreen: React.FC = () => {
   const { user } = useAuth();
   const { entries = [], isLoading = false } = useEntries(user?.id);
   const showLoading = useDelayedLoading(Boolean(isLoading), 200);
+  
+  // --- RESPONSIVE LAYOUT LOGIC ---
   const { width: SCREEN_WIDTH } = useWindowDimensions();
-
-  // Responsive Breakpoints
   const isCompact = SCREEN_WIDTH < 380;
   const isTablet = SCREEN_WIDTH >= 768;
-
-  // Dynamic Layout Calculations
   const horizontalPadding = isTablet ? spacing(5) : spacing(2.5);
-  const maxContentWidth = 800; // Constrain width on large tablets
+  const maxContentWidth = 800; 
   const containerWidth = Math.min(SCREEN_WIDTH, maxContentWidth);
+  // Calculate chart width dynamically inside the component
   const chartWidth = Math.min(containerWidth - (horizontalPadding * 2) - spacing(2), 600);
   const chartHeight = 220;
 
@@ -95,41 +89,41 @@ const HomeScreen: React.FC = () => {
   const [applyingUpdate, setApplyingUpdate] = useState(false);
   const isExpoGo = Constants?.appOwnership === 'expo';
 
-  useLayoutEffect(() => {
-    if (typeof navigation?.setOptions === 'function') {
-      navigation.setOptions({ headerShown: false });
-    }
-  }, [navigation]);
+  // --- ANIMATION ---
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
 
-  // Animation Refs
-  const shimmer = useSharedValue(0);
-  const heroPulse = useSharedValue(0);
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic),
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 600,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic),
+      }),
+    ]).start();
+  }, []);
 
   // Filters
   const [period, setPeriod] = useState<'week' | 'month'>('month');
   const [chartType, setChartType] = useState<'pie' | 'bar'>('pie');
 
-  /* ============================================================
-     DATA PROCESSING LOGIC (Unchanged functionality)
-  ============================================================ */
-  const totalIn = useMemo(
-    () => entries.filter((e) => e.type === 'in').reduce((s, x) => s + Number(x.amount || 0), 0),
-    [entries]
-  );
-
-  const totalOut = useMemo(
-    () => entries.filter((e) => e.type === 'out').reduce((s, x) => s + Number(x.amount || 0), 0),
-    [entries]
-  );
-
+  // --- DATA LOGIC ---
+  const totalIn = useMemo(() => entries.filter((e) => e.type === 'in').reduce((s, x) => s + Number(x.amount || 0), 0), [entries]);
+  const totalOut = useMemo(() => entries.filter((e) => e.type === 'out').reduce((s, x) => s + Number(x.amount || 0), 0), [entries]);
   const balance = totalIn - totalOut;
 
   const netTrend = useMemo(() => {
-    if (!entries.length) return { current: 0, previous: 0, delta: null as number | null };
+    if (!entries.length) return { current: 0, previous: 0, delta: null };
     const now = Date.now();
     const week = 7 * 24 * 60 * 60 * 1000;
-    let current = 0;
-    let previous = 0;
+    let current = 0; let previous = 0;
     entries.forEach((entry) => {
       const stamp = new Date(entry.date || entry.created_at).getTime();
       if (Number.isNaN(stamp)) return;
@@ -141,41 +135,23 @@ const HomeScreen: React.FC = () => {
     return { current, previous, delta };
   }, [entries]);
 
-  const periodStart = useMemo(() => {
-    if (period === 'week') return dayjs().startOf('day').subtract(6, 'day');
-    return dayjs().startOf('month');
-  }, [period]);
+  const periodStart = useMemo(() => period === 'week' ? dayjs().startOf('day').subtract(6, 'day') : dayjs().startOf('month'), [period]);
 
   const periodEntries = useMemo(() => {
     const startValue = periodStart.valueOf();
-    return (entries || [])
-      .filter((entry: any) => {
+    return (entries || []).filter((entry: any) => {
         const entryDate = dayjs(entry.date || entry.created_at).startOf('day');
         return entryDate.isValid() && entryDate.valueOf() >= startValue;
-      })
-      .sort((a, b) => {
-        const aTime = dayjs(a.date || a.created_at).valueOf();
-        const bTime = dayjs(b.date || b.created_at).valueOf();
-        return bTime - aTime;
-      });
+      }).sort((a, b) => dayjs(b.date || b.created_at).valueOf() - dayjs(a.date || a.created_at).valueOf());
   }, [entries, periodStart]);
 
   const periodLabel = period === 'week' ? 'Last 7 Days' : 'This Month';
-
-  const periodIncome = useMemo(
-    () => periodEntries.filter((e) => e.type === 'in').reduce((s, x) => s + Number(x.amount || 0), 0),
-    [periodEntries]
-  );
-
-  const periodExpense = useMemo(
-    () => periodEntries.filter((e) => e.type === 'out').reduce((s, x) => s + Number(x.amount || 0), 0),
-    [periodEntries]
-  );
-
+  const periodIncome = useMemo(() => periodEntries.filter((e) => e.type === 'in').reduce((s, x) => s + Number(x.amount || 0), 0), [periodEntries]);
+  const periodExpense = useMemo(() => periodEntries.filter((e) => e.type === 'out').reduce((s, x) => s + Number(x.amount || 0), 0), [periodEntries]);
+  
   const periodAverageTicket = useMemo(() => {
     if (!periodEntries.length) return 0;
-    const sum = periodEntries.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
-    return sum / periodEntries.length;
+    return periodEntries.reduce((acc, curr) => acc + Number(curr.amount || 0), 0) / periodEntries.length;
   }, [periodEntries]);
 
   const periodActiveDays = useMemo(() => {
@@ -184,13 +160,12 @@ const HomeScreen: React.FC = () => {
       try {
         const key = new Date(entry.date || entry.created_at).toISOString().slice(0, 10);
         if (key) set.add(key);
-      } catch (err) { }
+      } catch (err) {}
     });
     return set.size;
   }, [periodEntries]);
 
-  const periodNet = periodIncome - periodExpense;
-
+  // Charts Data
   const pieByCategory = useMemo(() => {
     const map: Record<string, { in: number; out: number }> = {};
     periodEntries.forEach((e) => {
@@ -199,93 +174,53 @@ const HomeScreen: React.FC = () => {
       if (e.type === 'in') map[cat].in += Number(e.amount || 0);
       if (e.type === 'out') map[cat].out += Number(e.amount || 0);
     });
-    return Object.entries(map).map(([category, vals]) => ({
-      category,
-      income: vals.in,
-      expense: vals.out,
-    }));
+    return Object.entries(map).map(([category, vals]) => ({ category, income: vals.in, expense: vals.out }));
   }, [periodEntries]);
 
-  const pieExpenseData = useMemo(
-    () =>
-      pieByCategory
-        .filter((x) => x.expense > 0)
-        .map((x, i) => ({
-          name: x.category,
-          population: x.expense,
-          color: PIE_COLORS[i % PIE_COLORS.length],
-          legendFontColor: colors.text,
-          legendFontSize: 12,
-        })),
-    [pieByCategory]
-  );
+  const pieExpenseData = useMemo(() => pieByCategory.filter((x) => x.expense > 0).map((x, i) => ({
+      name: x.category, population: x.expense, color: PIE_COLORS[i % PIE_COLORS.length], legendFontColor: colors.text, legendFontSize: 12,
+    })), [pieByCategory]);
 
   const weeklyBar = useMemo(() => {
     const source = periodEntries || [];
-    if (period === 'week') {
-      const labels: string[] = [];
-      const orderKeys: string[] = [];
-      const incomeMap: Record<string, number> = {};
-      const expenseMap: Record<string, number> = {};
-      for (let i = 6; i >= 0; i--) {
-        const day = dayjs().startOf('day').subtract(i, 'day');
-        const key = day.format('YYYY-MM-DD');
-        labels.push(day.format('ddd'));
-        orderKeys.push(key);
-        incomeMap[key] = 0;
-        expenseMap[key] = 0;
-      }
-      source.forEach((entry) => {
-        const entryKey = dayjs(entry.date || entry.created_at).startOf('day').format('YYYY-MM-DD');
-        if (entryKey in incomeMap) {
-          const amount = Number(entry.amount || 0);
-          if (entry.type === 'in') incomeMap[entryKey] += amount;
-          else if (entry.type === 'out') expenseMap[entryKey] += amount;
-        }
-      });
-      return {
-        labels,
-        income: orderKeys.map((key) => incomeMap[key]),
-        expense: orderKeys.map((key) => expenseMap[key]),
-      };
-    }
-    const buckets = 4;
     const labels: string[] = [];
-    const incomeTotals: number[] = Array(buckets).fill(0);
-    const expenseTotals: number[] = Array(buckets).fill(0);
-    const now = dayjs().endOf('day');
-    for (let idx = buckets - 1; idx >= 0; idx--) {
-      const bucketEnd = now.subtract(idx * 7, 'day');
-      const bucketStart = bucketEnd.subtract(6, 'day');
-      labels.push(`${bucketStart.format('DD')}-${bucketEnd.format('DD')}`);
-      source.forEach((entry) => {
-        const entryDate = dayjs(entry.date || entry.created_at);
-        if (entryDate.isValid() && entryDate.isAfter(bucketStart) && !entryDate.isAfter(bucketEnd)) {
-          const amount = Number(entry.amount || 0);
-          const targetIndex = buckets - 1 - idx;
-          if (entry.type === 'in') incomeTotals[targetIndex] += amount;
-          else if (entry.type === 'out') expenseTotals[targetIndex] += amount;
-        }
-      });
+    const incomeData: number[] = [];
+    const expenseData: number[] = [];
+
+    if (period === 'week') {
+      for (let i = 6; i >= 0; i--) {
+        const d = dayjs().subtract(i, 'day');
+        labels.push(d.format('ddd'));
+        const dayStr = d.format('YYYY-MM-DD');
+        const dayEntries = source.filter(e => dayjs(e.date || e.created_at).format('YYYY-MM-DD') === dayStr);
+        incomeData.push(dayEntries.filter(e => e.type === 'in').reduce((s, x) => s + Number(x.amount), 0));
+        expenseData.push(dayEntries.filter(e => e.type === 'out').reduce((s, x) => s + Number(x.amount), 0));
+      }
+    } else {
+        const buckets = 4;
+        for(let i=0; i<buckets; i++) labels.push(`W${i+1}`);
+        for(let i=0; i<buckets; i++) { incomeData.push(0); expenseData.push(0); }
+        source.forEach(e => {
+            const day = dayjs(e.date).date();
+            const idx = Math.min(Math.floor((day-1)/7), 3);
+            if(e.type === 'in') incomeData[idx] += Number(e.amount);
+            else expenseData[idx] += Number(e.amount);
+        });
     }
-    return { labels, income: incomeTotals, expense: expenseTotals };
+    return { labels, income: incomeData, expense: expenseData };
   }, [periodEntries, period]);
 
   const recent = (entries || []).slice(0, 5);
-  const pieData = pieExpenseData;
-
   const userInitial = user?.name?.trim().charAt(0).toUpperCase() || 'U';
 
-  // UI Helper: Trend Data
   const heroTrendDetails = useMemo(() => {
-    if (!entries.length) return { label: 'No data yet', color: colors.muted, icon: 'auto-graph' };
-    if (netTrend.delta === null) return { label: 'New activity', color: colors.secondary, icon: 'auto-graph' };
+    if (!entries.length) return { label: 'No data', color: colors.muted, icon: 'auto-graph' };
+    if (netTrend.delta === null) return { label: 'New', color: colors.secondary, icon: 'auto-graph' };
     const isUp = netTrend.delta >= 0;
     return {
       label: `${Math.abs(netTrend.delta).toFixed(1)}%`,
       color: isUp ? colors.accentGreen : colors.accentRed,
       icon: isUp ? 'trending-up' : 'trending-down',
-      isUp
     };
   }, [entries.length, netTrend]);
 
@@ -294,7 +229,6 @@ const HomeScreen: React.FC = () => {
     return [...pieExpenseData].sort((a, b) => b.population - a.population)[0]?.name || FALLBACK_CATEGORY;
   }, [pieExpenseData]);
 
-  // Actions Array (Reorganized)
   const quickActions = useMemo(() => [
     { label: 'Add Entry', icon: 'add-circle-outline', onPress: () => navigation.navigate('AddEntry'), primary: true },
     { label: 'Stats', icon: 'bar-chart', onPress: () => navigation.navigate('Stats'), primary: false },
@@ -302,31 +236,42 @@ const HomeScreen: React.FC = () => {
     { label: 'Settings', icon: 'settings', onPress: () => navigation.navigate('Settings'), primary: false },
   ], [navigation]);
 
-  // Highlight Cards
   const highlightCards = useMemo(() => [
     { label: 'Avg Ticket', value: `₹${periodAverageTicket.toFixed(0)}`, icon: 'receipt', color: colors.accentBlue },
     { label: 'Active Days', value: `${periodActiveDays}`, icon: 'event-available', color: colors.accentGreen },
     { label: 'Top Spend', value: topExpenseCategory, icon: 'category', color: colors.accentOrange },
   ], [periodAverageTicket, periodActiveDays, topExpenseCategory]);
 
-  /* ============================================================
-     ANIMATIONS & EFFECTS
-  ============================================================ */
-  useEffect(() => {
-    shimmer.value = withRepeat(withTiming(1, { duration: 1200 }), -1, true);
-    heroPulse.value = withRepeat(withTiming(1, { duration: 4000, easing: Easing.inOut(Easing.quad) }), -1, true);
-  }, []);
+  const chartConfig = {
+    backgroundColor: 'transparent',
+    backgroundGradientFrom: colors.card,
+    backgroundGradientTo: colors.card,
+    decimalPlaces: 0,
+    color: (opacity = 1) => `rgba(${hexToRgb(colors.primary)}, ${opacity})`,
+    labelColor: (opacity = 1) => `rgba(${hexToRgb(colors.muted)}, ${opacity})`,
+    propsForBackgroundLines: { strokeDasharray: '' },
+  };
 
-  const shimmerStyle = useAnimatedStyle(() => ({ opacity: 0.3 + 0.5 * shimmer.value }));
+  const responsiveContainerStyle = {
+    width: '100%',
+    maxWidth: maxContentWidth,
+    alignSelf: 'center' as const,
+    paddingHorizontal: horizontalPadding,
+  };
 
-  const heroBlobStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: interpolate(heroPulse.value, [0, 1], [0, -10]) },
-      { scale: 1 + heroPulse.value * 0.05 },
-    ],
-  }));
+  const handleOpenDrawer = () => {
+    navigation.openDrawer();
+  };
 
-  // OTA Updates Check
+  const handleBannerPress = async () => {
+    setUpdateBannerVisible(false);
+    try {
+      setApplyingUpdate(true);
+      const fetched = await Updates.fetchUpdateAsync();
+      if (fetched.isNew) await Updates.reloadAsync();
+    } catch (e) { } finally { setApplyingUpdate(false); }
+  };
+
   useEffect(() => {
     if (!isOnline || isExpoGo || autoCheckRef.current) return;
     autoCheckRef.current = true;
@@ -337,72 +282,48 @@ const HomeScreen: React.FC = () => {
           setUpdateMessage('New version available');
           setUpdateBannerVisible(true);
         }
-      } catch (e) { }
+      } catch (e) {}
     })();
   }, [isOnline]);
 
-  const handleBannerPress = async () => {
-    setUpdateBannerVisible(false);
-    try {
-      setApplyingUpdate(true);
-      const fetched = await Updates.fetchUpdateAsync();
-      if (fetched.isNew) await Updates.reloadAsync();
-    } catch (e) { console.log(e); } finally { setApplyingUpdate(false); }
-  };
-
-  const chartConfig = {
-    backgroundColor: 'transparent',
-    backgroundGradientFrom: colors.card,
-    backgroundGradientTo: colors.card,
-    decimalPlaces: 0,
-    color: (opacity = 1) => `rgba(${hexToRgb(colors.primary)}, ${opacity})`,
-    labelColor: (opacity = 1) => `rgba(${hexToRgb(colors.muted)}, ${opacity})`,
-    propsForBackgroundLines: { strokeDasharray: '' }, // Solid lines look cleaner
-  };
-
-  const responsiveContainerStyle = {
-    width: '100%',
-    maxWidth: maxContentWidth,
-    alignSelf: 'center' as const,
-    paddingHorizontal: horizontalPadding,
-  };
-
-  /* ============================================================
-     RENDER
-  ============================================================ */
   return (
     <View style={styles.mainContainer}>
-      <UpdateBanner
-        visible={updateBannerVisible}
-        message={updateMessage}
-        onPress={handleBannerPress}
-        onClose={() => setUpdateBannerVisible(false)}
+      <UpdateBanner 
+        visible={updateBannerVisible} 
+        message={updateMessage} 
+        onPress={handleBannerPress} 
+        onClose={() => setUpdateBannerVisible(false)} 
       />
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       <SafeAreaView style={styles.safeArea}>
         <FullScreenSpinner visible={showLoading || applyingUpdate} />
-
+        
         <FlatList
           data={recent}
           keyExtractor={(item) => item.local_id}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: spacing(12) }}
+          contentContainerStyle={{ paddingBottom: spacing(16) }} 
           ListHeaderComponent={
             <View style={responsiveContainerStyle}>
-
+              
               {/* --- HEADER --- */}
-              <Animated.View entering={FadeInDown.duration(600)} style={styles.headerRow}>
-                <View>
-                  <Text style={styles.greetingSub}>Welcome back,</Text>
-                  <Text style={styles.greetingName}>{user?.name?.split(' ')[0] || 'Guest'} 👋</Text>
+              <Animated.View style={[styles.headerRow, { opacity: fadeAnim, transform: [{translateY: slideAnim}] }]}>
+                <View style={styles.headerLeft}>
+                    <TouchableOpacity style={styles.menuButton} onPress={handleOpenDrawer}>
+                        <MaterialIcon name="menu" size={24} color={colors.text} />
+                    </TouchableOpacity>
+                    <View>
+                        <Text style={styles.greetingSub}>Welcome back,</Text>
+                        <Text style={styles.greetingName}>{user?.name?.split(' ')[0] || 'Guest'}</Text>
+                    </View>
                 </View>
-                <TouchableOpacity style={styles.profileBtn} onPress={() => navigation.openDrawer && navigation.openDrawer()}>
+                <View style={styles.profileBtn}>
                   <Text style={styles.profileInitial}>{userInitial}</Text>
-                </TouchableOpacity>
+                </View>
               </Animated.View>
 
-              {/* --- HERO CARD --- */}
-              <Animated.View entering={FadeInDown.delay(100).duration(600)} style={styles.heroContainer}>
+              {/* --- HERO --- */}
+              <Animated.View style={[styles.heroContainer, { opacity: fadeAnim, transform: [{translateY: slideAnim}] }]}>
                 <Svg pointerEvents="none" style={StyleSheet.absoluteFill}>
                   <Defs>
                     <SvgLinearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
@@ -412,65 +333,58 @@ const HomeScreen: React.FC = () => {
                   </Defs>
                   <Rect width="100%" height="100%" rx={26} fill="url(#grad)" />
                 </Svg>
-
-                {/* Background Decoration */}
-                <Animated.View style={[styles.heroBlob, heroBlobStyle]} />
-
+                
                 <View style={styles.heroContent}>
-                  <View style={styles.heroHeader}>
-                    <View style={styles.periodBadge}>
-                      <MaterialIcon name="calendar-today" size={12} color={colors.white} />
-                      <Text style={styles.periodText}>{periodLabel}</Text>
-                    </View>
-                    <View style={[styles.trendPill, { backgroundColor: 'rgba(0,0,0,0.2)' }]}>
-                      <MaterialIcon name={heroTrendDetails.icon as any} size={14} color={heroTrendDetails.color} />
-                      <Text style={[styles.trendText, { color: heroTrendDetails.color }]}>{heroTrendDetails.label}</Text>
-                    </View>
-                  </View>
+                   <View style={styles.heroHeader}>
+                      <View style={styles.periodBadge}>
+                        <MaterialIcon name="calendar-today" size={12} color={colors.white} />
+                        <Text style={styles.periodText}>{periodLabel}</Text>
+                      </View>
+                      <View style={[styles.trendPill, { backgroundColor: 'rgba(0,0,0,0.2)' }]}>
+                        <MaterialIcon name={heroTrendDetails.icon as any} size={14} color={heroTrendDetails.color} />
+                        <Text style={[styles.trendText, { color: heroTrendDetails.color }]}>{heroTrendDetails.label}</Text>
+                      </View>
+                   </View>
 
-                  <View style={styles.balanceBlock}>
-                    <Text style={styles.balanceLabel}>Total Balance</Text>
-                    <Text style={styles.balanceAmount}>₹{balance.toLocaleString('en-IN')}</Text>
-                  </View>
+                   <View style={styles.balanceBlock}>
+                      <Text style={styles.balanceLabel}>Total Balance</Text>
+                      <Text style={styles.balanceAmount}>₹{balance.toLocaleString('en-IN')}</Text>
+                   </View>
 
-                  <View style={styles.heroStatsRow}>
-                    <View style={styles.heroStatItem}>
-                      <View style={[styles.arrowCircle, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-                        <MaterialIcon name="arrow-downward" size={16} color={colors.accentGreen} />
+                   <View style={styles.heroStatsRow}>
+                      <View style={styles.heroStatItem}>
+                         <View style={[styles.arrowCircle, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+                           <MaterialIcon name="arrow-downward" size={16} color={colors.accentGreen} />
+                         </View>
+                         <View>
+                           <Text style={styles.statLabelLight}>Income</Text>
+                           <Text style={styles.statValueLight}>₹{Math.round(periodIncome).toLocaleString()}</Text>
+                         </View>
                       </View>
-                      <View>
-                        <Text style={styles.statLabelLight}>Income</Text>
-                        <Text style={styles.statValueLight}>₹{Math.round(periodIncome).toLocaleString()}</Text>
+                      <View style={styles.dividerVertical} />
+                      <View style={styles.heroStatItem}>
+                         <View style={[styles.arrowCircle, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+                           <MaterialIcon name="arrow-upward" size={16} color={colors.accentRed} />
+                         </View>
+                         <View>
+                           <Text style={styles.statLabelLight}>Expenses</Text>
+                           <Text style={styles.statValueLight}>₹{Math.round(periodExpense).toLocaleString()}</Text>
+                         </View>
                       </View>
-                    </View>
-                    <View style={styles.dividerVertical} />
-                    <View style={styles.heroStatItem}>
-                      <View style={[styles.arrowCircle, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-                        <MaterialIcon name="arrow-upward" size={16} color={colors.accentRed} />
-                      </View>
-                      <View>
-                        <Text style={styles.statLabelLight}>Expenses</Text>
-                        <Text style={styles.statValueLight}>₹{Math.round(periodExpense).toLocaleString()}</Text>
-                      </View>
-                    </View>
-                  </View>
+                   </View>
                 </View>
               </Animated.View>
 
-              {/* --- ACTION GRID (Moved Up for Accessibility) --- */}
-              <Animated.View entering={FadeInDown.delay(200).duration(600)} style={styles.actionRow}>
+              {/* --- ACTION GRID --- */}
+              <Animated.View style={[styles.actionRow, { opacity: fadeAnim, transform: [{translateY: slideAnim}] }]}>
                 {quickActions.map((action, idx) => (
-                  <TouchableOpacity
-                    key={idx}
+                  <TouchableOpacity 
+                    key={idx} 
                     style={[styles.actionBtn, action.primary ? styles.actionBtnPrimary : styles.actionBtnSecondary]}
                     onPress={action.onPress}
                     activeOpacity={0.7}
                   >
-                    <MaterialIcon
-                      name={action.icon as any}
-                      size={24}
-                      color={action.primary ? colors.white : colors.primary}
-                    />
+                    <MaterialIcon name={action.icon as any} size={24} color={action.primary ? colors.white : colors.primary} />
                     <Text style={[styles.actionLabel, { color: action.primary ? colors.white : colors.text }]}>
                       {action.label}
                     </Text>
@@ -478,107 +392,101 @@ const HomeScreen: React.FC = () => {
                 ))}
               </Animated.View>
 
-              {/* --- HORIZONTAL HIGHLIGHTS SCROLL --- */}
-              <Animated.View entering={FadeInDown.delay(300).duration(600)}>
+              {/* --- HIGHLIGHTS --- */}
+              <Animated.View style={{ opacity: fadeAnim, transform: [{translateY: slideAnim}] }}>
                 <Text style={styles.sectionTitle}>Highlights</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.highlightScroll}
-                >
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.highlightScroll}>
                   {highlightCards.map((card, idx) => (
                     <View key={idx} style={[styles.highlightCard, { minWidth: isCompact ? 130 : 150 }]}>
-                      <View style={[styles.highlightIcon, { backgroundColor: `${card.color}15` }]}>
-                        <MaterialIcon name={card.icon as any} size={20} color={card.color} />
-                      </View>
-                      <Text style={styles.highlightValue} numberOfLines={1}>{card.value}</Text>
-                      <Text style={styles.highlightLabel}>{card.label}</Text>
+                       <View style={[styles.highlightIcon, { backgroundColor: `${card.color}15` }]}>
+                          <MaterialIcon name={card.icon as any} size={20} color={card.color} />
+                       </View>
+                       <Text style={styles.highlightValue} numberOfLines={1}>{card.value}</Text>
+                       <Text style={styles.highlightLabel}>{card.label}</Text>
                     </View>
                   ))}
                 </ScrollView>
               </Animated.View>
 
-              {/* --- ANALYTICS SECTION --- */}
-              <Animated.View entering={FadeInDown.delay(400).duration(600)} style={styles.chartSection}>
-                <View style={styles.chartHeader}>
-                  <Text style={styles.sectionTitle}>Overview</Text>
-                  <View style={styles.chartToggle}>
-                    <SimpleButtonGroup
-                      buttons={['Pie', 'Bar']}
-                      selectedIndex={chartType === 'pie' ? 0 : 1}
-                      onPress={(i) => setChartType(i === 0 ? 'pie' : 'bar')}
-                      containerStyle={{ height: 32 }}
-                    />
-                    <View style={{ width: 8 }} />
-                    <SimpleButtonGroup
-                      buttons={['7D', '30D']}
-                      selectedIndex={period === 'week' ? 0 : 1}
-                      onPress={(i) => setPeriod(i === 0 ? 'week' : 'month')}
-                      containerStyle={{ height: 32 }}
-                    />
-                  </View>
-                </View>
+              {/* --- ANALYTICS --- */}
+              <Animated.View style={[styles.chartSection, { opacity: fadeAnim, transform: [{translateY: slideAnim}] }]}>
+                 <View style={styles.chartHeader}>
+                    <Text style={styles.sectionTitle}>Overview</Text>
+                    <View style={styles.chartToggle}>
+                       <SimpleButtonGroup 
+                         buttons={['Pie', 'Bar']} 
+                         selectedIndex={chartType === 'pie' ? 0 : 1}
+                         onPress={(i) => setChartType(i === 0 ? 'pie' : 'bar')}
+                         containerStyle={{ height: 32 }}
+                       />
+                       <View style={{ width: 8 }} />
+                       <SimpleButtonGroup 
+                         buttons={['7D', '30D']} 
+                         selectedIndex={period === 'week' ? 0 : 1}
+                         onPress={(i) => setPeriod(i === 0 ? 'week' : 'month')}
+                         containerStyle={{ height: 32 }}
+                       />
+                    </View>
+                 </View>
 
-                <View style={styles.chartContainer}>
-                  {isLoading ? (
-                    <Animated.View style={[styles.skeleton, shimmerStyle, { height: chartHeight }]} />
-                  ) : (
-                    <>
-                      {chartType === 'pie' && PieChart && pieData.length > 0 && (
-                        <PieChart
-                          data={pieData}
-                          width={chartWidth}
-                          height={chartHeight}
-                          chartConfig={chartConfig}
-                          accessor="population"
-                          backgroundColor="transparent"
-                          paddingLeft="0"
-                          absolute={false}
-                          center={[isTablet ? chartWidth / 4 : 10, 0]}
-                          hasLegend={true}
-                        />
-                      )}
-                      {chartType === 'bar' && BarChart && (
-                        <BarChart
-                          data={{
-                            labels: weeklyBar.labels,
-                            datasets: [{ data: weeklyBar.income }, { data: weeklyBar.expense }],
-                          }}
-                          width={chartWidth}
-                          height={chartHeight}
-                          yAxisLabel="₹"
-                          chartConfig={chartConfig}
-                          showValuesOnTopOfBars={!isCompact}
-                          fromZero
-                          style={{ borderRadius: 16, paddingRight: 32 }}
-                        />
-                      )}
-                      {pieData.length === 0 && weeklyBar.income.every(x => x === 0) && (
-                        <View style={styles.emptyChart}>
-                          <MaterialIcon name="donut-large" size={40} color={colors.border} />
-                          <Text style={styles.emptyText}>No data for this period</Text>
-                        </View>
-                      )}
-                    </>
-                  )}
-                </View>
+                 <View style={styles.chartContainer}>
+                    {isLoading ? (
+                      <View style={[styles.skeleton, { height: chartHeight }]} />
+                    ) : (
+                      <>
+                        {chartType === 'pie' && PieChart && pieExpenseData.length > 0 && (
+                          <PieChart
+                            data={pieExpenseData}
+                            width={chartWidth}
+                            height={chartHeight}
+                            chartConfig={chartConfig}
+                            accessor="population"
+                            backgroundColor="transparent"
+                            paddingLeft="0"
+                            absolute={false}
+                            center={[isTablet ? chartWidth / 4 : 10, 0]}
+                            hasLegend={true}
+                          />
+                        )}
+                        {chartType === 'bar' && BarChart && (
+                          <BarChart
+                            data={{
+                              labels: weeklyBar.labels,
+                              datasets: [{ data: weeklyBar.income }, { data: weeklyBar.expense }],
+                            }}
+                            width={chartWidth}
+                            height={chartHeight}
+                            yAxisLabel="₹"
+                            chartConfig={chartConfig}
+                            // Safe check for isCompact usage
+                            showValuesOnTopOfBars={!isCompact}
+                            fromZero
+                            style={{ borderRadius: 16, paddingRight: 32 }}
+                          />
+                        )}
+                        {pieExpenseData.length === 0 && weeklyBar.income.every(x => x === 0) && (
+                          <View style={styles.emptyChart}>
+                             <MaterialIcon name="donut-large" size={40} color={colors.border} />
+                             <Text style={styles.emptyText}>No data for this period</Text>
+                          </View>
+                        )}
+                      </>
+                    )}
+                 </View>
               </Animated.View>
 
               <View style={styles.listHeaderRow}>
-                <Text style={styles.sectionTitle}>Recent Transactions</Text>
-                <TouchableOpacity onPress={() => navigation.navigate('History')}>
-                  <Text style={styles.seeAll}>See All</Text>
-                </TouchableOpacity>
+                 <Text style={styles.sectionTitle}>Recent Transactions</Text>
+                 <TouchableOpacity onPress={() => navigation.navigate('History')}>
+                    <Text style={styles.seeAll}>See All</Text>
+                 </TouchableOpacity>
               </View>
             </View>
           }
-          renderItem={({ item, index }) => (
-            <Animated.View
-              entering={FadeInDown.delay(500 + (index * 50)).springify()}
-              style={[responsiveContainerStyle, { marginBottom: spacing(1.5) }]}
-            >
+          renderItem={({ item }) => (
+            <View style={[responsiveContainerStyle, { marginBottom: spacing(1.5) }]}>
               <TransactionCard item={item} />
-            </Animated.View>
+            </View>
           )}
           ListEmptyComponent={
             <View style={styles.emptyList}>
@@ -594,13 +502,10 @@ const HomeScreen: React.FC = () => {
 
 export default HomeScreen;
 
-/* ============================================================
-   MODERN STYLESHEET
-============================================================ */
 const styles = StyleSheet.create({
   mainContainer: {
     flex: 1,
-    backgroundColor: colors.background, // Ensure this color is light gray/white in your design file
+    backgroundColor: colors.background,
   },
   safeArea: {
     flex: 1,
@@ -611,22 +516,37 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginVertical: spacing(2),
   },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  menuButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: colors.card,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
   greetingSub: {
-    fontSize: 14,
+    fontSize: 12,
     color: colors.muted,
-    fontWeight: '500',
+    fontWeight: '600',
+    textTransform: 'uppercase',
   },
   greetingName: {
-    fontSize: 22,
+    fontSize: 20,
     color: colors.text,
     fontWeight: '800',
-    letterSpacing: -0.5,
   },
   profileBtn: {
     width: 44,
     height: 44,
     borderRadius: 14,
-    backgroundColor: colors.surfaceMuted || '#F1F5F9',
+    backgroundColor: colors.surfaceMuted,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
@@ -645,18 +565,9 @@ const styles = StyleSheet.create({
     marginBottom: spacing(3),
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 8,
-  },
-  heroBlob: {
-    position: 'absolute',
-    top: -50,
-    right: -50,
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 6,
   },
   heroContent: {
     flex: 1,
@@ -677,7 +588,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   periodText: {
-    color: 'rgba(255,255,255,0.9)',
+    color: 'rgba(255,255,255,0.95)',
     fontSize: 12,
     fontWeight: '600',
   },
@@ -746,7 +657,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
   },
-  /* ACTION GRID */
+  /* ACTIONS */
   actionRow: {
     flexDirection: 'row',
     gap: 12,
@@ -760,7 +671,6 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 24,
     gap: 8,
-    // Soft shadow
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.05,
@@ -769,7 +679,7 @@ const styles = StyleSheet.create({
   },
   actionBtnPrimary: {
     backgroundColor: colors.primary,
-    flexGrow: 1.5, // Make primary buttons slightly wider if needed
+    flexGrow: 1.5,
   },
   actionBtnSecondary: {
     backgroundColor: colors.card,
@@ -780,7 +690,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
-  /* HIGHLIGHTS SCROLL */
+  /* SCROLL */
   highlightScroll: {
     gap: 12,
     paddingVertical: 10,
@@ -844,7 +754,7 @@ const styles = StyleSheet.create({
   },
   skeleton: {
     width: '100%',
-    backgroundColor: colors.surfaceMuted || '#f0f0f0',
+    backgroundColor: colors.surfaceMuted,
     borderRadius: 16,
   },
   emptyChart: {

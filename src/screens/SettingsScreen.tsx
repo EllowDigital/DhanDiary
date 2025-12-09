@@ -40,11 +40,11 @@ const SettingsScreen = () => {
   const query = useQueryClient();
   const { showToast } = useToast();
   const { user } = useAuth();
-  
+
   const { width } = useWindowDimensions();
   const isTablet = width >= 768;
   const maxContentWidth = 700;
-  
+
   const containerStyle = {
     width: '100%',
     maxWidth: maxContentWidth,
@@ -72,7 +72,7 @@ const SettingsScreen = () => {
   // CRASH FIX: Added a safety check here
   const getAnimStyle = (index: number) => {
     const anim = animValues[index];
-    
+
     // If the animation value doesn't exist, return empty style instead of crashing
     if (!anim) return {};
 
@@ -160,11 +160,7 @@ const SettingsScreen = () => {
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       <SafeAreaView style={styles.safeArea}>
         <View style={containerStyle}>
-          <ScreenHeader
-            title="Settings"
-            subtitle="Preferences & Security"
-            showScrollHint={false}
-          />
+          <ScreenHeader title="Settings" subtitle="Preferences & Security" showScrollHint={false} />
         </View>
 
         <ScrollView
@@ -172,7 +168,6 @@ const SettingsScreen = () => {
           contentContainerStyle={{ paddingBottom: 120 }}
         >
           <View style={containerStyle}>
-            
             {/* 1. PROFILE CARD */}
             <Animated.View style={getAnimStyle(0)}>
               <View style={styles.profileCard}>
@@ -184,8 +179,8 @@ const SettingsScreen = () => {
                     <Text style={styles.profileName}>{user?.name || 'User'}</Text>
                     <Text style={styles.profileEmail}>{user?.email || 'No email'}</Text>
                   </View>
-                  <TouchableOpacity 
-                    style={styles.editButton} 
+                  <TouchableOpacity
+                    style={styles.editButton}
                     onPress={() => navigation.navigate('Account')}
                   >
                     <MaterialIcon name="chevron-right" size={24} color={colors.muted} />
@@ -226,7 +221,9 @@ const SettingsScreen = () => {
                   title={syncing ? 'Syncing...' : 'Sync Now'}
                   onPress={handleSync}
                   loading={syncing}
-                  icon={<MaterialIcon name="sync" size={18} color="white" style={{ marginRight: 8 }} />}
+                  icon={
+                    <MaterialIcon name="sync" size={18} color="white" style={{ marginRight: 8 }} />
+                  }
                   buttonStyle={styles.syncBtn}
                   titleStyle={styles.syncBtnTitle}
                   containerStyle={{ marginTop: 12 }}
@@ -238,20 +235,20 @@ const SettingsScreen = () => {
             <Animated.View style={getAnimStyle(2)}>
               <Text style={styles.sectionLabel}>General</Text>
               <View style={styles.card}>
-                <SettingsRow 
-                  icon="person-outline" 
-                  label="Account Details" 
+                <SettingsRow
+                  icon="person-outline"
+                  label="Account Details"
                   onPress={() => navigation.navigate('Account')}
                 />
-                <SettingsRow 
-                  icon="notifications-none" 
-                  label="Notifications" 
-                  onPress={() => showToast('Coming soon')} 
+                <SettingsRow
+                  icon="notifications-none"
+                  label="Notifications"
+                  onPress={() => showToast('Coming soon')}
                 />
-                 <SettingsRow 
-                  icon="lock-outline" 
-                  label="Privacy Policy" 
-                  onPress={() => {}} 
+                <SettingsRow
+                  icon="lock-outline"
+                  label="Privacy Policy"
+                  onPress={() => {}}
                   lastItem
                 />
               </View>
@@ -261,11 +258,16 @@ const SettingsScreen = () => {
             <Animated.View style={getAnimStyle(3)}>
               <View style={styles.dangerHeaderRow}>
                 <MaterialIcon name="warning" size={16} color={colors.accentRed} />
-                <Text style={[styles.sectionLabel, { color: colors.accentRed, marginTop: 0, marginBottom: 0 }]}>
+                <Text
+                  style={[
+                    styles.sectionLabel,
+                    { color: colors.accentRed, marginTop: 0, marginBottom: 0 },
+                  ]}
+                >
                   Danger Zone
                 </Text>
               </View>
-              
+
               <View style={styles.dangerCard}>
                 <View style={styles.dangerStrip} />
                 <View style={styles.dangerContent}>
@@ -273,8 +275,8 @@ const SettingsScreen = () => {
                   <Text style={styles.dangerDesc}>
                     Clears all local databases, cached images, and session data.
                   </Text>
-                  <TouchableOpacity 
-                    style={styles.dangerBtn} 
+                  <TouchableOpacity
+                    style={styles.dangerBtn}
                     onPress={handleClearData}
                     activeOpacity={0.7}
                   >
@@ -293,7 +295,6 @@ const SettingsScreen = () => {
               </TouchableOpacity>
               <Text style={styles.versionText}>v1.0.2 (Build 45)</Text>
             </Animated.View>
-
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -303,8 +304,8 @@ const SettingsScreen = () => {
 
 /* --- REUSABLE ROW COMPONENT --- */
 const SettingsRow = ({ icon, label, onPress, lastItem }: any) => (
-  <TouchableOpacity 
-    style={[styles.row, lastItem && { borderBottomWidth: 0 }]} 
+  <TouchableOpacity
+    style={[styles.row, lastItem && { borderBottomWidth: 0 }]}
     onPress={onPress}
     activeOpacity={0.7}
   >
@@ -337,7 +338,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.8,
   },
-  
+
   /* CARDS GLOBAL */
   card: {
     backgroundColor: colors.card,

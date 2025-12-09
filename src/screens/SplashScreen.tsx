@@ -63,18 +63,18 @@ const SplashScreen = () => {
     // 2. Navigation Logic
     const startedAt = Date.now();
     let hasNavigated = false;
-    const timeoutIds: NodeJS.Timeout[] = [];
+    const timeoutIds: Array<ReturnType<typeof setTimeout>> = [];
 
     const runNavigation = (route: 'Auth' | 'Main') => {
       if (!hasNavigated) {
         hasNavigated = true;
         // Smooth fade out before replacing
         Animated.timing(fadeAnim, {
-            toValue: 0,
-            duration: 200,
-            useNativeDriver: true
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
         }).start(() => {
-            navigation.replace(route);
+          navigation.replace(route);
         });
       }
     };
@@ -84,17 +84,19 @@ const SplashScreen = () => {
         const session = await getSession();
         const elapsed = Date.now() - startedAt;
         const delay = Math.max(0, MIN_SPLASH_TIME_MS - elapsed);
-        
-        timeoutIds.push(setTimeout(() => {
-          runNavigation(session ? 'Main' : 'Auth');
-        }, delay));
+
+        timeoutIds.push(
+          setTimeout(() => {
+            runNavigation(session ? 'Main' : 'Auth');
+          }, delay)
+        );
       } catch (e) {
         runNavigation('Auth');
       }
     };
 
     checkSessionAndNavigate();
-    
+
     // Safety fallback
     timeoutIds.push(setTimeout(() => runNavigation('Auth'), MAX_SPLASH_WAIT_MS));
 
@@ -122,17 +124,22 @@ const SplashScreen = () => {
       </Svg>
 
       {/* DECORATIVE ORBS */}
-      <View style={[styles.orb, { top: -100, right: -50, backgroundColor: `${colors.primary}10` }]} />
-      <View style={[styles.orb, { bottom: -100, left: -50, backgroundColor: `${colors.secondary}10` }]} />
+      <View
+        style={[styles.orb, { top: -100, right: -50, backgroundColor: `${colors.primary}10` }]}
+      />
+      <View
+        style={[styles.orb, { bottom: -100, left: -50, backgroundColor: `${colors.secondary}10` }]}
+      />
 
       <View style={styles.centerContent}>
         {/* LOGO */}
-        <Animated.View style={[styles.logoWrapper, { opacity: fadeAnim, transform: [{ scale: scaleAnim }, { translateY: slideAnim }] }]}>
-          <Image
-            source={require('../../assets/icon.png')}
-            style={styles.logo}
-            resizeMode="cover"
-          />
+        <Animated.View
+          style={[
+            styles.logoWrapper,
+            { opacity: fadeAnim, transform: [{ scale: scaleAnim }, { translateY: slideAnim }] },
+          ]}
+        >
+          <Image source={require('../../assets/icon.png')} style={styles.logo} resizeMode="cover" />
         </Animated.View>
 
         {/* TEXT */}
@@ -160,7 +167,7 @@ const SplashScreen = () => {
             <Text style={styles.badgeText}>Encrypted</Text>
           </View>
         </View>
-        
+
         <Text style={styles.powered}>
           Powered by <Text style={styles.brand}>EllowDigital</Text>
         </Text>
@@ -183,7 +190,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     zIndex: 10,
   },
-  
+
   /* LOGO */
   logoWrapper: {
     marginBottom: 24,

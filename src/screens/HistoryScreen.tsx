@@ -12,7 +12,7 @@ import {
   Platform,
   UIManager,
   Animated,
-  StatusBar
+  StatusBar,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, Button, Input } from '@rneui/themed';
@@ -59,12 +59,14 @@ const AnimatedTransaction = ({ item, index, onEdit, onDelete }: any) => {
     <Animated.View
       style={{
         opacity: anim,
-        transform: [{
-          translateY: anim.interpolate({
-            inputRange: [0, 1],
-            outputRange: [20, 0],
-          }),
-        }],
+        transform: [
+          {
+            translateY: anim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [20, 0],
+            }),
+          },
+        ],
         marginBottom: 12,
       }}
     >
@@ -91,7 +93,7 @@ const HistoryScreen = () => {
   const [amountMin, setAmountMin] = useState<string>('');
   const [amountMax, setAmountMax] = useState<string>('');
   const [categoryFilter, setCategoryFilter] = useState('');
-  
+
   // Picker visibility
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
@@ -184,7 +186,8 @@ const HistoryScreen = () => {
   const handleSaveEdit = async () => {
     if (!editingEntry) return;
     const amt = parseFloat(editAmount);
-    if (isNaN(amt) || amt <= 0) return Alert.alert('Invalid Amount', 'Please enter a valid number.');
+    if (isNaN(amt) || amt <= 0)
+      return Alert.alert('Invalid Amount', 'Please enter a valid number.');
 
     setEditingEntry(null); // Close optimistic
     showToast('Updating...');
@@ -231,7 +234,12 @@ const HistoryScreen = () => {
           <View style={styles.heroRow}>
             <View>
               <Text style={styles.heroLabel}>Net Balance</Text>
-              <Text style={[styles.heroValue, { color: summary.net >= 0 ? colors.primary : colors.accentRed }]}>
+              <Text
+                style={[
+                  styles.heroValue,
+                  { color: summary.net >= 0 ? colors.primary : colors.accentRed },
+                ]}
+              >
                 {summary.net >= 0 ? '+' : ''}₹{Math.abs(summary.net).toLocaleString()}
               </Text>
             </View>
@@ -245,11 +253,15 @@ const HistoryScreen = () => {
           <View style={styles.statsRow}>
             <View>
               <Text style={styles.statLabel}>Income</Text>
-              <Text style={[styles.statValue, { color: colors.accentGreen }]}>₹{summary.totalIn.toLocaleString()}</Text>
+              <Text style={[styles.statValue, { color: colors.accentGreen }]}>
+                ₹{summary.totalIn.toLocaleString()}
+              </Text>
             </View>
             <View style={{ alignItems: 'flex-end' }}>
               <Text style={styles.statLabel}>Expense</Text>
-              <Text style={[styles.statValue, { color: colors.accentRed }]}>₹{summary.totalOut.toLocaleString()}</Text>
+              <Text style={[styles.statValue, { color: colors.accentRed }]}>
+                ₹{summary.totalOut.toLocaleString()}
+              </Text>
             </View>
           </View>
         </View>
@@ -260,7 +272,11 @@ const HistoryScreen = () => {
           <MaterialIcon name="filter-list" size={20} color={colors.primary} />
           <Text style={styles.filterTitle}>Filters</Text>
         </View>
-        <MaterialIcon name={filtersVisible ? 'expand-less' : 'expand-more'} size={24} color={colors.muted} />
+        <MaterialIcon
+          name={filtersVisible ? 'expand-less' : 'expand-more'}
+          size={24}
+          color={colors.muted}
+        />
       </TouchableOpacity>
 
       {filtersVisible && (
@@ -271,7 +287,7 @@ const HistoryScreen = () => {
             onPress={setTypeIndex}
             containerStyle={{ marginBottom: 12 }}
           />
-          
+
           <View style={styles.dateRow}>
             <Button
               title={startDate ? startDate.toLocaleDateString() : 'Start Date'}
@@ -279,7 +295,14 @@ const HistoryScreen = () => {
               buttonStyle={styles.dateBtn}
               titleStyle={styles.dateBtnText}
               onPress={() => setShowStartPicker(true)}
-              icon={<MaterialIcon name="event" size={16} color={colors.primary} style={{ marginRight: 6 }} />}
+              icon={
+                <MaterialIcon
+                  name="event"
+                  size={16}
+                  color={colors.primary}
+                  style={{ marginRight: 6 }}
+                />
+              }
             />
             <Button
               title={endDate ? endDate.toLocaleDateString() : 'End Date'}
@@ -287,7 +310,14 @@ const HistoryScreen = () => {
               buttonStyle={styles.dateBtn}
               titleStyle={styles.dateBtnText}
               onPress={() => setShowEndPicker(true)}
-              icon={<MaterialIcon name="event" size={16} color={colors.primary} style={{ marginRight: 6 }} />}
+              icon={
+                <MaterialIcon
+                  name="event"
+                  size={16}
+                  color={colors.primary}
+                  style={{ marginRight: 6 }}
+                />
+              }
             />
           </View>
 
@@ -332,7 +362,7 @@ const HistoryScreen = () => {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       <ScreenHeader title="History" subtitle="Detailed transactions log" showScrollHint={false} />
-      
+
       <FlatList
         data={filtered}
         keyExtractor={(item) => item.local_id}
@@ -359,11 +389,16 @@ const HistoryScreen = () => {
       <FullScreenSpinner visible={showLoading} />
 
       {/* EDIT MODAL */}
-      <Modal visible={!!editingEntry} animationType="slide" transparent onRequestClose={() => setEditingEntry(null)}>
+      <Modal
+        visible={!!editingEntry}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setEditingEntry(null)}
+      >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Edit Transaction</Text>
-            
+
             <ScrollView>
               <SimpleButtonGroup
                 buttons={['Expense', 'Income']}
@@ -380,15 +415,24 @@ const HistoryScreen = () => {
                 inputContainerStyle={styles.modalInput}
               />
 
-              <TouchableOpacity style={styles.modalPickerBtn} onPress={() => setShowCategoryPicker(true)}>
-                <Text style={styles.modalPickerLabel}>Category: <Text style={{fontWeight:'700', color:colors.primary}}>{editCategory}</Text></Text>
+              <TouchableOpacity
+                style={styles.modalPickerBtn}
+                onPress={() => setShowCategoryPicker(true)}
+              >
+                <Text style={styles.modalPickerLabel}>
+                  Category:{' '}
+                  <Text style={{ fontWeight: '700', color: colors.primary }}>{editCategory}</Text>
+                </Text>
                 <MaterialIcon name="arrow-drop-down" size={24} color={colors.text} />
               </TouchableOpacity>
 
               <CategoryPickerModal
                 visible={showCategoryPicker}
                 onClose={() => setShowCategoryPicker(false)}
-                onSelect={(c) => { setEditCategory(c); setShowCategoryPicker(false); }}
+                onSelect={(c) => {
+                  setEditCategory(c);
+                  setShowCategoryPicker(false);
+                }}
               />
 
               <Input
@@ -399,8 +443,18 @@ const HistoryScreen = () => {
               />
 
               <View style={styles.modalActions}>
-                <Button title="Cancel" type="outline" onPress={() => setEditingEntry(null)} containerStyle={{ flex: 1, marginRight: 8 }} />
-                <Button title="Save" onPress={handleSaveEdit} containerStyle={{ flex: 1 }} buttonStyle={{ backgroundColor: colors.primary }} />
+                <Button
+                  title="Cancel"
+                  type="outline"
+                  onPress={() => setEditingEntry(null)}
+                  containerStyle={{ flex: 1, marginRight: 8 }}
+                />
+                <Button
+                  title="Save"
+                  onPress={handleSaveEdit}
+                  containerStyle={{ flex: 1 }}
+                  buttonStyle={{ backgroundColor: colors.primary }}
+                />
               </View>
             </ScrollView>
           </View>

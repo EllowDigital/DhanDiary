@@ -125,7 +125,7 @@ const MoreScreen: React.FC = () => {
         scrollOffset={scrollOffset}
         showScrollHint
       />
-      
+
       <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
         <ScrollView
           style={styles.container}
@@ -144,7 +144,7 @@ const MoreScreen: React.FC = () => {
               </Text>
             </View>
             <View style={styles.heroIconBg}>
-               <MaterialIcon name="dashboard" size={80} color="rgba(0,0,0,0.05)" />
+              <MaterialIcon name="dashboard" size={80} color="rgba(0,0,0,0.05)" />
             </View>
           </View>
 
@@ -152,11 +152,7 @@ const MoreScreen: React.FC = () => {
           <Text style={styles.sectionLabel}>Essentials</Text>
           <View style={styles.menuContainer}>
             {primaryLinks.map((item, index) => (
-              <MenuRow
-                key={item.label}
-                {...item}
-                isLast={index === primaryLinks.length - 1}
-              />
+              <MenuRow key={item.label} {...item} isLast={index === primaryLinks.length - 1} />
             ))}
           </View>
 
@@ -164,17 +160,11 @@ const MoreScreen: React.FC = () => {
           <Text style={styles.sectionLabel}>Help & Info</Text>
           <View style={styles.menuContainer}>
             {supportLinks.map((item, index) => (
-              <MenuRow
-                key={item.label}
-                {...item}
-                isLast={index === supportLinks.length - 1}
-              />
+              <MenuRow key={item.label} {...item} isLast={index === supportLinks.length - 1} />
             ))}
           </View>
 
-          <Text style={styles.footnote}>
-            DhanDiary v1.0.2 • Made with ❤️
-          </Text>
+          <Text style={styles.footnote}>DhanDiary v1.0.2 • Made with ❤️</Text>
         </ScrollView>
       </Animated.View>
     </SafeAreaView>
@@ -214,7 +204,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 10,
   },
-  
+
   /* HERO */
   heroCard: {
     backgroundColor: colors.card,
@@ -280,7 +270,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     overflow: 'hidden',
   },
-  
+
   /* ROW */
   row: {
     flexDirection: 'row',

@@ -69,12 +69,13 @@ const LoginScreen = () => {
   // --- HANDLERS ---
   const handleLogin = async () => {
     if (loading) return;
-    
+
     // Dismiss keyboard first so spinner is clearly visible
     Keyboard.dismiss();
 
-    if (!email || !password) return Alert.alert('Missing Fields', 'Please enter both email and password.');
-    
+    if (!email || !password)
+      return Alert.alert('Missing Fields', 'Please enter both email and password.');
+
     if (!isOnline) {
       return Alert.alert('Offline', 'An internet connection is required to sign in.');
     }
@@ -82,10 +83,10 @@ const LoginScreen = () => {
     setLoading(true);
     try {
       await loginOnline(email, password);
-      
+
       // Trigger background sync immediately
       syncBothWays().catch((e) => console.warn('Post-login sync warning:', e));
-      
+
       showToast('Welcome back!');
       (navigation.getParent() as any)?.replace('Main');
     } catch (err: any) {
@@ -110,7 +111,7 @@ const LoginScreen = () => {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-      
+
       {/* KEYBOARD HANDLING:
          - behavior="padding" works best on iOS
          - behavior="height" works best on Android
@@ -121,27 +122,27 @@ const LoginScreen = () => {
         style={{ flex: 1 }}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
-        <ScrollView 
+        <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <Animated.View 
+          <Animated.View
             style={[
-              styles.container, 
-              { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
+              styles.container,
+              { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
             ]}
           >
             {/* HERO SECTION */}
             <View style={styles.heroSection}>
               <View style={styles.logoContainer}>
-                <Image 
-                  source={require('../../assets/icon.png')} 
-                  style={styles.logo} 
+                <Image
+                  source={require('../../assets/icon.png')}
+                  style={styles.logo}
                   resizeMode="contain"
                 />
               </View>
-              
+
               <Text style={styles.title}>Welcome Back</Text>
               <Text style={styles.subtitle}>Sign in to continue your financial journey.</Text>
 
@@ -188,10 +189,7 @@ const LoginScreen = () => {
                 }
               />
 
-              <TouchableOpacity 
-                style={styles.forgotPassContainer} 
-                onPress={handleForgotPassword}
-              >
+              <TouchableOpacity style={styles.forgotPassContainer} onPress={handleForgotPassword}>
                 <Text style={styles.forgotPassText}>Forgot Password?</Text>
               </TouchableOpacity>
 
@@ -204,9 +202,9 @@ const LoginScreen = () => {
                 containerStyle={styles.buttonContainer}
                 titleStyle={{ fontWeight: '700', fontSize: 16 }}
                 icon={
-                   !loading ? (
-                     <MaterialIcon name="login" size={18} color="white" style={{ marginRight: 8 }} />
-                   ) : undefined
+                  !loading ? (
+                    <MaterialIcon name="login" size={18} color="white" style={{ marginRight: 8 }} />
+                  ) : undefined
                 }
               />
             </View>
@@ -248,7 +246,7 @@ const styles = StyleSheet.create({
     maxWidth: 400,
     alignSelf: 'center',
   },
-  
+
   /* HERO */
   heroSection: {
     alignItems: 'center',

@@ -15,7 +15,7 @@ import {
   Platform,
   StatusBar,
   useWindowDimensions,
-  Clipboard
+  Clipboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, Text } from '@rneui/themed';
@@ -33,7 +33,8 @@ const pkg = require('../../package.json');
 // --- CONSTANTS ---
 const ELLOW_URL = 'https://ellowdigital.netlify.app';
 const BRAND_NAME = 'EllowDigital';
-const BUILD_TYPE = (Constants.expoConfig?.extra?.BUILD_TYPE) || (pkg.version.includes('beta') ? 'Beta' : 'Release');
+const BUILD_TYPE =
+  Constants.expoConfig?.extra?.BUILD_TYPE || (pkg.version.includes('beta') ? 'Beta' : 'Release');
 
 const AboutScreen: React.FC = () => {
   const { width } = useWindowDimensions();
@@ -70,7 +71,7 @@ const AboutScreen: React.FC = () => {
 
   // Load failure count
   useEffect(() => {
-    AsyncStorage.getItem('UPDATE_FAIL_COUNT').then(val => {
+    AsyncStorage.getItem('UPDATE_FAIL_COUNT').then((val) => {
       if (val) setFailureCount(Number(val));
     });
   }, []);
@@ -78,7 +79,7 @@ const AboutScreen: React.FC = () => {
   // --- UPDATE LOGIC ---
   const checkForUpdates = useCallback(async () => {
     if (isExpoGo) return Alert.alert('Expo Go', 'OTA updates are not supported in Expo Go.');
-    
+
     setChecking(true);
     try {
       const result = await Updates.checkForUpdateAsync();
@@ -98,7 +99,7 @@ const AboutScreen: React.FC = () => {
 
   const applyUpdate = useCallback(async () => {
     if (isExpoGo) return;
-    
+
     setChecking(true);
     try {
       await Updates.fetchUpdateAsync();
@@ -132,42 +133,40 @@ const AboutScreen: React.FC = () => {
   // --- INFO TILES DATA ---
   const updateId = Updates.updateId || 'Embedded';
   const shortId = updateId === 'Embedded' ? updateId : updateId.substring(0, 8) + '...';
-  
+
   const copyUpdateId = () => {
     Clipboard.setString(updateId);
     Alert.alert('Copied', 'Update ID copied to clipboard');
   };
 
-  const infoGrid = useMemo(() => [
-    { label: 'Version', value: pkg.version, icon: 'tag' },
-    { label: 'Build Channel', value: BUILD_TYPE, icon: 'layers' },
-    { label: 'Env', value: process.env.NODE_ENV === 'production' ? 'Prod' : 'Dev', icon: 'code' },
-    { label: 'Update ID', value: shortId, icon: 'fingerprint', onPress: copyUpdateId },
-  ], [shortId]);
+  const infoGrid = useMemo(
+    () => [
+      { label: 'Version', value: pkg.version, icon: 'tag' },
+      { label: 'Build Channel', value: BUILD_TYPE, icon: 'layers' },
+      { label: 'Env', value: process.env.NODE_ENV === 'production' ? 'Prod' : 'Dev', icon: 'code' },
+      { label: 'Update ID', value: shortId, icon: 'fingerprint', onPress: copyUpdateId },
+    ],
+    [shortId]
+  );
 
   return (
     <View style={styles.mainContainer}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       <SafeAreaView style={styles.safeArea}>
         <View style={[styles.centerContainer, { maxWidth: isTablet ? 600 : '100%' }]}>
-          <ScreenHeader
-            title="About"
-            subtitle="Version info & updates"
-            showScrollHint={false}
-          />
+          <ScreenHeader title="About" subtitle="Version info & updates" showScrollHint={false} />
 
           <ScrollView
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.scrollContent}
           >
             <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-              
               {/* 1. HERO BRAND CARD */}
               <View style={styles.heroCard}>
                 <View style={styles.heroContent}>
-                  <Image 
-                    source={require('../../assets/icon.png')} 
-                    style={styles.appIcon} 
+                  <Image
+                    source={require('../../assets/icon.png')}
+                    style={styles.appIcon}
                     resizeMode="contain"
                   />
                   <View style={styles.heroText}>
@@ -188,9 +187,9 @@ const AboutScreen: React.FC = () => {
               {/* 2. TECH SPECS GRID (BENTO STYLE) */}
               <View style={styles.gridContainer}>
                 {infoGrid.map((item, idx) => (
-                  <TouchableOpacity 
-                    key={idx} 
-                    style={styles.gridItem} 
+                  <TouchableOpacity
+                    key={idx}
+                    style={styles.gridItem}
                     activeOpacity={item.onPress ? 0.7 : 1}
                     onPress={item.onPress}
                   >
@@ -209,64 +208,76 @@ const AboutScreen: React.FC = () => {
                   <MaterialIcon name="system-update" size={20} color={colors.primary} />
                   <Text style={styles.sectionTitle}>App Updates</Text>
                 </View>
-                
+
                 <Text style={styles.sectionDesc}>
                   We push over-the-air updates to fix bugs and add features instantly.
                 </Text>
 
                 <View style={styles.actionRow}>
-                   <Button
-                      title={checking ? "Checking..." : updateAvailable ? "Update Available" : "Check for Updates"}
-                      loading={checking}
-                      onPress={checkForUpdates}
-                      icon={<MaterialIcon name="refresh" size={18} color="white" style={{ marginRight: 8 }} />}
-                      buttonStyle={styles.primaryBtn}
-                      containerStyle={{ flex: 1 }}
-                   />
+                  <Button
+                    title={
+                      checking
+                        ? 'Checking...'
+                        : updateAvailable
+                          ? 'Update Available'
+                          : 'Check for Updates'
+                    }
+                    loading={checking}
+                    onPress={checkForUpdates}
+                    icon={
+                      <MaterialIcon
+                        name="refresh"
+                        size={18}
+                        color="white"
+                        style={{ marginRight: 8 }}
+                      />
+                    }
+                    buttonStyle={styles.primaryBtn}
+                    containerStyle={{ flex: 1 }}
+                  />
                 </View>
 
                 {/* FAILURE RECOVERY UI */}
                 {failureCount > 0 && (
-                   <View style={styles.errorBox}>
-                      <MaterialIcon name="warning" size={18} color={colors.accentOrange} />
-                      <Text style={styles.errorText}>Update failed {failureCount} times.</Text>
-                      <TouchableOpacity onPress={clearRetryState}>
-                         <Text style={styles.errorAction}>Reset</Text>
-                      </TouchableOpacity>
-                   </View>
+                  <View style={styles.errorBox}>
+                    <MaterialIcon name="warning" size={18} color={colors.accentOrange} />
+                    <Text style={styles.errorText}>Update failed {failureCount} times.</Text>
+                    <TouchableOpacity onPress={clearRetryState}>
+                      <Text style={styles.errorAction}>Reset</Text>
+                    </TouchableOpacity>
+                  </View>
                 )}
               </View>
 
               {/* 4. SUPPORT & SHARE */}
               <View style={styles.rowActions}>
-                 <TouchableOpacity style={styles.actionCard} onPress={handleShare}>
-                    <View style={[styles.iconCircle, { backgroundColor: colors.accentGreen }]}>
-                       <MaterialIcon name="share" size={20} color="white" />
-                    </View>
-                    <View>
-                       <Text style={styles.actionTitle}>Share App</Text>
-                       <Text style={styles.actionSub}>Invite friends</Text>
-                    </View>
-                 </TouchableOpacity>
+                <TouchableOpacity style={styles.actionCard} onPress={handleShare}>
+                  <View style={[styles.iconCircle, { backgroundColor: colors.accentGreen }]}>
+                    <MaterialIcon name="share" size={20} color="white" />
+                  </View>
+                  <View>
+                    <Text style={styles.actionTitle}>Share App</Text>
+                    <Text style={styles.actionSub}>Invite friends</Text>
+                  </View>
+                </TouchableOpacity>
 
-                 <TouchableOpacity 
-                    style={styles.actionCard} 
-                    onPress={() => Linking.openURL('mailto:support@ellow.digitial')}
-                 >
-                    <View style={[styles.iconCircle, { backgroundColor: colors.secondary }]}>
-                       <MaterialIcon name="mail" size={20} color="white" />
-                    </View>
-                    <View>
-                       <Text style={styles.actionTitle}>Support</Text>
-                       <Text style={styles.actionSub}>Get help</Text>
-                    </View>
-                 </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.actionCard}
+                  onPress={() => Linking.openURL('mailto:support@ellow.digitial')}
+                >
+                  <View style={[styles.iconCircle, { backgroundColor: colors.secondary }]}>
+                    <MaterialIcon name="mail" size={20} color="white" />
+                  </View>
+                  <View>
+                    <Text style={styles.actionTitle}>Support</Text>
+                    <Text style={styles.actionSub}>Get help</Text>
+                  </View>
+                </TouchableOpacity>
               </View>
 
               <Text style={styles.legalText}>
-                 © {new Date().getFullYear()} {BRAND_NAME}. All rights reserved.
+                © {new Date().getFullYear()} {BRAND_NAME}. All rights reserved.
               </Text>
-
             </Animated.View>
           </ScrollView>
         </View>
@@ -280,28 +291,27 @@ const AboutScreen: React.FC = () => {
         >
           <View style={styles.modalOverlay}>
             <View style={styles.modalContainer}>
-               <View style={styles.modalIcon}>
-                  <MaterialIcon name="download" size={32} color={colors.primary} />
-               </View>
-               <Text style={styles.modalTitle}>New Update Available</Text>
-               <Text style={styles.modalDesc}>
-                  A new version of DhanDiary is ready. It will take a few seconds to install.
-               </Text>
-               <Button
-                  title="Update Now"
-                  onPress={applyUpdate}
-                  buttonStyle={styles.modalBtnPrimary}
-               />
-               <Button
-                  title="Later"
-                  type="clear"
-                  titleStyle={{ color: colors.muted }}
-                  onPress={() => setShowUpdateModal(false)}
-               />
+              <View style={styles.modalIcon}>
+                <MaterialIcon name="download" size={32} color={colors.primary} />
+              </View>
+              <Text style={styles.modalTitle}>New Update Available</Text>
+              <Text style={styles.modalDesc}>
+                A new version of DhanDiary is ready. It will take a few seconds to install.
+              </Text>
+              <Button
+                title="Update Now"
+                onPress={applyUpdate}
+                buttonStyle={styles.modalBtnPrimary}
+              />
+              <Button
+                title="Later"
+                type="clear"
+                titleStyle={{ color: colors.muted }}
+                onPress={() => setShowUpdateModal(false)}
+              />
             </View>
           </View>
         </Modal>
-
       </SafeAreaView>
     </View>
   );
@@ -328,7 +338,7 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
     paddingTop: 10,
   },
-  
+
   /* HERO CARD */
   heroCard: {
     backgroundColor: colors.primary,
@@ -453,7 +463,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 12,
   },
-  
+
   /* ERROR BOX */
   errorBox: {
     marginTop: 16,

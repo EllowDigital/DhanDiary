@@ -24,7 +24,7 @@ const BottomTabNavigator = () => {
     // Android: Sit 16px from bottom (standard margin) as insets.bottom is usually 0 or included in navigation bar.
     // This removes the "floating gap" look while respecting gestures.
     const isIOS = Platform.OS === 'ios';
-    const bottomPosition = isIOS ? insets.bottom : 16; 
+    const bottomPosition = isIOS ? insets.bottom : 16;
     const tabHeight = 60; // Slightly more compact
 
     return {
@@ -32,11 +32,11 @@ const BottomTabNavigator = () => {
       tabBarActiveTintColor: colors.primary,
       tabBarInactiveTintColor: colors.muted,
       tabBarHideOnKeyboard: true,
-      
+
       // Floating Pill Style
       tabBarStyle: {
         position: 'absolute',
-        bottom: bottomPosition, 
+        bottom: bottomPosition,
         left: 20,
         right: 20,
         height: tabHeight,
@@ -46,7 +46,7 @@ const BottomTabNavigator = () => {
         borderColor: colors.border,
         paddingBottom: 0,
         paddingTop: 0,
-        
+
         // Shadow that blends better with the bottom
         shadowColor: colors.shadow,
         shadowOffset: { width: 0, height: 4 },
@@ -54,24 +54,24 @@ const BottomTabNavigator = () => {
         shadowRadius: 12,
         elevation: 8,
       },
-      
+
       // Tab Items
       tabBarItemStyle: {
         height: tabHeight,
         paddingVertical: 8,
         borderRadius: 30,
       },
-      
+
       // Text Labels
       tabBarLabelStyle: {
         fontSize: 10,
         fontWeight: '700',
         paddingBottom: 4,
       },
-      
+
       // Background
-      sceneContainerStyle: { 
-        backgroundColor: colors.background 
+      sceneContainerStyle: {
+        backgroundColor: colors.background,
       },
     } as const;
   }, [insets.bottom]);
@@ -79,7 +79,6 @@ const BottomTabNavigator = () => {
   return (
     <View style={styles.container}>
       <Tab.Navigator screenOptions={screenOptions as any}>
-        
         {/* DASHBOARD */}
         <Tab.Screen
           name="Dashboard"
@@ -89,7 +88,7 @@ const BottomTabNavigator = () => {
             tabBarIcon: ({ color, size, focused }) => (
               <AnimatedTabIcon
                 library="mc"
-                name={focused ? "view-dashboard" : "view-dashboard-outline"}
+                name={focused ? 'view-dashboard' : 'view-dashboard-outline'}
                 color={color}
                 size={22}
                 focused={focused}
@@ -127,7 +126,7 @@ const BottomTabNavigator = () => {
             tabBarIcon: ({ color, size, focused }) => (
               <AnimatedTabIcon
                 library="mc"
-                name={focused ? "dots-horizontal-circle" : "dots-horizontal"}
+                name={focused ? 'dots-horizontal-circle' : 'dots-horizontal'}
                 color={color}
                 size={22}
                 focused={focused}
@@ -147,6 +146,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-    position: 'relative', 
+    position: 'relative',
   },
 });

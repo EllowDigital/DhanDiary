@@ -124,14 +124,14 @@ const CashOutList = () => {
       activeOpacity={0.7}
       style={[styles.pill, active && styles.pillActive]}
     >
-      <Text style={[styles.pillText, active && styles.pillTextActive]}>
-        {label}
-      </Text>
+      <Text style={[styles.pillText, active && styles.pillTextActive]}>{label}</Text>
     </TouchableOpacity>
   );
 
   const renderHeader = () => (
-    <Animated.View style={[containerStyle, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+    <Animated.View
+      style={[containerStyle, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
+    >
       {/* HERO CARD */}
       <View style={styles.heroCard}>
         <View style={styles.heroHeader}>
@@ -157,14 +157,21 @@ const CashOutList = () => {
           </View>
           <View style={[styles.statItem, { flex: 1.5 }]}>
             <Text style={styles.statLabel}>Top Category</Text>
-            <Text style={styles.statValue} numberOfLines={1}>{summary.topCategory || '-'}</Text>
+            <Text style={styles.statValue} numberOfLines={1}>
+              {summary.topCategory || '-'}
+            </Text>
           </View>
         </View>
       </View>
 
       {/* FILTERS ROW */}
       <View style={styles.filterContainer}>
-        <MaterialIcon name="filter-list" size={20} color={colors.muted} style={{ marginRight: 8 }} />
+        <MaterialIcon
+          name="filter-list"
+          size={20}
+          color={colors.muted}
+          style={{ marginRight: 8 }}
+        />
         <FlatList
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -172,9 +179,7 @@ const CashOutList = () => {
           keyExtractor={(item) => item.label}
           renderItem={({ item }) => {
             // Check if this specific filter is active in either category
-            const isActive =
-              (item.value === timeFilter) ||
-              (item.value === sortMode);
+            const isActive = item.value === timeFilter || item.value === sortMode;
 
             return (
               <FilterPill
@@ -203,9 +208,7 @@ const CashOutList = () => {
         <MaterialIcon name="money-off" size={40} color={colors.muted} />
       </View>
       <Text style={styles.emptyTitle}>No Expenses Found</Text>
-      <Text style={styles.emptyDesc}>
-        You haven't logged any cash outflows for this period.
-      </Text>
+      <Text style={styles.emptyDesc}>You haven't logged any cash outflows for this period.</Text>
       <Button
         title="Log Expense"
         onPress={() => navigation.navigate('AddEntry', { type: 'out' })}
@@ -220,11 +223,7 @@ const CashOutList = () => {
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       <View style={[containerStyle, { paddingHorizontal: isTablet ? 0 : 20 }]}>
-        <ScreenHeader
-          title="Expenses"
-          subtitle="Track your cash outflow"
-          showScrollHint={false}
-        />
+        <ScreenHeader title="Expenses" subtitle="Track your cash outflow" showScrollHint={false} />
       </View>
 
       <FlatList
@@ -232,7 +231,7 @@ const CashOutList = () => {
         keyExtractor={(item) => item.local_id}
         contentContainerStyle={[
           styles.listContent,
-          { maxWidth: maxContentWidth, alignSelf: 'center', width: '100%' }
+          { maxWidth: maxContentWidth, alignSelf: 'center', width: '100%' },
         ]}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={renderHeader}

@@ -62,12 +62,12 @@ const chartConfig = {
   color: (opacity = 1) => `rgba(${hexToRgb(colors.primary)}, ${opacity})`,
   labelColor: (opacity = 1) => `rgba(${hexToRgb(colors.muted)}, ${opacity})`,
   propsForDots: {
-    r: "4",
-    strokeWidth: "2",
-    stroke: colors.primary
+    r: '4',
+    strokeWidth: '2',
+    stroke: colors.primary,
   },
   propsForBackgroundLines: {
-    strokeDasharray: "", // solid lines
+    strokeDasharray: '', // solid lines
     stroke: colors.border,
     strokeOpacity: 0.4,
   },
@@ -76,7 +76,7 @@ const chartConfig = {
 const StatsScreen = () => {
   const { user, loading: authLoading } = useAuth();
   const { entries = [], isLoading, refetch } = useEntries(user?.id);
-  
+
   // Animation Refs
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
@@ -86,9 +86,11 @@ const StatsScreen = () => {
   // Load Data & Animate
   useEffect(() => {
     const unsub = subscribeEntries(() => {
-      try { refetch(); } catch (e) {}
+      try {
+        refetch();
+      } catch (e) {}
     });
-    
+
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -133,12 +135,15 @@ const StatsScreen = () => {
   const pieData = useMemo(() => {
     const expenseCategories = filteredEntries
       .filter((e) => e.type === 'out')
-      .reduce((acc, e) => {
-        const category = ensureCategory(e.category);
-        const amount = Number(e.amount) || 0;
-        acc[category] = (acc[category] || 0) + amount;
-        return acc;
-      }, {} as { [key: string]: number });
+      .reduce(
+        (acc, e) => {
+          const category = ensureCategory(e.category);
+          const amount = Number(e.amount) || 0;
+          acc[category] = (acc[category] || 0) + amount;
+          return acc;
+        },
+        {} as { [key: string]: number }
+      );
 
     return Object.entries(expenseCategories)
       .map(([name, population], index) => ({
@@ -162,7 +167,8 @@ const StatsScreen = () => {
       for (let i = 0; i < 12; i++) {
         const monthLabel = now.month(i).format('MMM');
         labels.push(monthLabel);
-        inData.push(0); outData.push(0);
+        inData.push(0);
+        outData.push(0);
         indexByKey.set(monthLabel, i);
       }
     } else {
@@ -177,7 +183,8 @@ const StatsScreen = () => {
         const labelKey = date.format('YYYY-MM-DD');
         const labelText = i % step === 0 ? date.format(displayFormat) : '';
         labels.push(labelText);
-        inData.push(0); outData.push(0);
+        inData.push(0);
+        outData.push(0);
         indexByKey.set(labelKey, i);
       }
     }
@@ -207,7 +214,7 @@ const StatsScreen = () => {
           strokeWidth: 3,
         },
       ],
-      legend: ['Income', 'Expense'] 
+      legend: ['Income', 'Expense'],
     };
   }, [filteredEntries, filter]);
 
@@ -234,19 +241,14 @@ const StatsScreen = () => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-      <ScreenHeader
-        title="Analytics"
-        subtitle="Financial health overview"
-        showScrollHint={false}
-      />
-      
+      <ScreenHeader title="Analytics" subtitle="Financial health overview" showScrollHint={false} />
+
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
         <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-          
           {/* FILTER TABS */}
           <View style={styles.filterContainer}>
             {FILTERS.map((f) => {
@@ -257,9 +259,7 @@ const StatsScreen = () => {
                   style={[styles.filterPill, isActive && styles.filterPillActive]}
                   onPress={() => handleFilterPress(f)}
                 >
-                  <Text style={[styles.filterText, isActive && styles.filterTextActive]}>
-                    {f}
-                  </Text>
+                  <Text style={[styles.filterText, isActive && styles.filterTextActive]}>{f}</Text>
                 </Pressable>
               );
             })}
@@ -270,20 +270,32 @@ const StatsScreen = () => {
             <View style={styles.heroTop}>
               <View>
                 <Text style={styles.heroLabel}>Net Balance</Text>
-                <Text style={[
-                  styles.heroValue, 
-                  { color: netPositive ? colors.accentGreen : colors.accentRed }
-                ]}>
+                <Text
+                  style={[
+                    styles.heroValue,
+                    { color: netPositive ? colors.accentGreen : colors.accentRed },
+                  ]}
+                >
                   {netPositive ? '+' : ''}₹{Math.abs(stats.net).toLocaleString()}
                 </Text>
               </View>
-              <View style={[styles.trendBadge, { backgroundColor: netPositive ? '#DCFCE7' : '#FEE2E2' }]}>
-                <MaterialIcon 
-                  name={netPositive ? 'trending-up' : 'trending-down'} 
-                  size={18} 
-                  color={netPositive ? colors.accentGreen : colors.accentRed} 
+              <View
+                style={[
+                  styles.trendBadge,
+                  { backgroundColor: netPositive ? '#DCFCE7' : '#FEE2E2' },
+                ]}
+              >
+                <MaterialIcon
+                  name={netPositive ? 'trending-up' : 'trending-down'}
+                  size={18}
+                  color={netPositive ? colors.accentGreen : colors.accentRed}
                 />
-                <Text style={[styles.trendText, { color: netPositive ? colors.accentGreen : colors.accentRed }]}>
+                <Text
+                  style={[
+                    styles.trendText,
+                    { color: netPositive ? colors.accentGreen : colors.accentRed },
+                  ]}
+                >
                   {netPositive ? 'Surplus' : 'Deficit'}
                 </Text>
               </View>
@@ -317,7 +329,9 @@ const StatsScreen = () => {
             </View>
             <View style={styles.quickStatCard}>
               <MaterialIcon name="category" size={20} color={colors.secondary} />
-              <Text style={styles.quickStatValue} numberOfLines={1}>{topCategory}</Text>
+              <Text style={styles.quickStatValue} numberOfLines={1}>
+                {topCategory}
+              </Text>
               <Text style={styles.quickStatLabel}>Top Category</Text>
             </View>
           </View>
@@ -328,8 +342,9 @@ const StatsScreen = () => {
               <Text style={styles.cardTitle}>Cash Flow Trend</Text>
               <MaterialIcon name="show-chart" size={20} color={colors.muted} />
             </View>
-            
-            {seriesData.datasets[0].data.some(d => d > 0) || seriesData.datasets[1].data.some(d => d > 0) ? (
+
+            {seriesData.datasets[0].data.some((d) => d > 0) ||
+            seriesData.datasets[1].data.some((d) => d > 0) ? (
               <LineChart
                 data={seriesData}
                 width={SCREEN_WIDTH - 64} // Responsive width
@@ -355,7 +370,7 @@ const StatsScreen = () => {
               <Text style={styles.cardTitle}>Spending Breakdown</Text>
               <MaterialIcon name="pie-chart" size={20} color={colors.muted} />
             </View>
-            
+
             {pieData.length > 0 ? (
               <PieChart
                 data={pieData}
@@ -374,7 +389,6 @@ const StatsScreen = () => {
               </View>
             )}
           </View>
-
         </Animated.View>
       </ScrollView>
     </SafeAreaView>
@@ -401,7 +415,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  
+
   /* FILTERS */
   filterContainer: {
     flexDirection: 'row',
