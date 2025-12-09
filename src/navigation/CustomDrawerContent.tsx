@@ -30,12 +30,13 @@ const CustomDrawerContent = React.memo((props: DrawerContentComponentProps) => {
       duration: 450,
       easing: Easing.out(Easing.cubic),
     });
-  }, []);
+  }, [fade]);
 
   const aStyle = useAnimatedStyle(() => ({
     opacity: fade.value,
-    transform: [{ translateY: (1 - fade.value) * 18 }],
+    transform: [{ translateY: (1 - fade.value) * 16 }],
   }));
+
   const initials = useMemo(() => {
     if (!user?.name) return 'DD';
     return user.name
@@ -87,12 +88,15 @@ const CustomDrawerContent = React.memo((props: DrawerContentComponentProps) => {
               activeOpacity={0.9}
               onPress={() => handleNavigate(route.name)}
             >
-              {drawerIcon ? (
-                <View style={[styles.menuIconWrap, focused && styles.menuIconActive]}>
-                  {drawerIcon({ color: iconColor, size: 22, focused })}
-                </View>
-              ) : null}
-              <Text style={[styles.menuLabel, focused && styles.menuLabelActive]}>{label}</Text>
+              <View style={[styles.menuIndicator, focused && styles.menuIndicatorActive]} />
+              <View style={styles.menuRow}>
+                {drawerIcon ? (
+                  <View style={[styles.menuIconWrap, focused && styles.menuIconActive]}>
+                    {drawerIcon({ color: iconColor, size: 22, focused })}
+                  </View>
+                ) : null}
+                <Text style={[styles.menuLabel, focused && styles.menuLabelActive]}>{label}</Text>
+              </View>
             </TouchableOpacity>
           </Animated.View>
         );
@@ -109,9 +113,7 @@ const CustomDrawerContent = React.memo((props: DrawerContentComponentProps) => {
         onPress: async () => {
           try {
             await logout();
-
             props.navigation.closeDrawer();
-
             props.navigation.reset({
               index: 0,
               routes: [{ name: 'Auth' as never }],
@@ -139,15 +141,17 @@ const CustomDrawerContent = React.memo((props: DrawerContentComponentProps) => {
         <Text style={styles.appSub}>Personal finance hub</Text>
       </Animated.View>
 
+      <Text style={styles.sectionHeading}>Quick navigation</Text>
       <View style={styles.menuWrap}>{drawerItems}</View>
 
-      {/* LOGOUT */}
       <View style={styles.footer}>
         <Button
-          title="Logout"
+          title="Log out"
           onPress={handleLogout}
-          icon={{ name: 'logout', color: '#fff', size: 18 }}
+          type="outline"
+          icon={{ name: 'logout', color: colors.accentRed, size: 18 }}
           buttonStyle={styles.logoutBtn}
+          titleStyle={styles.logoutTitle}
         />
       </View>
     </DrawerContentScrollView>
@@ -167,17 +171,12 @@ const styles = StyleSheet.create({
   },
   headerCard: {
     backgroundColor: colors.card,
-    borderRadius: 20,
+    borderRadius: 18,
     paddingVertical: 18,
-    paddingHorizontal: 16,
-    marginBottom: 18,
-    borderWidth: 1,
+    paddingHorizontal: 18,
+    marginBottom: 16,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
-    shadowColor: colors.shadow,
-    shadowOpacity: 0.12,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 3,
   },
   userRow: {
     flexDirection: 'row',
@@ -219,41 +218,53 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginTop: 4,
   },
+  sectionHeading: {
+    fontSize: font(13),
+    fontWeight: '700',
+    color: colors.muted,
+    marginBottom: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
   menuWrap: {
-    paddingHorizontal: 4,
+    paddingHorizontal: 2,
   },
   menuItemWrapper: {
-    marginBottom: 12,
-    borderRadius: 18,
-    shadowColor: colors.shadow,
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 2,
-    backgroundColor: 'transparent',
+    marginBottom: 10,
   },
   menuItem: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'stretch',
     backgroundColor: colors.card,
-    borderRadius: 18,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderWidth: 1,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
-    minHeight: 60,
+    overflow: 'hidden',
   },
   menuItemActive: {
-    borderColor: colors.primary,
+    borderColor: `${colors.primary}55`,
     backgroundColor: colors.primarySoft,
-    shadowColor: colors.primary,
-    shadowOpacity: 0.12,
-    shadowRadius: 18,
-    elevation: 3,
+  },
+  menuIndicator: {
+    width: 4,
+    backgroundColor: 'transparent',
+    borderRadius: 999,
+    marginRight: 12,
+    alignSelf: 'stretch',
+  },
+  menuIndicatorActive: {
+    backgroundColor: colors.primary,
+  },
+  menuRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 4,
   },
   menuIconWrap: {
-    width: 36,
-    height: 36,
+    width: 34,
+    height: 34,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
@@ -273,12 +284,18 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   footer: {
-    paddingHorizontal: 4,
-    paddingTop: 16,
+    paddingHorizontal: 2,
+    paddingTop: 24,
   },
   logoutBtn: {
-    backgroundColor: colors.accentRed,
-    paddingVertical: 12,
-    borderRadius: 16,
+    borderColor: colors.accentRed,
+    borderWidth: 1,
+    paddingVertical: 11,
+    borderRadius: 14,
+    backgroundColor: 'transparent',
+  },
+  logoutTitle: {
+    color: colors.accentRed,
+    fontWeight: '700',
   },
 });
