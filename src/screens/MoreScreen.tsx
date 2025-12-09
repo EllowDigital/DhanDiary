@@ -1,5 +1,13 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { View, StyleSheet, Pressable, ScrollView, Linking, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  Pressable,
+  ScrollView,
+  Linking,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
+} from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
 import { useNavigation, NavigationProp } from '@react-navigation/native';
@@ -160,7 +168,9 @@ const MoreScreen: React.FC = () => {
           ))}
         </View>
 
-        <Text style={styles.footnote}>Need something else? Ping us anytime — replies are fast.</Text>
+        <Text style={styles.footnote}>
+          Need something else? Ping us anytime — replies are fast.
+        </Text>
       </ScrollView>
     </SafeAreaView>
   );
