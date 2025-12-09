@@ -2,17 +2,7 @@ import React from 'react';
 import { Modal, View, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { Text, Button } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
-
-const DEFAULT_CATEGORIES = [
-  'General',
-  'Salary',
-  'Groceries',
-  'Transport',
-  'Bills',
-  'Entertainment',
-  'Health',
-  'Other',
-];
+import { ALLOWED_CATEGORIES } from '../constants/categories';
 
 const CategoryPickerModal = ({
   visible,
@@ -31,7 +21,7 @@ const CategoryPickerModal = ({
             Select Category
           </Text>
           <FlatList
-            data={DEFAULT_CATEGORIES}
+            data={ALLOWED_CATEGORIES}
             keyExtractor={(item) => item}
             renderItem={({ item }) => (
               <TouchableOpacity style={styles.item} onPress={() => onSelect(item)}>

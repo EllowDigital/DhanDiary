@@ -14,37 +14,42 @@ import { colors } from '../utils/design';
 const Tab = createBottomTabNavigator();
 
 const labelStyle: TextStyle = {
-  fontSize: 12,
+  fontSize: 11,
   fontWeight: '600' as TextStyle['fontWeight'],
-  marginTop: -4,
+  marginTop: 4,
 };
 
 const itemStyle: ViewStyle = {
   paddingVertical: 0,
-  marginHorizontal: 6,
-  borderRadius: 18,
+  marginHorizontal: 4,
+  borderRadius: 22,
 };
 
 const BottomTabNavigator = () => {
   const insets = useSafeAreaInsets();
 
   const tabBarStyle = useMemo(() => {
-    const insetBottom = Math.max(insets.bottom, Platform.OS === 'android' ? 18 : 24);
+    const safeBottom = insets.bottom;
+    const floatingOffset = Platform.OS === 'android' ? 12 : 18;
+    const bottomPosition = Math.max(safeBottom * 0.35 + 8, floatingOffset);
+    const extraPadding = Math.max(safeBottom * 0.5, 8);
+    const baseHeight = 54;
     return {
       position: 'absolute',
-      bottom: insetBottom,
-      left: 16,
-      right: 16,
-      height: 70 + Math.min(insets.bottom, 16),
-      borderRadius: 26,
+      bottom: bottomPosition,
+      left: 20,
+      right: 20,
+      height: baseHeight + extraPadding,
+      borderRadius: 28,
       backgroundColor: colors.card,
-      paddingBottom: Math.max(insets.bottom / 2, 12),
+      paddingBottom: extraPadding,
       paddingTop: 10,
-      shadowColor: colors.text,
-      shadowOpacity: 0.07,
-      shadowOffset: { width: 0, height: 8 },
-      shadowRadius: 20,
-      elevation: 12,
+      paddingHorizontal: 6,
+      shadowColor: colors.shadow,
+      shadowOpacity: 0.15,
+      shadowOffset: { width: 0, height: 10 },
+      shadowRadius: 24,
+      elevation: 10,
       borderWidth: 1,
       borderColor: colors.border,
     } as const;
@@ -59,6 +64,7 @@ const BottomTabNavigator = () => {
       tabBarStyle,
       tabBarLabelStyle: labelStyle,
       tabBarItemStyle: itemStyle,
+      sceneContainerStyle: { backgroundColor: colors.background },
     }),
     [tabBarStyle]
   );

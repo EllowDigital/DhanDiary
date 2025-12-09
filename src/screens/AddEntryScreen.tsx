@@ -21,6 +21,8 @@ import runInBackground from '../utils/background';
 import CategoryPickerModal from '../components/CategoryPickerModal';
 import { v4 as uuidv4 } from 'uuid';
 import { colors } from '../utils/design';
+import { ALLOWED_CATEGORIES, DEFAULT_CATEGORY, ensureCategory } from '../constants/categories';
+import ScreenHeader from '../components/ScreenHeader';
 
 import Animated, {
   FadeInDown,
@@ -36,7 +38,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const scale = SCREEN_WIDTH / 390;
 const font = (s: number) => Math.round(s * scale);
 
-const quickCategories = ['Food', 'Transport', 'Bills', 'Salary', 'Shopping', 'Health', 'Other'];
+const quickCategories = ALLOWED_CATEGORIES;
 
 const typeConfigs = [
   {
@@ -66,7 +68,7 @@ const AddEntryScreen: React.FC = () => {
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const [typeIndex, setTypeIndex] = useState(0);
-  const [category, setCategory] = useState('General');
+  const [category, setCategory] = useState(DEFAULT_CATEGORY);
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
 
   const [date, setDate] = useState<Date>(new Date());
@@ -84,7 +86,7 @@ const AddEntryScreen: React.FC = () => {
         setAmount(String(found.amount ?? ''));
         setNote(found.note ?? '');
         setTypeIndex(found.type === 'in' ? 1 : 0);
-        setCategory(found.category ?? 'General');
+        setCategory(ensureCategory(found.category));
         const fallback = found.date ?? found.created_at ?? found.updated_at;
         setDate(fallback ? new Date(fallback) : new Date());
         setEditingLocalId(found.local_id);
@@ -93,7 +95,7 @@ const AddEntryScreen: React.FC = () => {
   }, [editingParamId, entries]);
 
   const onPickCategory = (c: string) => {
-    setCategory(c);
+    setCategory(ensureCategory(c));
     setCategoryModalVisible(false);
   };
 
@@ -114,7 +116,7 @@ const AddEntryScreen: React.FC = () => {
     const payload = {
       amount: parsed,
       type: types[typeIndex],
-      category,
+      category: ensureCategory(category),
       note,
       currency: 'INR',
       date: date.toISOString(),
@@ -198,6 +200,7 @@ const AddEntryScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.safe}>
+      <ScreenHeader title={editingLocalId ? 'Edit entry' : 'Add entry'} subtitle={subtitleLabel} />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}

@@ -1,4 +1,5 @@
 import { LocalEntry } from '../db/entries';
+import { ensureCategory, FALLBACK_CATEGORY } from '../constants/categories';
 
 export type EntryTimeframe = 'all' | '7d' | '30d';
 export type EntrySortMode = 'recent' | 'amount';
@@ -68,7 +69,7 @@ export const summarizeEntries = (entries: LocalEntry[]): EntrySummary => {
       total: 0,
       avg: 0,
       count: 0,
-      topCategory: 'General',
+      topCategory: FALLBACK_CATEGORY,
       lastTimestamp: 0,
     };
   }
@@ -82,12 +83,12 @@ export const summarizeEntries = (entries: LocalEntry[]): EntrySummary => {
     total += amount;
     const ts = entryTimestamp(entry);
     if (ts > lastTimestamp) lastTimestamp = ts;
-    const category = entry.category || 'General';
+    const category = ensureCategory(entry.category);
     categoryTotals[category] = (categoryTotals[category] || 0) + amount;
   });
 
   const topCategory =
-    Object.entries(categoryTotals).sort((a, b) => b[1] - a[1])[0]?.[0] || 'General';
+    Object.entries(categoryTotals).sort((a, b) => b[1] - a[1])[0]?.[0] || FALLBACK_CATEGORY;
   const count = entries.length;
 
   return {

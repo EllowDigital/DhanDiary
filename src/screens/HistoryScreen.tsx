@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   LayoutAnimation,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, Button, Input } from '@rneui/themed';
 import SimpleButtonGroup from '../components/SimpleButtonGroup';
 import CategoryPickerModal from '../components/CategoryPickerModal';
@@ -25,7 +26,9 @@ import { getEntryByLocalId } from '../db/entries';
 import { Animated as RNAnimated } from 'react-native';
 import useDelayedLoading from '../hooks/useDelayedLoading';
 import FullScreenSpinner from '../components/FullScreenSpinner';
-import { colors, shadows } from '../utils/design';
+import { colors, shadows, spacing } from '../utils/design';
+import { DEFAULT_CATEGORY, FALLBACK_CATEGORY, ensureCategory } from '../constants/categories';
+import ScreenHeader from '../components/ScreenHeader';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const scale = SCREEN_WIDTH / 390;
@@ -77,6 +80,7 @@ const AnimatedTransaction: React.FC<AnimatedTransactionProps> = React.memo(
 AnimatedTransaction.displayName = 'AnimatedTransaction';
 
 const HistoryScreen = () => {
+  const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { entries = [], isLoading, updateEntry, deleteEntry } = useEntries(user?.id);
   const navigation = useNavigation<any>();
@@ -99,7 +103,7 @@ const HistoryScreen = () => {
 
   const [editingEntry, setEditingEntry] = useState<any | null>(null);
   const [editAmount, setEditAmount] = useState('');
-  const [editCategory, setEditCategory] = useState('');
+  const [editCategory, setEditCategory] = useState(DEFAULT_CATEGORY);
   // guard against multiple openEdit calls (double-tap / multiple navigations)
   const isOpeningRef = React.useRef(false);
   const setEditingSafely = (item: any | null) => {
@@ -207,12 +211,12 @@ const HistoryScreen = () => {
         latestTs = timestamp;
       }
 
-      const category = entry.category || 'General';
+      const category = ensureCategory(entry.category);
       categoryTotals[category] = (categoryTotals[category] || 0) + amount;
     });
 
     const topCategory =
-      Object.entries(categoryTotals).sort((a, b) => b[1] - a[1])[0]?.[0] || 'General';
+      Object.entries(categoryTotals).sort((a, b) => b[1] - a[1])[0]?.[0] || FALLBACK_CATEGORY;
     const latestLabel = latestTs ? new Date(latestTs).toLocaleDateString() : 'No activity yet';
     return {
       totalIn,
@@ -313,7 +317,7 @@ const HistoryScreen = () => {
   const openEdit = (item: any) => {
     setEditingSafely(item);
     setEditAmount(String(item.amount));
-    setEditCategory(item.category || 'General');
+    setEditCategory(ensureCategory(item.category));
     setEditNote(item.note || '');
     setEditTypeIndex(item.type === 'in' ? 1 : 0);
     // initialize date but don't mark as changed until user picks a new value
@@ -359,7 +363,7 @@ const HistoryScreen = () => {
       try {
         const updates: any = {
           amount: amt,
-          category: editCategory,
+          category: ensureCategory(editCategory),
           note: editNote,
           type: editTypeIndex === 1 ? 'in' : 'out',
         };
@@ -399,8 +403,37 @@ const HistoryScreen = () => {
   // -----------------------
   // UI
   // -----------------------
+  const listContentStyle = useMemo(
+    () => [styles.listContent, { paddingBottom: spacing(12) + insets.bottom }],
+    [insets.bottom]
+  );
+
   const renderHeader = () => (
     <View style={styles.headerWrapper}>
+      <ScreenHeader
+        title="History"
+        subtitle="Review your cash flow timeline"
+        style={styles.headerInset}
+        rightSlot={
+          <TouchableOpacity
+            style={[styles.filterChip, filtersVisible && styles.filterChipActive]}
+            onPress={toggleFilters}
+            accessibilityRole="button"
+            accessibilityLabel="Toggle filters"
+          >
+            <MaterialIcon
+              name="tune"
+              size={18}
+              color={filtersVisible ? colors.white : colors.text}
+            />
+            <Text style={[styles.filterChipText, filtersVisible && styles.filterChipTextActive]}>
+              {activeFilterCount
+                ? `${activeFilterCount} filter${activeFilterCount > 1 ? 's' : ''}`
+                : 'Filters'}
+            </Text>
+          </TouchableOpacity>
+        }
+      />
       <RNAnimated.View
         style={[
           styles.heroCard,
@@ -440,11 +473,8 @@ const HistoryScreen = () => {
       </RNAnimated.View>
 
       <View style={styles.quickRow}>
-        {quickStats.map((stat, index) => (
-          <View
-            key={stat.label}
-            style={[styles.quickCard, index === quickStats.length - 1 && styles.quickCardLast]}
-          >
+        {quickStats.map((stat) => (
+          <View key={stat.label} style={styles.quickCard}>
             <Text style={styles.quickLabel}>{stat.label}</Text>
             <Text style={styles.quickValue}>{stat.value}</Text>
           </View>
@@ -609,13 +639,17 @@ const HistoryScreen = () => {
   ) : null;
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <FlatList
         data={filtered}
         keyExtractor={(item) => item.local_id}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={listContentStyle}
         ListHeaderComponent={renderHeader}
+        ListHeaderComponentStyle={styles.listHeaderComponent}
+        ListFooterComponent={<View style={styles.footerSpacer} />}
         ListEmptyComponent={emptyComponent}
+        ListEmptyComponentStyle={styles.emptyContent}
+        showsVerticalScrollIndicator={false}
         refreshing={isLoading}
         onRefresh={() => {}}
         initialNumToRender={12}
@@ -679,7 +713,7 @@ const HistoryScreen = () => {
                   visible={showCategoryPicker}
                   onClose={() => setShowCategoryPicker(false)}
                   onSelect={(c) => {
-                    setEditCategory(c);
+                    setEditCategory(ensureCategory(c));
                     setShowCategoryPicker(false);
                   }}
                 />
@@ -736,7 +770,7 @@ const HistoryScreen = () => {
           </View>
         </View>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 };
 
@@ -748,12 +782,27 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   listContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 160,
-    paddingTop: 16,
+    flexGrow: 1,
+    paddingHorizontal: spacing(2.5),
+    paddingTop: spacing(1),
+    paddingBottom: spacing(10),
+  },
+  listHeaderComponent: {
+    paddingBottom: spacing(2),
+  },
+  footerSpacer: {
+    height: spacing(8),
+  },
+  emptyContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
   },
   headerWrapper: {
     marginBottom: 26,
+  },
+  headerInset: {
+    paddingHorizontal: 0,
+    marginBottom: spacing(2),
   },
   heroCard: {
     backgroundColor: colors.card,
@@ -802,22 +851,45 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.text,
   },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing(1.5),
+    paddingVertical: spacing(0.75),
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    gap: 6,
+  },
+  filterChipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  filterChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  filterChipTextActive: {
+    color: colors.white,
+  },
   quickRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
     marginBottom: 20,
   },
   quickCard: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: '48%',
+    minWidth: '48%',
     backgroundColor: colors.card,
     borderRadius: 18,
     padding: 16,
     borderWidth: 1,
     borderColor: colors.border,
-    marginRight: 12,
     ...shadows.small,
-  },
-  quickCardLast: {
-    marginRight: 0,
   },
   quickLabel: {
     fontSize: font(12),

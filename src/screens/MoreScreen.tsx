@@ -1,10 +1,23 @@
-import React, { useCallback, useMemo } from 'react';
-import { View, StyleSheet, Dimensions, Pressable, ScrollView, Linking } from 'react-native';
+import React, { useCallback, useMemo, useState } from 'react';
+import {
+  View,
+  StyleSheet,
+  Dimensions,
+  Pressable,
+  ScrollView,
+  Linking,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
 import { useNavigation, NavigationProp } from '@react-navigation/native';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { colors, shadows } from '../utils/design';
+import ScreenHeader from '../components/ScreenHeader';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const scale = SCREEN_WIDTH / 390;
@@ -14,6 +27,8 @@ type RouteName = 'Settings' | 'About' | 'Account' | 'Stats' | 'AccountManagement
 
 const MoreScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp<Record<string, object>>>();
+  const [scrollOffset, setScrollOffset] = useState(0);
+  const insets = useSafeAreaInsets();
 
   const navigateParent = useCallback(
     (route: RouteName) => {
@@ -73,6 +88,27 @@ const MoreScreen: React.FC = () => {
     []
   );
 
+  const heroHighlights = useMemo(
+    () => [
+      { icon: 'sync', label: 'Offline ready' },
+      { icon: 'shield', label: 'Secure sessions' },
+      { icon: 'contact-support', label: 'Human support' },
+    ],
+    []
+  );
+
+  const chunkedPrimary = useMemo(() => {
+    const chunks: (typeof primaryLinks)[][] = [];
+    for (let i = 0; i < primaryLinks.length; i += 2) {
+      chunks.push(primaryLinks.slice(i, i + 2));
+    }
+    return chunks;
+  }, [primaryLinks]);
+
+  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    setScrollOffset(event.nativeEvent.contentOffset.y);
+  }, []);
+
   const Row = ({
     icon,
     label,
@@ -118,52 +154,131 @@ const MoreScreen: React.FC = () => {
     </Animated.View>
   );
 
+  const QuickTile = ({
+    icon,
+    label,
+    description,
+    onPress,
+    index = 0,
+    wrapperStyle,
+  }: {
+    icon: string;
+    label: string;
+    description?: string;
+    onPress: () => void;
+    index?: number;
+    wrapperStyle?: StyleProp<ViewStyle>;
+  }) => (
+    <Animated.View
+      style={wrapperStyle}
+      entering={FadeInDown.delay(140 + index * 50)
+        .springify()
+        .damping(18)}
+    >
+      <Pressable
+        onPress={onPress}
+        android_ripple={{ color: colors.surfaceMuted }}
+        style={({ pressed }) => [styles.quickTile, pressed && styles.quickTilePressed]}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+      >
+        <View style={styles.quickIconBadge}>
+          <MaterialIcon name={icon as any} size={font(22)} color={colors.primary} />
+        </View>
+        <Text style={styles.quickTileLabel}>{label}</Text>
+        {description ? <Text style={styles.quickTileDescription}>{description}</Text> : null}
+        <View style={styles.quickTileCta}>
+          <Text style={styles.quickTileCtaText}>Open</Text>
+          <MaterialIcon name="trending-flat" size={font(18)} color={colors.primary} />
+        </View>
+      </Pressable>
+    </Animated.View>
+  );
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Animated.View entering={FadeInDown.duration(400)} style={styles.headingBlock}>
-        <Text style={styles.headingTitle}>More</Text>
-        <Text style={styles.headingSubtitle}>
-          All the controls you reach for every day, now in one tidy place.
+    <SafeAreaView style={styles.safeArea}>
+      <ScreenHeader
+        title="More"
+        subtitle="Control center & support"
+        scrollOffset={scrollOffset}
+        showScrollHint
+      />
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={[styles.content, { paddingBottom: 40 + insets.bottom }]}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+        showsVerticalScrollIndicator={false}
+      >
+        <Animated.View entering={FadeInDown.duration(400)} style={styles.heroCard}>
+          <Text style={styles.heroEyebrow}>Control Center</Text>
+          <Text style={styles.heroTitle}>Everything you need, now tidy.</Text>
+          <Text style={styles.heroSubtitle}>
+            Jump into stats, accounts, or preferences without hunting through menus. All the
+            backstage tools live here.
+          </Text>
+          <View style={styles.heroHighlightRow}>
+            {heroHighlights.map((item) => (
+              <View key={item.label} style={styles.heroHighlight}>
+                <MaterialIcon name={item.icon as any} size={font(16)} color={colors.primary} />
+                <Text style={styles.heroHighlightText}>{item.label}</Text>
+              </View>
+            ))}
+          </View>
+        </Animated.View>
+
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionLabel}>Quick controls</Text>
+          {chunkedPrimary.map((row, rowIndex) => (
+            <View key={`row-${rowIndex}`} style={styles.quickRow}>
+              {row.map((item, colIndex) => (
+                <QuickTile
+                  key={item.label}
+                  icon={item.icon}
+                  label={item.label}
+                  description={item.description}
+                  onPress={item.action}
+                  index={rowIndex * 2 + colIndex}
+                  wrapperStyle={[
+                    styles.quickTileWrapper,
+                    colIndex === 0 && row.length > 1 ? styles.quickTileWrapperSpacing : null,
+                  ]}
+                />
+              ))}
+              {row.length === 1 ? (
+                <View style={[styles.quickTileWrapper, styles.quickGhost]} />
+              ) : null}
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionLabel}>Support & resources</Text>
+          {supportLinks.map((item, index) => (
+            <Row
+              key={item.label}
+              icon={item.icon}
+              label={item.label}
+              description={item.description}
+              onPress={item.action}
+              isLast={index === supportLinks.length - 1}
+              index={index + primaryLinks.length}
+            />
+          ))}
+        </View>
+        <Text style={styles.footnote}>
+          Need something else? Ping us anytime — we usually reply within a day.
         </Text>
-      </Animated.View>
-
-      <View style={styles.sectionCard}>
-        <Text style={styles.sectionLabel}>Navigate</Text>
-        {primaryLinks.map((item, index) => (
-          <Row
-            key={item.label}
-            icon={item.icon}
-            label={item.label}
-            description={item.description}
-            onPress={item.action}
-            isLast={index === primaryLinks.length - 1}
-            index={index}
-          />
-        ))}
-      </View>
-
-      <View style={styles.sectionCard}>
-        <Text style={styles.sectionLabel}>Support</Text>
-        {supportLinks.map((item, index) => (
-          <Row
-            key={item.label}
-            icon={item.icon}
-            label={item.label}
-            description={item.description}
-            onPress={item.action}
-            isLast={index === supportLinks.length - 1}
-            index={index + primaryLinks.length}
-          />
-        ))}
-      </View>
-      <Text style={styles.footnote}>
-        Need something else? Ping us anytime — we usually reply within a day.
-      </Text>
-    </ScrollView>
+      </ScrollView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -171,28 +286,63 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
     paddingBottom: 32,
+    paddingTop: 16,
   },
-  headingBlock: {
-    paddingTop: 28,
-    paddingBottom: 12,
+  heroCard: {
+    backgroundColor: colors.card,
+    borderRadius: 22,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.medium,
+    marginBottom: 20,
   },
-  headingTitle: {
-    fontSize: font(30),
+  heroEyebrow: {
+    fontSize: font(12),
+    color: colors.muted,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    fontWeight: '600',
+  },
+  heroTitle: {
+    fontSize: font(26),
     fontWeight: '700',
     color: colors.text,
+    marginTop: 6,
   },
-  headingSubtitle: {
+  heroSubtitle: {
     fontSize: font(14),
     color: colors.subtleText,
-    marginTop: 6,
+    marginTop: 10,
     lineHeight: 20,
+  },
+  heroHighlightRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 16,
+  },
+  heroHighlight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: colors.surfaceMuted,
+    marginRight: 10,
+    marginBottom: 10,
+  },
+  heroHighlightText: {
+    fontSize: font(12),
+    color: colors.text,
+    marginLeft: 6,
+    fontWeight: '600',
   },
   sectionCard: {
     backgroundColor: colors.card,
     borderRadius: 18,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingHorizontal: 4,
+    padding: 12,
     marginTop: 20,
   },
   sectionLabel: {
@@ -203,6 +353,62 @@ const styles = StyleSheet.create({
     paddingTop: 14,
     paddingBottom: 8,
     textTransform: 'uppercase',
+  },
+  quickRow: {
+    flexDirection: 'row',
+    marginTop: 8,
+  },
+  quickTileWrapper: {
+    flex: 1,
+  },
+  quickTileWrapperSpacing: {
+    marginRight: 12,
+  },
+  quickGhost: {
+    opacity: 0,
+  },
+  quickTile: {
+    backgroundColor: colors.background,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    minHeight: 150,
+    justifyContent: 'space-between',
+  },
+  quickTilePressed: {
+    backgroundColor: colors.surfaceMuted,
+  },
+  quickIconBadge: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: colors.primarySoft,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  quickTileLabel: {
+    fontSize: font(16),
+    color: colors.text,
+    fontWeight: '600',
+  },
+  quickTileDescription: {
+    fontSize: font(13),
+    color: colors.subtleText,
+    marginTop: 4,
+    flex: 1,
+  },
+  quickTileCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  quickTileCtaText: {
+    fontSize: font(13),
+    color: colors.primary,
+    marginRight: 4,
+    fontWeight: '600',
   },
   row: {
     flexDirection: 'row',
@@ -246,7 +452,7 @@ const styles = StyleSheet.create({
     fontSize: font(12),
     color: colors.muted,
     textAlign: 'center',
-    marginTop: 20,
+    marginTop: 24,
   },
 });
 

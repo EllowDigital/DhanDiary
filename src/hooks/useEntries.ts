@@ -9,6 +9,7 @@ import {
 } from '../db/entries';
 import { subscribeEntries } from '../utils/dbEvents';
 import { getSession, saveSession } from '../db/session';
+import { ensureCategory, DEFAULT_CATEGORY } from '../constants/categories';
 
 /* ----------------------------------------------------------
    Helpers
@@ -45,7 +46,7 @@ const makeOptimisticEntry = (entry: any, sid: string) => {
     user_id: sid,
     type: entry.type || 'out',
     amount: entry.amount || 0,
-    category: entry.category || 'General',
+    category: ensureCategory(entry.category || DEFAULT_CATEGORY),
     note: entry.note || null,
     date: normalizeDate(entry.date, now),
     currency: entry.currency || 'INR',
@@ -103,6 +104,7 @@ export const useEntries = (userId?: string | null) => {
 
       const newEntry = {
         ...entry,
+        category: ensureCategory(entry.category),
         user_id: sid,
         date: created,
         created_at: now,
@@ -157,6 +159,7 @@ export const useEntries = (userId?: string | null) => {
 
       await updateLocalEntry(local_id, {
         ...updates,
+        category: updates.category !== undefined ? ensureCategory(updates.category) : undefined,
         date: dateVal,
       } as any);
     },
@@ -171,7 +174,15 @@ export const useEntries = (userId?: string | null) => {
       const now = new Date().toISOString();
 
       const next = previous.map((item) =>
-        item.local_id === local_id ? { ...item, ...updates, updated_at: now } : item
+        item.local_id === local_id
+          ? {
+              ...item,
+              ...updates,
+              category:
+                updates.category !== undefined ? ensureCategory(updates.category) : item.category,
+              updated_at: now,
+            }
+          : item
       );
 
       queryClient.setQueryData(key, next);

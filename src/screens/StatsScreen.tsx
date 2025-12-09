@@ -11,6 +11,7 @@ import {
   Platform,
   Pressable,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
 import { useEntries } from '../hooks/useEntries';
 import { useAuth } from '../hooks/useAuth';
@@ -19,7 +20,9 @@ import dayjs from 'dayjs';
 import { getStartDateForFilter, getDaysCountForFilter } from '../utils/stats';
 import { LineChart, PieChart } from 'react-native-chart-kit';
 import { colors, shadows } from '../utils/design';
+import { ensureCategory, FALLBACK_CATEGORY } from '../constants/categories';
 import { enableLegacyLayoutAnimations } from '../utils/layoutAnimation';
+import ScreenHeader from '../components/ScreenHeader';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const fontScale = PixelRatio.getFontScale();
@@ -127,7 +130,7 @@ const StatsScreen = () => {
       .filter((e) => e.type === 'out')
       .reduce(
         (acc, e) => {
-          const category = e.category || 'General';
+          const category = ensureCategory(e.category);
           const amount = Number(e.amount) || 0;
           acc[category] = (acc[category] || 0) + amount;
           return acc;
@@ -220,7 +223,7 @@ const StatsScreen = () => {
     return stats.totalOut / safeDays;
   }, [stats.totalOut, daysInView]);
 
-  const topCategory = pieData[0]?.name || 'General';
+  const topCategory = pieData[0]?.name || FALLBACK_CATEGORY;
   const periodLabel = useMemo(() => {
     switch (filter) {
       case '7D':
@@ -345,103 +348,115 @@ const StatsScreen = () => {
   ];
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.scrollContent}
-      showsVerticalScrollIndicator={false}
-    >
-      <Animated.View
-        style={[
-          styles.heroCard,
-          styles.sectionBlock,
-          { opacity: heroOpacity, transform: [{ translateY: heroTranslate }] },
-        ]}
+    <SafeAreaView style={styles.safeArea}>
+      <ScreenHeader
+        title="Stats & Insights"
+        subtitle={`${filter} performance snapshot`}
+        showScrollHint={false}
+      />
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.headerOverline}>Overview</Text>
-        <Text style={styles.header}>Statistics</Text>
-        <Text style={styles.period}>{periodLabel}</Text>
-        <View style={styles.heroStatsRow}>
-          <View>
-            <Text style={styles.heroValue}>₹{stats.totalIn.toLocaleString('en-IN')}</Text>
-            <Text style={styles.heroHint}>Total income</Text>
+        <View style={styles.headerInset} />
+        <Animated.View
+          style={[
+            styles.heroCard,
+            styles.sectionBlock,
+            { opacity: heroOpacity, transform: [{ translateY: heroTranslate }] },
+          ]}
+        >
+          <Text style={styles.headerOverline}>Overview</Text>
+          <Text style={styles.header}>Statistics</Text>
+          <Text style={styles.period}>{periodLabel}</Text>
+          <View style={styles.heroStatsRow}>
+            <View>
+              <Text style={styles.heroValue}>₹{stats.totalIn.toLocaleString('en-IN')}</Text>
+              <Text style={styles.heroHint}>Total income</Text>
+            </View>
+            <View style={heroBadgeStyle(netPositive)}>
+              <Text style={styles.heroBadgeText}>{netPositive ? 'Healthy flow' : 'Overspend'}</Text>
+            </View>
           </View>
-          <View style={heroBadgeStyle(netPositive)}>
-            <Text style={styles.heroBadgeText}>{netPositive ? 'Healthy flow' : 'Overspend'}</Text>
-          </View>
-        </View>
-        <View style={styles.heroDivider} />
-        <View style={styles.heroBottomRow}>
-          <View>
-            <Text style={styles.heroBottomLabel}>Net savings</Text>
-            <Text
-              style={[
-                styles.heroBottomValue,
-                { color: netPositive ? colors.accentGreen : colors.accentRed },
-              ]}
-            >
-              ₹{stats.net.toLocaleString('en-IN')}
-            </Text>
-          </View>
-          <View>
-            <Text style={styles.heroBottomLabel}>Expenses</Text>
-            <Text style={styles.heroBottomValue}>₹{stats.totalOut.toLocaleString('en-IN')}</Text>
-          </View>
-        </View>
-      </Animated.View>
-
-      <Animated.View
-        style={[styles.sectionBlock, { transform: [{ translateY: filterTranslate }] }]}
-      >
-        <Text style={styles.sectionLabel}>Timeframe</Text>
-        <View style={styles.filterRow}>
-          {FILTERS.map((f) => {
-            const isActive = filter === f;
-            return (
-              <Pressable
-                key={f}
-                style={[styles.filterPill, isActive && styles.filterPillActive]}
-                onPress={() => handleFilterPress(f)}
+          <View style={styles.heroDivider} />
+          <View style={styles.heroBottomRow}>
+            <View>
+              <Text style={styles.heroBottomLabel}>Net savings</Text>
+              <Text
+                style={[
+                  styles.heroBottomValue,
+                  { color: netPositive ? colors.accentGreen : colors.accentRed },
+                ]}
               >
-                <Text style={[styles.filterPillText, isActive && styles.filterPillTextActive]}>
-                  {f}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </Animated.View>
-
-      <View style={[styles.statsGrid, styles.sectionBlock]}>
-        {statCards.map((card, index) => (
-          <StatCard key={card.title} {...card} isLast={index === statCards.length - 1} />
-        ))}
-      </View>
-
-      <View style={[styles.quickStatsCard, styles.sectionBlock]}>
-        {quickStats.map((item) => (
-          <View key={item.label} style={styles.quickStatItem}>
-            <Text style={styles.quickStatLabel}>{item.label}</Text>
-            <Text style={styles.quickStatValue}>{item.value}</Text>
+                ₹{stats.net.toLocaleString('en-IN')}
+              </Text>
+            </View>
+            <View>
+              <Text style={styles.heroBottomLabel}>Expenses</Text>
+              <Text style={styles.heroBottomValue}>₹{stats.totalOut.toLocaleString('en-IN')}</Text>
+            </View>
           </View>
-        ))}
-      </View>
+        </Animated.View>
 
-      <View style={[styles.chartCard, styles.sectionBlock]}>
-        <Text style={styles.chartTitle}>Expense Breakdown</Text>
-        {renderPieChart()}
-      </View>
+        <Animated.View
+          style={[styles.sectionBlock, { transform: [{ translateY: filterTranslate }] }]}
+        >
+          <Text style={styles.sectionLabel}>Timeframe</Text>
+          <View style={styles.filterRow}>
+            {FILTERS.map((f) => {
+              const isActive = filter === f;
+              return (
+                <Pressable
+                  key={f}
+                  style={[styles.filterPill, isActive && styles.filterPillActive]}
+                  onPress={() => handleFilterPress(f)}
+                >
+                  <Text style={[styles.filterPillText, isActive && styles.filterPillTextActive]}>
+                    {f}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </Animated.View>
 
-      <View style={[styles.chartCard, styles.sectionBlock]}>
-        <Text style={styles.chartTitle}>Income vs. Expenses</Text>
-        {renderLineChart()}
-      </View>
-    </ScrollView>
+        <View style={[styles.statsGrid, styles.sectionBlock]}>
+          {statCards.map((card, index) => (
+            <StatCard key={card.title} {...card} isLast={index === statCards.length - 1} />
+          ))}
+        </View>
+
+        <View style={[styles.quickStatsCard, styles.sectionBlock]}>
+          {quickStats.map((item) => (
+            <View key={item.label} style={styles.quickStatItem}>
+              <Text style={styles.quickStatLabel}>{item.label}</Text>
+              <Text style={styles.quickStatValue}>{item.value}</Text>
+            </View>
+          ))}
+        </View>
+
+        <View style={[styles.chartCard, styles.sectionBlock]}>
+          <Text style={styles.chartTitle}>Expense Breakdown</Text>
+          {renderPieChart()}
+        </View>
+
+        <View style={[styles.chartCard, styles.sectionBlock]}>
+          <Text style={styles.chartTitle}>Income vs. Expenses</Text>
+          {renderLineChart()}
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 };
 
 export default StatsScreen;
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -449,6 +464,9 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 20,
     paddingBottom: 60,
+  },
+  headerInset: {
+    height: 8,
   },
   sectionBlock: {
     marginBottom: 20,

@@ -12,6 +12,7 @@ import {
   Alert,
   Modal,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text, Button } from '@rneui/themed';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Updates from 'expo-updates';
@@ -25,15 +26,19 @@ import Animated, {
 } from 'react-native-reanimated';
 import { colors } from '../utils/design';
 import getLatestShareLink from '../utils/shareLink';
+import ScreenHeader from '../components/ScreenHeader';
 
 const pkg = require('../../package.json');
 
 const ELLOW_URL = 'https://ellowdigital.netlify.app';
 const extra: any = (Constants as any)?.expoConfig?.extra || {};
+const BRAND_NAME = 'EllowDigital';
 const BUILD_TYPE =
   process.env.BUILD_TYPE ||
   extra.BUILD_TYPE ||
   (pkg.version.includes('-beta') ? 'Beta' : 'Release');
+const CREDIT_LINE = extra?.creditLine || extra?.CREDIT_LINE;
+const FALLBACK_CREDIT = `Crafted with ❤️ by ${BRAND_NAME}`;
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
@@ -90,18 +95,18 @@ const AboutScreen: React.FC = () => {
     return currentUpdateId.length > 10 ? `${currentUpdateId.slice(0, 8)}…` : currentUpdateId;
   }, [currentUpdateId]);
 
-    const infoTiles = useMemo(
-      () => [
-        { label: 'Version', value: pkg.version },
-        { label: 'Build Type', value: String(BUILD_TYPE) },
-        {
-          label: 'Environment',
-          value: process.env.NODE_ENV === 'production' ? 'Production' : 'Development',
-        },
-        { label: 'Update ID', value: shortUpdateId, raw: currentUpdateId },
-      ],
-      [shortUpdateId, currentUpdateId]
-    );
+  const infoTiles = useMemo(
+    () => [
+      { label: 'Version', value: pkg.version },
+      { label: 'Build Type', value: String(BUILD_TYPE) },
+      {
+        label: 'Environment',
+        value: process.env.NODE_ENV === 'production' ? 'Production' : 'Development',
+      },
+      { label: 'Update ID', value: shortUpdateId, raw: currentUpdateId },
+    ],
+    [shortUpdateId, currentUpdateId]
+  );
 
   const fetchShareLink = useCallback(async () => {
     try {
@@ -153,7 +158,10 @@ const AboutScreen: React.FC = () => {
 
   const fetchAndApplyUpdate = useCallback(async () => {
     if (isExpoGo) {
-      Alert.alert('Not supported in Expo Go', 'Install a dev or production build to apply updates.');
+      Alert.alert(
+        'Not supported in Expo Go',
+        'Install a dev or production build to apply updates.'
+      );
       return;
     }
     try {
@@ -201,125 +209,171 @@ const AboutScreen: React.FC = () => {
   }, []);
   const closeShowFullId = useCallback(() => setShowUpdateIdModal(false), []);
 
+  const creditLineSegments = useMemo(() => {
+    const displayText = CREDIT_LINE?.trim().length ? CREDIT_LINE : FALLBACK_CREDIT;
+    const highlightIndex = displayText.indexOf(BRAND_NAME);
+    if (highlightIndex === -1) {
+      return { prefix: displayText, suffix: '', highlight: false };
+    }
+    return {
+      prefix: displayText.slice(0, highlightIndex),
+      suffix: displayText.slice(highlightIndex + BRAND_NAME.length),
+      highlight: true,
+    };
+  }, []);
+
   return (
-    <Animated.View style={[styles.container, animatedFadeStyle]}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        <Animated.View entering={FadeInDown.delay(80).springify()} style={styles.heroCard}>
-          <View style={styles.heroRow}>
-            <Image source={require('../../assets/icon.png')} style={styles.heroIcon} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.appName}>DhanDiary</Text>
-              <Text style={styles.appSubtitle}>Smart Personal Finance Tracker</Text>
+    <SafeAreaView style={styles.safeArea}>
+      <ScreenHeader
+        title="About & Updates"
+        subtitle="Build info, release notes, and support"
+        showScrollHint={false}
+      />
+      <Animated.View style={[styles.container, animatedFadeStyle]}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
+          <View style={styles.headerInset} />
+          <Animated.View entering={FadeInDown.delay(80).springify()} style={styles.heroCard}>
+            <View style={styles.heroRow}>
+              <Image source={require('../../assets/icon.png')} style={styles.heroIcon} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.appName}>DhanDiary</Text>
+                <Text style={styles.appSubtitle}>Smart Personal Finance Tracker</Text>
+              </View>
             </View>
-          </View>
-          <Text style={styles.heroCopy}>
-            Track incomes, expenses, and sync securely with our offline-first engine and instant OTA
-            updates.
-          </Text>
-        </Animated.View>
-
-        <Animated.View entering={FadeInDown.delay(140).springify()} style={styles.updateCard}>
-          <View style={styles.cardHeaderRow}>
-            <View>
-              <Text style={styles.cardTitle}>Stay Updated</Text>
-              <Text style={styles.cardSubtitle}>
-                Check for new features and apply the latest optimizations instantly.
+            <Text style={styles.heroCopy}>
+              Track incomes, expenses, and sync securely with our offline-first engine and instant
+              OTA updates.
+            </Text>
+            <TouchableOpacity
+              onPress={() => Linking.openURL(ELLOW_URL)}
+              activeOpacity={0.8}
+              style={styles.creditLineButton}
+            >
+              <Text style={styles.creditLineText}>
+                {creditLineSegments.prefix}
+                {creditLineSegments.highlight && (
+                  <Text style={styles.creditLineHighlight}>{BRAND_NAME}</Text>
+                )}
+                {creditLineSegments.highlight && creditLineSegments.suffix}
               </Text>
-            </View>
-            <View style={styles.cardIconWrap}>
-              <MaterialIcon name="system-update" size={22} color={colors.primary} />
-            </View>
-          </View>
-          <View style={styles.updateActions}>
-            <TouchableOpacity style={styles.primaryCta} onPress={checkForUpdates} activeOpacity={0.9}>
-              <MaterialIcon name="refresh" size={18} color={colors.white} />
-              <Text style={styles.primaryCtaText}>{checking ? 'Checking…' : 'Check for Updates'}</Text>
-            </TouchableOpacity>
-            {updateAvailable && (
-              <TouchableOpacity
-                style={[styles.primaryCta, styles.secondaryCta]}
-                onPress={() => setShowUpdateModal(true)}
-                activeOpacity={0.9}
-              >
-                <MaterialIcon name="download" size={18} color={colors.primary} />
-                <Text style={[styles.primaryCtaText, { color: colors.primary }]}>Apply Update</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </Animated.View>
-
-        <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.infoCard}>
-          <Text style={styles.infoHeading}>Build details</Text>
-          <View style={styles.infoGrid}>
-            {infoTiles.map((tile) => {
-              const isUpdateTile = tile.label === 'Update ID';
-              if (isUpdateTile) {
-                return (
-                  <TouchableOpacity
-                    key={tile.label}
-                    style={[styles.infoTile, styles.infoTilePressable]}
-                    activeOpacity={0.85}
-                    onPress={handleShowFullId}
-                  >
-                    <Text style={styles.infoLabel}>{tile.label}</Text>
-                    <Text style={styles.infoValue}>{tile.value}</Text>
-                    <Text style={styles.infoHint}>Tap to view full ID</Text>
-                  </TouchableOpacity>
-                );
-              }
-              return (
-                <View key={tile.label} style={styles.infoTile}>
-                  <Text style={styles.infoLabel}>{tile.label}</Text>
-                  <Text style={styles.infoValue}>{tile.value}</Text>
-                </View>
-              );
-            })}
-          </View>
-        </Animated.View>
-
-        <Animated.View entering={FadeInDown.delay(260).springify()} style={styles.quickActions}>
-          <TouchableOpacity style={styles.quickAction} onPress={handleShare} activeOpacity={0.9}>
-            <View style={[styles.quickIcon, { backgroundColor: colors.primary }]}>
-              <MaterialIcon name="share" size={18} color={colors.white} />
-            </View>
-            <View>
-              <Text style={styles.quickTitle}>Share DhanDiary</Text>
-              <Text style={styles.quickSubtitle}>Invite friends in one tap</Text>
-            </View>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.quickAction} onPress={openSupportEmail} activeOpacity={0.9}>
-            <View style={[styles.quickIcon, { backgroundColor: colors.accentGreen }]}>
-              <MaterialIcon name="mail" size={18} color={colors.white} />
-            </View>
-            <View>
-              <Text style={styles.quickTitle}>Contact Support</Text>
-              <Text style={styles.quickSubtitle}>We respond within 24 hours</Text>
-            </View>
-          </TouchableOpacity>
-        </Animated.View>
-
-        {failureCount >= 2 && (
-          <Animated.View entering={FadeInDown.delay(320).springify()} style={styles.retryCard}>
-            <MaterialIcon name="warning" size={20} color={colors.accentOrange} />
-            <View style={{ flex: 1, marginHorizontal: 12 }}>
-              <Text style={styles.retryTitle}>Something blocked your last update.</Text>
-              <Text style={styles.retrySubtitle}>Retry now or clear the retry state.</Text>
-            </View>
-            <TouchableOpacity style={styles.retryChip} onPress={fetchAndApplyUpdate}>
-              <Text style={styles.retryChipText}>{checking ? 'Retrying…' : 'Retry'}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.retryChip, styles.retryChipMuted]} onPress={clearRetryState}>
-              <Text style={[styles.retryChipText, { color: colors.muted }]}>Clear</Text>
             </TouchableOpacity>
           </Animated.View>
-        )}
 
-        <TouchableOpacity style={styles.footer} onPress={() => Linking.openURL(ELLOW_URL)}>
-          <Text style={styles.footerText}>
-            Crafted with ❤️ by <Text style={styles.footerLink}>EllowDigital</Text>
-          </Text>
-        </TouchableOpacity>
-      </ScrollView>
+          <Animated.View entering={FadeInDown.delay(140).springify()} style={styles.updateCard}>
+            <View style={styles.cardHeaderRow}>
+              <View>
+                <Text style={styles.cardTitle}>Stay Updated</Text>
+                <Text style={styles.cardSubtitle}>
+                  Check for new features and apply the latest optimizations instantly.
+                </Text>
+              </View>
+              <View style={styles.cardIconWrap}>
+                <MaterialIcon name="system-update" size={22} color={colors.primary} />
+              </View>
+            </View>
+            <View style={styles.updateActions}>
+              <TouchableOpacity
+                style={styles.primaryCta}
+                onPress={checkForUpdates}
+                activeOpacity={0.9}
+              >
+                <MaterialIcon name="refresh" size={18} color={colors.white} />
+                <Text style={styles.primaryCtaText}>
+                  {checking ? 'Checking…' : 'Check for Updates'}
+                </Text>
+              </TouchableOpacity>
+              {updateAvailable && (
+                <TouchableOpacity
+                  style={[styles.primaryCta, styles.secondaryCta]}
+                  onPress={() => setShowUpdateModal(true)}
+                  activeOpacity={0.9}
+                >
+                  <MaterialIcon name="download" size={18} color={colors.primary} />
+                  <Text style={[styles.primaryCtaText, { color: colors.primary }]}>
+                    Apply Update
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </Animated.View>
+
+          <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.infoCard}>
+            <Text style={styles.infoHeading}>Build details</Text>
+            <View style={styles.infoGrid}>
+              {infoTiles.map((tile) => {
+                const isUpdateTile = tile.label === 'Update ID';
+                if (isUpdateTile) {
+                  return (
+                    <TouchableOpacity
+                      key={tile.label}
+                      style={[styles.infoTile, styles.infoTilePressable]}
+                      activeOpacity={0.85}
+                      onPress={handleShowFullId}
+                    >
+                      <Text style={styles.infoLabel}>{tile.label}</Text>
+                      <Text style={styles.infoValue}>{tile.value}</Text>
+                      <Text style={styles.infoHint}>Tap to view full ID</Text>
+                    </TouchableOpacity>
+                  );
+                }
+                return (
+                  <View key={tile.label} style={styles.infoTile}>
+                    <Text style={styles.infoLabel}>{tile.label}</Text>
+                    <Text style={styles.infoValue}>{tile.value}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          </Animated.View>
+
+          <Animated.View entering={FadeInDown.delay(260).springify()} style={styles.quickActions}>
+            <TouchableOpacity style={styles.quickAction} onPress={handleShare} activeOpacity={0.9}>
+              <View style={[styles.quickIcon, { backgroundColor: colors.primary }]}>
+                <MaterialIcon name="share" size={18} color={colors.white} />
+              </View>
+              <View>
+                <Text style={styles.quickTitle}>Share DhanDiary</Text>
+                <Text style={styles.quickSubtitle}>Invite friends in one tap</Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.quickAction}
+              onPress={openSupportEmail}
+              activeOpacity={0.9}
+            >
+              <View style={[styles.quickIcon, { backgroundColor: colors.accentGreen }]}>
+                <MaterialIcon name="mail" size={18} color={colors.white} />
+              </View>
+              <View>
+                <Text style={styles.quickTitle}>Contact Support</Text>
+                <Text style={styles.quickSubtitle}>We respond within 24 hours</Text>
+              </View>
+            </TouchableOpacity>
+          </Animated.View>
+
+          {failureCount >= 2 && (
+            <Animated.View entering={FadeInDown.delay(320).springify()} style={styles.retryCard}>
+              <MaterialIcon name="warning" size={20} color={colors.accentOrange} />
+              <View style={{ flex: 1, marginHorizontal: 12 }}>
+                <Text style={styles.retryTitle}>Something blocked your last update.</Text>
+                <Text style={styles.retrySubtitle}>Retry now or clear the retry state.</Text>
+              </View>
+              <TouchableOpacity style={styles.retryChip} onPress={fetchAndApplyUpdate}>
+                <Text style={styles.retryChipText}>{checking ? 'Retrying…' : 'Retry'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.retryChip, styles.retryChipMuted]}
+                onPress={clearRetryState}
+              >
+                <Text style={[styles.retryChipText, { color: colors.muted }]}>Clear</Text>
+              </TouchableOpacity>
+            </Animated.View>
+          )}
+        </ScrollView>
+      </Animated.View>
 
       <Modal
         visible={showUpdateModal}
@@ -366,7 +420,7 @@ const AboutScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
-    </Animated.View>
+    </SafeAreaView>
   );
 };
 
@@ -380,17 +434,24 @@ const createStyles = (
   isCompact: boolean
 ) =>
   StyleSheet.create({
+    safeArea: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
     container: {
       flex: 1,
       backgroundColor: colors.background,
     },
     scrollContent: {
       paddingHorizontal: outerPadding,
-      paddingTop: outerPadding + 6,
+      paddingTop: outerPadding,
       paddingBottom: outerPadding,
       width: '100%',
       maxWidth: 640,
       alignSelf: 'center',
+    },
+    headerInset: {
+      height: Math.max(12, outerPadding * 0.35),
     },
     heroCard: {
       backgroundColor: colors.softCard,
@@ -435,6 +496,30 @@ const createStyles = (
       color: colors.subtleText,
       lineHeight: 20,
       fontSize: font(14),
+    },
+    creditLineButton: {
+      marginTop: 18,
+      alignSelf: 'stretch',
+      width: '100%',
+      paddingHorizontal: 18,
+      paddingVertical: 8,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surfaceMuted,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    creditLineText: {
+      color: colors.muted,
+      fontSize: font(12),
+      fontWeight: '600',
+      textAlign: 'center',
+      lineHeight: 18,
+    },
+    creditLineHighlight: {
+      color: colors.primary,
+      fontWeight: '800',
     },
     updateCard: {
       backgroundColor: colors.card,
@@ -617,19 +702,6 @@ const createStyles = (
     },
     retryChipMuted: {
       backgroundColor: colors.surfaceMuted,
-    },
-    footer: {
-      marginTop: gap * 0.5,
-      alignItems: 'center',
-    },
-    footerText: {
-      fontSize: font(13),
-      color: colors.muted,
-      textAlign: 'center',
-    },
-    footerLink: {
-      fontWeight: 'bold',
-      color: colors.primary,
     },
     modalBackdrop: {
       flex: 1,

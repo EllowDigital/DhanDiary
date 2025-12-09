@@ -13,6 +13,7 @@ import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { RectButton } from 'react-native-gesture-handler';
 import dayjs from 'dayjs';
 import AppCard from './AppCard';
+import { ensureCategory } from '../constants/categories';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const scale = SCREEN_WIDTH / 390;
@@ -83,7 +84,7 @@ const TransactionCardInner: React.FC<Props> = ({ item, onEdit, onDelete }) => {
 
             {/* MAIN CONTENT */}
             <View style={styles.middleContent}>
-              <Text style={styles.categoryText}>{item.category || 'General'}</Text>
+              <Text style={styles.categoryText}>{ensureCategory(item.category)}</Text>
               <Text style={styles.noteText}>{item.note || 'No description'}</Text>
             </View>
 

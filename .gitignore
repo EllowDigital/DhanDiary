@@ -79,8 +79,11 @@ expo-env.d.ts
 .DS_Store
 Thumbs.db
 ehthumbs.db
+desktop.ini
+**/desktop.ini
 *.swp
 *.swo
+*.lnk
 
 # -----------------------------------------------------
 # IDE / Editor folders
@@ -103,6 +106,15 @@ coverage/
 *.pid
 *.seed
 *.pid.lock
+icon.ico
+assets/icon.ico
+assets/icon.png
+*.bak
+*.tmp
+*.orig
+*.rej
+*.sqlite
+*.db-journal
 
 # -----------------------------------------------------
 # Lockfiles (optional - uncomment any tool you don't use)

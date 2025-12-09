@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Constants from 'expo-constants';
 import {
   View,
@@ -29,9 +29,12 @@ import Animated, {
   withRepeat,
   Easing,
   FadeInDown,
+  interpolate,
 } from 'react-native-reanimated';
 
+import Svg, { Defs, LinearGradient as SvgLinearGradient, Stop, Rect } from 'react-native-svg';
 import { spacing, colors } from '../utils/design';
+import { ensureCategory, FALLBACK_CATEGORY } from '../constants/categories';
 
 const pkg = require('../../package.json');
 
@@ -77,9 +80,14 @@ const HomeScreen: React.FC = () => {
   const [applyingUpdate, setApplyingUpdate] = useState(false);
   const isExpoGo = Constants?.appOwnership === 'expo';
 
+  useLayoutEffect(() => {
+    if (typeof navigation?.setOptions === 'function') {
+      navigation.setOptions({ headerShown: false });
+    }
+  }, [navigation]);
+
   // Dynamic sizing for responsiveness
-  const CARD_PADDING = spacing(4);
-  const CHART_WIDTH = SCREEN_WIDTH - CARD_PADDING * 2 - spacing(4);
+  const CHART_WIDTH = SCREEN_WIDTH - spacing(4) * 2 - spacing(4);
 
   const [period, setPeriod] = useState<'week' | 'month'>('month');
   const [chartType, setChartType] = useState<'pie' | 'bar'>('pie');
@@ -179,7 +187,7 @@ const HomeScreen: React.FC = () => {
   const pieByCategory = useMemo(() => {
     const map: Record<string, { in: number; out: number }> = {};
     filteredByPeriod.forEach((e) => {
-      const cat = e.category || 'Other';
+      const cat = ensureCategory(e.category);
       if (!map[cat]) map[cat] = { in: 0, out: 0 };
       if (e.type === 'in') map[cat].in += Number(e.amount || 0);
       if (e.type === 'out') map[cat].out += Number(e.amount || 0);
@@ -304,6 +312,14 @@ const HomeScreen: React.FC = () => {
     labelColor: (opacity = 1) => `rgba(${chartLabelRgb}, ${opacity})`,
   };
 
+  const userInitial = (() => {
+    if (typeof user?.name === 'string') {
+      const trimmed = user.name.trim();
+      if (trimmed.length) return trimmed.charAt(0).toUpperCase();
+    }
+    return 'D';
+  })();
+
   const heroTrendDetails = useMemo(() => {
     if (!entries.length) {
       return {
@@ -329,18 +345,54 @@ const HomeScreen: React.FC = () => {
 
   const highlightCards = useMemo(
     () => [
-      { label: 'Avg ticket', value: `₹${periodAverageTicket.toFixed(0)}`, icon: 'receipt-long' },
-      { label: 'Active days', value: `${periodActiveDays || 0}`, icon: 'calendar-today' },
-      { label: 'Entries (period)', value: `${periodEntries.length}`, icon: 'fact-check' },
+      {
+        label: 'Avg ticket',
+        value: `₹${periodAverageTicket.toFixed(0)}`,
+        icon: 'receipt-long',
+        tint: colors.accentBlue,
+      },
+      {
+        label: 'Active days',
+        value: `${periodActiveDays || 0}`,
+        icon: 'calendar-today',
+        tint: colors.accentGreen,
+      },
+      {
+        label: 'Entries (period)',
+        value: `${periodEntries.length}`,
+        icon: 'fact-check',
+        tint: colors.secondary,
+      },
     ],
     [periodAverageTicket, periodActiveDays, periodEntries.length]
   );
 
   const topExpenseCategory = useMemo(() => {
-    if (!pieExpenseData.length) return 'General';
+    if (!pieExpenseData.length) return FALLBACK_CATEGORY;
     const sorted = [...pieExpenseData].sort((a, b) => b.population - a.population);
-    return sorted[0]?.name || 'General';
+    return sorted[0]?.name || FALLBACK_CATEGORY;
   }, [pieExpenseData]);
+
+  const heroMetrics = useMemo(
+    () => [
+      {
+        label: 'Cash in',
+        value: `₹${Math.round(periodIncome).toLocaleString('en-IN')}`,
+        accent: colors.accentGreen,
+      },
+      {
+        label: 'Cash out',
+        value: `₹${Math.round(periodExpense).toLocaleString('en-IN')}`,
+        accent: colors.accentRed,
+      },
+      {
+        label: 'Top category',
+        value: topExpenseCategory,
+        accent: colors.accentOrange,
+      },
+    ],
+    [periodIncome, periodExpense, topExpenseCategory]
+  );
 
   const insightRows = useMemo(
     () => [
@@ -379,6 +431,33 @@ const HomeScreen: React.FC = () => {
     ],
     [navigation]
   );
+
+  const heroPulse = useSharedValue(0);
+  useEffect(() => {
+    heroPulse.value = withRepeat(
+      withTiming(1, { duration: 4200, easing: Easing.inOut(Easing.quad) }),
+      -1,
+      true
+    );
+  }, [heroPulse]);
+
+  const heroBlobLeftStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: interpolate(heroPulse.value, [0, 1], [0, -12]) },
+      { translateX: interpolate(heroPulse.value, [0, 1], [0, 10]) },
+      { scale: 0.95 + heroPulse.value * 0.08 },
+    ],
+    opacity: 0.45,
+  }));
+
+  const heroBlobRightStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: interpolate(heroPulse.value, [0, 1], [-6, 8]) },
+      { translateX: interpolate(heroPulse.value, [0, 1], [12, -8]) },
+      { scale: 0.9 + heroPulse.value * 0.1 },
+    ],
+    opacity: 0.35,
+  }));
 
   /* --- ANIMATIONS --- */
   const shimmer = useSharedValue(0);
@@ -432,6 +511,15 @@ const HomeScreen: React.FC = () => {
     }
   }, []);
 
+  const handleOpenDrawer = useCallback(() => {
+    const anyNav: any = navigation;
+    if (typeof anyNav?.openDrawer === 'function') {
+      anyNav.openDrawer();
+    } else if (typeof anyNav?.toggleDrawer === 'function') {
+      anyNav.toggleDrawer();
+    }
+  }, [navigation]);
+
   return (
     <View style={styles.mainContainer}>
       <UpdateBanner
@@ -468,7 +556,51 @@ const HomeScreen: React.FC = () => {
           ListHeaderComponentStyle={styles.listHeaderSpacing}
           ListHeaderComponent={
             <Animated.View entering={FadeInDown.delay(100).duration(500)}>
+              <View style={styles.topNavRow}>
+                <TouchableOpacity style={styles.navIconButton} onPress={handleOpenDrawer}>
+                  <MaterialIcon name="menu" size={22} color={colors.text} />
+                </TouchableOpacity>
+                <Text style={styles.topNavTitle}>Dashboard</Text>
+                <View style={styles.topNavAvatar}>
+                  <Text style={styles.topNavAvatarText}>{userInitial}</Text>
+                </View>
+              </View>
+
               <View style={styles.heroCard}>
+                <Svg pointerEvents="none" style={StyleSheet.absoluteFill}>
+                  <Defs>
+                    <SvgLinearGradient id="heroGradient" x1="0" y1="0" x2="1" y2="1">
+                      <Stop offset="0%" stopColor={colors.primary} stopOpacity={0.9} />
+                      <Stop offset="90%" stopColor={colors.secondary} stopOpacity={0.85} />
+                    </SvgLinearGradient>
+                  </Defs>
+                  <Rect width="100%" height="100%" rx={28} fill="url(#heroGradient)" />
+                </Svg>
+
+                <Animated.View style={[styles.heroBlob, styles.heroBlobLeft, heroBlobLeftStyle]} />
+                <Animated.View
+                  style={[styles.heroBlob, styles.heroBlobRight, heroBlobRightStyle]}
+                />
+
+                <View style={styles.heroChipRow}>
+                  <View style={styles.heroChip}>
+                    <MaterialIcon
+                      name={isOnline ? 'wifi' : 'wifi-off'}
+                      size={16}
+                      color={colors.white}
+                    />
+                    <Text style={styles.heroChipText}>
+                      {isOnline ? 'Live sync on' : 'Offline mode'}
+                    </Text>
+                  </View>
+                  <View style={[styles.heroChip, styles.heroChipLight]}>
+                    <MaterialIcon name="schedule" size={16} color={colors.primary} />
+                    <Text style={[styles.heroChipText, styles.heroChipTextDark]}>
+                      {periodLabel}
+                    </Text>
+                  </View>
+                </View>
+
                 <View style={styles.heroTopRow}>
                   <View>
                     <Text style={styles.heroSubtle}>Welcome back</Text>
@@ -478,96 +610,110 @@ const HomeScreen: React.FC = () => {
                     style={styles.heroSettings}
                     onPress={() => navigation.navigate('Settings')}
                   >
-                    <MaterialIcon name="settings" size={20} color={colors.muted} />
+                    <MaterialIcon name="settings" size={20} color={colors.primary} />
                   </TouchableOpacity>
                 </View>
-                <View style={styles.heroLabelRow}>
-                  <Text style={styles.heroLabel}>Period net</Text>
-                  <Text style={styles.heroPeriod}>{periodLabel}</Text>
+
+                <View style={styles.heroBalanceRow}>
+                  <View>
+                    <Text style={styles.heroOverline}>Net this period</Text>
+                    <Text style={styles.heroBalance}>₹{periodNet.toFixed(2)}</Text>
+                  </View>
+                  <View style={[styles.trendBadge, { backgroundColor: 'rgba(255,255,255,0.12)' }]}>
+                    <MaterialIcon name={heroTrendDetails.icon} size={18} color={colors.white} />
+                    <Text style={[styles.trendText, { color: colors.white }]}>
+                      {heroTrendDetails.label}
+                    </Text>
+                  </View>
                 </View>
-                <Text style={styles.heroBalance}>₹{periodNet.toFixed(2)}</Text>
-                <View
-                  style={[styles.trendBadge, { backgroundColor: `${heroTrendDetails.color}22` }]}
-                >
-                  <MaterialIcon
-                    name={heroTrendDetails.icon}
-                    size={18}
-                    color={heroTrendDetails.color}
-                  />
-                  <Text style={[styles.trendText, { color: heroTrendDetails.color }]}>
-                    {heroTrendDetails.label}
-                  </Text>
+
+                <View style={styles.heroMetricRow}>
+                  {heroMetrics.map((metric) => (
+                    <View key={metric.label} style={styles.heroMetric}>
+                      <View style={[styles.heroMetricDot, { backgroundColor: metric.accent }]} />
+                      <Text style={styles.heroMetricLabel}>{metric.label}</Text>
+                      <Text style={styles.heroMetricValue}>{metric.value}</Text>
+                    </View>
+                  ))}
                 </View>
-                <View style={styles.heroStatsRow}>
-                  <View style={[styles.heroStatCard, styles.heroStatSpacing]}>
-                    <Text style={styles.heroStatLabel}>Income</Text>
-                    <Text style={[styles.heroStatValue, { color: colors.accentGreen }]}>
-                      ₹{periodIncome.toFixed(2)}
-                    </Text>
-                  </View>
-                  <View style={[styles.heroStatCard, styles.heroStatSpacing]}>
-                    <Text style={styles.heroStatLabel}>Expense</Text>
-                    <Text style={[styles.heroStatValue, { color: colors.accentRed }]}>
-                      ₹{periodExpense.toFixed(2)}
-                    </Text>
-                  </View>
-                  <View style={styles.heroStatCard}>
-                    <Text style={styles.heroStatLabel}>Entries</Text>
-                    <Text style={[styles.heroStatValue, { color: colors.secondary }]}>
-                      {periodEntries.length}
-                    </Text>
-                  </View>
+
+                <View style={styles.heroPrimaryActionRow}>
+                  <TouchableOpacity
+                    style={styles.heroPrimaryCta}
+                    onPress={() => navigation.navigate('AddEntry')}
+                  >
+                    <MaterialIcon name="flash-on" size={18} color={colors.white} />
+                    <Text style={styles.heroPrimaryCtaText}>Log entry</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.heroSecondaryCta}
+                    onPress={() => navigation.navigate('Stats')}
+                  >
+                    <MaterialIcon name="insights" size={18} color={colors.primary} />
+                    <Text style={styles.heroSecondaryCtaText}>Open stats</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
 
-              <View style={styles.highlightRow}>
+              <View style={styles.quickStatsCard}>
                 {highlightCards.map((card, idx) => (
                   <Animated.View
                     key={card.label}
-                    entering={FadeInDown.delay(160 + idx * 60)
+                    entering={FadeInDown.delay(140 + idx * 40)
                       .springify()
-                      .damping(16)}
+                      .damping(18)}
                     style={[
-                      styles.highlightCard,
-                      idx !== highlightCards.length - 1 && styles.horizontalSpacer,
+                      styles.quickStatRow,
+                      idx !== highlightCards.length - 1 && styles.quickStatDivider,
                     ]}
                   >
-                    <MaterialIcon name={card.icon as any} size={18} color={colors.muted} />
-                    <Text style={styles.highlightLabel}>{card.label}</Text>
-                    <Text style={styles.highlightValue}>{card.value}</Text>
+                    <View style={[styles.quickStatIcon, { backgroundColor: `${card.tint}1A` }]}>
+                      <MaterialIcon name={card.icon as any} size={18} color={card.tint} />
+                    </View>
+                    <View style={styles.quickStatTextWrap}>
+                      <Text style={styles.quickStatLabel}>{card.label}</Text>
+                      <Text style={styles.quickStatValue}>{card.value}</Text>
+                    </View>
                   </Animated.View>
                 ))}
               </View>
 
-              <View style={styles.actionGrid}>
-                {homeActions.map((action, idx) => (
-                  <Animated.View
-                    key={action.label}
-                    entering={FadeInDown.delay(260 + idx * 60)
-                      .springify()
-                      .damping(15)}
-                    style={[
-                      styles.actionWrapper,
-                      idx !== homeActions.length - 1 && styles.horizontalSpacer,
-                    ]}
-                  >
-                    <TouchableOpacity
-                      style={[styles.actionCard, { backgroundColor: `${action.accent}15` }]}
-                      onPress={action.onPress}
+              <View style={styles.quickActionsCard}>
+                <View style={styles.actionGrid}>
+                  {homeActions.map((action, idx) => (
+                    <Animated.View
+                      key={action.label}
+                      entering={FadeInDown.delay(260 + idx * 60)
+                        .springify()
+                        .damping(15)}
+                      style={styles.actionWrapper}
                     >
-                      <View style={[styles.actionIconWrap, { backgroundColor: action.accent }]}>
-                        <MaterialIcon name={action.icon as any} size={20} color={colors.white} />
-                      </View>
-                      <Text style={styles.actionLabel}>{action.label}</Text>
-                    </TouchableOpacity>
-                  </Animated.View>
-                ))}
+                      <TouchableOpacity style={styles.actionCard} onPress={action.onPress}>
+                        <View style={styles.actionInner}>
+                          <View
+                            style={[
+                              styles.actionIconWrap,
+                              { backgroundColor: `${action.accent}22` },
+                            ]}
+                          >
+                            <MaterialIcon
+                              name={action.icon as any}
+                              size={20}
+                              color={action.accent}
+                            />
+                          </View>
+                          <Text style={styles.actionLabel}>{action.label}</Text>
+                        </View>
+                      </TouchableOpacity>
+                    </Animated.View>
+                  ))}
+                </View>
               </View>
 
               <View style={styles.analyticsCard}>
                 <View style={styles.cardHeaderRow}>
                   <View>
-                    <Text style={styles.cardTitle}>Cash flow</Text>
+                    <Text style={styles.cardTitle}>Cash intelligence</Text>
                     <Text style={styles.cardSubtitle}>Visualize income vs expense</Text>
                   </View>
                   <TouchableOpacity
@@ -721,18 +867,94 @@ const styles = StyleSheet.create({
   listHeaderSpacing: {
     paddingBottom: spacing(3),
   },
-  heroCard: {
-    backgroundColor: colors.softCard,
-    borderRadius: 28,
-    padding: spacing(3),
+  topNavRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: spacing(3),
+    position: 'relative',
+    zIndex: 2,
+  },
+  navIconButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 16,
+    backgroundColor: colors.card,
+    justifyContent: 'center',
+    alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.border,
-    shadowColor: colors.text,
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.08,
-    shadowRadius: 20,
-    elevation: 6,
+  },
+  topNavTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  topNavAvatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 16,
+    backgroundColor: colors.primarySoft,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  topNavAvatarText: {
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  heroCard: {
+    borderRadius: 28,
+    padding: spacing(3),
+    marginTop: spacing(0.5),
+    marginBottom: spacing(3),
+    overflow: 'hidden',
+    position: 'relative',
+    zIndex: 1,
+  },
+  heroBlob: {
+    position: 'absolute',
+    width: 180,
+    height: 180,
+    borderRadius: 160,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
+  heroBlobLeft: {
+    top: -30,
+    left: -30,
+  },
+  heroBlobRight: {
+    bottom: -20,
+    right: -10,
+  },
+  heroChipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    columnGap: spacing(1.25),
+    rowGap: spacing(1),
+    marginBottom: spacing(2),
+  },
+  heroChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    gap: 8,
+    flexShrink: 1,
+  },
+  heroChipLight: {
+    backgroundColor: colors.white,
+    marginLeft: 'auto',
+  },
+  heroChipText: {
+    color: colors.white,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  heroChipTextDark: {
+    color: colors.primary,
   },
   heroTopRow: {
     flexDirection: 'row',
@@ -741,51 +963,43 @@ const styles = StyleSheet.create({
     marginBottom: spacing(2),
   },
   heroSubtle: {
-    color: colors.muted,
+    color: 'rgba(255,255,255,0.7)',
     fontSize: 14,
     marginBottom: 4,
   },
   heroGreeting: {
     fontSize: 22,
-    color: colors.text,
+    color: colors.white,
     fontWeight: '700',
     letterSpacing: -0.5,
   },
   heroSettings: {
-    backgroundColor: colors.card,
+    backgroundColor: 'rgba(255,255,255,0.25)',
     width: 38,
     height: 38,
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
   },
-  heroLabel: {
-    color: colors.muted,
-    fontSize: 13,
-    marginBottom: 4,
-  },
-  heroLabelRow: {
+  heroBalanceRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: spacing(1),
+    marginBottom: spacing(2),
   },
-  heroPeriod: {
-    color: colors.muted,
-    fontSize: 12,
-    fontWeight: '600',
+  heroOverline: {
+    color: 'rgba(255,255,255,0.65)',
+    fontSize: 13,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
   },
   heroBalance: {
-    color: colors.text,
-    fontSize: 36,
+    color: colors.white,
+    fontSize: 38,
     fontWeight: '800',
     letterSpacing: -1,
   },
   trendBadge: {
-    marginTop: spacing(2),
-    alignSelf: 'flex-start',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 999,
@@ -797,81 +1011,149 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginLeft: 6,
   },
-  heroStatsRow: {
+  heroMetricRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: spacing(3),
+    gap: 12,
+    marginBottom: spacing(2),
   },
-  heroStatCard: {
+  heroMetric: {
     flex: 1,
-    backgroundColor: colors.card,
-    padding: 14,
+    backgroundColor: 'rgba(15,23,42,0.14)',
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
+    padding: 12,
   },
-  heroStatSpacing: {
-    marginRight: 12,
+  heroMetricDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 6,
+    marginBottom: 8,
   },
-  heroStatLabel: {
-    color: colors.muted,
+  heroMetricLabel: {
+    color: 'rgba(255,255,255,0.65)',
     fontSize: 12,
     marginBottom: 6,
   },
-  heroStatValue: {
-    fontSize: 18,
+  heroMetricValue: {
+    color: colors.white,
+    fontSize: 16,
     fontWeight: '700',
   },
-  highlightRow: {
+  heroPrimaryActionRow: {
     flexDirection: 'row',
-    marginBottom: spacing(3),
+    gap: 12,
   },
-  highlightCard: {
+  heroPrimaryCta: {
     flex: 1,
+    backgroundColor: colors.secondary,
+    paddingVertical: 12,
+    borderRadius: 14,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+  heroPrimaryCtaText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.white,
+  },
+  heroSecondaryCta: {
+    flex: 1,
+    backgroundColor: colors.white,
+    paddingVertical: 12,
+    borderRadius: 14,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+  heroSecondaryCtaText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  quickStatsCard: {
     backgroundColor: colors.card,
-    borderRadius: 18,
-    padding: 14,
+    borderRadius: 24,
+    paddingHorizontal: spacing(2),
+    paddingVertical: spacing(1),
     borderWidth: 1,
     borderColor: colors.border,
+    marginBottom: spacing(3),
+  },
+  quickStatRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing(1.5),
+  },
+  quickStatDivider: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  quickStatIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing(1.5),
+  },
+  quickStatTextWrap: {
+    flex: 1,
+  },
+  quickStatLabel: {
+    color: colors.muted,
+    fontSize: 12,
+    marginBottom: 2,
+  },
+  quickStatValue: {
+    color: colors.text,
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  quickActionsCard: {
+    backgroundColor: colors.card,
+    borderRadius: 28,
+    paddingHorizontal: spacing(2),
+    paddingVertical: spacing(2.5),
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing(3),
     shadowColor: colors.text,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.04,
     shadowRadius: 10,
     elevation: 2,
   },
-  highlightLabel: {
-    marginTop: 8,
-    color: colors.muted,
-    fontSize: 12,
-  },
-  highlightValue: {
-    color: colors.text,
-    fontWeight: '700',
-    fontSize: 16,
-    marginTop: 2,
-  },
   actionGrid: {
     flexDirection: 'row',
-    marginBottom: spacing(3),
+    gap: spacing(1.5),
   },
   actionWrapper: {
     flex: 1,
   },
   actionCard: {
+    borderRadius: 22,
+    padding: spacing(0.75),
+    backgroundColor: colors.surfaceMuted,
+  },
+  actionInner: {
     borderRadius: 20,
-    padding: 16,
-    alignItems: 'flex-start',
+    paddingVertical: spacing(2),
+    paddingHorizontal: spacing(1),
+    alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
   },
   actionIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
+    width: 50,
+    height: 50,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   actionLabel: {
     color: colors.text,
@@ -1006,8 +1288,5 @@ const styles = StyleSheet.create({
   emptyCtaText: {
     color: colors.white,
     fontWeight: '600',
-  },
-  horizontalSpacer: {
-    marginRight: 12,
   },
 });
