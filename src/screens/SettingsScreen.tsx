@@ -25,6 +25,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '../context/ToastContext';
 import { colors, spacing } from '../utils/design';
 import ScreenHeader from '../components/ScreenHeader';
+import appConfig from '../../app.json';
+const pkg = require('../../package.json');
 
 // Helper: Format Date
 const formatSyncDate = (isoString: string | null) => {
@@ -303,7 +305,9 @@ const SettingsScreen = () => {
                 <MaterialIcon name="logout" size={20} color={colors.accentRed} />
                 <Text style={styles.logoutText}>Sign Out</Text>
               </TouchableOpacity>
-              <Text style={styles.versionText}>v1.2.0 (Build 45)</Text>
+              <Text style={styles.versionText}>
+                v{pkg.version} (Build {appConfig.expo.ios?.buildNumber || appConfig.expo.android?.versionCode})
+              </Text>
             </Animated.View>
           </View>
         </ScrollView>

@@ -18,6 +18,8 @@ import { useNavigation, NavigationProp } from '@react-navigation/native';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { colors, spacing } from '../utils/design';
 import ScreenHeader from '../components/ScreenHeader';
+import appConfig from '../../app.json';
+const pkg = require('../../package.json');
 
 type RouteName = 'Settings' | 'About' | 'Account' | 'Stats' | string;
 
@@ -165,7 +167,9 @@ const MoreScreen: React.FC = () => {
             ))}
           </View>
 
-          <Text style={styles.footnote}>DhanDiary v1.0.2 • Made with ❤️</Text>
+          <Text style={styles.footnote}>
+            DhanDiary v{pkg.version} (Build {appConfig.expo.ios?.buildNumber || appConfig.expo.android?.versionCode}) • Made with ❤️
+          </Text>
         </ScrollView>
       </Animated.View>
     </SafeAreaView>
