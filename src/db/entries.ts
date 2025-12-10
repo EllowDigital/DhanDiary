@@ -240,6 +240,14 @@ export const markEntrySynced = async (
   } catch (e) {}
 };
 
+export const deleteLocalEntry = async (localId: string) => {
+  const db = await sqlite.open();
+  await db.run('DELETE FROM local_entries WHERE local_id = ?', [localId]);
+  try {
+    notifyEntriesChanged();
+  } catch (e) {}
+};
+
 export const getEntryByLocalId = async (localId: string) => {
   const db = await sqlite.open();
   const r = await db.get<LocalEntry>('SELECT * FROM local_entries WHERE local_id = ? LIMIT 1', [
@@ -373,4 +381,5 @@ export default {
   markLocalDeletedByRemoteId,
   getLocalByClientId,
   getUnsyncedEntries,
+  deleteLocalEntry,
 };
