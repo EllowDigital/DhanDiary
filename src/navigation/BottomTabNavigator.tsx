@@ -19,13 +19,16 @@ const BottomTabNavigator = () => {
   const insets = useSafeAreaInsets();
 
   const screenOptions = useMemo(() => {
-    // --- POSITIONING LOGIC ---
-    // iOS: Sit exactly on top of the Home Indicator (insets.bottom).
-    // Android: Sit 16px from bottom (standard margin) as insets.bottom is usually 0 or included in navigation bar.
-    // This removes the "floating gap" look while respecting gestures.
     const isIOS = Platform.OS === 'ios';
-    const bottomPosition = isIOS ? insets.bottom : 16;
-    const tabHeight = 60; // Slightly more compact
+    const baseHorizontal = 16;
+    const tabHeight = 56;
+    const leftOffset = baseHorizontal + insets.left;
+    const rightOffset = baseHorizontal + insets.right;
+    const iosBottomGap = Math.max(insets.bottom, 12);
+    const androidBottomGap = Math.max(insets.bottom + 12, 16);
+    const bottomPosition = isIOS ? iosBottomGap : androidBottomGap;
+    const extraBottomPadding = Math.max(insets.bottom * 0.5, isIOS ? 6 : 8);
+    const tabBarHeight = tabHeight + extraBottomPadding + 10;
 
     return {
       headerShown: false,
@@ -37,15 +40,15 @@ const BottomTabNavigator = () => {
       tabBarStyle: {
         position: 'absolute',
         bottom: bottomPosition,
-        left: 20,
-        right: 20,
-        height: tabHeight,
+        left: leftOffset,
+        right: rightOffset,
+        height: tabBarHeight,
         borderRadius: 30,
         backgroundColor: colors.card,
         borderWidth: 1,
         borderColor: colors.border,
-        paddingBottom: 0,
-        paddingTop: 0,
+        paddingBottom: extraBottomPadding,
+        paddingTop: 10,
 
         // Shadow that blends better with the bottom
         shadowColor: colors.shadow,
@@ -58,7 +61,7 @@ const BottomTabNavigator = () => {
       // Tab Items
       tabBarItemStyle: {
         height: tabHeight,
-        paddingVertical: 8,
+        paddingVertical: 6,
         borderRadius: 30,
       },
 
@@ -66,7 +69,7 @@ const BottomTabNavigator = () => {
       tabBarLabelStyle: {
         fontSize: 10,
         fontWeight: '700',
-        paddingBottom: 4,
+        paddingBottom: 0,
       },
 
       // Background
@@ -74,7 +77,7 @@ const BottomTabNavigator = () => {
         backgroundColor: colors.background,
       },
     } as const;
-  }, [insets.bottom]);
+  }, [insets.bottom, insets.left, insets.right]);
 
   return (
     <View style={styles.container}>

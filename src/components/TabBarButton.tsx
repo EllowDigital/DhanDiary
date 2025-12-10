@@ -52,6 +52,7 @@ const TabBarButton = ({ children, onPress, accessibilityState }: Props) => {
       onPress={onPress}
       android_ripple={{ color: 'rgba(37,99,235,0.15)', borderless: true }}
       style={({ pressed }) => [styles.container, pressed && styles.pressed]}
+      hitSlop={{ top: 6, bottom: 6, left: 12, right: 12 }}
     >
       <Animated.View pointerEvents="none" style={[styles.cardBehind, highlightStyle]} />
       <Animated.View style={[styles.content, { transform: [{ translateY: contentTranslate }] }]}>
@@ -66,7 +67,8 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 4,
   },
   pressed: {
     transform: [{ scale: 0.97 }],
@@ -77,9 +79,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cardBehind: {
-    position: 'absolute',
-    width: 64,
-    height: 40,
+    ...StyleSheet.absoluteFillObject,
+    left: 12,
+    right: 12,
+    top: 10,
+    bottom: 10,
     borderRadius: 18,
     backgroundColor: 'rgba(37,99,235,0.12)',
     zIndex: 1,
