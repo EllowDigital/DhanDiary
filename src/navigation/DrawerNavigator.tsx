@@ -12,6 +12,7 @@ import StatsScreen from '../screens/StatsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import AccountManagementScreen from '../screens/AccountManagementScreen';
 import AboutScreen from '../screens/AboutScreen';
+import PrivacyPolicyScreen from '../screens/PrivacyPolicyScreen';
 
 // Components & Theme
 import CustomDrawerContent from './CustomDrawerContent';
@@ -164,6 +165,15 @@ const DrawerNavigator = () => {
           drawerIcon: ({ color, size }) => (
             <MaterialCommunityIcon name="information-outline" color={color} size={size} />
           ),
+        }}
+      />
+
+      <Drawer.Screen
+        name="PrivacyPolicy"
+        component={PrivacyPolicyScreen}
+        options={{
+          title: 'Privacy Policy',
+          drawerItemStyle: { display: 'none' },
         }}
       />
     </Drawer.Navigator>
