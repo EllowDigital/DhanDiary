@@ -139,7 +139,7 @@ const SplashScreen = () => {
             { opacity: fadeAnim, transform: [{ scale: scaleAnim }, { translateY: slideAnim }] },
           ]}
         >
-          <Image source={require('../../assets/icon.png')} style={styles.logo} resizeMode="cover" />
+          <Image source={require('../../assets/splash-icon.png')} style={styles.logo} resizeMode="cover" />
         </Animated.View>
 
         {/* TEXT */}
