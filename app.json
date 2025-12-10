@@ -16,11 +16,11 @@
     },
     "ios": {
       "supportsTablet": true,
-      "buildNumber": "10800"
+      "buildNumber": "120"
     },
     "android": {
       "package": "com.ellowdigital.dhandiary",
-      "versionCode": 10800,
+      "versionCode": 120,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -32,6 +32,7 @@
     "plugins": [
       "expo-updates",
       "expo-sqlite",
+      "expo-font",
       [
         "expo-build-properties",
         {
