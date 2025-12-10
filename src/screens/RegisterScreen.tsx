@@ -15,14 +15,14 @@ import {
   Keyboard,
 } from 'react-native';
 import { Button, Text } from '@rneui/themed';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 
 // Types & Services
 import { AuthStackParamList } from '../types/navigation';
-import { registerOnline } from '../services/auth';
+import { registerOnline, warmNeonConnection } from '../services/auth';
 import { useToast } from '../context/ToastContext';
 import { useInternetStatus } from '../hooks/useInternetStatus';
 
@@ -45,6 +45,8 @@ const RegisterScreen = () => {
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [warming, setWarming] = useState(false);
+  const [neonReady, setNeonReady] = useState(true);
 
   // Validation State
   const [emailError, setEmailError] = useState<string | null>(null);
@@ -82,8 +84,29 @@ const RegisterScreen = () => {
   };
   const passStrength = getPasswordStrength(password);
 
+  const warmRemote = React.useCallback(
+    async (force = false) => {
+      if (!isOnline) return false;
+      setWarming(true);
+      try {
+        const ok = await warmNeonConnection({ force });
+        setNeonReady(ok);
+        return ok;
+      } finally {
+        setWarming(false);
+      }
+    },
+    [isOnline]
+  );
+
+  useFocusEffect(
+    React.useCallback(() => {
+      warmRemote(false).catch(() => {});
+    }, [warmRemote])
+  );
+
   const handleRegister = async () => {
-    if (loading) return;
+    if (loading || warming) return;
     if (!isOnline)
       return Alert.alert('Offline', 'Internet connection required to create an account.');
 
@@ -106,6 +129,7 @@ const RegisterScreen = () => {
 
     setLoading(true);
     try {
+      await warmRemote(true);
       await registerOnline(name, email, password);
       showToast('Account created!');
       (navigation.getParent() as any)?.replace('Main');
@@ -243,11 +267,20 @@ const RegisterScreen = () => {
                 </Text>
               )}
 
+              {warming && (
+                <View style={styles.warmingBanner}>
+                  <MaterialIcon name="bolt" size={16} color={colors.accentOrange} />
+                  <Text style={styles.warmingText}>
+                    Secure server is waking up…
+                  </Text>
+                </View>
+              )}
+
               <Button
                 title={loading ? 'Creating...' : 'Create Account'}
                 onPress={handleRegister}
                 loading={loading}
-                disabled={loading || !isOnline}
+                disabled={loading || warming || !isOnline}
                 buttonStyle={styles.primaryButton}
                 containerStyle={styles.buttonContainer}
                 titleStyle={{ fontWeight: '700', fontSize: 16 }}
@@ -383,6 +416,21 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 10,
     textAlign: 'right',
+  },
+  warmingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: 10,
+    marginTop: 10,
+  },
+  warmingText: {
+    fontSize: 12,
+    color: colors.muted,
+    fontWeight: '600',
   },
 
   primaryButton: {
