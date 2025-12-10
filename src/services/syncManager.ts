@@ -27,6 +27,56 @@ import {
 } from '../db/entries';
 import { query } from '../api/neonClient';
 import vexoService from './vexo';
+
+export type SyncStatusState = 'idle' | 'syncing' | 'offline' | 'error';
+export type SyncConflictEvent = {
+  localId?: string | null;
+  remoteId?: string | null;
+  amount?: number | null;
+  category?: string | null;
+  note?: string | null;
+  message: string;
+};
+
+let currentSyncStatus: SyncStatusState = 'idle';
+const syncStatusListeners = new Set<(status: SyncStatusState) => void>();
+const conflictListeners = new Set<(event: SyncConflictEvent) => void>();
+
+const emitSyncStatus = (status: SyncStatusState) => {
+  currentSyncStatus = status;
+  syncStatusListeners.forEach((listener) => {
+    try {
+      listener(status);
+    } catch (e) {}
+  });
+};
+
+const emitSyncConflict = (event: SyncConflictEvent) => {
+  conflictListeners.forEach((listener) => {
+    try {
+      listener(event);
+    } catch (e) {}
+  });
+};
+
+export const getSyncStatus = () => currentSyncStatus;
+
+export const subscribeSyncStatus = (listener: (status: SyncStatusState) => void) => {
+  syncStatusListeners.add(listener);
+  try {
+    listener(currentSyncStatus);
+  } catch (e) {}
+  return () => {
+    syncStatusListeners.delete(listener);
+  };
+};
+
+export const subscribeSyncConflicts = (listener: (event: SyncConflictEvent) => void) => {
+  conflictListeners.add(listener);
+  return () => {
+    conflictListeners.delete(listener);
+  };
+};
 const Q = (sql: string, params: any[] = []) => query(sql, params, { retries: 2, timeoutMs: 15000 });
 let _unsubscribe: (() => void) | null = null;
 let _foregroundTimer: any = null;
@@ -637,6 +687,15 @@ export const pullRemote = async () => {
 
         // Otherwise remote is same or newer -> upsert into local (including client_id)
         try {
+          const localSnapshot = local
+            ? {
+                local_id: local.local_id,
+                amount: Number(local.amount),
+                note: local.note || null,
+                updated_at: local.updated_at || null,
+              }
+            : null;
+
           await upsertLocalFromRemote({
             id: String(r.id),
             user_id: r.user_id,
@@ -652,6 +711,28 @@ export const pullRemote = async () => {
             server_version: typeof r.server_version === 'number' ? r.server_version : undefined,
           });
           pulled += 1;
+
+          if (localSnapshot) {
+            const remoteAmount = Number(r.amount);
+            const remoteUpdated = r.updated_at || null;
+            const localUpdatedTime = new Date(localSnapshot.updated_at || 0).getTime();
+            const remoteUpdatedTime = new Date(remoteUpdated || 0).getTime();
+            const noteChanged = (localSnapshot.note || '') !== (r.note || '');
+            if (
+              localSnapshot.amount !== remoteAmount ||
+              noteChanged ||
+              localUpdatedTime !== remoteUpdatedTime
+            ) {
+              emitSyncConflict({
+                localId: localSnapshot.local_id,
+                remoteId: r.id ? String(r.id) : r.client_id || null,
+                amount: remoteAmount,
+                category: r.category,
+                note: r.note,
+                message: 'Server version replaced a transaction.',
+              });
+            }
+          }
         } catch (err) {
           console.error('Failed to merge remote row', r.id, err);
           try {
@@ -738,10 +819,14 @@ export const syncBothWays = async () => {
     return { pushed: 0, updated: 0, deleted: 0, pulled: 0, merged: 0, total: 0 };
   }
   const state = await NetInfo.fetch();
-  if (!state.isConnected) return;
+  if (!state.isConnected) {
+    emitSyncStatus('offline');
+    return { pushed: 0, updated: 0, deleted: 0, pulled: 0, merged: 0, total: 0 };
+  }
   _syncInProgress = true;
   let result = { pushed: 0, updated: 0, deleted: 0, pulled: 0, merged: 0, total: 0 };
   try {
+    emitSyncStatus('syncing');
     try {
       if (vexoService.customEvent) {
         vexoService.customEvent('sync_start', { when: new Date().toISOString() });
@@ -786,6 +871,7 @@ export const syncBothWays = async () => {
     }
 
     result = { pushed, updated, deleted, pulled, merged, total };
+    emitSyncStatus('idle');
     try {
       if (vexoService.customEvent) {
         vexoService.customEvent('sync_complete', {
@@ -799,6 +885,9 @@ export const syncBothWays = async () => {
       }
     } catch (e) {}
     return result;
+  } catch (err) {
+    emitSyncStatus('error');
+    throw err;
   } finally {
     _syncInProgress = false;
     // If another sync was requested while we were running, clear the flag and run once more.
@@ -815,6 +904,9 @@ export const syncBothWays = async () => {
         vexoService.customEvent('sync_ended', { when: new Date().toISOString() });
       }
     } catch (e) {}
+    if (currentSyncStatus === 'syncing') {
+      emitSyncStatus('idle');
+    }
   }
 };
 
