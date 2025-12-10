@@ -6,6 +6,7 @@ import {
   Animated,
   Dimensions,
   Text as RNText,
+  ViewStyle,
 } from 'react-native';
 import { Text } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
@@ -23,9 +24,17 @@ type Props = {
   item: any;
   onEdit?: (item: any) => void;
   onDelete?: (local_id: string) => void;
+  enableSwipe?: boolean;
+  compact?: boolean;
 };
 
-const TransactionCardInner: React.FC<Props> = ({ item, onEdit, onDelete }) => {
+const TransactionCardInner: React.FC<Props> = ({
+  item,
+  onEdit,
+  onDelete,
+  enableSwipe = true,
+  compact = false,
+}) => {
   const anim = useRef(new Animated.Value(0.9)).current;
 
   useEffect(() => {
@@ -36,37 +45,37 @@ const TransactionCardInner: React.FC<Props> = ({ item, onEdit, onDelete }) => {
     }).start();
   }, []);
 
-  // LEFT ACTION (Edit)
-  const renderLeftActions = () => (
-    <RectButton
-      style={[styles.swipeAction, { backgroundColor: '#1E88E5' }]}
-      onPress={() => onEdit?.(item)}
-    >
-      <MaterialIcon name="edit" size={24} color="#fff" />
-      <RNText style={styles.swipeText}>Edit</RNText>
-    </RectButton>
-  );
+  const hasSwipeActions = Boolean(onEdit || onDelete);
+  const shouldSwipe = enableSwipe && hasSwipeActions;
 
-  // RIGHT ACTION (Delete)
-  const renderRightActions = () => (
-    <RectButton
-      style={[styles.swipeAction, { backgroundColor: '#D32F2F' }]}
-      onPress={() => onDelete?.(item.local_id)}
-    >
-      <MaterialIcon name="delete" size={24} color="#fff" />
-      <RNText style={styles.swipeText}>Delete</RNText>
-    </RectButton>
-  );
+  const renderLeftActions = () =>
+    onEdit ? (
+      <RectButton
+        style={[styles.swipeAction, { backgroundColor: '#1E88E5' }]}
+        onPress={() => onEdit?.(item)}
+      >
+        <MaterialIcon name="edit" size={24} color="#fff" />
+        <RNText style={styles.swipeText}>Edit</RNText>
+      </RectButton>
+    ) : null;
 
-  return (
-    <Swipeable
-      overshootLeft={false}
-      overshootRight={false}
-      renderLeftActions={renderLeftActions}
-      renderRightActions={renderRightActions}
-    >
-      <Animated.View style={{ transform: [{ scale: anim }] }}>
-        <AppCard style={styles.card}>
+  const renderRightActions = () =>
+    onDelete ? (
+      <RectButton
+        style={[styles.swipeAction, { backgroundColor: '#D32F2F' }]}
+        onPress={() => onDelete?.(item.local_id)}
+      >
+        <MaterialIcon name="delete" size={24} color="#fff" />
+        <RNText style={styles.swipeText}>Delete</RNText>
+      </RectButton>
+    ) : null;
+
+  const cardStyles: ViewStyle[] = [styles.card];
+  if (compact) cardStyles.push(styles.cardCompact);
+
+  const cardContent = (
+    <Animated.View style={{ transform: [{ scale: anim }] }}>
+      <AppCard style={cardStyles}>
           <View style={styles.row}>
             {/* ICON */}
             <View
@@ -128,8 +137,21 @@ const TransactionCardInner: React.FC<Props> = ({ item, onEdit, onDelete }) => {
               )}
             </View>
           </View>
-        </AppCard>
-      </Animated.View>
+      </AppCard>
+    </Animated.View>
+  );
+
+  if (!shouldSwipe) return cardContent;
+
+  return (
+    <Swipeable
+      overshootLeft={false}
+      overshootRight={false}
+      renderLeftActions={renderLeftActions}
+      renderRightActions={renderRightActions}
+      enabled={shouldSwipe}
+    >
+      {cardContent}
     </Swipeable>
   );
 };
@@ -145,7 +167,12 @@ const TransactionCard = React.memo(TransactionCardInner, (prev, next) => {
     }
   } catch (e) {}
   // assume handlers stable (caller should memoize) — otherwise re-render
-  return prev.onEdit === next.onEdit && prev.onDelete === next.onDelete;
+  return (
+    prev.onEdit === next.onEdit &&
+    prev.onDelete === next.onDelete &&
+    prev.enableSwipe === next.enableSwipe &&
+    prev.compact === next.compact
+  );
 });
 
 export default TransactionCard;
@@ -165,6 +192,9 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
     elevation: 3,
+  },
+  cardCompact: {
+    marginHorizontal: 0,
   },
 
   row: {

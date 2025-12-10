@@ -689,8 +689,7 @@ const HomeScreen: React.FC = () => {
           }
           renderItem={({ item }) => (
             <View style={[responsiveContainerStyle, { marginBottom: spacing(1.5) }]}>
-              {/* READ ONLY MODE: No onEdit or onDelete passed */}
-              <TransactionCard item={item} />
+              <TransactionCard item={item} enableSwipe={false} compact />
             </View>
           )}
           ListEmptyComponent={
