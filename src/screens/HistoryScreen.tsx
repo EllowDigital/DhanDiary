@@ -416,7 +416,9 @@ const HistoryScreen = () => {
                 <View style={styles.modalHeaderRow}>
                   <View>
                     <Text style={styles.modalTitle}>Edit Transaction</Text>
-                    <Text style={styles.modalSubtitle}>Update the amount, category, note, and date.</Text>
+                    <Text style={styles.modalSubtitle}>
+                      Update the amount, category, note, and date.
+                    </Text>
                   </View>
                   <TouchableOpacity
                     onPress={() => setEditingEntry(null)}

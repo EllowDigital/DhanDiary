@@ -118,17 +118,14 @@ const LoginScreen = () => {
         <ScrollView
           contentContainerStyle={[
             styles.scrollContent,
-            { minHeight: isSmallScreen ? '100%' : '90%', justifyContent: 'center' }
+            { minHeight: isSmallScreen ? '100%' : '90%', justifyContent: 'center' },
           ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           bounces={false}
         >
           <Animated.View
-            style={[
-              styles.card,
-              { opacity: fadeAnim, transform: [{ scale: scaleAnim }] },
-            ]}
+            style={[styles.card, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}
           >
             {/* --- HEADER ROW (Logo Left | Text Right) --- */}
             <View style={styles.brandHeader}>
@@ -229,7 +226,6 @@ const LoginScreen = () => {
             <MaterialIcon name="security" size={14} color={colors.muted || '#999'} />
             <Text style={styles.securityText}>Secured by DhanDiary</Text>
           </View>
-
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -415,5 +411,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.muted || '#999',
     fontWeight: '500',
-  }
+  },
 });

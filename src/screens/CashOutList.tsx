@@ -9,6 +9,7 @@ import {
   Easing,
   StatusBar,
   Platform,
+  type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, Button } from '@rneui/themed';
@@ -67,13 +68,13 @@ const CashOutList = () => {
   const MAX_WIDTH = 700;
 
   // Dynamic container style
-  const contentContainerStyle = {
+  const contentContainerStyle: ViewStyle = {
     paddingHorizontal: isTablet ? 0 : 20,
     paddingTop: insets.top + 10, // Breathing room at top
     paddingBottom: insets.bottom + 80, // Space for bottom gestures
     width: '100%',
     maxWidth: MAX_WIDTH,
-    alignSelf: 'center' as const,
+    alignSelf: 'center',
   };
 
   // --- EFFECTS ---
@@ -119,7 +120,11 @@ const CashOutList = () => {
   // --- HANDLERS ---
   const handleEdit = (item: any) => navigation.navigate('History', { edit_item: item });
   const handleDelete = async (id: string) => {
-    try { await deleteEntry(id); } catch (err) { console.warn(err); }
+    try {
+      await deleteEntry(id);
+    } catch (err) {
+      console.warn(err);
+    }
   };
 
   // --- RENDER HELPERS ---
@@ -139,7 +144,6 @@ const CashOutList = () => {
   // 2. The Scrollable Header
   const renderHeader = () => (
     <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-      
       {/* Page Title */}
       <View style={{ marginBottom: 24 }}>
         <ScreenHeader
@@ -215,28 +219,27 @@ const CashOutList = () => {
   );
 
   // 3. Empty State
-  const renderEmpty = () => (!showLoading ? (
-    <View style={styles.emptyContainer}>
-      <View style={styles.emptyIconCircle}>
-        <MaterialIcon name="money-off" size={40} color={colors.muted} />
+  const renderEmpty = () =>
+    !showLoading ? (
+      <View style={styles.emptyContainer}>
+        <View style={styles.emptyIconCircle}>
+          <MaterialIcon name="money-off" size={40} color={colors.muted} />
+        </View>
+        <Text style={styles.emptyTitle}>No Expenses Found</Text>
+        <Text style={styles.emptyText}>Any money you spend will be listed here.</Text>
+        <Button
+          title="Add Expense"
+          onPress={() => navigation.navigate('AddEntry', { type: 'out' })}
+          buttonStyle={styles.addBtn}
+          containerStyle={{ marginTop: 24, width: '100%', maxWidth: 200 }}
+        />
       </View>
-      <Text style={styles.emptyTitle}>No Expenses Found</Text>
-      <Text style={styles.emptyText}>
-        Any money you spend will be listed here.
-      </Text>
-      <Button
-        title="Add Expense"
-        onPress={() => navigation.navigate('AddEntry', { type: 'out' })}
-        buttonStyle={styles.addBtn}
-        containerStyle={{ marginTop: 24, width: '100%', maxWidth: 200 }}
-      />
-    </View>
-  ) : null);
+    ) : null;
 
   return (
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-      
+
       <FlatList
         data={entryView.sortedEntries}
         keyExtractor={(item) => item.local_id}
@@ -250,11 +253,9 @@ const CashOutList = () => {
         // Layout
         contentContainerStyle={contentContainerStyle}
         showsVerticalScrollIndicator={false}
-        
         // Components
         ListHeaderComponent={renderHeader}
         ListEmptyComponent={renderEmpty}
-        
         // Performance
         initialNumToRender={8}
         maxToRenderPerBatch={10}
@@ -356,7 +357,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 100,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceMuted,
     borderWidth: 1,
     borderColor: colors.border,
     marginRight: 10,

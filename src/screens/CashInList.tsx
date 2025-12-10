@@ -9,6 +9,7 @@ import {
   Easing,
   StatusBar,
   Platform,
+  type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, Button } from '@rneui/themed';
@@ -49,7 +50,7 @@ const CashInList = () => {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const { user } = useAuth();
-  
+
   // Data Fetching
   const { entries, deleteEntry, isLoading, refetch } = useEntries(user?.id);
   const showLoading = useDelayedLoading(Boolean(isLoading), 200);
@@ -65,15 +66,15 @@ const CashInList = () => {
   // --- RESPONSIVENESS ---
   const isTablet = width >= 768;
   const MAX_WIDTH = 700;
-  
+
   // Dynamic container style for tablet support
-  const contentContainerStyle = {
+  const contentContainerStyle: ViewStyle = {
     paddingHorizontal: isTablet ? 0 : 20,
     paddingTop: insets.top + 10, // Extra breathing room at top
     paddingBottom: insets.bottom + 80, // Space for bottom gestures
     width: '100%',
     maxWidth: MAX_WIDTH,
-    alignSelf: 'center' as const,
+    alignSelf: 'center',
   };
 
   // --- EFFECTS ---
@@ -119,11 +120,15 @@ const CashInList = () => {
   // --- HANDLERS ---
   const handleEdit = (item: any) => navigation.navigate('History', { edit_item: item });
   const handleDelete = async (id: string) => {
-    try { await deleteEntry(id); } catch (err) { console.warn(err); }
+    try {
+      await deleteEntry(id);
+    } catch (err) {
+      console.warn(err);
+    }
   };
 
   // --- RENDER HELPERS ---
-  
+
   // 1. Filter Pill Component
   const FilterPill = ({ label, active, onPress }: any) => (
     <TouchableOpacity
@@ -139,7 +144,6 @@ const CashInList = () => {
   // 2. The Header (Now part of the scroll view)
   const renderHeader = () => (
     <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-      
       {/* Page Title with extra margin bottom */}
       <View style={{ marginBottom: 24 }}>
         <ScreenHeader
@@ -208,35 +212,34 @@ const CashInList = () => {
           contentContainerStyle={{ gap: 8, paddingBottom: 4 }}
         />
       </View>
-      
+
       {/* List Label */}
       <Text style={styles.listSectionTitle}>Recent Transactions</Text>
     </Animated.View>
   );
 
   // 3. Empty State
-  const renderEmpty = () => (!showLoading ? (
-    <View style={styles.emptyContainer}>
-      <View style={styles.emptyIconCircle}>
-        <MaterialIcon name="attach-money" size={40} color={colors.muted} />
+  const renderEmpty = () =>
+    !showLoading ? (
+      <View style={styles.emptyContainer}>
+        <View style={styles.emptyIconCircle}>
+          <MaterialIcon name="attach-money" size={40} color={colors.muted} />
+        </View>
+        <Text style={styles.emptyTitle}>No Income Yet</Text>
+        <Text style={styles.emptyText}>Payments you receive will appear here.</Text>
+        <Button
+          title="Add Income"
+          onPress={() => navigation.navigate('AddEntry', { type: 'in' })}
+          buttonStyle={styles.addBtn}
+          containerStyle={{ marginTop: 24, width: '100%', maxWidth: 200 }}
+        />
       </View>
-      <Text style={styles.emptyTitle}>No Income Yet</Text>
-      <Text style={styles.emptyText}>
-        Payments you receive will appear here.
-      </Text>
-      <Button
-        title="Add Income"
-        onPress={() => navigation.navigate('AddEntry', { type: 'in' })}
-        buttonStyle={styles.addBtn}
-        containerStyle={{ marginTop: 24, width: '100%', maxWidth: 200 }}
-      />
-    </View>
-  ) : null);
+    ) : null;
 
   return (
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-      
+
       <FlatList
         data={entryView.sortedEntries}
         keyExtractor={(item) => item.local_id}
@@ -250,11 +253,9 @@ const CashInList = () => {
         // Layout & Styling
         contentContainerStyle={contentContainerStyle}
         showsVerticalScrollIndicator={false}
-        
         // Components
         ListHeaderComponent={renderHeader}
         ListEmptyComponent={renderEmpty}
-        
         // Performance
         initialNumToRender={8}
         maxToRenderPerBatch={10}
@@ -274,7 +275,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  
+
   /* HEADER AREA */
   heroCard: {
     backgroundColor: colors.card,
@@ -356,7 +357,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 100,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceMuted,
     borderWidth: 1,
     borderColor: colors.border,
     marginRight: 10,

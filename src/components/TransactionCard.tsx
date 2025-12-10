@@ -76,67 +76,67 @@ const TransactionCardInner: React.FC<Props> = ({
   const cardContent = (
     <Animated.View style={{ transform: [{ scale: anim }] }}>
       <AppCard style={cardStyles}>
-          <View style={styles.row}>
-            {/* ICON */}
-            <View
+        <View style={styles.row}>
+          {/* ICON */}
+          <View
+            style={[
+              styles.iconContainer,
+              { backgroundColor: item.type === 'in' ? '#E8F5E9' : '#FDECEA' },
+            ]}
+          >
+            <MaterialIcon
+              name={item.type === 'in' ? 'arrow-downward' : 'arrow-upward'}
+              size={26}
+              color={item.type === 'in' ? '#2E7D32' : '#C62828'}
+            />
+          </View>
+
+          {/* MAIN CONTENT */}
+          <View style={styles.middleContent}>
+            <Text style={styles.categoryText}>{ensureCategory(item.category)}</Text>
+            <Text style={styles.noteText}>{item.note || 'No description'}</Text>
+          </View>
+
+          {/* RIGHT SIDE */}
+          <View style={styles.rightSide}>
+            <Text
               style={[
-                styles.iconContainer,
-                { backgroundColor: item.type === 'in' ? '#E8F5E9' : '#FDECEA' },
+                styles.amountText,
+                {
+                  color: item.type === 'in' ? '#2E7D32' : '#C62828',
+                },
               ]}
             >
-              <MaterialIcon
-                name={item.type === 'in' ? 'arrow-downward' : 'arrow-upward'}
-                size={26}
-                color={item.type === 'in' ? '#2E7D32' : '#C62828'}
-              />
-            </View>
+              {item.type === 'in' ? '+' : '-'}₹{Number(item.amount).toFixed(2)}
+            </Text>
 
-            {/* MAIN CONTENT */}
-            <View style={styles.middleContent}>
-              <Text style={styles.categoryText}>{ensureCategory(item.category)}</Text>
-              <Text style={styles.noteText}>{item.note || 'No description'}</Text>
-            </View>
+            <RNText style={styles.dateText}>
+              {(() => {
+                const d = dayjs(item.date || item.created_at);
+                return d.isValid() ? d.format('DD MMM YYYY') : '—';
+              })()}
+            </RNText>
 
-            {/* RIGHT SIDE */}
-            <View style={styles.rightSide}>
-              <Text
-                style={[
-                  styles.amountText,
-                  {
-                    color: item.type === 'in' ? '#2E7D32' : '#C62828',
-                  },
-                ]}
-              >
-                {item.type === 'in' ? '+' : '-'}₹{Number(item.amount).toFixed(2)}
-              </Text>
-
-              <RNText style={styles.dateText}>
-                {(() => {
-                  const d = dayjs(item.date || item.created_at);
-                  return d.isValid() ? d.format('DD MMM YYYY') : '—';
-                })()}
-              </RNText>
-
-              {/* ACTION ICONS: Only show if handlers are provided */}
-              {(onEdit || onDelete) && (
-                <View style={styles.actionsRow}>
-                  {onEdit && (
-                    <TouchableOpacity onPress={() => onEdit(item)} style={styles.iconButton}>
-                      <MaterialIcon name="edit" size={18} color="#444" />
-                    </TouchableOpacity>
-                  )}
-                  {onDelete && (
-                    <TouchableOpacity
-                      onPress={() => onDelete(item.local_id)}
-                      style={[styles.iconButton, { marginLeft: 12 }]}
-                    >
-                      <MaterialIcon name="delete" size={18} color="#D32F2F" />
-                    </TouchableOpacity>
-                  )}
-                </View>
-              )}
-            </View>
+            {/* ACTION ICONS: Only show if handlers are provided */}
+            {(onEdit || onDelete) && (
+              <View style={styles.actionsRow}>
+                {onEdit && (
+                  <TouchableOpacity onPress={() => onEdit(item)} style={styles.iconButton}>
+                    <MaterialIcon name="edit" size={18} color="#444" />
+                  </TouchableOpacity>
+                )}
+                {onDelete && (
+                  <TouchableOpacity
+                    onPress={() => onDelete(item.local_id)}
+                    style={[styles.iconButton, { marginLeft: 12 }]}
+                  >
+                    <MaterialIcon name="delete" size={18} color="#D32F2F" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
           </View>
+        </View>
       </AppCard>
     </Animated.View>
   );

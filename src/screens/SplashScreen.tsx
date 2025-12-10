@@ -49,9 +49,19 @@ const SplashScreen = () => {
           Animated.timing(orbPulse, { toValue: 1, duration: 4000, useNativeDriver: true }),
         ]),
         Animated.sequence([
-          Animated.timing(orbTranslate, { toValue: 15, duration: 5000, easing: Easing.sin, useNativeDriver: true }),
-          Animated.timing(orbTranslate, { toValue: 0, duration: 5000, easing: Easing.sin, useNativeDriver: true }),
-        ])
+          Animated.timing(orbTranslate, {
+            toValue: 15,
+            duration: 5000,
+            easing: Easing.sin,
+            useNativeDriver: true,
+          }),
+          Animated.timing(orbTranslate, {
+            toValue: 0,
+            duration: 5000,
+            easing: Easing.sin,
+            useNativeDriver: true,
+          }),
+        ]),
       ])
     ).start();
 
@@ -145,11 +155,7 @@ const SplashScreen = () => {
 
   return (
     <View style={styles.container}>
-      <StatusBar
-        barStyle="dark-content"
-        backgroundColor="transparent"
-        translucent
-      />
+      <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
       {/* BACKGROUND SVG */}
       <Svg style={StyleSheet.absoluteFill}>
@@ -170,8 +176,8 @@ const SplashScreen = () => {
             top: -height * 0.1,
             right: -width * 0.1,
             backgroundColor: `${colors.primary}15`,
-            transform: [{ scale: orbPulse }, { translateY: orbTranslate }]
-          }
+            transform: [{ scale: orbPulse }, { translateY: orbTranslate }],
+          },
         ]}
       />
       <Animated.View
@@ -181,8 +187,8 @@ const SplashScreen = () => {
             bottom: -height * 0.1,
             left: -width * 0.1,
             backgroundColor: `${colors.secondary}15`,
-            transform: [{ scale: orbPulse }, { translateY: Animated.multiply(orbTranslate, -1) }]
-          }
+            transform: [{ scale: orbPulse }, { translateY: Animated.multiply(orbTranslate, -1) }],
+          },
         ]}
       />
 
@@ -197,7 +203,7 @@ const SplashScreen = () => {
               height: logoSize,
               borderRadius: logoSize * 0.25,
               opacity: fadeAnim,
-              transform: [{ scale: scaleAnim }, { translateY: slideAnim }]
+              transform: [{ scale: scaleAnim }, { translateY: slideAnim }],
             },
           ]}
         >
@@ -213,12 +219,10 @@ const SplashScreen = () => {
           style={{
             opacity: fadeAnim,
             transform: [{ translateY: textSlideAnim }],
-            alignItems: 'center'
+            alignItems: 'center',
           }}
         >
-          <Text style={[styles.appName, { fontSize: Math.min(width * 0.1, 40) }]}>
-            DhanDiary
-          </Text>
+          <Text style={[styles.appName, { fontSize: Math.min(width * 0.1, 40) }]}>DhanDiary</Text>
           <Text style={styles.tagline}>Intelligent Finance Tracker</Text>
         </Animated.View>
 
@@ -234,8 +238,8 @@ const SplashScreen = () => {
           styles.footer,
           {
             opacity: fadeAnim,
-            bottom: footerBottom
-          }
+            bottom: footerBottom,
+          },
         ]}
       >
         <View style={styles.badgeRow}>
@@ -352,7 +356,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,1)',
-    shadowColor: "#000",
+    shadowColor: '#000',
     shadowOffset: {
       width: 0,
       height: 4,

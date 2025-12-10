@@ -113,25 +113,31 @@ const RegisterScreen = () => {
 
   useFocusEffect(
     useCallback(() => {
-      warmRemote(false).catch(() => { });
+      warmRemote(false).catch(() => {});
     }, [warmRemote])
   );
 
   // Optimized Handlers
-  const handleEmailChange = useCallback((text: string) => {
-    setEmail(text);
-    if (emailError) {
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      setEmailError(null);
-    }
-  }, [emailError]);
+  const handleEmailChange = useCallback(
+    (text: string) => {
+      setEmail(text);
+      if (emailError) {
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        setEmailError(null);
+      }
+    },
+    [emailError]
+  );
 
-  const handlePasswordChange = useCallback((text: string) => {
-    // Smoothly animate the strength meter appearing/changing
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setPassword(text);
-    if (passwordError) setPasswordError(null);
-  }, [passwordError]);
+  const handlePasswordChange = useCallback(
+    (text: string) => {
+      // Smoothly animate the strength meter appearing/changing
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setPassword(text);
+      if (passwordError) setPasswordError(null);
+    },
+    [passwordError]
+  );
 
   const handleRegister = useCallback(async () => {
     if (loading || warming) return;
@@ -190,17 +196,14 @@ const RegisterScreen = () => {
         <ScrollView
           contentContainerStyle={[
             styles.scrollContent,
-            { minHeight: isSmallScreen ? '100%' : '90%', justifyContent: 'center' }
+            { minHeight: isSmallScreen ? '100%' : '90%', justifyContent: 'center' },
           ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           bounces={false}
         >
           <Animated.View
-            style={[
-              styles.card,
-              { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
-            ]}
+            style={[styles.card, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
           >
             {/* --- HEADER ROW (Logo Left | Text Right) --- */}
             <View style={styles.brandHeader}>
@@ -223,7 +226,11 @@ const RegisterScreen = () => {
             {/* --- TRUST BADGES (Pill Style) --- */}
             <View style={styles.trustRow}>
               <View style={styles.trustBadge}>
-                <MaterialIcon name="verified-user" size={12} color={colors.accentGreen || 'green'} />
+                <MaterialIcon
+                  name="verified-user"
+                  size={12}
+                  color={colors.accentGreen || 'green'}
+                />
                 <Text style={styles.trustText}>Free Forever</Text>
               </View>
               <View style={styles.verticalDivider} />
@@ -283,9 +290,9 @@ const RegisterScreen = () => {
                           backgroundColor:
                             passStrength >= 1
                               ? passStrength >= 2
-                                ? (colors.accentGreen || '#4CAF50')
-                                : (colors.accentOrange || '#FF9800')
-                              : (colors.accentRed || '#F44336'),
+                                ? colors.accentGreen || '#4CAF50'
+                                : colors.accentOrange || '#FF9800'
+                              : colors.accentRed || '#F44336',
                           flex: passStrength,
                         },
                       ]}
@@ -298,7 +305,13 @@ const RegisterScreen = () => {
                     />
                   </View>
                   <Text style={styles.strengthText}>
-                    {passStrength === 0 ? 'Too short' : passStrength === 1 ? 'Weak' : passStrength === 2 ? 'Good' : 'Strong'}
+                    {passStrength === 0
+                      ? 'Too short'
+                      : passStrength === 1
+                        ? 'Weak'
+                        : passStrength === 2
+                          ? 'Good'
+                          : 'Strong'}
                   </Text>
                 </View>
               )}
@@ -335,9 +348,14 @@ const RegisterScreen = () => {
               <View style={styles.termsContainer}>
                 <Text style={styles.termsText}>
                   By signing up, you agree to our{' '}
-                  <Text style={styles.termsLink} onPress={handleOpenTerms}>Terms</Text>
-                  {' '}and{' '}
-                  <Text style={styles.termsLink} onPress={handleOpenPrivacy}>Privacy Policy</Text>.
+                  <Text style={styles.termsLink} onPress={handleOpenTerms}>
+                    Terms
+                  </Text>{' '}
+                  and{' '}
+                  <Text style={styles.termsLink} onPress={handleOpenPrivacy}>
+                    Privacy Policy
+                  </Text>
+                  .
                 </Text>
               </View>
             </View>
@@ -591,5 +609,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.muted || '#999',
     fontWeight: '500',
-  }
+  },
 });

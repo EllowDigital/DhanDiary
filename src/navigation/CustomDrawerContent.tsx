@@ -1,13 +1,5 @@
 import React, { useEffect, useMemo, useRef } from 'react';
-import {
-  View,
-  StyleSheet,
-  Alert,
-  TouchableOpacity,
-  Animated,
-  Easing,
-  Image,
-} from 'react-native';
+import { View, StyleSheet, Alert, TouchableOpacity, Animated, Easing, Image } from 'react-native';
 import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-navigation/drawer';
 import { Text } from '@rneui/themed';
 import { CommonActions } from '@react-navigation/native';
@@ -222,7 +214,7 @@ const styles = StyleSheet.create({
     ...shadows.small,
     // Removed border here too for a cleaner look, optional
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.03)', 
+    borderColor: 'rgba(0,0,0,0.03)',
   },
   brandRow: {
     flexDirection: 'row',
@@ -234,7 +226,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 16, // Slightly softer radius
-    backgroundColor: colors.primarySoft || '#eff6ff', 
+    backgroundColor: colors.primarySoft || '#eff6ff',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden', // Ensures the image respects the radius

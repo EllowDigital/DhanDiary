@@ -8,33 +8,27 @@ import { colors, spacing } from '../utils/design';
 const sections = [
   {
     title: 'Using DhanDiary',
-    body:
-      'DhanDiary is provided for tracking your personal finances. You may not use the app for unlawful activity, automated scraping, or to host malicious content. We can suspend accounts that abuse the service or compromise the experience for others.',
+    body: 'DhanDiary is provided for tracking your personal finances. You may not use the app for unlawful activity, automated scraping, or to host malicious content. We can suspend accounts that abuse the service or compromise the experience for others.',
   },
   {
     title: 'Accounts & Security',
-    body:
-      'Keep your password secret and device secure. You are responsible for transactions recorded using your credentials. If you suspect unauthorized access, change your password and contact support so we can help protect your data.',
+    body: 'Keep your password secret and device secure. You are responsible for transactions recorded using your credentials. If you suspect unauthorized access, change your password and contact support so we can help protect your data.',
   },
   {
     title: 'Local & Cloud Data',
-    body:
-      'Your entries are stored on your device first. When you log in, the app syncs with EllowDigital servers to keep a cloud backup. Deleting the app from a device does not automatically erase cloud backups—submit a deletion request if you need data purged.',
+    body: 'Your entries are stored on your device first. When you log in, the app syncs with EllowDigital servers to keep a cloud backup. Deleting the app from a device does not automatically erase cloud backups—submit a deletion request if you need data purged.',
   },
   {
     title: 'Payments',
-    body:
-      'The current version of DhanDiary is free. If we add paid features in the future, pricing and billing terms will be communicated clearly inside the app before any charge is applied.',
+    body: 'The current version of DhanDiary is free. If we add paid features in the future, pricing and billing terms will be communicated clearly inside the app before any charge is applied.',
   },
   {
     title: 'Availability',
-    body:
-      'We strive for high uptime but cannot guarantee uninterrupted service. Scheduled maintenance or infrastructure partners (like Neon DB and Expo services) may occasionally cause brief downtime.',
+    body: 'We strive for high uptime but cannot guarantee uninterrupted service. Scheduled maintenance or infrastructure partners (like Neon DB and Expo services) may occasionally cause brief downtime.',
   },
   {
     title: 'Changes',
-    body:
-      'We may update these Terms to reflect new features or regulations. Significant changes will be highlighted in-app, and continued use of DhanDiary means you accept the updated Terms.',
+    body: 'We may update these Terms to reflect new features or regulations. Significant changes will be highlighted in-app, and continued use of DhanDiary means you accept the updated Terms.',
   },
   {
     title: 'Contact',

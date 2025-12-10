@@ -11,33 +11,27 @@ const SUPPORT_EMAIL = 'sarwanyadav26@outlook.com';
 const sections = [
   {
     title: 'What We Collect',
-    body:
-      'DhanDiary stores the information you add inside the app, such as income, expenses, notes, categories, session details, and optional profile information. We also keep anonymous diagnostics that help us improve app stability.',
+    body: 'DhanDiary stores the information you add inside the app, such as income, expenses, notes, categories, session details, and optional profile information. We also keep anonymous diagnostics that help us improve app stability.',
   },
   {
     title: 'How We Use Data',
-    body:
-      'Your entries stay on your device first. When you sign in, encrypted sync keeps your records backed up across devices so that you can recover them if you reinstall the app. We analyse aggregated totals locally to show trends and insights, and never sell your personal data.',
+    body: 'Your entries stay on your device first. When you sign in, encrypted sync keeps your records backed up across devices so that you can recover them if you reinstall the app. We analyse aggregated totals locally to show trends and insights, and never sell your personal data.',
   },
   {
     title: 'Offline & Sync',
-    body:
-      'You can continue logging transactions without an internet connection. When the app detects connectivity, it pushes queued updates to EllowDigital servers and pulls the latest changes to keep all devices aligned.',
+    body: 'You can continue logging transactions without an internet connection. When the app detects connectivity, it pushes queued updates to EllowDigital servers and pulls the latest changes to keep all devices aligned.',
   },
   {
     title: 'Analytics & Third Parties',
-    body:
-      'We use basic diagnostics from Expo and React Native libraries to understand crashes or performance bottlenecks. These services receive minimal technical metadata (device model, OS version) and do not receive your financial entries.',
+    body: 'We use basic diagnostics from Expo and React Native libraries to understand crashes or performance bottlenecks. These services receive minimal technical metadata (device model, OS version) and do not receive your financial entries.',
   },
   {
     title: 'Your Controls',
-    body:
-      'Use the Account and Settings screens to update your profile, trigger a manual sync, or clear all local data. To remove your cloud backup entirely, request deletion through the support email below.',
+    body: 'Use the Account and Settings screens to update your profile, trigger a manual sync, or clear all local data. To remove your cloud backup entirely, request deletion through the support email below.',
   },
   {
     title: 'Contact',
-    body:
-      `Questions or privacy requests? Email ${SUPPORT_EMAIL}. We aim to respond within 3 business days.`,
+    body: `Questions or privacy requests? Email ${SUPPORT_EMAIL}. We aim to respond within 3 business days.`,
   },
 ];
 

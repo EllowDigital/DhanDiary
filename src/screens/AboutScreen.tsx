@@ -46,7 +46,8 @@ const theme = {
 // --- CONSTANTS ---
 const ELLOW_URL = 'https://ellowdigital.netlify.app';
 const BRAND_NAME = 'EllowDigital';
-const BUILD_TYPE = Constants.expoConfig?.extra?.BUILD_TYPE || (pkg.version.includes('beta') ? 'Beta' : 'Release');
+const BUILD_TYPE =
+  Constants.expoConfig?.extra?.BUILD_TYPE || (pkg.version.includes('beta') ? 'Beta' : 'Release');
 
 const AboutScreen: React.FC = () => {
   const { width } = useWindowDimensions();
@@ -64,8 +65,18 @@ const AboutScreen: React.FC = () => {
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true, easing: Easing.out(Easing.cubic) }),
-      Animated.timing(slideAnim, { toValue: 0, duration: 600, useNativeDriver: true, easing: Easing.out(Easing.cubic) }),
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic),
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 600,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic),
+      }),
     ]).start();
   }, []);
 
@@ -141,23 +152,35 @@ const AboutScreen: React.FC = () => {
     });
   };
 
-  const infoGrid = useMemo(() => [
-    { label: 'Version', value: pkg.version, icon: 'tag', color: theme.primary },
-    { label: 'Channel', value: BUILD_TYPE, icon: 'layers', color: theme.primary },
-    { label: 'Env', value: process.env.NODE_ENV === 'production' ? 'Prod' : 'Dev', icon: 'code', color: theme.primary },
-    { label: 'Build ID', value: shortId, icon: 'fingerprint', color: theme.primary, onPress: copyUpdateId },
-  ], [shortId]);
+  const infoGrid = useMemo(
+    () => [
+      { label: 'Version', value: pkg.version, icon: 'tag', color: theme.primary },
+      { label: 'Channel', value: BUILD_TYPE, icon: 'layers', color: theme.primary },
+      {
+        label: 'Env',
+        value: process.env.NODE_ENV === 'production' ? 'Prod' : 'Dev',
+        icon: 'code',
+        color: theme.primary,
+      },
+      {
+        label: 'Build ID',
+        value: shortId,
+        icon: 'fingerprint',
+        color: theme.primary,
+        onPress: copyUpdateId,
+      },
+    ],
+    [shortId]
+  );
 
   return (
     <View style={styles.mainContainer}>
-      <StatusBar
-        barStyle="dark-content"
-        backgroundColor="transparent"
-        translucent={true}
-      />
+      <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent={true} />
 
       {/* HEADER */}
-      <View style={{ paddingTop: insets.top, paddingHorizontal: 20, backgroundColor: theme.background }}>
+      <View
+        style={{ paddingTop: insets.top, paddingHorizontal: 20, backgroundColor: theme.background }}
+      >
         <ScreenHeader
           title="About"
           subtitle="System status & info"
@@ -172,11 +195,10 @@ const AboutScreen: React.FC = () => {
         contentContainerStyle={[
           styles.scrollContent,
           // CRITICAL: Ensure padding accounts for bottom navigation bar (gestures)
-          { paddingBottom: insets.bottom + 80 }
+          { paddingBottom: insets.bottom + 80 },
         ]}
       >
         <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-
           {/* 1. HERO CARD */}
           <View style={styles.heroCard}>
             <View style={styles.heroContent}>
@@ -199,7 +221,9 @@ const AboutScreen: React.FC = () => {
             <View style={styles.heroDivider} />
 
             <View style={styles.heroFooter}>
-              <Text style={styles.heroFooterText}>Crafted by <Text style={styles.heroBrand}>{BRAND_NAME}</Text></Text>
+              <Text style={styles.heroFooterText}>
+                Crafted by <Text style={styles.heroBrand}>{BRAND_NAME}</Text>
+              </Text>
               <TouchableOpacity style={styles.visitBtn} onPress={() => Linking.openURL(ELLOW_URL)}>
                 <Text style={styles.visitText}>Visit Website</Text>
                 <MaterialIcon name="arrow-forward" size={14} color="rgba(255,255,255,0.9)" />
@@ -222,7 +246,9 @@ const AboutScreen: React.FC = () => {
                 </View>
                 <View>
                   <Text style={styles.gridLabel}>{item.label}</Text>
-                  <Text style={styles.gridValue} numberOfLines={1}>{item.value}</Text>
+                  <Text style={styles.gridValue} numberOfLines={1}>
+                    {item.value}
+                  </Text>
                 </View>
               </TouchableOpacity>
             ))}
@@ -233,9 +259,18 @@ const AboutScreen: React.FC = () => {
 
           <View style={styles.actionCard}>
             <View style={styles.actionRow}>
-              <View style={[styles.iconBoxLarge, { backgroundColor: updateAvailable ? 'rgba(16, 185, 129, 0.1)' : theme.primarySoft }]}>
+              <View
+                style={[
+                  styles.iconBoxLarge,
+                  {
+                    backgroundColor: updateAvailable
+                      ? 'rgba(16, 185, 129, 0.1)'
+                      : theme.primarySoft,
+                  },
+                ]}
+              >
                 <MaterialIcon
-                  name={updateAvailable ? "cloud-download" : "system-update"}
+                  name={updateAvailable ? 'cloud-download' : 'system-update'}
                   size={24}
                   color={updateAvailable ? theme.accentGreen : theme.primary}
                 />
@@ -243,27 +278,37 @@ const AboutScreen: React.FC = () => {
               <View style={{ flex: 1 }}>
                 <Text style={styles.cardTitle}>App Version</Text>
                 <Text style={styles.cardDesc}>
-                  {updateAvailable ? 'New version available for install.' : 'You are on the latest version.'}
+                  {updateAvailable
+                    ? 'New version available for install.'
+                    : 'You are on the latest version.'}
                 </Text>
               </View>
             </View>
 
             <Button
-              title={checking ? "Checking..." : updateAvailable ? "Update Now" : "Check for Updates"}
+              title={
+                checking ? 'Checking...' : updateAvailable ? 'Update Now' : 'Check for Updates'
+              }
               loading={checking}
               onPress={updateAvailable ? applyUpdate : checkForUpdates}
               buttonStyle={[
                 styles.mainBtn,
-                updateAvailable && { backgroundColor: theme.accentGreen }
+                updateAvailable && { backgroundColor: theme.accentGreen },
               ]}
               titleStyle={{ fontWeight: '600', fontSize: 14 }}
-              icon={!checking && !updateAvailable ? <MaterialIcon name="refresh" size={16} color="white" style={{ marginRight: 8 }} /> : undefined}
+              icon={
+                !checking && !updateAvailable ? (
+                  <MaterialIcon name="refresh" size={16} color="white" style={{ marginRight: 8 }} />
+                ) : undefined
+              }
             />
 
             {failureCount > 0 && (
               <TouchableOpacity style={styles.errorRow} onPress={clearRetryState}>
                 <MaterialIcon name="error-outline" size={16} color={theme.accentRed} />
-                <Text style={styles.errorText}>Update failed {failureCount} times. Tap to reset.</Text>
+                <Text style={styles.errorText}>
+                  Update failed {failureCount} times. Tap to reset.
+                </Text>
               </TouchableOpacity>
             )}
           </View>
@@ -275,31 +320,47 @@ const AboutScreen: React.FC = () => {
               <Text style={styles.halfBtnText}>Share App</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.halfBtn} onPress={() => Linking.openURL('mailto:support@ellow.digitial')}>
+            <TouchableOpacity
+              style={styles.halfBtn}
+              onPress={() => Linking.openURL('mailto:support@ellow.digitial')}
+            >
               <MaterialIcon name="mail-outline" size={20} color={theme.primary} />
               <Text style={styles.halfBtnText}>Contact Us</Text>
             </TouchableOpacity>
           </View>
 
           {/* FOOTER */}
-          <Text style={styles.copyright}>© {new Date().getFullYear()} {BRAND_NAME}</Text>
+          <Text style={styles.copyright}>
+            © {new Date().getFullYear()} {BRAND_NAME}
+          </Text>
         </Animated.View>
       </ScrollView>
 
       {/* UPDATE MODAL */}
-      <Modal visible={showUpdateModal} transparent animationType="fade" onRequestClose={() => setShowUpdateModal(false)}>
+      <Modal
+        visible={showUpdateModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowUpdateModal(false)}
+      >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={[styles.modalIcon, { backgroundColor: 'rgba(16, 185, 129, 0.15)' }]}>
               <MaterialIcon name="arrow-downward" size={32} color={theme.accentGreen} />
             </View>
             <Text style={styles.modalTitle}>Update Ready</Text>
-            <Text style={styles.modalText}>A new version of DhanDiary is ready to install. This will only take a moment.</Text>
+            <Text style={styles.modalText}>
+              A new version of DhanDiary is ready to install. This will only take a moment.
+            </Text>
 
             <Button
               title="Install Update"
               onPress={applyUpdate}
-              buttonStyle={{ backgroundColor: theme.accentGreen, borderRadius: 12, paddingVertical: 12 }}
+              buttonStyle={{
+                backgroundColor: theme.accentGreen,
+                borderRadius: 12,
+                paddingVertical: 12,
+              }}
               containerStyle={{ width: '100%', marginBottom: 10 }}
             />
             <Button
