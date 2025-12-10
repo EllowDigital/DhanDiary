@@ -18,16 +18,8 @@ const AuthNavigator = () => (
   <AuthStack.Navigator screenOptions={{ headerShown: false }}>
     <AuthStack.Screen name="Login" component={LoginScreen} />
     <AuthStack.Screen name="Register" component={RegisterScreen} />
-    <AuthStack.Screen
-      name="Terms"
-      component={TermsScreen}
-      options={{ headerShown: true, title: 'Terms of Use' }}
-    />
-    <AuthStack.Screen
-      name="PrivacyPolicy"
-      component={PrivacyPolicyScreen}
-      options={{ headerShown: true, title: 'Privacy Policy' }}
-    />
+    <AuthStack.Screen name="Terms" component={TermsScreen} />
+    <AuthStack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
   </AuthStack.Navigator>
 );
 
