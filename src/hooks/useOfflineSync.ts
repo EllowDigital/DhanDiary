@@ -1,6 +1,11 @@
 import { useEffect } from 'react';
 import { useInternetStatus } from './useInternetStatus';
-import { syncBothWays, startAutoSyncListener, stopAutoSyncListener } from '../services/syncManager';
+import {
+  syncBothWays,
+  startAutoSyncListener,
+  stopAutoSyncListener,
+  subscribeSyncConflicts,
+} from '../services/syncManager';
 import { useToast } from '../context/ToastContext';
 
 /**
@@ -14,10 +19,22 @@ export const useOfflineSync = (userId?: string | null) => {
 
   useEffect(() => {
     if (!userId) return;
+    const unsubscribeConflicts = subscribeSyncConflicts((event) => {
+      const amountLabel =
+        typeof event.amount === 'number'
+          ? `₹${Number(event.amount).toLocaleString('en-IN')}`
+          : undefined;
+      const parts = [event.category, amountLabel].filter(Boolean).join(' • ');
+      const message = event.message || (parts ? `${parts} updated on another device` : null);
+      showToast(message || 'Server kept the latest version of an entry.');
+    });
     // start auto sync listener when user is logged in
     startAutoSyncListener();
-    return () => stopAutoSyncListener();
-  }, [userId]);
+    return () => {
+      unsubscribeConflicts();
+      stopAutoSyncListener();
+    };
+  }, [userId, showToast]);
 
   useEffect(() => {
     if (!userId) return;
@@ -29,5 +46,5 @@ export const useOfflineSync = (userId?: string | null) => {
           showToast('Auto-sync failed');
         });
     }
-  }, [isOnline, userId]);
+  }, [isOnline, userId, showToast]);
 };
