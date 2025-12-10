@@ -28,9 +28,7 @@ const open = async (): Promise<DB> => {
       raw = (SQLite as any).openDatabase(DB_NAME);
     } else {
       // fallback: try calling as any
-      raw = (SQLite as any).openDatabaseSync
-        ? (SQLite as any).openDatabaseSync(DB_NAME)
-        : null;
+      raw = (SQLite as any).openDatabaseSync ? (SQLite as any).openDatabaseSync(DB_NAME) : null;
     }
 
     const run = (sql: string, params: any[] = []) =>
@@ -126,11 +124,18 @@ const close = async () => {
   }
 };
 
+const resolveSqliteDir = () => {
+  const fsAny = FileSystem as any;
+  const documentDir = typeof fsAny.documentDirectory === 'string' ? fsAny.documentDirectory : null;
+  const cacheDir = typeof fsAny.cacheDirectory === 'string' ? fsAny.cacheDirectory : null;
+  if (documentDir) return `${documentDir}SQLite`;
+  if (cacheDir) return `${cacheDir}SQLite`;
+  return null;
+};
+
 const deleteDbFile = async () => {
   await close();
-  const baseDir = FileSystem.documentDirectory
-    ? `${FileSystem.documentDirectory}SQLite`
-    : null;
+  const baseDir = resolveSqliteDir();
   if (!baseDir) return;
 
   const suffixes = ['', '-wal', '-shm'];
