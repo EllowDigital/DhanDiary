@@ -28,6 +28,18 @@ import {
 import { query } from '../api/neonClient';
 import vexoService from './vexo';
 const Q = (sql: string, params: any[] = []) => query(sql, params, { retries: 2, timeoutMs: 15000 });
+type SyncConflictEvent = {
+  localId?: string;
+  remoteId?: string;
+  amount?: number;
+  category?: string;
+  message?: string;
+};
+
+type SyncConflictListener = (event: SyncConflictEvent) => void;
+
+const conflictListeners = new Set<SyncConflictListener>();
+
 let _unsubscribe: (() => void) | null = null;
 let _foregroundTimer: any = null;
 let _backgroundFetchInstance: any = null;
@@ -48,6 +60,23 @@ const safeQ = async (sql: string, params: any[] = []) => {
     } catch (e) {}
     throw err;
   }
+};
+
+export const subscribeSyncConflicts = (listener: SyncConflictListener) => {
+  conflictListeners.add(listener);
+  return () => {
+    conflictListeners.delete(listener);
+  };
+};
+
+const emitSyncConflict = (event: SyncConflictEvent) => {
+  conflictListeners.forEach((listener) => {
+    try {
+      listener(event);
+    } catch (err) {
+      console.warn('sync conflict listener failed', err);
+    }
+  });
 };
 
 // Run a callback inside a remote transaction. Rolls back on error.
@@ -578,6 +607,13 @@ export const pullRemote = async () => {
             }
 
             // Conflict: both remote and local changed. To avoid data loss, push local as a new remote row
+            emitSyncConflict({
+              localId: local.local_id,
+              remoteId: String(r.id),
+              amount: typeof local.amount === 'number' ? Number(local.amount) : undefined,
+              category: local.category,
+              message: 'Detected conflicting edits. Keeping your latest change.',
+            });
             try {
               // Prefer updating the existing remote row (client-wins) instead of creating duplicates.
               const upd = await Q(
