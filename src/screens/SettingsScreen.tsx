@@ -306,7 +306,8 @@ const SettingsScreen = () => {
                 <Text style={styles.logoutText}>Sign Out</Text>
               </TouchableOpacity>
               <Text style={styles.versionText}>
-                v{pkg.version} (Build {appConfig.expo.ios?.buildNumber || appConfig.expo.android?.versionCode})
+                v{pkg.version} (Build{' '}
+                {appConfig.expo.ios?.buildNumber || appConfig.expo.android?.versionCode})
               </Text>
             </Animated.View>
           </View>

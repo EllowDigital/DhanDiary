@@ -10,17 +10,20 @@ import {
   Platform,
 } from 'react-native';
 import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-navigation/drawer';
-import { Text, Button } from '@rneui/themed';
+import { Text } from '@rneui/themed';
 import { CommonActions } from '@react-navigation/native';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Logic & Utils
 import { logout } from '../services/auth';
-import { useAuth } from '../hooks/useAuth';
 import { colors, spacing, shadows } from '../utils/design';
+import appConfig from '../../app.json';
+const pkg = require('../../package.json');
+const brandIcon = require('../../assets/icon.png');
 
 const CustomDrawerContent = (props: DrawerContentComponentProps) => {
-  const { user } = useAuth();
+  const insets = useSafeAreaInsets();
 
   // --- ANIMATIONS ---
   // Standard Animated API (Crash Proof)
@@ -60,16 +63,10 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
     Animated.stagger(50, staggerAnimations).start();
   }, []);
 
-  // --- LOGIC ---
-  const initials = useMemo(() => {
-    if (!user?.name) return 'U';
-    return user.name
-      .split(' ')
-      .slice(0, 2)
-      .map((c) => c[0])
-      .join('')
-      .toUpperCase();
-  }, [user?.name]);
+  const versionLabel = useMemo(() => {
+    const build = appConfig.expo.android?.versionCode ?? appConfig.expo.ios?.buildNumber;
+    return build ? `v${pkg.version} (Build ${build})` : `v${pkg.version}`;
+  }, []);
 
   const handleNavigate = (routeName: string) => {
     // Handling nested navigators if needed
@@ -112,29 +109,27 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   return (
     <DrawerContentScrollView
       {...props}
-      contentContainerStyle={styles.container}
+      contentContainerStyle={[
+        styles.container,
+        {
+          paddingTop: insets.top + spacing(3),
+          paddingBottom: insets.bottom + spacing(4),
+        },
+      ]}
       showsVerticalScrollIndicator={false}
     >
       {/* PROFILE HEADER */}
       <Animated.View
         style={[styles.headerCard, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
       >
-        <View style={styles.userRow}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{initials}</Text>
+        <View style={styles.brandRow}>
+          <View style={styles.brandIconWrap}>
+            <Image source={brandIcon} style={styles.brandIcon} resizeMode="contain" />
           </View>
-          <View style={styles.userInfo}>
-            <Text style={styles.userName} numberOfLines={1}>
-              {user?.name || 'Guest'}
-            </Text>
-            <Text style={styles.userEmail} numberOfLines={1}>
-              {user?.email || 'No email linked'}
-            </Text>
+          <View>
+            <Text style={styles.brandTitle}>DhanDiary</Text>
+            <Text style={styles.brandSubtitle}>Smarter money tracking</Text>
           </View>
-        </View>
-        <View style={styles.planBadge}>
-          <MaterialIcon name="verified" size={14} color={colors.primary} />
-          <Text style={styles.planText}>Standard Plan</Text>
         </View>
       </Animated.View>
 
@@ -210,7 +205,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
           </View>
           <Text style={styles.logoutText}>Sign Out</Text>
         </TouchableOpacity>
-        <Text style={styles.versionText}>v1.0.2</Text>
+        <Text style={styles.versionText}>{versionLabel}</Text>
       </View>
     </DrawerContentScrollView>
   );
@@ -236,54 +231,35 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     ...shadows.small,
   },
-  userRow: {
+  brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    gap: 14,
+    marginBottom: 16,
   },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
+  brandIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 18,
     backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
+    borderColor: 'rgba(37,99,235,0.2)',
   },
-  avatarText: {
+  brandIcon: {
+    width: 36,
+    height: 36,
+  },
+  brandTitle: {
     fontSize: 20,
-    fontWeight: '700',
-    color: colors.primary,
-  },
-  userInfo: {
-    flex: 1,
-  },
-  userName: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '800',
     color: colors.text,
-    marginBottom: 2,
   },
-  userEmail: {
-    fontSize: 12,
+  brandSubtitle: {
+    fontSize: 13,
     color: colors.muted,
-  },
-  planBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surfaceMuted,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    alignSelf: 'flex-start',
-    gap: 6,
-  },
-  planText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: colors.text,
+    marginTop: 2,
   },
 
   /* MENU */
@@ -302,10 +278,10 @@ const styles = StyleSheet.create({
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    marginBottom: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    marginBottom: 10,
   },
   menuItemActive: {
     backgroundColor: colors.primarySoft, // Light blue bg for active
@@ -338,8 +314,8 @@ const styles = StyleSheet.create({
 
   /* FOOTER */
   footer: {
-    marginTop: 20,
-    paddingBottom: 20,
+    marginTop: 16,
+    paddingBottom: 12,
   },
   divider: {
     height: 1,
@@ -350,8 +326,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 14,
+    paddingHorizontal: 14,
+    borderRadius: 16,
     // backgroundColor: 'rgba(239, 68, 68, 0.05)', // Optional red tint
   },
   logoutIconBox: {

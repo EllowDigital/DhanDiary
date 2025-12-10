@@ -169,7 +169,8 @@ const MoreScreen: React.FC = () => {
           </View>
 
           <Text style={styles.footnote}>
-            DhanDiary v{pkg.version} (Build {appConfig.expo.ios?.buildNumber || appConfig.expo.android?.versionCode}) • Made with ❤️
+            DhanDiary v{pkg.version} (Build{' '}
+            {appConfig.expo.ios?.buildNumber || appConfig.expo.android?.versionCode}) • Made with ❤️
           </Text>
         </ScrollView>
       </Animated.View>
