@@ -11,7 +11,7 @@ import MoreScreen from '../screens/MoreScreen';
 // Components
 import AnimatedTabIcon from '../components/AnimatedTabIcon';
 import TabBarButton from '../components/TabBarButton';
-import { colors, shadows } from '../utils/design';
+import { colors } from '../utils/design';
 
 const Tab = createBottomTabNavigator();
 
@@ -22,59 +22,93 @@ const BottomTabNavigator = () => {
     const isIOS = Platform.OS === 'ios';
     const baseHorizontal = 16;
     const tabHeight = 56;
-    const leftOffset = baseHorizontal + insets.left;
-    const rightOffset = baseHorizontal + insets.right;
-    const iosBottomGap = Math.max(insets.bottom, 12);
-    const androidBottomGap = Math.max(insets.bottom + 12, 16);
-    const bottomPosition = isIOS ? iosBottomGap : androidBottomGap;
-    const extraBottomPadding = Math.max(insets.bottom * 0.5, isIOS ? 6 : 8);
-    const tabBarHeight = tabHeight + extraBottomPadding + 10;
+    const iosBottomInset = Math.max(insets.bottom, 10);
+    const androidGestureInset = Math.max(insets.bottom, 24);
+
+    const floatingOffsets = {
+      left: baseHorizontal + insets.left,
+      right: baseHorizontal + insets.right,
+    } as const;
+
+    const iosBottomPosition = iosBottomInset + 8;
+    const iosExtraBottomPadding = Math.max(iosBottomInset * 0.6, 8);
+    const iosTabBarHeight = tabHeight + iosExtraBottomPadding + 8;
+
+    const androidTabBarHeight = tabHeight + androidGestureInset + 16;
+
+    const tabBarStyle = isIOS
+      ? {
+          position: 'absolute',
+          bottom: iosBottomPosition,
+          left: floatingOffsets.left,
+          right: floatingOffsets.right,
+          height: iosTabBarHeight,
+          borderRadius: 30,
+          backgroundColor: colors.card,
+          borderWidth: 1,
+          borderColor: colors.border,
+          paddingBottom: iosExtraBottomPadding,
+          paddingTop: 10,
+          shadowColor: colors.shadow,
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.1,
+          shadowRadius: 12,
+          elevation: 8,
+        }
+      : {
+          // Android gets an anchored rail so it clears system gestures
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: androidTabBarHeight,
+          borderTopLeftRadius: 28,
+          borderTopRightRadius: 28,
+          borderBottomLeftRadius: 0,
+          borderBottomRightRadius: 0,
+          backgroundColor: colors.card,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          borderColor: colors.border,
+          paddingBottom: androidGestureInset,
+          paddingTop: 12,
+          paddingHorizontal: baseHorizontal,
+          shadowColor: colors.shadow,
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.08,
+          shadowRadius: 10,
+          elevation: 18,
+        };
+
+    const scenePaddingBottom = isIOS
+      ? iosTabBarHeight + iosBottomPosition
+      : androidTabBarHeight + 8;
 
     return {
       headerShown: false,
       tabBarActiveTintColor: colors.primary,
       tabBarInactiveTintColor: colors.muted,
       tabBarHideOnKeyboard: true,
+      tabBarStyle,
 
-      // Floating Pill Style
-      tabBarStyle: {
-        position: 'absolute',
-        bottom: bottomPosition,
-        left: leftOffset,
-        right: rightOffset,
-        height: tabBarHeight,
-        borderRadius: 30,
-        backgroundColor: colors.card,
-        borderWidth: 1,
-        borderColor: colors.border,
-        paddingBottom: extraBottomPadding,
-        paddingTop: 10,
-
-        // Shadow that blends better with the bottom
-        shadowColor: colors.shadow,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 12,
-        elevation: 8,
+      tabBarSafeAreaInsets: {
+        bottom: isIOS ? 0 : androidGestureInset,
       },
 
-      // Tab Items
       tabBarItemStyle: {
         height: tabHeight,
         paddingVertical: 6,
         borderRadius: 30,
       },
 
-      // Text Labels
       tabBarLabelStyle: {
         fontSize: 10,
         fontWeight: '700',
         paddingBottom: 0,
       },
 
-      // Background
       sceneContainerStyle: {
         backgroundColor: colors.background,
+        paddingBottom: scenePaddingBottom,
       },
     } as const;
   }, [insets.bottom, insets.left, insets.right]);

@@ -277,15 +277,33 @@ const HomeScreen: React.FC = () => {
   const userInitial = user?.name?.trim().charAt(0).toUpperCase() || 'U';
 
   const heroTrendDetails = useMemo(() => {
-    if (!entries.length) return { label: 'No data', color: colors.muted, icon: 'auto-graph' };
+    if (!entries.length)
+      return {
+        label: 'No data',
+        icon: 'insights',
+        background: 'rgba(255,255,255,0.2)',
+        borderColor: 'rgba(255,255,255,0.35)',
+        textColor: colors.white,
+        iconColor: colors.white,
+      } as const;
     if (netTrend.delta === null)
-      return { label: 'New', color: colors.secondary, icon: 'auto-graph' };
+      return {
+        label: 'New',
+        icon: 'auto-graph',
+        background: 'rgba(255,255,255,0.18)',
+        borderColor: 'rgba(255,255,255,0.3)',
+        textColor: colors.white,
+        iconColor: colors.white,
+      } as const;
     const isUp = netTrend.delta >= 0;
     return {
       label: `${Math.abs(netTrend.delta).toFixed(1)}%`,
-      color: isUp ? colors.accentGreen : colors.accentRed,
       icon: isUp ? 'trending-up' : 'trending-down',
-    };
+      background: isUp ? 'rgba(34,197,94,0.28)' : 'rgba(239,68,68,0.28)',
+      borderColor: isUp ? 'rgba(34,197,94,0.5)' : 'rgba(239,68,68,0.5)',
+      textColor: colors.white,
+      iconColor: colors.white,
+    } as const;
   }, [entries.length, netTrend]);
 
   const topExpenseCategory = useMemo(() => {
@@ -474,13 +492,21 @@ const HomeScreen: React.FC = () => {
                       <MaterialIcon name="calendar-today" size={12} color={colors.white} />
                       <Text style={styles.periodText}>{periodLabel}</Text>
                     </View>
-                    <View style={[styles.trendPill, { backgroundColor: 'rgba(0,0,0,0.2)' }]}>
+                    <View
+                      style={[
+                        styles.trendPill,
+                        {
+                          backgroundColor: heroTrendDetails.background,
+                          borderColor: heroTrendDetails.borderColor,
+                        },
+                      ]}
+                    >
                       <MaterialIcon
                         name={heroTrendDetails.icon as any}
                         size={14}
-                        color={heroTrendDetails.color}
+                        color={heroTrendDetails.iconColor}
                       />
-                      <Text style={[styles.trendText, { color: heroTrendDetails.color }]}>
+                      <Text style={[styles.trendText, { color: heroTrendDetails.textColor }]}>
                         {heroTrendDetails.label}
                       </Text>
                     </View>
@@ -787,6 +813,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 20,
+    borderWidth: 1,
     gap: 4,
   },
   trendText: {
