@@ -27,6 +27,7 @@ const MoreScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp<Record<string, object>>>();
   const [scrollOffset, setScrollOffset] = useState(0);
   const insets = useSafeAreaInsets();
+  const bottomContentPadding = useMemo(() => spacing(10) + insets.bottom + 56, [insets.bottom]);
 
   // --- ANIMATION SETUP ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -132,7 +133,7 @@ const MoreScreen: React.FC = () => {
       <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
         <ScrollView
           style={styles.container}
-          contentContainerStyle={[styles.content, { paddingBottom: 32 + insets.bottom }]}
+          contentContainerStyle={[styles.content, { paddingBottom: bottomContentPadding }]}
           onScroll={handleScroll}
           scrollEventThrottle={16}
           showsVerticalScrollIndicator={false}
