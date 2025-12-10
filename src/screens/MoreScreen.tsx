@@ -124,6 +124,7 @@ const MoreScreen: React.FC = () => {
         subtitle="Menu & Tools"
         scrollOffset={scrollOffset}
         showScrollHint
+        useSafeAreaPadding={false}
       />
 
       <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>

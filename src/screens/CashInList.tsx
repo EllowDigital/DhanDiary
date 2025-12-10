@@ -223,7 +223,12 @@ const CashInList = () => {
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       <View style={[containerStyle, { paddingHorizontal: isTablet ? 0 : 20 }]}>
-        <ScreenHeader title="Income" subtitle="Track your cash inflow" showScrollHint={false} />
+        <ScreenHeader
+          title="Income"
+          subtitle="Track your cash inflow"
+          showScrollHint={false}
+          useSafeAreaPadding={false}
+        />
       </View>
 
       <FlatList

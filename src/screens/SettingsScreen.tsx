@@ -165,7 +165,12 @@ const SettingsScreen = () => {
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       <SafeAreaView style={styles.safeArea}>
         <View style={containerStyle}>
-          <ScreenHeader title="Settings" subtitle="Preferences & Security" showScrollHint={false} />
+          <ScreenHeader
+            title="Settings"
+            subtitle="Preferences & Security"
+            showScrollHint={false}
+            useSafeAreaPadding={false}
+          />
         </View>
 
         <ScrollView
@@ -298,7 +303,7 @@ const SettingsScreen = () => {
                 <MaterialIcon name="logout" size={20} color={colors.accentRed} />
                 <Text style={styles.logoutText}>Sign Out</Text>
               </TouchableOpacity>
-              <Text style={styles.versionText}>v1.0.2 (Build 45)</Text>
+              <Text style={styles.versionText}>v1.2.0 (Build 45)</Text>
             </Animated.View>
           </View>
         </ScrollView>

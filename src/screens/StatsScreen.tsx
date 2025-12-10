@@ -241,7 +241,12 @@ const StatsScreen = () => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-      <ScreenHeader title="Analytics" subtitle="Financial health overview" showScrollHint={false} />
+      <ScreenHeader
+        title="Analytics"
+        subtitle="Financial health overview"
+        showScrollHint={false}
+        useSafeAreaPadding={false}
+      />
 
       <ScrollView
         style={styles.container}

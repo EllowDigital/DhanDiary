@@ -154,7 +154,12 @@ const AboutScreen: React.FC = () => {
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       <SafeAreaView style={styles.safeArea}>
         <View style={[styles.centerContainer, { maxWidth: isTablet ? 600 : '100%' }]}>
-          <ScreenHeader title="About" subtitle="Version info & updates" showScrollHint={false} />
+          <ScreenHeader
+            title="About"
+            subtitle="Version info & updates"
+            showScrollHint={false}
+            useSafeAreaPadding={false}
+          />
 
           <ScrollView
             showsVerticalScrollIndicator={false}

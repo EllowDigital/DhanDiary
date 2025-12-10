@@ -191,6 +191,7 @@ const AddEntryScreen: React.FC = () => {
       <ScreenHeader
         title={editingLocalId ? 'Edit Entry' : 'New Entry'}
         subtitle={editingLocalId ? 'Update transaction details' : 'Record a new transaction'}
+        useSafeAreaPadding={false}
       />
 
       <KeyboardAvoidingView

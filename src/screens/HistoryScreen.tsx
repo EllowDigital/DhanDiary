@@ -361,7 +361,12 @@ const HistoryScreen = () => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-      <ScreenHeader title="History" subtitle="Detailed transactions log" showScrollHint={false} />
+      <ScreenHeader
+        title="History"
+        subtitle="Detailed transactions log"
+        showScrollHint={false}
+        useSafeAreaPadding={false}
+      />
 
       <FlatList
         data={filtered}
