@@ -2,7 +2,7 @@ import NetInfo from '@react-native-community/netinfo';
 import { query } from '../api/neonClient';
 import { saveSession, clearSession, getSession } from '../db/session';
 import { addPendingProfileUpdate, clearAllData, init as initDb, wipeLocalDatabase } from '../db/localDb';
-import { getOfflineDbOwner, setOfflineDbOwner, clearOfflineDbOwner } from '../db/offlineOwner';
+import { getOfflineDbOwner, setOfflineDbOwner } from '../db/offlineOwner';
 import sqlite from '../db/sqlite';
 import bcrypt from 'bcryptjs';
 import Constants from 'expo-constants';
