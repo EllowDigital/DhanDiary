@@ -30,13 +30,15 @@ import ScreenHeader from '../components/ScreenHeader';
 
 // --- FIX FOR WARNING ---
 // Only enable legacy layout animation if NOT on New Architecture (Fabric)
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  const { nativeFabricUIManager } = globalThis as {
-    nativeFabricUIManager?: unknown;
-  };
-  if (!nativeFabricUIManager) {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
-  }
+const { nativeFabricUIManager } = globalThis as {
+  nativeFabricUIManager?: unknown;
+};
+if (
+  Platform.OS === 'android' &&
+  UIManager.setLayoutAnimationEnabledExperimental &&
+  !nativeFabricUIManager
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
 // --- FIXED COMPONENT: Defined OUTSIDE to prevent keyboard closing ---

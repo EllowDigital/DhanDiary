@@ -10,6 +10,7 @@ import {
   useWindowDimensions,
   StatusBar,
 } from 'react-native';
+import { Linking } from 'react-native';
 import type { ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, Text } from '@rneui/themed';
@@ -43,6 +44,7 @@ const SettingsScreen = () => {
   const query = useQueryClient();
   const { showToast } = useToast();
   const { user } = useAuth();
+  const privacyPolicyUrl = 'https://ellowdigital.netlify.app/privacy';
 
   const { width } = useWindowDimensions();
   const isTablet = width >= 768;
@@ -260,7 +262,7 @@ const SettingsScreen = () => {
                 <SettingsRow
                   icon="lock-outline"
                   label="Privacy Policy"
-                  onPress={() => {}}
+                  onPress={() => Linking.openURL(privacyPolicyUrl)}
                   lastItem
                 />
               </View>
