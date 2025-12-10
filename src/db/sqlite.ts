@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import * as FileSystem from 'expo-file-system';
 
 type DB = {
   name: string;
@@ -9,7 +10,9 @@ type DB = {
   exec: (sql: string) => Promise<void>;
 };
 
+const DB_NAME = 'dhandiary.db';
 let DB_INSTANCE: Promise<DB> | null = null;
+let LAST_DB: DB | null = null;
 
 const open = async (): Promise<DB> => {
   if (DB_INSTANCE) return DB_INSTANCE;
@@ -18,15 +21,15 @@ const open = async (): Promise<DB> => {
     let raw: any;
     // Different expo-sqlite versions expose openDatabase or openDatabaseSync/openDatabaseAsync.
     if ((SQLite as any).openDatabaseAsync) {
-      raw = await (SQLite as any).openDatabaseAsync('dhandiary.db');
+      raw = await (SQLite as any).openDatabaseAsync(DB_NAME);
     } else if ((SQLite as any).openDatabaseSync) {
-      raw = (SQLite as any).openDatabaseSync('dhandiary.db');
+      raw = (SQLite as any).openDatabaseSync(DB_NAME);
     } else if ((SQLite as any).openDatabase) {
-      raw = (SQLite as any).openDatabase('dhandiary.db');
+      raw = (SQLite as any).openDatabase(DB_NAME);
     } else {
       // fallback: try calling as any
       raw = (SQLite as any).openDatabaseSync
-        ? (SQLite as any).openDatabaseSync('dhandiary.db')
+        ? (SQLite as any).openDatabaseSync(DB_NAME)
         : null;
     }
 
@@ -87,7 +90,7 @@ const open = async (): Promise<DB> => {
       return run(sql, []);
     };
 
-    const db: DB = { name: 'dhandiary.db', raw, run, all, get, exec };
+    const db: DB = { name: DB_NAME, raw, run, all, get, exec };
 
     // enable WAL for better concurrency; best-effort
     try {
@@ -96,10 +99,52 @@ const open = async (): Promise<DB> => {
       /* ignore */
     }
 
+    LAST_DB = db;
     return db;
   })();
 
   return DB_INSTANCE;
 };
 
-export default { open };
+const close = async () => {
+  try {
+    const db = LAST_DB || (DB_INSTANCE ? await DB_INSTANCE : null);
+    if (!db || !db.raw) return;
+    const raw = db.raw;
+    if (typeof raw.closeAsync === 'function') {
+      await raw.closeAsync();
+    } else if (typeof raw.close === 'function') {
+      raw.close();
+    } else if (raw._db && typeof raw._db.close === 'function') {
+      raw._db.close();
+    }
+  } catch (e) {
+    // ignore close failures
+  } finally {
+    LAST_DB = null;
+    DB_INSTANCE = null;
+  }
+};
+
+const deleteDbFile = async () => {
+  await close();
+  const baseDir = FileSystem.documentDirectory
+    ? `${FileSystem.documentDirectory}SQLite`
+    : null;
+  if (!baseDir) return;
+
+  const suffixes = ['', '-wal', '-shm'];
+  for (const suffix of suffixes) {
+    const path = `${baseDir}/${DB_NAME}${suffix}`;
+    try {
+      const info = await FileSystem.getInfoAsync(path);
+      if (info.exists) {
+        await FileSystem.deleteAsync(path, { idempotent: true });
+      }
+    } catch (e) {
+      // ignore individual delete failures
+    }
+  }
+};
+
+export default { open, close, deleteDbFile };

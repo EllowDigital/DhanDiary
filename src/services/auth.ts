@@ -1,7 +1,7 @@
 import NetInfo from '@react-native-community/netinfo';
 import { query } from '../api/neonClient';
 import { saveSession, clearSession, getSession } from '../db/session';
-import { addPendingProfileUpdate, clearAllData, init as initDb } from '../db/localDb';
+import { addPendingProfileUpdate, clearAllData, init as initDb, wipeLocalDatabase } from '../db/localDb';
 import { getOfflineDbOwner, setOfflineDbOwner, clearOfflineDbOwner } from '../db/offlineOwner';
 import sqlite from '../db/sqlite';
 import bcrypt from 'bcryptjs';
@@ -180,13 +180,7 @@ export const logout = async () => {
     // ignore if syncManager can't be required
   }
 
-  const session = await getSession();
-  if (session?.id) {
-    try {
-      await setOfflineDbOwner(session.id);
-    } catch (e) {}
-  }
-  await clearSession();
+  await wipeLocalDatabase();
 };
 
 export const deleteAccount = async () => {
@@ -222,8 +216,7 @@ export const deleteAccount = async () => {
   }
 
   // Clear local DB
-  await clearAllData();
-  await clearOfflineDbOwner();
+  await wipeLocalDatabase();
   return { remoteDeleted, userDeleted };
 };
 
