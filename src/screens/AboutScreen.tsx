@@ -12,54 +12,60 @@ import {
   Modal,
   Animated,
   Easing,
-  Platform,
   StatusBar,
   useWindowDimensions,
   Clipboard,
+  Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Text } from '@rneui/themed';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Updates from 'expo-updates';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 
-// Utils & Components
-import { colors, spacing } from '../utils/design';
-import getLatestShareLink from '../utils/shareLink';
+// --- PLACEHOLDERS (Replace with your actual imports) ---
+// Assuming these exist in your project structure
 import ScreenHeader from '../components/ScreenHeader';
-
+import getLatestShareLink from '../utils/shareLink';
 const pkg = require('../../package.json');
+
+// --- THEME CONFIGURATION ---
+const theme = {
+  background: '#F8F9FA',
+  surface: '#FFFFFF',
+  primary: '#2563EB',
+  primarySoft: '#EFF6FF',
+  text: '#1E293B',
+  textSecondary: '#64748B',
+  accentGreen: '#10B981',
+  accentRed: '#EF4444',
+  heroBg: '#0F172A',
+  border: '#F1F5F9',
+};
 
 // --- CONSTANTS ---
 const ELLOW_URL = 'https://ellowdigital.netlify.app';
 const BRAND_NAME = 'EllowDigital';
-const BUILD_TYPE =
-  Constants.expoConfig?.extra?.BUILD_TYPE || (pkg.version.includes('beta') ? 'Beta' : 'Release');
+const BUILD_TYPE = Constants.expoConfig?.extra?.BUILD_TYPE || (pkg.version.includes('beta') ? 'Beta' : 'Release');
 
 const AboutScreen: React.FC = () => {
   const { width } = useWindowDimensions();
-  const isTablet = width >= 768;
+  const insets = useSafeAreaInsets();
   const isExpoGo = Constants.appOwnership === 'expo';
 
+  // --- RESPONSIVE CALCULATIONS ---
+  // Calculate card width: (Screen Width - Side Padding (40) - Gap (12)) / 2
+  const cardWidth = (width - 40 - 12) / 2;
+  const isSmallScreen = width < 360;
+
   // --- ANIMATIONS ---
-  // Standard Animated API (Crash-proof)
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(20)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 600,
-        useNativeDriver: true,
-        easing: Easing.out(Easing.cubic),
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 600,
-        useNativeDriver: true,
-        easing: Easing.out(Easing.cubic),
-      }),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true, easing: Easing.out(Easing.cubic) }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 600, useNativeDriver: true, easing: Easing.out(Easing.cubic) }),
     ]).start();
   }, []);
 
@@ -69,7 +75,6 @@ const AboutScreen: React.FC = () => {
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [failureCount, setFailureCount] = useState(0);
 
-  // Load failure count
   useEffect(() => {
     AsyncStorage.getItem('UPDATE_FAIL_COUNT').then((val) => {
       if (val) setFailureCount(Number(val));
@@ -85,7 +90,7 @@ const AboutScreen: React.FC = () => {
       const result = await Updates.checkForUpdateAsync();
       if (result.isAvailable) {
         setUpdateAvailable(true);
-        setShowUpdateModal(true); // Auto show modal if found
+        setShowUpdateModal(true);
       } else {
         setUpdateAvailable(false);
         Alert.alert('Up to Date', 'You are running the latest version.');
@@ -99,14 +104,12 @@ const AboutScreen: React.FC = () => {
 
   const applyUpdate = useCallback(async () => {
     if (isExpoGo) return;
-
     setChecking(true);
     try {
       await Updates.fetchUpdateAsync();
       await Updates.reloadAsync();
     } catch (err: any) {
       Alert.alert('Update Failed', err.message);
-      // Increment failure count
       const newCount = failureCount + 1;
       setFailureCount(newCount);
       AsyncStorage.setItem('UPDATE_FAIL_COUNT', String(newCount));
@@ -121,16 +124,7 @@ const AboutScreen: React.FC = () => {
     setFailureCount(0);
   };
 
-  // --- SHARING ---
-  const handleShare = async () => {
-    const link = await getLatestShareLink().catch(() => ELLOW_URL);
-    Share.share({
-      title: 'DhanDiary',
-      message: `Manage your finances smartly with DhanDiary! Download: ${link}`,
-    });
-  };
-
-  // --- INFO TILES DATA ---
+  // --- INFO DATA ---
   const updateId = Updates.updateId || 'Embedded';
   const shortId = updateId === 'Embedded' ? updateId : updateId.substring(0, 8) + '...';
 
@@ -139,185 +133,184 @@ const AboutScreen: React.FC = () => {
     Alert.alert('Copied', 'Update ID copied to clipboard');
   };
 
-  const infoGrid = useMemo(
-    () => [
-      { label: 'Version', value: pkg.version, icon: 'tag' },
-      { label: 'Build Channel', value: BUILD_TYPE, icon: 'layers' },
-      { label: 'Env', value: process.env.NODE_ENV === 'production' ? 'Prod' : 'Dev', icon: 'code' },
-      { label: 'Update ID', value: shortId, icon: 'fingerprint', onPress: copyUpdateId },
-    ],
-    [shortId]
-  );
+  const handleShare = async () => {
+    const link = await getLatestShareLink().catch(() => ELLOW_URL);
+    Share.share({
+      title: 'DhanDiary',
+      message: `Manage your finances smartly with DhanDiary! Download: ${link}`,
+    });
+  };
+
+  const infoGrid = useMemo(() => [
+    { label: 'Version', value: pkg.version, icon: 'tag', color: theme.primary },
+    { label: 'Channel', value: BUILD_TYPE, icon: 'layers', color: theme.primary },
+    { label: 'Env', value: process.env.NODE_ENV === 'production' ? 'Prod' : 'Dev', icon: 'code', color: theme.primary },
+    { label: 'Build ID', value: shortId, icon: 'fingerprint', color: theme.primary, onPress: copyUpdateId },
+  ], [shortId]);
 
   return (
     <View style={styles.mainContainer}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-      <SafeAreaView style={styles.safeArea}>
-        <View style={[styles.centerContainer, { maxWidth: isTablet ? 600 : '100%' }]}>
-          <ScreenHeader
-            title="About"
-            subtitle="Version info & updates"
-            showScrollHint={false}
-            useSafeAreaPadding={false}
-          />
+      <StatusBar
+        barStyle="dark-content"
+        backgroundColor="transparent"
+        translucent={true}
+      />
 
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.scrollContent}
-          >
-            <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-              {/* 1. HERO BRAND CARD */}
-              <View style={styles.heroCard}>
-                <View style={styles.heroContent}>
-                  <Image
-                    source={require('../../assets/icon.png')}
-                    style={styles.appIcon}
-                    resizeMode="contain"
-                  />
-                  <View style={styles.heroText}>
-                    <Text style={styles.appName}>DhanDiary</Text>
-                    <Text style={styles.appDesc}>Smart Personal Finance</Text>
-                  </View>
-                </View>
-                <View style={styles.heroFooter}>
-                  <Text style={styles.heroFooterText}>
-                    Crafted by <Text style={styles.brandName}>{BRAND_NAME}</Text>
-                  </Text>
-                  <TouchableOpacity onPress={() => Linking.openURL(ELLOW_URL)}>
-                    <MaterialIcon name="open-in-new" size={16} color="rgba(255,255,255,0.8)" />
-                  </TouchableOpacity>
-                </View>
-              </View>
+      {/* HEADER */}
+      <View style={{ paddingTop: insets.top, paddingHorizontal: 20, backgroundColor: theme.background }}>
+        <ScreenHeader
+          title="About"
+          subtitle="System status & info"
+          showScrollHint={false}
+          useSafeAreaPadding={false}
+        />
+      </View>
 
-              {/* 2. TECH SPECS GRID (BENTO STYLE) */}
-              <View style={styles.gridContainer}>
-                {infoGrid.map((item, idx) => (
-                  <TouchableOpacity
-                    key={idx}
-                    style={styles.gridItem}
-                    activeOpacity={item.onPress ? 0.7 : 1}
-                    onPress={item.onPress}
-                  >
-                    <View style={styles.gridLabelRow}>
-                      <MaterialIcon name={item.icon as any} size={14} color={colors.muted} />
-                      <Text style={styles.gridLabel}>{item.label}</Text>
-                    </View>
-                    <Text style={styles.gridValue}>{item.value}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        overScrollMode="never" // Android specific: removes the stretch effect
+        contentContainerStyle={[
+          styles.scrollContent,
+          // CRITICAL: Ensure padding accounts for bottom navigation bar (gestures)
+          { paddingBottom: insets.bottom + 80 }
+        ]}
+      >
+        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
 
-              {/* 3. UPDATES SECTION */}
-              <View style={styles.sectionCard}>
-                <View style={styles.sectionHeader}>
-                  <MaterialIcon name="system-update" size={20} color={colors.primary} />
-                  <Text style={styles.sectionTitle}>App Updates</Text>
-                </View>
-
-                <Text style={styles.sectionDesc}>
-                  We push over-the-air updates to fix bugs and add features instantly.
-                </Text>
-
-                <View style={styles.actionRow}>
-                  <Button
-                    title={
-                      checking
-                        ? 'Checking...'
-                        : updateAvailable
-                          ? 'Update Available'
-                          : 'Check for Updates'
-                    }
-                    loading={checking}
-                    onPress={checkForUpdates}
-                    icon={
-                      <MaterialIcon
-                        name="refresh"
-                        size={18}
-                        color="white"
-                        style={{ marginRight: 8 }}
-                      />
-                    }
-                    buttonStyle={styles.primaryBtn}
-                    containerStyle={{ flex: 1 }}
-                  />
-                </View>
-
-                {/* FAILURE RECOVERY UI */}
-                {failureCount > 0 && (
-                  <View style={styles.errorBox}>
-                    <MaterialIcon name="warning" size={18} color={colors.accentOrange} />
-                    <Text style={styles.errorText}>Update failed {failureCount} times.</Text>
-                    <TouchableOpacity onPress={clearRetryState}>
-                      <Text style={styles.errorAction}>Reset</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
-
-              {/* 4. SUPPORT & SHARE */}
-              <View style={styles.rowActions}>
-                <TouchableOpacity style={styles.actionCard} onPress={handleShare}>
-                  <View style={[styles.iconCircle, { backgroundColor: colors.accentGreen }]}>
-                    <MaterialIcon name="share" size={20} color="white" />
-                  </View>
-                  <View>
-                    <Text style={styles.actionTitle}>Share App</Text>
-                    <Text style={styles.actionSub}>Invite friends</Text>
-                  </View>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.actionCard}
-                  onPress={() => Linking.openURL('mailto:support@ellow.digitial')}
-                >
-                  <View style={[styles.iconCircle, { backgroundColor: colors.secondary }]}>
-                    <MaterialIcon name="mail" size={20} color="white" />
-                  </View>
-                  <View>
-                    <Text style={styles.actionTitle}>Support</Text>
-                    <Text style={styles.actionSub}>Get help</Text>
-                  </View>
-                </TouchableOpacity>
-              </View>
-
-              <Text style={styles.legalText}>
-                © {new Date().getFullYear()} {BRAND_NAME}. All rights reserved.
-              </Text>
-            </Animated.View>
-          </ScrollView>
-        </View>
-
-        {/* UPDATE MODAL */}
-        <Modal
-          visible={showUpdateModal}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setShowUpdateModal(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContainer}>
-              <View style={styles.modalIcon}>
-                <MaterialIcon name="download" size={32} color={colors.primary} />
-              </View>
-              <Text style={styles.modalTitle}>New Update Available</Text>
-              <Text style={styles.modalDesc}>
-                A new version of DhanDiary is ready. It will take a few seconds to install.
-              </Text>
-              <Button
-                title="Update Now"
-                onPress={applyUpdate}
-                buttonStyle={styles.modalBtnPrimary}
+          {/* 1. HERO CARD */}
+          <View style={styles.heroCard}>
+            <View style={styles.heroContent}>
+              <Image
+                source={require('../../assets/splash-icon.png')}
+                style={styles.heroIcon}
+                resizeMode="contain"
               />
-              <Button
-                title="Later"
-                type="clear"
-                titleStyle={{ color: colors.muted }}
-                onPress={() => setShowUpdateModal(false)}
-              />
+              <View style={styles.heroText}>
+                <Text style={styles.heroTitle}>DhanDiary</Text>
+                <Text style={styles.heroSubtitle}>Smart Personal Finance</Text>
+
+                <View style={styles.activePill}>
+                  <View style={styles.activeDot} />
+                  <Text style={styles.activeText}>System Operational</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.heroDivider} />
+
+            <View style={styles.heroFooter}>
+              <Text style={styles.heroFooterText}>Crafted by <Text style={styles.heroBrand}>{BRAND_NAME}</Text></Text>
+              <TouchableOpacity style={styles.visitBtn} onPress={() => Linking.openURL(ELLOW_URL)}>
+                <Text style={styles.visitText}>Visit Website</Text>
+                <MaterialIcon name="arrow-forward" size={14} color="rgba(255,255,255,0.9)" />
+              </TouchableOpacity>
             </View>
           </View>
-        </Modal>
-      </SafeAreaView>
+
+          {/* 2. SYSTEM INFO GRID (Responsive) */}
+          <Text style={styles.sectionHeader}>System Information</Text>
+          <View style={styles.gridContainer}>
+            {infoGrid.map((item, idx) => (
+              <TouchableOpacity
+                key={idx}
+                style={[styles.gridCard, { width: cardWidth }]} // Responsive Width applied here
+                activeOpacity={item.onPress ? 0.7 : 1}
+                onPress={item.onPress}
+              >
+                <View style={[styles.iconBox, { backgroundColor: theme.primarySoft }]}>
+                  <MaterialIcon name={item.icon as any} size={20} color={item.color} />
+                </View>
+                <View>
+                  <Text style={styles.gridLabel}>{item.label}</Text>
+                  <Text style={styles.gridValue} numberOfLines={1}>{item.value}</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* 3. UPDATES & ACTIONS */}
+          <Text style={styles.sectionHeader}>Updates & Support</Text>
+
+          <View style={styles.actionCard}>
+            <View style={styles.actionRow}>
+              <View style={[styles.iconBoxLarge, { backgroundColor: updateAvailable ? 'rgba(16, 185, 129, 0.1)' : theme.primarySoft }]}>
+                <MaterialIcon
+                  name={updateAvailable ? "cloud-download" : "system-update"}
+                  size={24}
+                  color={updateAvailable ? theme.accentGreen : theme.primary}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.cardTitle}>App Version</Text>
+                <Text style={styles.cardDesc}>
+                  {updateAvailable ? 'New version available for install.' : 'You are on the latest version.'}
+                </Text>
+              </View>
+            </View>
+
+            <Button
+              title={checking ? "Checking..." : updateAvailable ? "Update Now" : "Check for Updates"}
+              loading={checking}
+              onPress={updateAvailable ? applyUpdate : checkForUpdates}
+              buttonStyle={[
+                styles.mainBtn,
+                updateAvailable && { backgroundColor: theme.accentGreen }
+              ]}
+              titleStyle={{ fontWeight: '600', fontSize: 14 }}
+              icon={!checking && !updateAvailable ? <MaterialIcon name="refresh" size={16} color="white" style={{ marginRight: 8 }} /> : undefined}
+            />
+
+            {failureCount > 0 && (
+              <TouchableOpacity style={styles.errorRow} onPress={clearRetryState}>
+                <MaterialIcon name="error-outline" size={16} color={theme.accentRed} />
+                <Text style={styles.errorText}>Update failed {failureCount} times. Tap to reset.</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Support Buttons Row */}
+          <View style={styles.buttonRow}>
+            <TouchableOpacity style={styles.halfBtn} onPress={handleShare}>
+              <MaterialIcon name="share" size={20} color={theme.primary} />
+              <Text style={styles.halfBtnText}>Share App</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.halfBtn} onPress={() => Linking.openURL('mailto:support@ellow.digitial')}>
+              <MaterialIcon name="mail-outline" size={20} color={theme.primary} />
+              <Text style={styles.halfBtnText}>Contact Us</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* FOOTER */}
+          <Text style={styles.copyright}>© {new Date().getFullYear()} {BRAND_NAME}</Text>
+        </Animated.View>
+      </ScrollView>
+
+      {/* UPDATE MODAL */}
+      <Modal visible={showUpdateModal} transparent animationType="fade" onRequestClose={() => setShowUpdateModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={[styles.modalIcon, { backgroundColor: 'rgba(16, 185, 129, 0.15)' }]}>
+              <MaterialIcon name="arrow-downward" size={32} color={theme.accentGreen} />
+            </View>
+            <Text style={styles.modalTitle}>Update Ready</Text>
+            <Text style={styles.modalText}>A new version of DhanDiary is ready to install. This will only take a moment.</Text>
+
+            <Button
+              title="Install Update"
+              onPress={applyUpdate}
+              buttonStyle={{ backgroundColor: theme.accentGreen, borderRadius: 12, paddingVertical: 12 }}
+              containerStyle={{ width: '100%', marginBottom: 10 }}
+            />
+            <Button
+              title="Not Now"
+              type="clear"
+              onPress={() => setShowUpdateModal(false)}
+              titleStyle={{ color: theme.textSecondary }}
+            />
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -328,209 +321,244 @@ export default AboutScreen;
 const styles = StyleSheet.create({
   mainContainer: {
     flex: 1,
-    backgroundColor: colors.background,
-  },
-  safeArea: {
-    flex: 1,
-  },
-  centerContainer: {
-    width: '100%',
-    alignSelf: 'center',
-    paddingHorizontal: 20,
-    flex: 1,
+    backgroundColor: theme.background,
   },
   scrollContent: {
-    paddingBottom: 40,
+    paddingHorizontal: 20,
     paddingTop: 10,
+    flexGrow: 1, // Ensures scrollview takes space even if content is small
+  },
+  sectionHeader: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: theme.textSecondary,
+    marginBottom: 12,
+    marginTop: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
 
   /* HERO CARD */
   heroCard: {
-    backgroundColor: colors.primary,
+    backgroundColor: theme.heroBg,
     borderRadius: 24,
     padding: 24,
-    marginBottom: 20,
-    shadowColor: colors.primary,
+    marginBottom: 24,
+    shadowColor: theme.primary,
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.2,
     shadowRadius: 16,
-    elevation: 6,
+    elevation: 8,
   },
   heroContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
   },
-  appIcon: {
+  heroIcon: {
     width: 64,
     height: 64,
     borderRadius: 16,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   heroText: {
     marginLeft: 16,
+    flex: 1, // Allows text to shrink on small devices
+    justifyContent: 'center',
   },
-  appName: {
-    fontSize: 24,
+  heroTitle: {
+    fontSize: 22,
     fontWeight: '800',
-    color: 'white',
+    color: '#fff',
     letterSpacing: -0.5,
   },
-  appDesc: {
-    color: 'rgba(255,255,255,0.8)',
-    fontSize: 14,
-    marginTop: 4,
+  heroSubtitle: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.6)',
+    marginTop: 2,
+  },
+  activePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.2)', // Green tint on dark
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    marginTop: 8,
+    alignSelf: 'flex-start',
+  },
+  activeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: theme.accentGreen,
+    marginRight: 6,
+  },
+  activeText: {
+    color: theme.accentGreen,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  heroDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    marginVertical: 16,
   },
   heroFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.1)',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
+    flexWrap: 'wrap', // Wrap on very small screens
+    gap: 10,
   },
   heroFooterText: {
-    color: 'rgba(255,255,255,0.9)',
-    fontSize: 13,
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 12,
   },
-  brandName: {
+  heroBrand: {
+    color: '#fff',
     fontWeight: '700',
-    color: '#FFF',
+  },
+  visitBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 100,
+  },
+  visitText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+    marginRight: 4,
   },
 
-  /* BENTO GRID */
+  /* GRID */
   gridContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
-    marginBottom: 20,
+    marginBottom: 24,
   },
-  gridItem: {
-    flex: 1,
-    minWidth: '45%',
-    backgroundColor: colors.card,
-    borderRadius: 16,
+  gridCard: {
+    // Width is handled inline for responsiveness
+    backgroundColor: theme.surface,
     padding: 16,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: theme.border,
   },
-  gridLabelRow: {
-    flexDirection: 'row',
+  iconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
     alignItems: 'center',
-    gap: 6,
-    marginBottom: 8,
+    justifyContent: 'center',
+    marginBottom: 12,
   },
   gridLabel: {
-    fontSize: 12,
-    color: colors.muted,
+    fontSize: 11,
+    color: theme.textSecondary,
+    fontWeight: '700',
     textTransform: 'uppercase',
-    fontWeight: '600',
+    marginBottom: 2,
   },
   gridValue: {
     fontSize: 15,
     fontWeight: '700',
-    color: colors.text,
+    color: theme.text,
   },
 
-  /* SECTIONS */
-  sectionCard: {
-    backgroundColor: colors.card,
+  /* ACTIONS & UPDATES */
+  actionCard: {
+    backgroundColor: theme.surface,
     borderRadius: 20,
     padding: 20,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
     borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: 20,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 10,
-  },
-  sectionTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  sectionDesc: {
-    fontSize: 14,
-    color: colors.muted,
-    lineHeight: 20,
-    marginBottom: 16,
+    borderColor: theme.border,
   },
   actionRow: {
     flexDirection: 'row',
+    gap: 16,
+    marginBottom: 16,
   },
-  primaryBtn: {
-    backgroundColor: colors.primary,
-    borderRadius: 12,
+  iconBoxLarge: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: theme.text,
+    marginBottom: 4,
+  },
+  cardDesc: {
+    fontSize: 13,
+    color: theme.textSecondary,
+    lineHeight: 18,
+  },
+  mainBtn: {
+    backgroundColor: theme.primary,
+    borderRadius: 14,
     paddingVertical: 12,
   },
-
-  /* ERROR BOX */
-  errorBox: {
-    marginTop: 16,
+  errorRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FEF2F2',
-    padding: 12,
-    borderRadius: 12,
-    gap: 8,
+    justifyContent: 'center',
+    marginTop: 12,
+    gap: 6,
   },
   errorText: {
-    flex: 1,
-    fontSize: 13,
-    color: colors.accentRed,
-  },
-  errorAction: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: colors.accentRed,
+    fontSize: 12,
+    color: theme.accentRed,
+    fontWeight: '500',
   },
 
-  /* ROW ACTIONS */
-  rowActions: {
+  /* SUPPORT BUTTONS */
+  buttonRow: {
     flexDirection: 'row',
     gap: 12,
     marginBottom: 30,
   },
-  actionCard: {
+  halfBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.card,
-    padding: 16,
+    justifyContent: 'center',
+    backgroundColor: theme.surface,
+    paddingVertical: 14,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: colors.border,
-    gap: 12,
+    borderColor: theme.border,
+    gap: 8,
   },
-  iconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionTitle: {
+  halfBtnText: {
     fontSize: 14,
-    fontWeight: '700',
-    color: colors.text,
+    fontWeight: '600',
+    color: theme.text,
   },
-  actionSub: {
-    fontSize: 12,
-    color: colors.muted,
-  },
-
-  /* FOOTER */
-  legalText: {
+  copyright: {
     textAlign: 'center',
-    color: colors.muted,
     fontSize: 12,
-    marginBottom: 20,
-    opacity: 0.6,
+    color: theme.textSecondary,
+    opacity: 0.5,
+    paddingBottom: 20,
   },
 
   /* MODAL */
@@ -540,39 +568,32 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 24,
   },
-  modalContainer: {
-    backgroundColor: colors.card,
+  modalContent: {
+    backgroundColor: theme.surface,
     borderRadius: 24,
     padding: 24,
     alignItems: 'center',
+    elevation: 24, // High elevation for modal to sit above everything
   },
   modalIcon: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: colors.primarySoft,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: '700',
-    color: colors.text,
+    fontWeight: '800',
+    color: theme.text,
     marginBottom: 8,
   },
-  modalDesc: {
+  modalText: {
     textAlign: 'center',
-    color: colors.muted,
+    color: theme.textSecondary,
     fontSize: 15,
     lineHeight: 22,
     marginBottom: 24,
-  },
-  modalBtnPrimary: {
-    width: '100%',
-    backgroundColor: colors.primary,
-    borderRadius: 12,
-    paddingVertical: 12,
-    minWidth: 200,
   },
 });

@@ -7,7 +7,6 @@ import {
   Animated,
   Easing,
   Image,
-  Platform,
 } from 'react-native';
 import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-navigation/drawer';
 import { Text } from '@rneui/themed';
@@ -20,18 +19,16 @@ import { logout } from '../services/auth';
 import { colors, spacing, shadows } from '../utils/design';
 import appConfig from '../../app.json';
 const pkg = require('../../package.json');
-const brandIcon = require('../../assets/icon.png');
+
+// CHANGED: Using splash-icon.png now
+const brandIcon = require('../../assets/splash-icon.png');
 
 const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   const insets = useSafeAreaInsets();
 
   // --- ANIMATIONS ---
-  // Standard Animated API (Crash Proof)
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
-
-  // Create an array of animated values for staggered list items
-  // Assuming max 10 menu items for safety
   const listAnims = useRef([...Array(10)].map(() => new Animated.Value(0))).current;
 
   useEffect(() => {
@@ -69,7 +66,6 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   }, []);
 
   const handleNavigate = (routeName: string) => {
-    // Handling nested navigators if needed
     if (routeName === 'HomeTabs') {
       props.navigation.dispatch(
         CommonActions.navigate({
@@ -80,8 +76,6 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
     } else {
       props.navigation.navigate(routeName);
     }
-    // Optional: Close drawer after tap
-    // props.navigation.closeDrawer();
   };
 
   const handleLogout = () => {
@@ -123,8 +117,9 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
         style={[styles.headerCard, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
       >
         <View style={styles.brandRow}>
+          {/* UPDATED: Wrapper logic changed (no border) */}
           <View style={styles.brandIconWrap}>
-            <Image source={brandIcon} style={styles.brandIcon} resizeMode="contain" />
+            <Image source={brandIcon} style={styles.brandIcon} resizeMode="cover" />
           </View>
           <View>
             <Text style={styles.brandTitle}>DhanDiary</Text>
@@ -147,13 +142,11 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
                 ? options.title
                 : route.name;
 
-          // Skip hidden routes if any
           const flattenedStyle = options.drawerItemStyle
             ? StyleSheet.flatten(options.drawerItemStyle)
             : undefined;
           if (flattenedStyle?.display === 'none') return null;
 
-          // Animation for this item
           const itemAnim = listAnims[index] || new Animated.Value(1);
           const itemTranslate = itemAnim.interpolate({
             inputRange: [0, 1],
@@ -171,7 +164,6 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
                 activeOpacity={0.7}
               >
                 <View style={[styles.iconBox, focused && styles.iconBoxActive]}>
-                  {/* Render Icon if provided in navigation options */}
                   {options.drawerIcon ? (
                     options.drawerIcon({
                       focused,
@@ -227,39 +219,42 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 16,
     marginBottom: 24,
-    borderWidth: 1,
-    borderColor: colors.border,
     ...shadows.small,
+    // Removed border here too for a cleaner look, optional
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.03)', 
   },
   brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
-    marginBottom: 16,
+    marginBottom: 4, // Reduced margin to make card tighter
   },
   brandIconWrap: {
     width: 56,
     height: 56,
-    borderRadius: 18,
-    backgroundColor: colors.primarySoft,
+    borderRadius: 16, // Slightly softer radius
+    backgroundColor: colors.primarySoft || '#eff6ff', 
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(37,99,235,0.2)',
+    overflow: 'hidden', // Ensures the image respects the radius
+    // CHANGED: Removed borderWidth and borderColor
   },
   brandIcon: {
-    width: 36,
-    height: 36,
+    width: '100%', // Fill the container
+    height: '100%',
   },
   brandTitle: {
     fontSize: 20,
     fontWeight: '800',
     color: colors.text,
+    letterSpacing: -0.5,
   },
   brandSubtitle: {
     fontSize: 13,
     color: colors.muted,
     marginTop: 2,
+    fontWeight: '500',
   },
 
   /* MENU */
@@ -274,17 +269,18 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     marginLeft: 8,
     letterSpacing: 0.5,
+    opacity: 0.7,
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
     paddingHorizontal: 14,
-    borderRadius: 16,
-    marginBottom: 10,
+    borderRadius: 14,
+    marginBottom: 8,
   },
   menuItemActive: {
-    backgroundColor: colors.primarySoft, // Light blue bg for active
+    backgroundColor: colors.primarySoft || '#eff6ff',
   },
   iconBox: {
     width: 32,
@@ -292,9 +288,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
   },
-  iconBoxActive: {
-    // Optional: distinct styling for active icon container
-  },
+  iconBoxActive: {},
   menuLabel: {
     fontSize: 15,
     fontWeight: '500',
@@ -319,7 +313,7 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
-    backgroundColor: colors.border,
+    backgroundColor: colors.border || '#f3f4f6',
     marginBottom: 20,
   },
   logoutBtn: {
@@ -327,8 +321,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     paddingHorizontal: 14,
-    borderRadius: 16,
-    // backgroundColor: 'rgba(239, 68, 68, 0.05)', // Optional red tint
+    borderRadius: 14,
   },
   logoutIconBox: {
     width: 32,
@@ -344,6 +337,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: colors.muted,
     marginTop: 16,
-    opacity: 0.5,
+    opacity: 0.4,
   },
 });
