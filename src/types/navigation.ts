@@ -7,6 +7,8 @@ export type RootStackParamList = {
 export type AuthStackParamList = {
   Login: undefined;
   Register: undefined;
+  Terms: undefined;
+  PrivacyPolicy: undefined;
 };
 
 export type MainStackParamList = {

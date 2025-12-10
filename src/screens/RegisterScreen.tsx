@@ -46,7 +46,6 @@ const RegisterScreen = () => {
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [warming, setWarming] = useState(false);
-  const [neonReady, setNeonReady] = useState(true);
 
   // Validation State
   const [emailError, setEmailError] = useState<string | null>(null);
@@ -90,7 +89,6 @@ const RegisterScreen = () => {
       setWarming(true);
       try {
         const ok = await warmNeonConnection({ force });
-        setNeonReady(ok);
         return ok;
       } finally {
         setWarming(false);
@@ -144,6 +142,9 @@ const RegisterScreen = () => {
       setLoading(false);
     }
   };
+
+  const handleOpenTerms = () => navigation.navigate('Terms');
+  const handleOpenPrivacy = () => navigation.navigate('PrivacyPolicy');
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -298,8 +299,15 @@ const RegisterScreen = () => {
 
               <View style={styles.termsContainer}>
                 <Text style={styles.termsText}>
-                  By signing up, you agree to our <Text style={styles.termsLink}>Terms</Text> and{' '}
-                  <Text style={styles.termsLink}>Privacy Policy</Text>.
+                  By signing up, you agree to our{' '}
+                  <Text style={styles.termsLink} onPress={handleOpenTerms}>
+                    Terms
+                  </Text>{' '}
+                  and{' '}
+                  <Text style={styles.termsLink} onPress={handleOpenPrivacy}>
+                    Privacy Policy
+                  </Text>
+                  .
                 </Text>
               </View>
             </View>

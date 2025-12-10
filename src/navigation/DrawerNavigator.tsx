@@ -13,6 +13,7 @@ import SettingsScreen from '../screens/SettingsScreen';
 import AccountManagementScreen from '../screens/AccountManagementScreen';
 import AboutScreen from '../screens/AboutScreen';
 import PrivacyPolicyScreen from '../screens/PrivacyPolicyScreen';
+import TermsScreen from '../screens/TermsScreen';
 
 // Components & Theme
 import CustomDrawerContent from './CustomDrawerContent';
@@ -173,6 +174,15 @@ const DrawerNavigator = () => {
         component={PrivacyPolicyScreen}
         options={{
           title: 'Privacy Policy',
+          drawerItemStyle: { display: 'none' },
+        }}
+      />
+
+      <Drawer.Screen
+        name="Terms"
+        component={TermsScreen}
+        options={{
+          title: 'Terms of Use',
           drawerItemStyle: { display: 'none' },
         }}
       />
