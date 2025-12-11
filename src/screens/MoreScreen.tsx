@@ -28,15 +28,15 @@ const MoreScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp<Record<string, object>>>();
   const [scrollOffset, setScrollOffset] = useState(0);
   const insets = useSafeAreaInsets();
-  
+
   // --- RESPONSIVE LOGIC ---
   const { width, scale } = useWindowDimensions();
-  
-  // Dynamic Width: 
+
+  // Dynamic Width:
   // - On Phones: Use 92% of screen width (spacing(2) margin on sides)
   // - On Tablets: Cap at 600px width and center it
   const isTablet = width >= 768;
-  const contentWidth = Math.min(width - spacing(4), 600); 
+  const contentWidth = Math.min(width - spacing(4), 600);
 
   // Calculate bottom padding to clear navigation bars
   const bottomContentPadding = useMemo(() => spacing(10) + insets.bottom + 20, [insets.bottom]);
@@ -62,9 +62,12 @@ const MoreScreen: React.FC = () => {
     ]).start();
   }, []);
 
-  const navigateParent = useCallback((route: RouteName) => {
+  const navigateParent = useCallback(
+    (route: RouteName) => {
       navigation.navigate(route as any);
-  }, [navigation]);
+    },
+    [navigation]
+  );
 
   const handleEmail = useCallback(() => {
     Linking.openURL('mailto:sarwanyadav26@outlook.com?subject=DhanDiary%20Support');
@@ -75,7 +78,8 @@ const MoreScreen: React.FC = () => {
   }, []);
 
   // --- CONFIG ---
-  const primaryLinks = useMemo(() => [
+  const primaryLinks = useMemo(
+    () => [
       {
         icon: 'bar-chart',
         label: 'Stats & Analytics',
@@ -104,9 +108,12 @@ const MoreScreen: React.FC = () => {
         action: () => navigateParent('About'),
         color: colors.accentBlue,
       },
-    ], [navigateParent]);
+    ],
+    [navigateParent]
+  );
 
-  const supportLinks = useMemo(() => [
+  const supportLinks = useMemo(
+    () => [
       {
         icon: 'map',
         label: 'Roadmap',
@@ -121,7 +128,9 @@ const MoreScreen: React.FC = () => {
         action: handleEmail,
         color: colors.accentRed,
       },
-    ], [handleRoadmap, handleEmail]);
+    ],
+    [handleRoadmap, handleEmail]
+  );
 
   const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     setScrollOffset(event.nativeEvent.contentOffset.y);
@@ -131,33 +140,29 @@ const MoreScreen: React.FC = () => {
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       <SafeAreaView style={styles.safeArea}>
-        
         {/* Header Container - Aligned with content */}
         <View style={{ alignItems: 'center', width: '100%' }}>
-            <View style={{ width: contentWidth }}>
-                <ScreenHeader
-                    title="More"
-                    subtitle="Menu & Tools"
-                    scrollOffset={scrollOffset}
-                    showScrollHint
-                    useSafeAreaPadding={false}
-                />
-            </View>
+          <View style={{ width: contentWidth }}>
+            <ScreenHeader
+              title="More"
+              subtitle="Menu & Tools"
+              scrollOffset={scrollOffset}
+              showScrollHint
+              useSafeAreaPadding={false}
+            />
+          </View>
         </View>
 
-        <Animated.View 
-            style={{ 
-                flex: 1, 
-                opacity: fadeAnim, 
-                transform: [{ translateY: slideAnim }] 
-            }}
+        <Animated.View
+          style={{
+            flex: 1,
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }],
+          }}
         >
           <ScrollView
             style={styles.scroll}
-            contentContainerStyle={[
-                styles.scrollContent, 
-                { paddingBottom: bottomContentPadding }
-            ]}
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomContentPadding }]}
             onScroll={handleScroll}
             scrollEventThrottle={16}
             showsVerticalScrollIndicator={false}
@@ -167,46 +172,46 @@ const MoreScreen: React.FC = () => {
                 calculated in the logic above.
             */}
             <View style={[styles.responsiveWrapper, { width: contentWidth }]}>
-                
-                {/* HERO CARD */}
-                <View style={styles.heroCard}>
-                    <View style={styles.heroBgCircle} />
-                    
-                    <View style={styles.heroContent}>
-                        <View style={styles.heroHeaderRow}>
-                            <Text style={styles.heroEyebrow}>DhanDiary Hub</Text>
-                            <MaterialIcon name="verified" size={16} color="rgba(255,255,255,0.6)" />
-                        </View>
-                        <Text style={styles.heroTitle} numberOfLines={1} adjustsFontSizeToFit>Control Center</Text>
-                        <Text style={styles.heroSubtitle}>
-                        Manage your analytics, preferences, and account details.
-                        </Text>
-                    </View>
-                    <View style={styles.heroIconPos}>
-                        <MaterialIcon name="dashboard" size={90} color="rgba(255,255,255,0.1)" />
-                    </View>
-                </View>
+              {/* HERO CARD */}
+              <View style={styles.heroCard}>
+                <View style={styles.heroBgCircle} />
 
-                {/* PRIMARY NAVIGATION */}
-                <Text style={styles.sectionLabel}>Essentials</Text>
-                <View style={styles.menuContainer}>
+                <View style={styles.heroContent}>
+                  <View style={styles.heroHeaderRow}>
+                    <Text style={styles.heroEyebrow}>DhanDiary Hub</Text>
+                    <MaterialIcon name="verified" size={16} color="rgba(255,255,255,0.6)" />
+                  </View>
+                  <Text style={styles.heroTitle} numberOfLines={1} adjustsFontSizeToFit>
+                    Control Center
+                  </Text>
+                  <Text style={styles.heroSubtitle}>
+                    Manage your analytics, preferences, and account details.
+                  </Text>
+                </View>
+                <View style={styles.heroIconPos}>
+                  <MaterialIcon name="dashboard" size={90} color="rgba(255,255,255,0.1)" />
+                </View>
+              </View>
+
+              {/* PRIMARY NAVIGATION */}
+              <Text style={styles.sectionLabel}>Essentials</Text>
+              <View style={styles.menuContainer}>
                 {primaryLinks.map((item, index) => (
-                    <MenuRow key={item.label} {...item} isLast={index === primaryLinks.length - 1} />
+                  <MenuRow key={item.label} {...item} isLast={index === primaryLinks.length - 1} />
                 ))}
-                </View>
+              </View>
 
-                {/* SUPPORT NAVIGATION */}
-                <Text style={styles.sectionLabel}>Help & Info</Text>
-                <View style={styles.menuContainer}>
+              {/* SUPPORT NAVIGATION */}
+              <Text style={styles.sectionLabel}>Help & Info</Text>
+              <View style={styles.menuContainer}>
                 {supportLinks.map((item, index) => (
-                    <MenuRow key={item.label} {...item} isLast={index === supportLinks.length - 1} />
+                  <MenuRow key={item.label} {...item} isLast={index === supportLinks.length - 1} />
                 ))}
-                </View>
+              </View>
 
-                <Text style={styles.footnote}>
+              <Text style={styles.footnote}>
                 v{pkg.version} ({appConfig.expo.version || '1.0.0'}) • Made with ❤️
-                </Text>
-
+              </Text>
             </View>
           </ScrollView>
         </Animated.View>
@@ -227,7 +232,9 @@ const MenuRow = ({ icon, label, description, action, color, isLast }: any) => (
       <MaterialIcon name={icon} size={22} color={color} />
     </View>
     <View style={styles.rowTextContainer}>
-      <Text style={styles.rowTitle} numberOfLines={1}>{label}</Text>
+      <Text style={styles.rowTitle} numberOfLines={1}>
+        {label}
+      </Text>
       <Text style={styles.rowDesc} numberOfLines={1} ellipsizeMode="tail">
         {description}
       </Text>
@@ -255,13 +262,13 @@ const styles = StyleSheet.create({
     paddingTop: spacing(2),
   },
   responsiveWrapper: {
-     // Width is handled dynamically inline
-     flexDirection: 'column',
+    // Width is handled dynamically inline
+    flexDirection: 'column',
   },
 
   /* HERO */
   heroCard: {
-    backgroundColor: colors.primary, 
+    backgroundColor: colors.primary,
     borderRadius: 24,
     padding: 24,
     marginBottom: 28,
@@ -287,7 +294,7 @@ const styles = StyleSheet.create({
   heroContent: {
     zIndex: 2,
     // Ensure text doesn't overlap with the background icon on small screens
-    paddingRight: 60, 
+    paddingRight: 60,
   },
   heroHeaderRow: {
     flexDirection: 'row',
@@ -300,7 +307,7 @@ const styles = StyleSheet.create({
     right: -10,
     bottom: -15,
     zIndex: 1,
-    transform: [{ rotate: '-10deg' }]
+    transform: [{ rotate: '-10deg' }],
   },
   heroEyebrow: {
     fontSize: 12,
@@ -355,7 +362,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: colors.surfaceMuted || '#F3F4F6', 
+    borderBottomColor: colors.surfaceMuted || '#F3F4F6',
     backgroundColor: colors.card,
   },
   rowLast: {

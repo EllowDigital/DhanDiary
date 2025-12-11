@@ -15,6 +15,7 @@ import {
   KeyboardAvoidingView,
   Keyboard,
   useWindowDimensions,
+  Animated,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, Button, Input } from '@rneui/themed';
@@ -32,50 +33,103 @@ import { colors, spacing } from '../utils/design';
 import { DEFAULT_CATEGORY, ensureCategory } from '../constants/categories';
 import ScreenHeader from '../components/ScreenHeader';
 import dayjs from 'dayjs';
+import { Swipeable } from 'react-native-gesture-handler';
 
 // Enable LayoutAnimation for Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-// --- COMPACT LIST ITEM ---
-const CompactListItem = React.memo(({ item, onPress, onDelete }: any) => {
+// --- SWIPEABLE LIST ITEM ---
+const SwipeableHistoryItem = React.memo(({ item, onEdit, onDelete }: any) => {
   const isIncome = item.type === 'in';
   const color = isIncome ? colors.accentGreen : colors.text;
   const iconName = isIncome ? 'arrow-downward' : 'arrow-upward';
   const dateStr = dayjs(item.date || item.created_at).format('MMM D, h:mm A');
+  const swipeableRef = useRef<Swipeable>(null);
+
+  // Left Action (Revealed when Swiping Right ->) => EDIT
+  const renderLeftActions = (progress: any, dragX: any) => {
+    const scale = dragX.interpolate({
+      inputRange: [0, 80],
+      outputRange: [0, 1],
+      extrapolate: 'clamp',
+    });
+    return (
+      <TouchableOpacity
+        style={styles.leftAction}
+        onPress={() => {
+          swipeableRef.current?.close();
+          onEdit();
+        }}
+      >
+        <Animated.View style={{ transform: [{ scale }], alignItems: 'center' }}>
+          <MaterialIcon name="edit" size={24} color="white" />
+          <Text style={styles.actionText}>Edit</Text>
+        </Animated.View>
+      </TouchableOpacity>
+    );
+  };
+
+  // Right Action (Revealed when Swiping Left <-) => DELETE
+  const renderRightActions = (progress: any, dragX: any) => {
+    const scale = dragX.interpolate({
+      inputRange: [-80, 0],
+      outputRange: [1, 0],
+      extrapolate: 'clamp',
+    });
+    return (
+      <TouchableOpacity
+        style={styles.rightAction}
+        onPress={() => {
+          swipeableRef.current?.close();
+          onDelete();
+        }}
+      >
+        <Animated.View style={{ transform: [{ scale }], alignItems: 'center' }}>
+          <MaterialIcon name="delete" size={24} color="white" />
+          <Text style={styles.actionText}>Delete</Text>
+        </Animated.View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
-    <TouchableOpacity
-      style={styles.compactRow}
-      onPress={onPress}
-      onLongPress={onDelete}
-      activeOpacity={0.7}
+    <Swipeable
+      ref={swipeableRef}
+      renderLeftActions={renderLeftActions}
+      renderRightActions={renderRightActions}
+      containerStyle={styles.swipeContainer}
+      friction={2}
+      leftThreshold={40}
+      rightThreshold={40}
     >
-      <View style={[styles.compactIcon, { backgroundColor: isIncome ? '#ecfdf5' : '#fef2f2' }]}>
-        <MaterialIcon
-          name={iconName}
-          size={18}
-          color={isIncome ? colors.accentGreen : colors.accentRed}
-        />
-      </View>
-      <View style={styles.compactContent}>
-        <View style={styles.compactHeader}>
-          <Text style={styles.compactCategory} numberOfLines={1}>
-            {item.category}
-          </Text>
-          <Text style={[styles.compactAmount, { color }]}>
-            {isIncome ? '+' : '-'}₹{Number(item.amount).toLocaleString()}
-          </Text>
+      <View style={styles.compactRow}>
+        <View style={[styles.compactIcon, { backgroundColor: isIncome ? '#ecfdf5' : '#fef2f2' }]}>
+          <MaterialIcon
+            name={iconName}
+            size={18}
+            color={isIncome ? colors.accentGreen : colors.accentRed}
+          />
         </View>
-        <View style={styles.compactSubRow}>
-          <Text style={styles.compactNote} numberOfLines={1}>
-            {item.note || 'No description'}
-          </Text>
-          <Text style={styles.compactDate}>{dateStr}</Text>
+        <View style={styles.compactContent}>
+          <View style={styles.compactHeader}>
+            <Text style={styles.compactCategory} numberOfLines={1}>
+              {item.category}
+            </Text>
+            <Text style={[styles.compactAmount, { color }]}>
+              {isIncome ? '+' : '-'}₹{Number(item.amount).toLocaleString()}
+            </Text>
+          </View>
+          <View style={styles.compactSubRow}>
+            <Text style={styles.compactNote} numberOfLines={1}>
+              {item.note || 'No description'}
+            </Text>
+            <Text style={styles.compactDate}>{dateStr}</Text>
+          </View>
         </View>
       </View>
-    </TouchableOpacity>
+    </Swipeable>
   );
 });
 
@@ -90,13 +144,13 @@ const HistoryScreen = () => {
   // --- FILTERS STATE ---
   const [filtersExpanded, setFiltersExpanded] = useState(false);
   const [quickFilter, setQuickFilter] = useState<'ALL' | 'WEEK' | 'MONTH'>('ALL');
-  
+
   // Advanced Filters
   const [typeIndex, setTypeIndex] = useState(0); // 0:All, 1:In, 2:Out
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [categoryFilter, setCategoryFilter] = useState('');
-  
+
   // Picker visibility
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
@@ -118,9 +172,9 @@ const HistoryScreen = () => {
     // Quick Filters (Pre-computation)
     const now = dayjs();
     if (quickFilter === 'WEEK') {
-        list = list.filter(e => dayjs(e.created_at).isAfter(now.subtract(7, 'day')));
+      list = list.filter((e) => dayjs(e.created_at).isAfter(now.subtract(7, 'day')));
     } else if (quickFilter === 'MONTH') {
-        list = list.filter(e => dayjs(e.created_at).isSame(now, 'month'));
+      list = list.filter((e) => dayjs(e.created_at).isSame(now, 'month'));
     }
 
     // Advanced Filters
@@ -179,7 +233,8 @@ const HistoryScreen = () => {
   const handleSaveEdit = async () => {
     if (!editingEntry) return;
     const amt = parseFloat(editAmount);
-    if (isNaN(amt) || amt <= 0) return Alert.alert('Invalid Amount', 'Please enter a valid number.');
+    if (isNaN(amt) || amt <= 0)
+      return Alert.alert('Invalid Amount', 'Please enter a valid number.');
 
     setEditingEntry(null);
     showToast('Updating...');
@@ -201,134 +256,177 @@ const HistoryScreen = () => {
     });
   };
 
-  const handleDelete = useCallback((id: string) => {
-    Alert.alert('Delete Transaction', 'This cannot be undone.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => {
-          showToast('Deleting...');
-          runInBackground(async () => {
-            await deleteEntry(id);
-            showToast('Deleted');
-          });
+  const handleDelete = useCallback(
+    (id: string) => {
+      Alert.alert('Delete Transaction', 'This cannot be undone.', [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            // Visual feedback before deletion
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            showToast('Deleting...');
+            runInBackground(async () => {
+              await deleteEntry(id);
+              showToast('Deleted');
+            });
+          },
         },
-      },
-    ]);
-  }, [deleteEntry, showToast]);
+      ]);
+    },
+    [deleteEntry, showToast]
+  );
 
   const quickAmounts = ['100', '500', '1000', '2000'];
 
   // --- HEADER RENDER ---
   const renderHeader = () => (
     <View style={styles.headerContainer}>
-        {/* Compact Summary Card */}
-        <View style={styles.compactHero}>
-            <View>
-                <Text style={styles.heroLabel}>Net Result (Selected Period)</Text>
-                <Text style={[
-                    styles.heroValue, 
-                    { color: summary.net >= 0 ? colors.primary : colors.accentRed }
-                ]}>
-                    {summary.net >= 0 ? '+' : ''}₹{Math.abs(summary.net).toLocaleString()}
-                </Text>
-            </View>
-            <View style={styles.countChip}>
-                <Text style={styles.countText}>{summary.count} Txns</Text>
-            </View>
+      {/* Compact Summary Card */}
+      <View style={styles.compactHero}>
+        <View>
+          <Text style={styles.heroLabel}>Net Result (Selected Period)</Text>
+          <Text
+            style={[
+              styles.heroValue,
+              { color: summary.net >= 0 ? colors.primary : colors.accentRed },
+            ]}
+          >
+            {summary.net >= 0 ? '+' : ''}₹{Math.abs(summary.net).toLocaleString()}
+          </Text>
         </View>
+        <View style={styles.countChip}>
+          <Text style={styles.countText}>{summary.count} Txns</Text>
+        </View>
+      </View>
 
-        {/* Quick Filter Chips */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-            {['ALL', 'WEEK', 'MONTH'].map((f) => (
-                <TouchableOpacity 
-                    key={f}
-                    onPress={() => setQuickFilter(f as any)}
-                    style={[styles.filterChip, quickFilter === f && styles.filterChipActive]}
-                >
-                    <Text style={[styles.filterChipText, quickFilter === f && styles.filterChipTextActive]}>
-                        {f === 'ALL' ? 'All Time' : f === 'WEEK' ? 'This Week' : 'This Month'}
-                    </Text>
-                </TouchableOpacity>
-            ))}
-             <TouchableOpacity style={styles.filterIconBtn} onPress={toggleFilters}>
-                <MaterialIcon name="tune" size={20} color={filtersExpanded ? colors.primary : colors.muted} />
-            </TouchableOpacity>
-        </ScrollView>
+      {/* Quick Filter Chips */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.chipRow}
+      >
+        {['ALL', 'WEEK', 'MONTH'].map((f) => (
+          <TouchableOpacity
+            key={f}
+            onPress={() => setQuickFilter(f as any)}
+            style={[styles.filterChip, quickFilter === f && styles.filterChipActive]}
+          >
+            <Text style={[styles.filterChipText, quickFilter === f && styles.filterChipTextActive]}>
+              {f === 'ALL' ? 'All Time' : f === 'WEEK' ? 'This Week' : 'This Month'}
+            </Text>
+          </TouchableOpacity>
+        ))}
+        <TouchableOpacity style={styles.filterIconBtn} onPress={toggleFilters}>
+          <MaterialIcon
+            name="tune"
+            size={20}
+            color={filtersExpanded ? colors.primary : colors.muted}
+          />
+        </TouchableOpacity>
+      </ScrollView>
 
-        {/* Expandable Advanced Filters */}
-        {filtersExpanded && (
-            <View style={styles.advancedFilters}>
-                <SimpleButtonGroup
-                    buttons={['All Types', 'Income', 'Expense']}
-                    selectedIndex={typeIndex}
-                    onPress={setTypeIndex}
-                    containerStyle={{ marginBottom: 12, height: 36 }}
-                    textStyle={{ fontSize: 13 }}
+      {/* Expandable Advanced Filters */}
+      {filtersExpanded && (
+        <View style={styles.advancedFilters}>
+          <SimpleButtonGroup
+            buttons={['All Types', 'Income', 'Expense']}
+            selectedIndex={typeIndex}
+            onPress={setTypeIndex}
+            containerStyle={{ marginBottom: 12, height: 36 }}
+            textStyle={{ fontSize: 13 }}
+          />
+
+          <View style={styles.dateRow}>
+            <Button
+              title={startDate ? dayjs(startDate).format('DD MMM') : 'Start'}
+              type="outline"
+              buttonStyle={styles.dateBtn}
+              titleStyle={styles.dateBtnText}
+              onPress={() => setShowStartPicker(true)}
+              icon={
+                <MaterialIcon
+                  name="calendar-today"
+                  size={14}
+                  color={colors.primary}
+                  style={{ marginRight: 4 }}
                 />
-                
-                <View style={styles.dateRow}>
-                    <Button
-                        title={startDate ? dayjs(startDate).format('DD MMM') : 'Start'}
-                        type="outline"
-                        buttonStyle={styles.dateBtn}
-                        titleStyle={styles.dateBtnText}
-                        onPress={() => setShowStartPicker(true)}
-                        icon={<MaterialIcon name="calendar-today" size={14} color={colors.primary} style={{marginRight:4}}/>}
-                    />
-                    <Text style={{alignSelf:'center', color: colors.muted}}>-</Text>
-                    <Button
-                        title={endDate ? dayjs(endDate).format('DD MMM') : 'End'}
-                        type="outline"
-                        buttonStyle={styles.dateBtn}
-                        titleStyle={styles.dateBtnText}
-                        onPress={() => setShowEndPicker(true)}
-                        icon={<MaterialIcon name="calendar-today" size={14} color={colors.primary} style={{marginRight:4}}/>}
-                    />
-                </View>
-
-                 {/* Date Pickers */}
-                 {(showStartPicker || showEndPicker) && (
-                    <DateTimePicker
-                        value={new Date()}
-                        mode="date"
-                        display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                        onChange={(e, d) => {
-                            if (showStartPicker) { setShowStartPicker(false); if(d) setStartDate(d); }
-                            else { setShowEndPicker(false); if(d) setEndDate(d); }
-                        }}
-                    />
-                )}
-
-                <Input
-                    placeholder="Search category or notes..."
-                    value={categoryFilter}
-                    onChangeText={setCategoryFilter}
-                    inputContainerStyle={styles.searchInput}
-                    inputStyle={{ fontSize: 14 }}
-                    leftIcon={<MaterialIcon name="search" size={18} color={colors.muted} />}
+              }
+            />
+            <Text style={{ alignSelf: 'center', color: colors.muted }}>-</Text>
+            <Button
+              title={endDate ? dayjs(endDate).format('DD MMM') : 'End'}
+              type="outline"
+              buttonStyle={styles.dateBtn}
+              titleStyle={styles.dateBtnText}
+              onPress={() => setShowEndPicker(true)}
+              icon={
+                <MaterialIcon
+                  name="calendar-today"
+                  size={14}
+                  color={colors.primary}
+                  style={{ marginRight: 4 }}
                 />
-                
-                <TouchableOpacity onPress={clearFilters} style={{alignSelf: 'flex-end'}}>
-                    <Text style={styles.clearText}>Reset Filters</Text>
-                </TouchableOpacity>
-            </View>
-        )}
+              }
+            />
+          </View>
+
+          {(showStartPicker || showEndPicker) && (
+            <DateTimePicker
+              value={new Date()}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              onChange={(e, d) => {
+                if (showStartPicker) {
+                  setShowStartPicker(false);
+                  if (d) setStartDate(d);
+                } else {
+                  setShowEndPicker(false);
+                  if (d) setEndDate(d);
+                }
+              }}
+            />
+          )}
+
+          <Input
+            placeholder="Search category or notes..."
+            value={categoryFilter}
+            onChangeText={setCategoryFilter}
+            inputContainerStyle={styles.searchInput}
+            inputStyle={{ fontSize: 14 }}
+            leftIcon={<MaterialIcon name="search" size={18} color={colors.muted} />}
+          />
+
+          <TouchableOpacity onPress={clearFilters} style={{ alignSelf: 'flex-end' }}>
+            <Text style={styles.clearText}>Reset Filters</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* User Hint for Swipe */}
+      {filtered.length > 0 && (
+        <View style={styles.tipContainer}>
+          <MaterialIcon name="touch-app" size={14} color={colors.muted} />
+          <Text style={styles.tipText}>
+            Swipe <Text style={{ fontWeight: '700', color: colors.primary }}>Left</Text> to Delete •
+            Swipe <Text style={{ fontWeight: '700', color: colors.accentRed }}>Right</Text> to Edit
+          </Text>
+        </View>
+      )}
     </View>
   );
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-      
-      {/* Fixed Screen Header */}
+
       <View style={{ paddingHorizontal: width >= 768 ? spacing(4) : 0 }}>
         <ScreenHeader
-            title="History"
-            subtitle="Transaction log"
-            showScrollHint={false}
-            useSafeAreaPadding={false}
+          title="History"
+          subtitle="Transaction log"
+          showScrollHint={false}
+          useSafeAreaPadding={false}
         />
       </View>
 
@@ -336,17 +434,17 @@ const HistoryScreen = () => {
         data={filtered}
         keyExtractor={(item) => item.local_id}
         renderItem={({ item }) => (
-            <CompactListItem 
-                item={item} 
-                onPress={() => openEdit(item)}
-                onDelete={() => handleDelete(item.local_id)}
-            />
+          <SwipeableHistoryItem
+            item={item}
+            onEdit={() => openEdit(item)}
+            onDelete={() => handleDelete(item.local_id)}
+          />
         )}
         ListHeaderComponent={renderHeader}
         contentContainerStyle={[
-            styles.listContent, 
-            { paddingBottom: insets.bottom + 80 },
-            width >= 768 && { paddingHorizontal: spacing(4) }
+          styles.listContent,
+          { paddingBottom: insets.bottom + 80 },
+          width >= 768 && { paddingHorizontal: spacing(4) },
         ]}
         initialNumToRender={15}
         maxToRenderPerBatch={10}
@@ -376,7 +474,9 @@ const HistoryScreen = () => {
         >
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
             <View style={styles.modalOverlay}>
-              <View style={[styles.modalContent, { maxWidth: 600, alignSelf: 'center', width: '100%' }]}>
+              <View
+                style={[styles.modalContent, { maxWidth: 600, alignSelf: 'center', width: '100%' }]}
+              >
                 <View style={styles.sheetHandle} />
                 <View style={styles.modalHeaderRow}>
                   <Text style={styles.modalTitle}>Edit Transaction</Text>
@@ -415,21 +515,29 @@ const HistoryScreen = () => {
                   </View>
 
                   <View style={styles.rowInputs}>
-                      <TouchableOpacity style={styles.pickerBtn} onPress={() => setShowCategoryPicker(true)}>
-                        <Text style={styles.pickerLabel}>Category</Text>
-                        <View style={styles.pickerValueRow}>
-                             <Text style={styles.pickerValue}>{editCategory}</Text>
-                             <MaterialIcon name="arrow-drop-down" size={20} color={colors.muted} />
-                        </View>
-                      </TouchableOpacity>
-                      
-                      <TouchableOpacity style={styles.pickerBtn} onPress={() => setShowEditDatePicker(true)}>
-                        <Text style={styles.pickerLabel}>Date</Text>
-                         <View style={styles.pickerValueRow}>
-                             <Text style={styles.pickerValue}>{editDate ? dayjs(editDate).format('DD MMM YYYY') : 'Select'}</Text>
-                             <MaterialIcon name="event" size={18} color={colors.muted} />
-                        </View>
-                      </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.pickerBtn}
+                      onPress={() => setShowCategoryPicker(true)}
+                    >
+                      <Text style={styles.pickerLabel}>Category</Text>
+                      <View style={styles.pickerValueRow}>
+                        <Text style={styles.pickerValue}>{editCategory}</Text>
+                        <MaterialIcon name="arrow-drop-down" size={20} color={colors.muted} />
+                      </View>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.pickerBtn}
+                      onPress={() => setShowEditDatePicker(true)}
+                    >
+                      <Text style={styles.pickerLabel}>Date</Text>
+                      <View style={styles.pickerValueRow}>
+                        <Text style={styles.pickerValue}>
+                          {editDate ? dayjs(editDate).format('DD MMM YYYY') : 'Select'}
+                        </Text>
+                        <MaterialIcon name="event" size={18} color={colors.muted} />
+                      </View>
+                    </TouchableOpacity>
                   </View>
 
                   <Input
@@ -457,18 +565,23 @@ const HistoryScreen = () => {
       <CategoryPickerModal
         visible={showCategoryPicker}
         onClose={() => setShowCategoryPicker(false)}
-        onSelect={(c) => { setEditCategory(c); setShowCategoryPicker(false); }}
+        onSelect={(c) => {
+          setEditCategory(c);
+          setShowCategoryPicker(false);
+        }}
       />
-      
+
       {showEditDatePicker && (
         <DateTimePicker
-            value={editDate || new Date()}
-            mode="date"
-            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-            onChange={(e, d) => { setShowEditDatePicker(false); if(d) setEditDate(d); }}
+          value={editDate || new Date()}
+          mode="date"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          onChange={(e, d) => {
+            setShowEditDatePicker(false);
+            if (d) setEditDate(d);
+          }}
         />
       )}
-
     </SafeAreaView>
   );
 };
@@ -484,10 +597,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   headerContainer: {
-    marginBottom: 16,
-    marginTop: 16, // Added Gap between Fixed Header and Hero
+    marginBottom: 8,
+    marginTop: 16,
   },
-  
+
   /* COMPACT HERO */
   compactHero: {
     flexDirection: 'row',
@@ -603,16 +716,36 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
 
+  /* TIP */
+  tipContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+    marginBottom: 8,
+    gap: 6,
+    opacity: 0.8,
+  },
+  tipText: {
+    fontSize: 12,
+    color: colors.muted,
+  },
+
   /* COMPACT ITEM */
+  swipeContainer: {
+    marginBottom: 8,
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
   compactRow: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.card,
     padding: 12,
     borderRadius: 14,
-    marginBottom: 8,
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.03)',
+    height: 72,
   },
   compactIcon: {
     width: 36,
@@ -654,6 +787,32 @@ const styles = StyleSheet.create({
   compactDate: {
     fontSize: 11,
     color: colors.subtleText,
+  },
+
+  /* SWIPE ACTIONS */
+  leftAction: {
+    backgroundColor: '#3b82f6', // Blue for Edit (Appears on Left when Swiping Right)
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 80,
+    height: '100%',
+    borderRadius: 14,
+    marginRight: 10,
+  },
+  rightAction: {
+    backgroundColor: '#ef4444', // Red for Delete (Appears on Right when Swiping Left)
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 80,
+    height: '100%',
+    borderRadius: 14,
+    marginLeft: 10,
+  },
+  actionText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 4,
   },
 
   /* EMPTY STATE */

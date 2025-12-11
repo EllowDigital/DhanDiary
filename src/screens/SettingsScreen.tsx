@@ -63,7 +63,7 @@ const SettingsScreen = () => {
   // --- ANIMATION SETUP ---
   // Entrance Stagger
   const animValues = useRef([...Array(6)].map(() => new Animated.Value(0))).current;
-  
+
   // Sync Spin Animation
   const spinValue = useRef(new Animated.Value(0)).current;
 
@@ -230,42 +230,45 @@ const SettingsScreen = () => {
                 <View style={styles.syncHeader}>
                   <View style={[styles.iconBox, { backgroundColor: colors.primarySoft }]}>
                     <Animated.View style={{ transform: [{ rotate: spin }] }}>
-                       <MaterialIcon name="sync" size={24} color={colors.primary} />
+                      <MaterialIcon name="sync" size={24} color={colors.primary} />
                     </Animated.View>
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.cardTitle}>Cloud Sync</Text>
                     <Text style={styles.cardSub}>
-                       {syncing ? 'Synchronizing records...' : 'Keep your records backed up'}
+                      {syncing ? 'Synchronizing records...' : 'Keep your records backed up'}
                     </Text>
                   </View>
                 </View>
 
                 <View style={styles.statGrid}>
-                    <View style={styles.statItem}>
-                        <Text style={styles.statLabel}>LAST SYNC</Text>
-                        <Text style={styles.statValue}>{formatSyncDate(lastSynced)}</Text>
-                    </View>
-                    <View style={styles.statItem}>
-                        <Text style={styles.statLabel}>ITEMS</Text>
-                        <Text style={styles.statValue}>{lastSyncedCount} Records</Text>
-                    </View>
+                  <View style={styles.statItem}>
+                    <Text style={styles.statLabel}>LAST SYNC</Text>
+                    <Text style={styles.statValue}>{formatSyncDate(lastSynced)}</Text>
+                  </View>
+                  <View style={styles.statItem}>
+                    <Text style={styles.statLabel}>ITEMS</Text>
+                    <Text style={styles.statValue}>{lastSyncedCount} Records</Text>
+                  </View>
                 </View>
 
-                <TouchableOpacity 
-                    style={[styles.syncButton, syncing && styles.syncButtonDisabled]} 
-                    onPress={handleSync}
-                    disabled={syncing}
-                    activeOpacity={0.8}
+                <TouchableOpacity
+                  style={[styles.syncButton, syncing && styles.syncButtonDisabled]}
+                  onPress={handleSync}
+                  disabled={syncing}
+                  activeOpacity={0.8}
                 >
-                    {syncing ? (
-                        <ActivityIndicator color="#fff" size="small" style={{marginRight: 8}} />
-                    ) : (
-                        <MaterialIcon name="cloud-upload" size={18} color="#fff" style={{marginRight: 8}} />
-                    )}
-                    <Text style={styles.syncButtonText}>
-                        {syncing ? 'Syncing...' : 'Sync Now'}
-                    </Text>
+                  {syncing ? (
+                    <ActivityIndicator color="#fff" size="small" style={{ marginRight: 8 }} />
+                  ) : (
+                    <MaterialIcon
+                      name="cloud-upload"
+                      size={18}
+                      color="#fff"
+                      style={{ marginRight: 8 }}
+                    />
+                  )}
+                  <Text style={styles.syncButtonText}>{syncing ? 'Syncing...' : 'Sync Now'}</Text>
                 </TouchableOpacity>
               </View>
             </Animated.View>
@@ -299,8 +302,8 @@ const SettingsScreen = () => {
                 <View style={styles.dangerContent}>
                   <Text style={styles.dangerTitle}>Reset Application</Text>
                   <Text style={styles.dangerDesc}>
-                    Clears all local databases, cached images, and session data. 
-                    Use this if the app is behaving unexpectedly.
+                    Clears all local databases, cached images, and session data. Use this if the app
+                    is behaving unexpectedly.
                   </Text>
                   <TouchableOpacity
                     style={styles.dangerBtn}
@@ -320,7 +323,7 @@ const SettingsScreen = () => {
                 <MaterialIcon name="logout" size={20} color={colors.accentRed} />
                 <Text style={styles.logoutText}>Sign Out</Text>
               </TouchableOpacity>
-              
+
               <Text style={styles.versionText}>
                 v{pkg.version} ({appConfig.expo.version || '1.0.0'})
               </Text>
