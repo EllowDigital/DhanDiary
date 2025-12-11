@@ -15,6 +15,7 @@ import {
   LayoutAnimation,
   UIManager,
   Keyboard,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Text } from '@rneui/themed';
@@ -26,7 +27,7 @@ import { useToast } from '../context/ToastContext';
 import runInBackground from '../utils/background';
 import CategoryPickerModal from '../components/CategoryPickerModal';
 import { v4 as uuidv4 } from 'uuid';
-import { colors, shadows } from '../utils/design';
+import { colors, spacing, shadows } from '../utils/design';
 import { ALLOWED_CATEGORIES, DEFAULT_CATEGORY, ensureCategory } from '../constants/categories';
 import ScreenHeader from '../components/ScreenHeader';
 import dayjs from 'dayjs';
@@ -36,7 +37,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const typeConfigs = [
   {
@@ -97,18 +98,23 @@ const AddEntryScreen: React.FC = () => {
     outputRange: ['#FEF2F2', '#ECFDF5'], // Light Red -> Light Green
   });
 
+  const themeBorder = colorAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['#FECACA', '#A7F3D0'],
+  });
+
   useEffect(() => {
     // Entrance Animation
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 600,
+        duration: 500,
         useNativeDriver: true,
         easing: Easing.out(Easing.cubic),
       }),
       Animated.timing(slideAnim, {
         toValue: 0,
-        duration: 600,
+        duration: 500,
         useNativeDriver: true,
         easing: Easing.out(Easing.back(1.5)),
       }),
@@ -120,7 +126,7 @@ const AddEntryScreen: React.FC = () => {
     Animated.timing(colorAnim, {
       toValue: typeIndex,
       duration: 300,
-      useNativeDriver: false, // Color interpolation requires false
+      useNativeDriver: false,
     }).start();
   }, [typeIndex]);
 
@@ -175,11 +181,11 @@ const AddEntryScreen: React.FC = () => {
     });
   };
 
-  const scrollToBottom = () => {
-    // Wait for keyboard to open then scroll
+  const handleInputFocus = () => {
+    // Scroll to bottom to ensure keyboard doesn't hide input
     setTimeout(() => {
       scrollRef.current?.scrollToEnd({ animated: true });
-    }, 100);
+    }, 200);
   };
 
   return (
@@ -188,7 +194,7 @@ const AddEntryScreen: React.FC = () => {
 
       <ScreenHeader
         title={editingLocalId ? 'Edit Transaction' : 'New Transaction'}
-        subtitle={dayjs(date).format('dddd, D MMMM')} // Dynamic Date Subtitle
+        subtitle={dayjs(date).format('dddd, D MMMM')}
         useSafeAreaPadding={false}
         showScrollHint={false}
       />
@@ -196,156 +202,163 @@ const AddEntryScreen: React.FC = () => {
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        // Android needs explicit offset sometimes depending on statusbar/header
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
-        <ScrollView
-          ref={scrollRef}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-            {/* 1. TYPE SEGMENTED CONTROL */}
-            <View style={styles.toggleWrapper}>
-              <View style={styles.toggleContainer}>
-                {typeConfigs.map((cfg, idx) => {
-                  const isActive = typeIndex === idx;
-                  return (
-                    <Pressable
-                      key={cfg.value}
-                      style={[styles.toggleBtn, isActive && styles.toggleBtnActive]}
-                      onPress={() => {
-                        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                        setTypeIndex(idx);
-                      }}
-                    >
-                      <MaterialIcon
-                        name={cfg.icon as any}
-                        size={20}
-                        color={isActive ? cfg.color : colors.muted}
-                      />
-                      <Text
-                        style={[
-                          styles.toggleText,
-                          isActive && { color: cfg.color, fontWeight: '700' },
-                        ]}
+        <View style={styles.contentWrapper}>
+          <ScrollView
+            ref={scrollRef}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+              {/* 1. TYPE SEGMENTED CONTROL */}
+              <View style={styles.toggleWrapper}>
+                <View style={styles.toggleContainer}>
+                  {typeConfigs.map((cfg, idx) => {
+                    const isActive = typeIndex === idx;
+                    return (
+                      <Pressable
+                        key={cfg.value}
+                        style={[styles.toggleBtn, isActive && styles.toggleBtnActive]}
+                        onPress={() => {
+                          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                          setTypeIndex(idx);
+                        }}
                       >
-                        {cfg.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
+                        <MaterialIcon
+                          name={cfg.icon as any}
+                          size={20}
+                          color={isActive ? cfg.color : colors.muted}
+                        />
+                        <Text
+                          style={[
+                            styles.toggleText,
+                            isActive && { color: cfg.color, fontWeight: '700' },
+                          ]}
+                        >
+                          {cfg.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
               </View>
-            </View>
 
-            {/* 2. AMOUNT INPUT CARD */}
-            <Animated.View
-              style={[styles.amountCard, { backgroundColor: themeBg, borderColor: themeColor }]}
-            >
-              <Text style={[styles.inputLabel, { color: activeType.color }]}>AMOUNT</Text>
-              <View style={styles.amountInputRow}>
-                <Animated.Text style={[styles.currencySymbol, { color: themeColor }]}>
-                  ₹
-                </Animated.Text>
-                <TextInput
-                  value={amount}
-                  onChangeText={setAmount}
-                  placeholder="0"
-                  placeholderTextColor="rgba(0,0,0,0.2)"
-                  keyboardType="numeric"
-                  style={[styles.amountInput, { color: activeType.color }]}
-                  autoFocus={!editingLocalId}
-                />
-              </View>
-            </Animated.View>
-
-            {/* 3. DETAILS GRID */}
-            <View style={styles.gridContainer}>
-              {/* Category Picker */}
-              <Pressable style={styles.gridCard} onPress={() => setCategoryModalVisible(true)}>
-                <View style={styles.gridIconBg}>
-                  <MaterialIcon name="category" size={22} color={colors.primary} />
+              {/* 2. AMOUNT INPUT CARD */}
+              <Animated.View
+                style={[styles.amountCard, { backgroundColor: themeBg, borderColor: themeBorder }]}
+              >
+                <Text style={[styles.inputLabel, { color: activeType.color }]}>AMOUNT</Text>
+                <View style={styles.amountInputRow}>
+                  <Animated.Text style={[styles.currencySymbol, { color: themeColor }]}>
+                    ₹
+                  </Animated.Text>
+                  <TextInput
+                    value={amount}
+                    onChangeText={setAmount}
+                    placeholder="0"
+                    placeholderTextColor="rgba(0,0,0,0.2)"
+                    keyboardType="numeric"
+                    style={[styles.amountInput, { color: activeType.color }]}
+                    autoFocus={!editingLocalId}
+                  />
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.gridLabel}>Category</Text>
-                  <Text style={styles.gridValue} numberOfLines={1}>
-                    {category}
-                  </Text>
-                </View>
-                <MaterialIcon name="chevron-right" size={24} color={colors.border} />
-              </Pressable>
+              </Animated.View>
 
-              {/* Date Picker */}
-              <Pressable style={styles.gridCard} onPress={() => setShowDatePicker(true)}>
-                <View style={[styles.gridIconBg, { backgroundColor: '#eff6ff' }]}>
-                  <MaterialIcon name="event" size={22} color={colors.accentBlue} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.gridLabel}>Date</Text>
-                  <Text style={styles.gridValue}>{dayjs(date).format('DD MMM YYYY')}</Text>
-                </View>
-                <MaterialIcon name="chevron-right" size={24} color={colors.border} />
-              </Pressable>
-            </View>
-
-            {/* 4. NOTE INPUT (Responsive) */}
-            <View style={styles.noteSection}>
-              <Text style={styles.sectionTitle}>Description</Text>
-              <View style={styles.noteInputWrapper}>
-                <TextInput
-                  value={note}
-                  onChangeText={setNote}
-                  placeholder="What is this transaction for?"
-                  placeholderTextColor={colors.muted}
-                  multiline
-                  style={styles.noteInput}
-                  onFocus={scrollToBottom} // Scroll up when focused
-                />
-                <MaterialIcon name="edit" size={18} color={colors.muted} style={styles.noteIcon} />
-              </View>
-            </View>
-
-            {/* 5. QUICK CATEGORIES */}
-            <Text style={styles.sectionTitle}>Quick Select</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.chipScroll}
-            >
-              {ALLOWED_CATEGORIES.map((cat) => (
-                <Pressable
-                  key={cat}
-                  style={[
-                    styles.chip,
-                    category === cat && {
-                      backgroundColor: activeType.color,
-                      borderColor: activeType.color,
-                    },
-                  ]}
-                  onPress={() => setCategory(cat)}
-                >
-                  <Text style={[styles.chipText, category === cat && { color: 'white' }]}>
-                    {cat}
-                  </Text>
+              {/* 3. DETAILS GRID */}
+              <View style={styles.gridContainer}>
+                {/* Category Picker */}
+                <Pressable style={styles.gridCard} onPress={() => setCategoryModalVisible(true)}>
+                  <View style={styles.gridIconBg}>
+                    <MaterialIcon name="category" size={22} color={colors.primary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.gridLabel}>Category</Text>
+                    <Text style={styles.gridValue} numberOfLines={1}>
+                      {category}
+                    </Text>
+                  </View>
+                  <MaterialIcon name="chevron-right" size={24} color={colors.border} />
                 </Pressable>
-              ))}
-            </ScrollView>
 
-            {/* SPACE FOR KEYBOARD */}
-            <View style={{ height: 100 }} />
-          </Animated.View>
-        </ScrollView>
+                {/* Date Picker */}
+                <Pressable style={styles.gridCard} onPress={() => setShowDatePicker(true)}>
+                  <View style={[styles.gridIconBg, { backgroundColor: '#eff6ff' }]}>
+                    <MaterialIcon name="event" size={22} color={colors.accentBlue} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.gridLabel}>Date</Text>
+                    <Text style={styles.gridValue}>{dayjs(date).format('DD MMM YYYY')}</Text>
+                  </View>
+                  <MaterialIcon name="chevron-right" size={24} color={colors.border} />
+                </Pressable>
+              </View>
 
-        {/* FLOATING SAVE BUTTON */}
-        <Animated.View style={[styles.footerContainer, { opacity: fadeAnim }]}>
-          <Button
-            title="Save Transaction"
-            onPress={handleSave}
-            icon={<MaterialIcon name="check" size={20} color="white" style={{ marginRight: 8 }} />}
-            buttonStyle={[styles.saveBtn, { backgroundColor: activeType.color }]}
-            titleStyle={{ fontWeight: '700', fontSize: 16 }}
-          />
-        </Animated.View>
+              {/* 4. NOTE INPUT */}
+              <View style={styles.noteSection}>
+                <Text style={styles.sectionTitle}>Description</Text>
+                <View style={styles.noteInputWrapper}>
+                  <TextInput
+                    value={note}
+                    onChangeText={setNote}
+                    placeholder="What is this transaction for?"
+                    placeholderTextColor={colors.muted}
+                    multiline
+                    style={styles.noteInput}
+                    onFocus={handleInputFocus}
+                  />
+                  <MaterialIcon
+                    name="edit"
+                    size={18}
+                    color={colors.muted}
+                    style={styles.noteIcon}
+                  />
+                </View>
+              </View>
+
+              {/* 5. QUICK CATEGORIES */}
+              <Text style={styles.sectionTitle}>Quick Select</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.chipScroll}
+              >
+                {ALLOWED_CATEGORIES.map((cat) => (
+                  <Pressable
+                    key={cat}
+                    style={[
+                      styles.chip,
+                      category === cat && {
+                        backgroundColor: activeType.color,
+                        borderColor: activeType.color,
+                      },
+                    ]}
+                    onPress={() => setCategory(cat)}
+                  >
+                    <Text style={[styles.chipText, category === cat && { color: 'white' }]}>
+                      {cat}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </Animated.View>
+          </ScrollView>
+
+          {/* FLOATING FOOTER - Outside ScrollView for Stickiness */}
+          <View style={[styles.footerContainer, { paddingBottom: Platform.OS === 'ios' ? 0 : 20 }]}>
+            <Button
+              title={editingLocalId ? 'Update Transaction' : 'Save Transaction'}
+              onPress={handleSave}
+              icon={
+                <MaterialIcon name="check" size={22} color="white" style={{ marginRight: 8 }} />
+              }
+              buttonStyle={[styles.saveBtn, { backgroundColor: activeType.color }]}
+              titleStyle={{ fontWeight: '700', fontSize: 16 }}
+            />
+          </View>
+        </View>
       </KeyboardAvoidingView>
 
       {/* --- MODALS --- */}
@@ -380,9 +393,15 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  contentWrapper: {
+    flex: 1,
+    // This allows the footer to sit at the bottom of the visible area
+    justifyContent: 'space-between',
+  },
   scrollContent: {
     paddingHorizontal: 20,
     paddingTop: 10,
+    paddingBottom: 40, // Extra padding so content isn't hidden behind footer
   },
 
   /* TOGGLE */
@@ -396,7 +415,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 4,
     width: '100%',
-    maxWidth: 300,
+    maxWidth: 320,
   },
   toggleBtn: {
     flex: 1,
@@ -451,7 +470,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     minWidth: 100,
     textAlign: 'center',
-    padding: 0, // Remove default padding
+    padding: 0,
   },
 
   /* GRID */
@@ -473,7 +492,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 12,
-    backgroundColor: '#f3f4f6', // Light gray
+    backgroundColor: '#f3f4f6',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -507,14 +526,15 @@ const styles = StyleSheet.create({
     padding: 14,
     borderWidth: 1,
     borderColor: 'transparent',
+    minHeight: 100,
   },
   noteInput: {
     flex: 1,
     fontSize: 15,
     color: colors.text,
-    minHeight: 80, // Height for visibility
-    textAlignVertical: 'top', // Android top align
-    paddingTop: 0, // Align with icon
+    textAlignVertical: 'top',
+    paddingTop: 0,
+    height: '100%',
   },
   noteIcon: {
     marginTop: 2,
@@ -525,7 +545,7 @@ const styles = StyleSheet.create({
   chipScroll: {
     paddingRight: 20,
     gap: 10,
-    paddingBottom: 20, // Space for shadow
+    paddingBottom: 20,
   },
   chip: {
     paddingHorizontal: 16,
@@ -543,10 +563,11 @@ const styles = StyleSheet.create({
 
   /* FOOTER */
   footerContainer: {
-    position: 'absolute',
-    bottom: 20,
-    left: 20,
-    right: 20,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    backgroundColor: colors.background,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
   },
   saveBtn: {
     paddingVertical: 16,

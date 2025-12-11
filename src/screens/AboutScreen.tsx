@@ -24,7 +24,6 @@ import * as Updates from 'expo-updates';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 
 // --- PLACEHOLDERS (Replace with your actual imports) ---
-// Assuming these exist in your project structure
 import ScreenHeader from '../components/ScreenHeader';
 import getLatestShareLink from '../utils/shareLink';
 const pkg = require('../../package.json');
