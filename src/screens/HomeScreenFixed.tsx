@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Constants from 'expo-constants';
 import {
   View,
@@ -8,10 +8,9 @@ import {
   useWindowDimensions,
   FlatList,
   ScrollView,
-  Platform,
   Animated,
   Easing,
-  Image,
+  LayoutChangeEvent,
 } from 'react-native';
 import type { ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -36,13 +35,12 @@ import Svg, {
   Stop,
   Rect,
   Circle,
+  Path,
 } from 'react-native-svg';
-import { spacing, colors, shadows } from '../utils/design';
+import { spacing, colors } from '../utils/design';
 import { ensureCategory, FALLBACK_CATEGORY } from '../constants/categories';
 
 // --- CONFIG ---
-const pkg = require('../../package.json');
-
 /* CHART KIT SAFE LOAD */
 let PieChart: any = null;
 let BarChart: any = null;
@@ -80,13 +78,15 @@ const HomeScreen: React.FC = () => {
 
   // --- RESPONSIVE LOGIC ---
   const { width: SCREEN_WIDTH } = useWindowDimensions();
-  const isCompact = SCREEN_WIDTH < 380;
   const isTablet = SCREEN_WIDTH >= 768;
-  const horizontalPadding = isTablet ? spacing(5) : spacing(2.5);
-  const maxContentWidth = 800;
-  const containerWidth = Math.min(SCREEN_WIDTH, maxContentWidth);
-  const chartWidth = Math.min(containerWidth - horizontalPadding * 2 - spacing(4), 600);
-  const chartHeight = 220;
+  const isSmallPhone = SCREEN_WIDTH < 380;
+
+  // Dynamic padding calculation
+  const horizontalPadding = isTablet ? spacing(6) : spacing(2.5);
+  const maxContentWidth = 900;
+
+  // Chart width calculation state (Calculated on Layout for precision)
+  const [containerWidth, setContainerWidth] = useState(SCREEN_WIDTH - spacing(5));
 
   const isOnline = useInternetStatus();
   const autoCheckRef = useRef(false);
@@ -97,39 +97,30 @@ const HomeScreen: React.FC = () => {
 
   // --- ANIMATIONS ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(20)).current;
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
 
   useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 600,
+        duration: 700,
         useNativeDriver: true,
-        easing: Easing.out(Easing.cubic),
+        easing: Easing.out(Easing.poly(4)),
       }),
       Animated.timing(slideAnim, {
         toValue: 0,
-        duration: 600,
+        duration: 700,
         useNativeDriver: true,
-        easing: Easing.out(Easing.cubic),
+        easing: Easing.out(Easing.back(1.5)),
       }),
     ]).start();
-
-    // Subtle decoration pulse
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.05, duration: 3000, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 3000, useNativeDriver: true }),
-      ])
-    ).start();
   }, []);
 
   // Filters
   const [period, setPeriod] = useState<'week' | 'month'>('month');
   const [chartType, setChartType] = useState<'pie' | 'bar'>('pie');
 
-  // --- DATA LOGIC ---
+  // --- DATA PROCESSING ---
   const totalIn = useMemo(
     () => entries.filter((e) => e.type === 'in').reduce((s, x) => s + Number(x.amount || 0), 0),
     [entries]
@@ -257,6 +248,7 @@ const HomeScreen: React.FC = () => {
         );
       }
     } else {
+      // Month View: 4 buckets
       const buckets = 4;
       for (let i = 0; i < buckets; i++) labels.push(`W${i + 1}`);
       for (let i = 0; i < buckets; i++) {
@@ -281,33 +273,24 @@ const HomeScreen: React.FC = () => {
       return {
         label: 'No data',
         icon: 'insights',
-        background: 'rgba(255,255,255,0.2)',
-        borderColor: 'rgba(255,255,255,0.35)',
-        textColor: colors.white,
-        iconColor: colors.white,
-      } as const;
+        color: colors.white,
+      };
     if (netTrend.delta === null)
       return {
         label: 'New',
         icon: 'auto-graph',
-        background: 'rgba(255,255,255,0.18)',
-        borderColor: 'rgba(255,255,255,0.3)',
-        textColor: colors.white,
-        iconColor: colors.white,
-      } as const;
+        color: colors.white,
+      };
     const isUp = netTrend.delta >= 0;
     return {
       label: `${Math.abs(netTrend.delta).toFixed(1)}%`,
       icon: isUp ? 'trending-up' : 'trending-down',
-      background: isUp ? 'rgba(34,197,94,0.28)' : 'rgba(239,68,68,0.28)',
-      borderColor: isUp ? 'rgba(34,197,94,0.5)' : 'rgba(239,68,68,0.5)',
-      textColor: colors.white,
-      iconColor: colors.white,
-    } as const;
+      color: isUp ? '#4ade80' : '#f87171', // Lighter green/red for dark bg
+    };
   }, [entries.length, netTrend]);
 
   const topExpenseCategory = useMemo(() => {
-    if (!pieExpenseData.length) return FALLBACK_CATEGORY;
+    if (!pieExpenseData.length) return 'None';
     return (
       [...pieExpenseData].sort((a, b) => b.population - a.population)[0]?.name || FALLBACK_CATEGORY
     );
@@ -318,7 +301,7 @@ const HomeScreen: React.FC = () => {
     () => [
       {
         label: 'Add Entry',
-        icon: 'add-circle-outline',
+        icon: 'add',
         onPress: () => navigation.navigate('AddEntry'),
         primary: true,
       },
@@ -326,19 +309,16 @@ const HomeScreen: React.FC = () => {
         label: 'Stats',
         icon: 'bar-chart',
         onPress: () => navigation.navigate('Stats'),
-        primary: false,
       },
       {
         label: 'History',
         icon: 'history',
         onPress: () => navigation.navigate('History'),
-        primary: false,
       },
       {
         label: 'Settings',
         icon: 'settings',
         onPress: () => navigation.navigate('Settings'),
-        primary: false,
       },
     ],
     [navigation]
@@ -355,13 +335,13 @@ const HomeScreen: React.FC = () => {
       {
         label: 'Active Days',
         value: `${periodActiveDays}`,
-        icon: 'event-available',
+        icon: 'calendar-today',
         color: colors.accentGreen,
       },
       {
         label: 'Top Spend',
         value: topExpenseCategory,
-        icon: 'category',
+        icon: 'pie-chart',
         color: colors.accentOrange,
       },
     ],
@@ -374,8 +354,8 @@ const HomeScreen: React.FC = () => {
     backgroundGradientTo: colors.card,
     decimalPlaces: 0,
     color: (opacity = 1) => `rgba(${hexToRgb(colors.primary)}, ${opacity})`,
-    labelColor: (opacity = 1) => `rgba(${hexToRgb(colors.muted)}, ${opacity})`,
-    propsForBackgroundLines: { strokeDasharray: '' },
+    labelColor: (opacity = 1) => `rgba(${hexToRgb(colors.subtleText)}, ${opacity})`,
+    propsForBackgroundLines: { strokeDasharray: '4', stroke: colors.border },
   };
 
   const responsiveContainerStyle = useMemo<ViewStyle>(
@@ -389,10 +369,7 @@ const HomeScreen: React.FC = () => {
   );
 
   // --- HANDLERS ---
-  const handleOpenDrawer = () => {
-    navigation.openDrawer();
-  };
-
+  const handleOpenDrawer = () => navigation.openDrawer();
   const handleBannerPress = async () => {
     setUpdateBannerVisible(false);
     try {
@@ -403,6 +380,9 @@ const HomeScreen: React.FC = () => {
     } finally {
       setApplyingUpdate(false);
     }
+  };
+  const onLayoutContainer = (e: LayoutChangeEvent) => {
+    setContainerWidth(e.nativeEvent.layout.width);
   };
 
   // Update Checker
@@ -436,22 +416,17 @@ const HomeScreen: React.FC = () => {
           data={recent}
           keyExtractor={(item) => item.local_id}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: spacing(16) }}
+          contentContainerStyle={{ paddingBottom: spacing(12) }}
           ListHeaderComponent={
             <View style={responsiveContainerStyle}>
               {/* --- HEADER --- */}
-              <Animated.View
-                style={[
-                  styles.headerRow,
-                  { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
-                ]}
-              >
+              <Animated.View style={[styles.headerRow, { opacity: fadeAnim }]}>
                 <View style={styles.headerLeft}>
                   <TouchableOpacity style={styles.menuButton} onPress={handleOpenDrawer}>
                     <MaterialIcon name="menu" size={24} color={colors.text} />
                   </TouchableOpacity>
                   <View>
-                    <Text style={styles.greetingSub}>Welcome back,</Text>
+                    <Text style={styles.greetingSub}>Welcome,</Text>
                     <Text style={styles.greetingName}>
                       {user?.name?.split(' ')[0] || 'Guest'} 👋
                     </Text>
@@ -463,7 +438,7 @@ const HomeScreen: React.FC = () => {
                 </View>
               </Animated.View>
 
-              {/* --- HERO CARD (Decorated) --- */}
+              {/* --- HERO CARD (GRADIENT) --- */}
               <Animated.View
                 style={[
                   styles.heroContainer,
@@ -472,75 +447,67 @@ const HomeScreen: React.FC = () => {
               >
                 <Svg pointerEvents="none" style={StyleSheet.absoluteFill}>
                   <Defs>
-                    <SvgLinearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
+                    <SvgLinearGradient id="heroGrad" x1="0" y1="0" x2="1" y2="1">
                       <Stop offset="0" stopColor={colors.primary} stopOpacity="1" />
                       <Stop offset="1" stopColor={colors.secondary} stopOpacity="1" />
                     </SvgLinearGradient>
                   </Defs>
-                  <Rect width="100%" height="100%" rx={26} fill="url(#grad)" />
-                  {/* Decorations */}
-                  <Circle cx="85%" cy="20%" r="60" fill="white" fillOpacity="0.1" />
-                  <Circle cx="10%" cy="90%" r="80" fill="white" fillOpacity="0.05" />
+                  <Rect width="100%" height="100%" rx={28} fill="url(#heroGrad)" />
+                  <Circle cx="90%" cy="15%" r="80" fill="white" fillOpacity="0.1" />
+                  <Path
+                    d="M0 200 Q 150 150 350 240 T 400 240"
+                    fill="none"
+                    stroke="white"
+                    strokeWidth="40"
+                    strokeOpacity="0.05"
+                  />
                 </Svg>
 
-                {/* Pulsing Glow */}
-                <Animated.View style={[styles.heroGlow, { transform: [{ scale: pulseAnim }] }]} />
-
                 <View style={styles.heroContent}>
-                  <View style={styles.heroHeader}>
-                    <View style={styles.periodBadge}>
-                      <MaterialIcon name="calendar-today" size={12} color={colors.white} />
-                      <Text style={styles.periodText}>{periodLabel}</Text>
+                  <View style={styles.heroTopRow}>
+                    <View style={styles.glassBadge}>
+                      <MaterialIcon name="date-range" size={12} color="rgba(255,255,255,0.9)" />
+                      <Text style={styles.glassBadgeText}>{periodLabel}</Text>
                     </View>
-                    <View
-                      style={[
-                        styles.trendPill,
-                        {
-                          backgroundColor: heroTrendDetails.background,
-                          borderColor: heroTrendDetails.borderColor,
-                        },
-                      ]}
-                    >
+                    <View style={styles.glassBadge}>
                       <MaterialIcon
                         name={heroTrendDetails.icon as any}
                         size={14}
-                        color={heroTrendDetails.iconColor}
+                        color={heroTrendDetails.color}
                       />
-                      <Text style={[styles.trendText, { color: heroTrendDetails.textColor }]}>
+                      <Text style={[styles.glassBadgeText, { color: heroTrendDetails.color }]}>
                         {heroTrendDetails.label}
                       </Text>
                     </View>
                   </View>
 
-                  <View style={styles.balanceBlock}>
-                    <Text style={styles.balanceLabel}>Total Balance</Text>
-                    <Text style={styles.balanceAmount}>₹{balance.toLocaleString('en-IN')}</Text>
+                  <View style={styles.balanceContainer}>
+                    <Text style={styles.balanceLabel}>TOTAL BALANCE</Text>
+                    <Text style={styles.balanceAmount} numberOfLines={1} adjustsFontSizeToFit>
+                      ₹{balance.toLocaleString('en-IN')}
+                    </Text>
                   </View>
 
-                  <View style={styles.heroStatsRow}>
+                  <View style={styles.heroStatsContainer}>
                     <View style={styles.heroStatItem}>
-                      <View
-                        style={[styles.arrowCircle, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
-                      >
-                        <MaterialIcon name="arrow-downward" size={16} color={colors.accentGreen} />
+                      <View style={[styles.statIcon, { backgroundColor: 'rgba(34,197,94,0.2)' }]}>
+                        <MaterialIcon name="arrow-downward" size={16} color="#86efac" />
                       </View>
                       <View>
-                        <Text style={styles.statLabelLight}>Income</Text>
-                        <Text style={styles.statValueLight}>
+                        <Text style={styles.statLabel}>Income</Text>
+                        <Text style={styles.statValue}>
                           ₹{Math.round(periodIncome).toLocaleString()}
                         </Text>
                       </View>
                     </View>
-                    <View style={styles.dividerVertical} />
+                    <View style={styles.divider} />
                     <View style={styles.heroStatItem}>
-                      <View
-                        style={[styles.arrowCircle, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
-                      >
-                        <MaterialIcon name="arrow-upward" size={16} color={colors.accentRed} />
+                      <View style={[styles.statIcon, { backgroundColor: 'rgba(239,68,68,0.2)' }]}>
+                        <MaterialIcon name="arrow-upward" size={16} color="#fca5a5" />
                       </View>
                       <View>
-                        <Text style={styles.statLabelLight}>Expenses</Text>
-                        <Text style={styles.statValueLight}>
+                        <Text style={styles.statLabel}>Expenses</Text>
+                        <Text style={styles.statValue}>
                           ₹{Math.round(periodExpense).toLocaleString()}
                         </Text>
                       </View>
@@ -549,82 +516,69 @@ const HomeScreen: React.FC = () => {
                 </View>
               </Animated.View>
 
-              {/* --- ACTION GRID --- */}
-              <Animated.View
-                style={[
-                  styles.actionRow,
-                  { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
-                ]}
-              >
-                {quickActions.map((action, idx) => (
+              {/* --- QUICK ACTIONS --- */}
+              <View style={styles.actionGrid}>
+                {quickActions.map((action, index) => (
                   <TouchableOpacity
-                    key={idx}
+                    key={index}
                     style={[
-                      styles.actionBtn,
-                      action.primary ? styles.actionBtnPrimary : styles.actionBtnSecondary,
+                      styles.actionButton,
+                      action.primary && styles.actionButtonPrimary,
+                      { width: isSmallPhone ? '48%' : '23%' }, // Responsive Wrapping
                     ]}
                     onPress={action.onPress}
-                    activeOpacity={0.7}
+                    activeOpacity={0.8}
                   >
                     <MaterialIcon
                       name={action.icon as any}
                       size={24}
-                      color={action.primary ? colors.white : colors.primary}
+                      color={action.primary ? '#fff' : colors.primary}
                     />
                     <Text
                       style={[
-                        styles.actionLabel,
-                        { color: action.primary ? colors.white : colors.text },
+                        styles.actionText,
+                        action.primary && { color: '#fff', fontWeight: '700' },
                       ]}
                     >
                       {action.label}
                     </Text>
                   </TouchableOpacity>
                 ))}
-              </Animated.View>
+              </View>
 
-              {/* --- HIGHLIGHTS --- */}
-              <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+              {/* --- HIGHLIGHTS SCROLL --- */}
+              <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Highlights</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.highlightScroll}
-                >
-                  {highlightCards.map((card, idx) => (
-                    <View
-                      key={idx}
-                      style={[styles.highlightCard, { minWidth: isCompact ? 130 : 150 }]}
-                    >
-                      <View style={[styles.highlightIcon, { backgroundColor: `${card.color}15` }]}>
-                        <MaterialIcon name={card.icon as any} size={20} color={card.color} />
-                      </View>
-                      <Text style={styles.highlightValue} numberOfLines={1}>
-                        {card.value}
-                      </Text>
+              </View>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.highlightScrollContent}
+              >
+                {highlightCards.map((card, idx) => (
+                  <View key={idx} style={styles.highlightCard}>
+                    <View style={[styles.highlightIconBox, { backgroundColor: `${card.color}15` }]}>
+                      <MaterialIcon name={card.icon as any} size={22} color={card.color} />
+                    </View>
+                    <View>
+                      <Text style={styles.highlightValue}>{card.value}</Text>
                       <Text style={styles.highlightLabel}>{card.label}</Text>
                     </View>
-                  ))}
-                </ScrollView>
-              </Animated.View>
+                  </View>
+                ))}
+              </ScrollView>
 
               {/* --- ANALYTICS --- */}
-              <Animated.View
-                style={[
-                  styles.chartSection,
-                  { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
-                ]}
-              >
-                <View style={styles.chartHeader}>
+              <View style={styles.chartCard} onLayout={onLayoutContainer}>
+                <View style={styles.chartHeaderRow}>
                   <Text style={styles.sectionTitle}>Overview</Text>
-                  <View style={styles.chartToggle}>
+                  <View style={styles.toggleRow}>
                     <SimpleButtonGroup
                       buttons={['Pie', 'Bar']}
                       selectedIndex={chartType === 'pie' ? 0 : 1}
                       onPress={(i) => setChartType(i === 0 ? 'pie' : 'bar')}
                       containerStyle={{ height: 32 }}
                     />
-                    <View style={{ width: 8 }} />
                     <SimpleButtonGroup
                       buttons={['7D', '30D']}
                       selectedIndex={period === 'week' ? 0 : 1}
@@ -634,55 +588,61 @@ const HomeScreen: React.FC = () => {
                   </View>
                 </View>
 
-                <View style={styles.chartContainer}>
-                  {isLoading ? (
-                    <View style={[styles.skeleton, { height: chartHeight }]} />
-                  ) : (
-                    <>
-                      {chartType === 'pie' && PieChart && pieExpenseData.length > 0 && (
-                        <PieChart
-                          data={pieExpenseData}
-                          width={chartWidth}
-                          height={chartHeight}
-                          chartConfig={chartConfig}
-                          accessor="population"
-                          backgroundColor="transparent"
-                          paddingLeft="0"
-                          absolute={false}
-                          center={[isTablet ? chartWidth / 4 : 10, 0]}
-                          hasLegend={true}
-                        />
-                      )}
-                      {chartType === 'bar' && BarChart && (
-                        <BarChart
-                          data={{
-                            labels: weeklyBar.labels,
-                            datasets: [{ data: weeklyBar.income }, { data: weeklyBar.expense }],
-                          }}
-                          width={chartWidth}
-                          height={chartHeight}
-                          yAxisLabel="₹"
-                          chartConfig={chartConfig}
-                          showValuesOnTopOfBars={!isCompact}
-                          fromZero
-                          style={{ borderRadius: 16, paddingRight: 32 }}
-                        />
-                      )}
-                      {pieExpenseData.length === 0 && weeklyBar.income.every((x) => x === 0) && (
-                        <View style={styles.emptyChart}>
-                          <MaterialIcon name="donut-large" size={40} color={colors.border} />
-                          <Text style={styles.emptyText}>No data for this period</Text>
-                        </View>
-                      )}
-                    </>
-                  )}
-                </View>
-              </Animated.View>
+                {isLoading ? (
+                  <View style={styles.loadingChart} />
+                ) : (
+                  <View style={styles.chartWrapper}>
+                    {/* Render Charts conditionally based on DATA availability */}
+                    {pieExpenseData.length === 0 && weeklyBar.income.every((v) => v === 0) ? (
+                      <View style={styles.noDataContainer}>
+                        <MaterialIcon name="donut-large" size={48} color={colors.border} />
+                        <Text style={styles.noDataText}>No data for this period</Text>
+                      </View>
+                    ) : (
+                      <>
+                        {chartType === 'pie' && PieChart && (
+                          <PieChart
+                            data={pieExpenseData}
+                            width={containerWidth} // Dynamic Width
+                            height={220}
+                            chartConfig={chartConfig}
+                            accessor="population"
+                            backgroundColor="transparent"
+                            paddingLeft="15"
+                            absolute={false}
+                            hasLegend={!isSmallPhone} // Hide legend on very small screens
+                            center={[isSmallPhone ? 0 : 10, 0]}
+                          />
+                        )}
+                        {chartType === 'bar' && BarChart && (
+                          <BarChart
+                            data={{
+                              labels: weeklyBar.labels,
+                              datasets: [{ data: weeklyBar.income }, { data: weeklyBar.expense }],
+                            }}
+                            width={containerWidth - 10}
+                            height={220}
+                            yAxisLabel="₹"
+                            chartConfig={chartConfig}
+                            showValuesOnTopOfBars={!isSmallPhone}
+                            fromZero
+                            style={{
+                              paddingRight: 40, // Prevent label cutoff
+                              borderRadius: 16,
+                            }}
+                          />
+                        )}
+                      </>
+                    )}
+                  </View>
+                )}
+              </View>
 
-              <View style={styles.listHeaderRow}>
+              {/* --- RECENT LIST HEADER --- */}
+              <View style={styles.sectionHeaderRow}>
                 <Text style={styles.sectionTitle}>Recent Transactions</Text>
                 <TouchableOpacity onPress={() => navigation.navigate('History')}>
-                  <Text style={styles.seeAll}>See All</Text>
+                  <Text style={styles.seeAllText}>See All</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -695,7 +655,7 @@ const HomeScreen: React.FC = () => {
           ListEmptyComponent={
             <View style={styles.emptyList}>
               <MaterialIcon name="receipt-long" size={48} color={colors.border} />
-              <Text style={styles.emptyText}>No transactions found.</Text>
+              <Text style={styles.emptyText}>No recent transactions.</Text>
             </View>
           }
         />
@@ -714,6 +674,7 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
+  // --- HEADER ---
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -742,14 +703,14 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   greetingName: {
-    fontSize: 20,
+    fontSize: 18,
     color: colors.text,
     fontWeight: '800',
   },
   profileBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: colors.surfaceMuted,
     justifyContent: 'center',
     alignItems: 'center',
@@ -761,197 +722,189 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.primary,
   },
-  /* HERO CARD */
+
+  // --- HERO CARD ---
   heroContainer: {
-    height: 240,
-    borderRadius: 30,
+    height: 220,
+    borderRadius: 28,
     overflow: 'hidden',
     marginBottom: spacing(3),
+    // Shadows
     shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.2,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
     shadowRadius: 16,
-    elevation: 6,
-    position: 'relative',
-  },
-  heroGlow: {
-    position: 'absolute',
-    top: -50,
-    right: -50,
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    elevation: 8,
   },
   heroContent: {
     flex: 1,
-    padding: spacing(3),
+    padding: spacing(2.5),
     justifyContent: 'space-between',
   },
-  heroHeader: {
+  heroTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-  periodBadge: {
+  glassBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,0.15)',
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 20,
-    gap: 6,
+    borderRadius: 12,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
-  periodText: {
+  glassBadgeText: {
     color: 'rgba(255,255,255,0.95)',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
   },
-  trendPill: {
-    flexDirection: 'row',
+  balanceContainer: {
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-    borderWidth: 1,
-    gap: 4,
-  },
-  trendText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  balanceBlock: {
-    alignItems: 'center',
-    marginVertical: spacing(1),
   },
   balanceLabel: {
     color: 'rgba(255,255,255,0.7)',
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: 12,
+    fontWeight: '600',
     letterSpacing: 1,
-    textTransform: 'uppercase',
     marginBottom: 4,
   },
   balanceAmount: {
     color: colors.white,
-    fontSize: 36,
+    fontSize: 34,
     fontWeight: '800',
-    letterSpacing: -1,
+    letterSpacing: -0.5,
   },
-  heroStatsRow: {
+  heroStatsContainer: {
     flexDirection: 'row',
     backgroundColor: 'rgba(0,0,0,0.15)',
-    borderRadius: 20,
-    padding: 12,
+    borderRadius: 18,
+    padding: 10,
     alignItems: 'center',
+    backdropFilter: 'blur(10px)', // Works on some versions, ignored on others
   },
   heroStatItem: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
     justifyContent: 'center',
+    gap: 8,
   },
-  dividerVertical: {
+  divider: {
     width: 1,
-    height: '80%',
+    height: '60%',
     backgroundColor: 'rgba(255,255,255,0.2)',
   },
-  arrowCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+  statIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  statLabelLight: {
+  statLabel: {
     color: 'rgba(255,255,255,0.7)',
-    fontSize: 11,
+    fontSize: 10,
   },
-  statValueLight: {
+  statValue: {
     color: colors.white,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
   },
-  /* ACTIONS */
-  actionRow: {
+
+  // --- QUICK ACTIONS ---
+  actionGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
+    justifyContent: 'space-between',
     marginBottom: spacing(3),
   },
-  actionBtn: {
-    flex: 1,
-    flexDirection: 'column',
+  actionButton: {
+    backgroundColor: colors.card,
+    paddingVertical: 14,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
-    borderRadius: 24,
-    gap: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 2,
-  },
-  actionBtnPrimary: {
-    backgroundColor: colors.primary,
-    flexGrow: 1.5,
-  },
-  actionBtnSecondary: {
-    backgroundColor: colors.card,
+    gap: 6,
     borderWidth: 1,
     borderColor: colors.border,
+    // Soft shadow
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  actionLabel: {
-    fontSize: 13,
+  actionButtonPrimary: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  actionText: {
+    fontSize: 12,
     fontWeight: '600',
+    color: colors.text,
   },
-  /* SCROLL */
-  highlightScroll: {
+
+  // --- HIGHLIGHTS ---
+  sectionHeader: {
+    marginBottom: spacing(1.5),
+  },
+  sectionTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  highlightScrollContent: {
     gap: 12,
-    paddingVertical: 10,
+    paddingRight: 20,
     marginBottom: spacing(3),
   },
   highlightCard: {
     backgroundColor: colors.card,
-    borderRadius: 22,
+    borderRadius: 20,
     padding: 16,
+    minWidth: 140,
     borderWidth: 1,
     borderColor: colors.border,
-    justifyContent: 'center',
+    flexDirection: 'column',
+    justifyContent: 'space-between',
+    gap: 12,
   },
-  highlightIcon: {
-    width: 36,
-    height: 36,
+  highlightIconBox: {
+    width: 38,
+    height: 38,
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 10,
   },
   highlightValue: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
     color: colors.text,
-    marginBottom: 2,
   },
   highlightLabel: {
     fontSize: 12,
     color: colors.muted,
   },
-  /* ANALYTICS */
-  chartSection: {
+
+  // --- CHARTS ---
+  chartCard: {
     backgroundColor: colors.card,
-    borderRadius: 28,
-    padding: spacing(2.5),
+    borderRadius: 24,
+    padding: spacing(2),
+    marginBottom: spacing(3),
     borderWidth: 1,
     borderColor: colors.border,
-    marginBottom: spacing(3),
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.03,
-    shadowRadius: 10,
+    shadowRadius: 8,
     elevation: 2,
   },
-  chartHeader: {
+  chartHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -959,44 +912,47 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 10,
   },
-  chartToggle: {
+  toggleRow: {
     flexDirection: 'row',
+    gap: 8,
   },
-  chartContainer: {
+  chartWrapper: {
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 220,
   },
-  skeleton: {
-    width: '100%',
+  loadingChart: {
+    height: 220,
     backgroundColor: colors.surfaceMuted,
     borderRadius: 16,
+    width: '100%',
   },
-  emptyChart: {
+  noDataContainer: {
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'center',
+    gap: 10,
+    height: 200,
   },
-  /* LIST */
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.text,
-    marginBottom: 5,
+  noDataText: {
+    color: colors.muted,
+    fontSize: 14,
   },
-  listHeaderRow: {
+
+  // --- LIST ---
+  sectionHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: spacing(2),
   },
-  seeAll: {
+  seeAllText: {
     fontSize: 14,
     color: colors.primary,
     fontWeight: '600',
   },
   emptyList: {
     alignItems: 'center',
-    marginTop: 40,
+    marginTop: 30,
     gap: 10,
   },
   emptyText: {

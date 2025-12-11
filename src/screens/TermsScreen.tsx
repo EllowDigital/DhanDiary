@@ -60,13 +60,13 @@ const sections = [
 ];
 
 // --- Component for individual sections ---
-const TermSection = ({ item }: { item: typeof sections[0] }) => (
+const TermSection = ({ item }: { item: (typeof sections)[0] }) => (
   <View style={styles.card}>
     <View style={styles.cardHeader}>
-      <MaterialCommunityIcons 
-        name={item.icon as any} 
-        size={22} 
-        color={colors.primary || '#007AFF'} 
+      <MaterialCommunityIcons
+        name={item.icon as any}
+        size={22}
+        color={colors.primary || '#007AFF'}
         style={styles.icon}
       />
       <Text style={styles.cardTitle}>{item.title}</Text>
@@ -101,8 +101,9 @@ const TermsScreen = () => {
         >
           {/* Intro Text */}
           <Text style={styles.leadText}>
-            Please read these Terms carefully before using <Text style={styles.bold}>DhanDiary</Text>. 
-            By creating an account or continuing to use the app, you agree to the rules below.
+            Please read these Terms carefully before using{' '}
+            <Text style={styles.bold}>DhanDiary</Text>. By creating an account or continuing to use
+            the app, you agree to the rules below.
           </Text>
 
           {/* Mapped Sections */}
@@ -119,7 +120,7 @@ const TermsScreen = () => {
             <Text style={styles.cardBody}>
               Have questions? We'll get back to you within a few business days.
             </Text>
-            
+
             <TouchableOpacity onPress={handleEmailPress}>
               <Text style={styles.linkText}>{CONTACT_EMAIL_PRIMARY}</Text>
             </TouchableOpacity>
@@ -200,7 +201,7 @@ const styles = StyleSheet.create({
   },
   // Contact Specifics
   contactCard: {
-    backgroundColor: (colors.background === '#000') ? '#222' : '#F9FAFB', 
+    backgroundColor: colors.background === '#000' ? '#222' : '#F9FAFB',
   },
   linkText: {
     fontSize: 15,

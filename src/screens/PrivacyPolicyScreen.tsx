@@ -107,8 +107,9 @@ const PrivacyPolicyScreen = () => {
         >
           {/* Introduction */}
           <Text style={styles.leadText}>
-            {COMPANY_NAME} built <Text style={styles.bold}>DhanDiary</Text> to help individuals track their cash flow safely.
-            This policy explains what data we collect, why we process it, and your choices.
+            {COMPANY_NAME} built <Text style={styles.bold}>DhanDiary</Text> to help individuals
+            track their cash flow safely. This policy explains what data we collect, why we process
+            it, and your choices.
           </Text>
 
           {/* Policy Sections */}
@@ -125,24 +126,18 @@ const PrivacyPolicyScreen = () => {
             <Text style={styles.sectionBody}>
               Questions or privacy requests? We aim to respond within 3 business days.
             </Text>
-            
+
             <TouchableOpacity onPress={handleEmailPress} activeOpacity={0.7}>
               <Text style={styles.emailLink}>{SUPPORT_EMAIL_PRIMARY}</Text>
             </TouchableOpacity>
-            
-            <Text style={styles.secondaryEmail}>
-              Alternative: {SUPPORT_EMAIL_SECONDARY}
-            </Text>
+
+            <Text style={styles.secondaryEmail}>Alternative: {SUPPORT_EMAIL_SECONDARY}</Text>
           </View>
 
           {/* Footer */}
           <View style={styles.footer}>
-            <Text style={styles.footerText}>
-              Last updated: {LAST_UPDATED}
-            </Text>
-            <Text style={styles.footerSubText}>
-              Future updates will be shared inside the app.
-            </Text>
+            <Text style={styles.footerText}>Last updated: {LAST_UPDATED}</Text>
+            <Text style={styles.footerSubText}>Future updates will be shared inside the app.</Text>
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -216,7 +211,8 @@ const styles = StyleSheet.create({
   },
   // Contact Specifics
   contactSection: {
-    backgroundColor: (colors.background === '#000' || colors.background === '#121212') ? '#1E1E1E' : '#F8F9FA', // Slight contrast for contact
+    backgroundColor:
+      colors.background === '#000' || colors.background === '#121212' ? '#1E1E1E' : '#F8F9FA', // Slight contrast for contact
     borderColor: colors.border,
   },
   emailLink: {

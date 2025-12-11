@@ -193,7 +193,7 @@ const LoginScreen = () => {
                 onPress={handleForgotPassword}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <Text style={styles.forgotPassText}>Forgot Password?</Text>
+                {/* <Text style={styles.forgotPassText}>Forgot Password?</Text> */}
               </TouchableOpacity>
 
               <Button
