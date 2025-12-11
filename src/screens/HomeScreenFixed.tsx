@@ -783,7 +783,6 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 10,
     alignItems: 'center',
-    backdropFilter: 'blur(10px)', // Works on some versions, ignored on others
   },
   heroStatItem: {
     flex: 1,

@@ -399,7 +399,7 @@ const StatsScreen = () => {
                     chartConfig={chartConfig}
                     accessor="population"
                     backgroundColor="transparent"
-                    paddingLeft={donutSize / 4}
+                    paddingLeft={`${donutSize / 4}`}
                     absolute={false}
                     hasLegend={false}
                     center={[0, 0]}

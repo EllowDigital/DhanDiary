@@ -1,14 +1,14 @@
 import React, { useEffect, useMemo, useRef } from 'react';
-import { 
-  View, 
-  StyleSheet, 
-  Alert, 
-  TouchableOpacity, 
-  Animated, 
-  Easing, 
-  Image, 
+import {
+  View,
+  StyleSheet,
+  Alert,
+  TouchableOpacity,
+  Animated,
+  Easing,
+  Image,
   Platform,
-  useWindowDimensions 
+  useWindowDimensions,
 } from 'react-native';
 import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-navigation/drawer';
 import { Text } from '@rneui/themed';
@@ -111,7 +111,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
       contentContainerStyle={[
         styles.container,
         {
-          paddingTop: insets.top + spacing(2), 
+          paddingTop: insets.top + spacing(2),
           paddingBottom: insets.bottom + spacing(4),
         },
       ]}
@@ -119,10 +119,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
     >
       {/* --- PROFILE HEADER --- */}
       <Animated.View
-        style={[
-          styles.headerCard,
-          { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
-        ]}
+        style={[styles.headerCard, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
       >
         <View style={styles.brandRow}>
           <View style={styles.brandIconWrap}>
@@ -142,16 +139,19 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
         {props.state.routes.map((route, index) => {
           const focused = props.state.index === index;
           const { options } = props.descriptors[route.key];
-          
+
           // Hide hidden items
-          const flattenedStyle = options.drawerItemStyle ? StyleSheet.flatten(options.drawerItemStyle) : undefined;
+          const flattenedStyle = options.drawerItemStyle
+            ? StyleSheet.flatten(options.drawerItemStyle)
+            : undefined;
           if (flattenedStyle?.display === 'none') return null;
 
-          const label = options.drawerLabel !== undefined
-            ? options.drawerLabel
-            : options.title !== undefined
-              ? options.title
-              : route.name;
+          const label =
+            options.drawerLabel !== undefined
+              ? options.drawerLabel
+              : options.title !== undefined
+                ? options.title
+                : route.name;
 
           // Animation values for this item
           const itemAnim = listAnims[index] || new Animated.Value(1);
@@ -185,11 +185,11 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
                     />
                   )}
                 </View>
-                
+
                 <Text style={[styles.menuLabel, focused && styles.menuLabelActive]}>
                   {label as string}
                 </Text>
-                
+
                 {focused && <View style={styles.activeIndicator} />}
               </TouchableOpacity>
             </Animated.View>
@@ -200,18 +200,14 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
       {/* --- FOOTER --- */}
       <View style={styles.footer}>
         <View style={styles.divider} />
-        
-        <TouchableOpacity 
-            style={styles.logoutBtn} 
-            onPress={handleLogout}
-            activeOpacity={0.7}
-        >
+
+        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.7}>
           <View style={[styles.iconBox, styles.logoutIconBox]}>
             <MaterialIcon name="logout" size={20} color={colors.accentRed} />
           </View>
           <Text style={styles.logoutText}>Sign Out</Text>
         </TouchableOpacity>
-        
+
         <Text style={styles.versionText}>{versionLabel}</Text>
       </View>
     </DrawerContentScrollView>

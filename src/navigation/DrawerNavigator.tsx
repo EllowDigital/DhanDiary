@@ -27,11 +27,11 @@ const DrawerNavigator = () => {
 
   // --- RESPONSIVE CONFIG ---
   const isLargeScreen = width >= 768; // Tablet breakpoint
-  
+
   // On large screens, show drawer permanently on the left.
   // On phones, it slides over as a modal.
   const drawerType = isLargeScreen ? 'permanent' : 'front';
-  
+
   // Cap width so it doesn't look ridiculous on landscape tablets
   const drawerWidth = Math.min(300, width * 0.75);
 
@@ -54,13 +54,13 @@ const DrawerNavigator = () => {
         drawerActiveTintColor: colors.primary,
         drawerInactiveTintColor: colors.text,
         drawerActiveBackgroundColor: colors.primarySoft || '#EEF2FF',
-        
+
         drawerLabelStyle: {
           fontSize: 14,
           fontWeight: '600',
           marginLeft: -10, // Pull label closer to icon
         },
-        
+
         drawerItemStyle: {
           borderRadius: 12,
           paddingHorizontal: 8,

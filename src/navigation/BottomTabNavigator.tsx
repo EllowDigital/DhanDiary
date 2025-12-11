@@ -81,9 +81,7 @@ const TabButton = ({
   const animatedLabelStyle = useAnimatedStyle(() => {
     return {
       opacity: withTiming(isFocused ? 1 : 0, { duration: 200 }),
-      transform: [
-        { translateY: withTiming(isFocused ? 0 : 5, { duration: 200 }) },
-      ],
+      transform: [{ translateY: withTiming(isFocused ? 0 : 5, { duration: 200 }) }],
       height: isFocused ? 'auto' : 0,
     };
   });
@@ -104,12 +102,7 @@ const TabButton = ({
       </Animated.View>
 
       <Animated.View style={animatedLabelStyle}>
-        <Text
-          style={[
-            styles.label,
-            { color: isFocused ? colors.primary : colors.muted },
-          ]}
-        >
+        <Text style={[styles.label, { color: isFocused ? colors.primary : colors.muted }]}>
           {label}
         </Text>
       </Animated.View>
@@ -223,21 +216,9 @@ const BottomTabNavigator = () => {
           headerShown: false,
         }}
       >
-        <Tab.Screen
-          name="Dashboard"
-          component={HomeScreen}
-          options={{ tabBarLabel: 'Home' }}
-        />
-        <Tab.Screen
-          name="History"
-          component={HistoryScreen}
-          options={{ tabBarLabel: 'History' }}
-        />
-        <Tab.Screen
-          name="More"
-          component={MoreScreen}
-          options={{ tabBarLabel: 'Menu' }}
-        />
+        <Tab.Screen name="Dashboard" component={HomeScreen} options={{ tabBarLabel: 'Home' }} />
+        <Tab.Screen name="History" component={HistoryScreen} options={{ tabBarLabel: 'History' }} />
+        <Tab.Screen name="More" component={MoreScreen} options={{ tabBarLabel: 'Menu' }} />
       </Tab.Navigator>
     </View>
   );
@@ -269,13 +250,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 10,
     elevation: 10, // Android Shadow
-    
+
     // Border for definition
     borderTopWidth: 1,
     borderLeftWidth: 1,
     borderRightWidth: 1,
     borderColor: 'rgba(0,0,0,0.05)',
-    
+
     justifyContent: 'flex-start', // Align content to top
   },
   tabBarContent: {
