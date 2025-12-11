@@ -1,13 +1,6 @@
-import React, { 
-  createContext, 
-  useState, 
-  useContext, 
-  useCallback, 
-  useMemo, 
-  useRef
-} from 'react';
+import React, { createContext, useState, useContext, useCallback, useMemo, useRef } from 'react';
 import { StyleSheet, Text, View, Pressable } from 'react-native';
-import Animated, { FadeInUp, FadeOutUp } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeOutUp } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
@@ -26,26 +19,39 @@ interface ToastContextType {
 }
 
 // --- Context ---
-const ToastContext = createContext<ToastContextType>({ 
-  showToast: () => {}, 
-  hideToast: () => {} 
+const ToastContext = createContext<ToastContextType>({
+  showToast: () => {},
+  hideToast: () => {},
 });
 
 export const useToast = () => useContext(ToastContext);
 
 // --- Configuration ---
 const TOAST_CONFIG = {
-  success: { color: '#10B981', icon: 'check-circle' },
-  error: { color: '#EF4444', icon: 'alert-circle' },
-  info: { color: '#3B82F6', icon: 'information' },
+  success: {
+    bg: '#DEF7EC',
+    text: '#03543F',
+    iconColor: '#0E9F6E',
+    icon: 'check-decagram',
+  },
+  error: {
+    bg: '#FDE8E8',
+    text: '#9B1C1C',
+    iconColor: '#F05252',
+    icon: 'alert-octagon',
+  },
+  info: {
+    bg: '#E1EFFE',
+    text: '#1E429F',
+    iconColor: '#3F83F8',
+    icon: 'information',
+  },
 };
 
 // --- Component ---
 export const ToastProvider = ({ children }: { children: React.ReactNode }) => {
   const insets = useSafeAreaInsets();
   const [toast, setToast] = useState<ToastOptions | null>(null);
-  
-  // Ref to hold the timer so we can clear it if a new toast comes in
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const hideToast = useCallback(() => {
@@ -53,15 +59,10 @@ export const ToastProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   const showToast = useCallback((message: string, type: ToastType = 'info', duration = 3000) => {
-    // 1. Clear existing timer if any
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-    }
+    if (timerRef.current) clearTimeout(timerRef.current);
 
-    // 2. Set new toast
     setToast({ message, type, duration });
 
-    // 3. Start new timer
     timerRef.current = setTimeout(() => {
       setToast(null);
       timerRef.current = null;
@@ -70,39 +71,37 @@ export const ToastProvider = ({ children }: { children: React.ReactNode }) => {
 
   const contextValue = useMemo(() => ({ showToast, hideToast }), [showToast, hideToast]);
 
-  // Determine styles based on type
-  const activeConfig = toast ? TOAST_CONFIG[toast.type || 'info'] : TOAST_CONFIG.info;
+  const config = toast ? TOAST_CONFIG[toast.type || 'info'] : TOAST_CONFIG.info;
 
   return (
     <ToastContext.Provider value={contextValue}>
       {children}
-      
+
       {toast && (
-        <Animated.View 
-          entering={FadeInUp.springify().damping(15)}
+        <Animated.View
+          entering={FadeInDown.springify().damping(15)}
           exiting={FadeOutUp}
-          style={[
-            styles.toastContainer, 
-            { top: insets.top + 10 } // Dynamic Island positioning
-          ]}
+          style={[styles.container, { top: insets.top + 10 }]}
         >
-          <Pressable onPress={hideToast} style={styles.toastContent}>
-            
-            {/* Icon Box */}
-            <View style={[styles.iconContainer, { backgroundColor: activeConfig.color }]}>
-              <MaterialCommunityIcons 
-                name={activeConfig.icon as any} 
-                size={18} 
-                color="white" 
+          <View style={[styles.card, { backgroundColor: config.bg }]}>
+            <MaterialCommunityIcons
+              name={config.icon as any}
+              size={24}
+              color={config.iconColor}
+              style={styles.icon}
+            />
+
+            <Text style={[styles.text, { color: config.text }]}>{toast.message}</Text>
+
+            <Pressable onPress={hideToast} hitSlop={10}>
+              <MaterialCommunityIcons
+                name="close"
+                size={20}
+                color={config.text}
+                style={{ opacity: 0.5 }}
               />
-            </View>
-
-            {/* Message */}
-            <Text style={styles.messageText} numberOfLines={2}>
-              {toast.message}
-            </Text>
-
-          </Pressable>
+            </Pressable>
+          </View>
         </Animated.View>
       )}
     </ToastContext.Provider>
@@ -111,43 +110,42 @@ export const ToastProvider = ({ children }: { children: React.ReactNode }) => {
 
 // --- Styles ---
 const styles = StyleSheet.create({
-  toastContainer: {
+  container: {
     position: 'absolute',
-    left: 20,
-    right: 20,
-    zIndex: 9999, // Ensure it sits on top of everything
-    alignItems: 'center',
+    left: 0,
+    right: 0,
+    zIndex: 9999,
+    alignItems: 'center', // Centers the card horizontally
     justifyContent: 'center',
   },
-  toastContent: {
+  card: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1F2937', // Dark charcoal background
     paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 50, // Full Capsule
-    
-    // Modern Shadow
+    paddingHorizontal: 20,
+    borderRadius: 50, // Increased radius for "Floating Pill" look
+
+    // Auto width logic
+    alignSelf: 'center',
+    minWidth: '40%',
+    maxWidth: '90%', // Prevents it from touching edges on small screens
+
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
-    
-    maxWidth: '90%',
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 6,
+
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.02)',
   },
-  iconContainer: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
+  icon: {
     marginRight: 10,
   },
-  messageText: {
-    color: '#F9FAFB',
+  text: {
     fontSize: 14,
     fontWeight: '600',
-    flexShrink: 1, // Allows text to wrap if too long
+    marginRight: 10,
+    flexShrink: 1, // Ensures text wraps if it hits maxWidth
   },
 });
