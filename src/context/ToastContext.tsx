@@ -52,7 +52,7 @@ const TOAST_CONFIG = {
 export const ToastProvider = ({ children }: { children: React.ReactNode }) => {
   const insets = useSafeAreaInsets();
   const [toast, setToast] = useState<ToastOptions | null>(null);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const hideToast = useCallback(() => {
     setToast(null);
