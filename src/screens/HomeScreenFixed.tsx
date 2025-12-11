@@ -46,10 +46,12 @@ export const ALLOWED_CATEGORIES = [
   'Salary',
   'Shopping',
   'Health',
+  'Education',
+  'Entertainment',
   'Other',
 ] as const;
 
-// 1. Icon Mapping - Expanded for safety
+// 1. Icon Mapping - Fixed & Expanded
 const getIconForCategory = (cat?: string | null) => {
   const normalized = (cat || 'other').trim().toLowerCase();
   switch (normalized) {
@@ -59,15 +61,25 @@ const getIconForCategory = (cat?: string | null) => {
     case 'salary': return 'attach-money';
     case 'shopping': return 'shopping-bag';
     case 'health': return 'medical-services';
-    case 'entertainment': return 'celebration'; // Added
-    case 'party': return 'celebration';        // Added
     case 'education': return 'school';
+    case 'entertainment': return 'movie';
+    case 'party': return 'celebration'; 
     case 'other': return 'category';
     default: return 'category';
   }
 };
 
-// 2. Ensure Category Logic
+// 2. Helper to get Display Name (e.g. "transport" -> "Transport")
+const getCategoryDisplayName = (cat?: string | null) => {
+  if (!cat) return 'Other';
+  const normalized = cat.trim().toLowerCase();
+  // Find the matching official category with proper casing
+  const match = ALLOWED_CATEGORIES.find(c => c.toLowerCase() === normalized);
+  // If found return it, otherwise capitalize the first letter of the input
+  return match || (normalized.charAt(0).toUpperCase() + normalized.slice(1));
+};
+
+// 3. Ensure Category Logic for Charts
 const ensureCategory = (value?: string | null) => {
   if (!value) return 'Other';
   const match = ALLOWED_CATEGORIES.find(c => c.toLowerCase() === value.toLowerCase());
@@ -95,10 +107,14 @@ const PIE_COLORS = [
 ];
 
 // --- COMPONENT: COMPACT TRANSACTION ROW ---
+// FIX: Swapped logic. Title is now Category (to match Icon). Subtitle is Note.
 const CompactTransactionRow = ({ item, onPress }: { item: any; onPress: () => void }) => {
   const isExpense = item.type === 'out';
   const color = isExpense ? colors.accentRed : colors.accentGreen;
+  
+  const categoryName = getCategoryDisplayName(item.category);
   const iconName = getIconForCategory(item.category);
+  const noteText = item.note ? item.note.trim() : '';
 
   return (
     <TouchableOpacity style={styles.compactRow} onPress={onPress} activeOpacity={0.7}>
@@ -106,12 +122,13 @@ const CompactTransactionRow = ({ item, onPress }: { item: any; onPress: () => vo
         <MaterialIcon name={iconName as any} size={20} color={color} />
       </View>
       <View style={styles.compactContent}>
+        {/* PRIMARY TITLE: Category (Matches the Icon) */}
         <Text style={styles.compactTitle} numberOfLines={1}>
-          {item.note || item.category || 'Untitled'}
+          {categoryName}
         </Text>
-        {/* FIX: Showing Category Name here solves the "mismatch" confusion */}
-        <Text style={styles.compactDate}>
-          {item.category || 'Other'} • {dayjs(item.date || item.created_at).format('MMM D, h:mm A')}
+        {/* SUBTITLE: Note + Date */}
+        <Text style={styles.compactDate} numberOfLines={1}>
+          {noteText ? `${noteText} • ` : ''}{dayjs(item.date || item.created_at).format('MMM D, h:mm A')}
         </Text>
       </View>
       <Text style={[styles.compactAmount, { color: isExpense ? colors.text : colors.accentGreen }]}>
@@ -150,23 +167,11 @@ const HomeScreen: React.FC = () => {
   const pulseAnim = useRef(new Animated.Value(1)).current; 
 
   useEffect(() => {
-    // Intro
     Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 800,
-        useNativeDriver: true,
-        easing: Easing.out(Easing.cubic),
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 800,
-        useNativeDriver: true,
-        easing: Easing.out(Easing.back(1.2)),
-      }),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true, easing: Easing.out(Easing.cubic) }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 800, useNativeDriver: true, easing: Easing.out(Easing.back(1.2)) }),
     ]).start();
 
-    // Pulse Loop
     Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, { toValue: 1.05, duration: 3000, useNativeDriver: true }),
@@ -180,14 +185,8 @@ const HomeScreen: React.FC = () => {
   const [chartType, setChartType] = useState<'pie' | 'bar'>('pie');
 
   // --- DATA PROCESSING ---
-  const totalIn = useMemo(
-    () => entries.filter((e) => e.type === 'in').reduce((s, x) => s + Number(x.amount || 0), 0),
-    [entries]
-  );
-  const totalOut = useMemo(
-    () => entries.filter((e) => e.type === 'out').reduce((s, x) => s + Number(x.amount || 0), 0),
-    [entries]
-  );
+  const totalIn = useMemo(() => entries.filter((e) => e.type === 'in').reduce((s, x) => s + Number(x.amount || 0), 0), [entries]);
+  const totalOut = useMemo(() => entries.filter((e) => e.type === 'out').reduce((s, x) => s + Number(x.amount || 0), 0), [entries]);
   const balance = totalIn - totalOut;
 
   // Net Trend
@@ -278,32 +277,19 @@ const HomeScreen: React.FC = () => {
     return { labels, income: incomeData, expense: expenseData };
   }, [periodEntries, period]);
 
-  // Highlights
+  // Highlights & Recent
   const periodActiveDays = new Set(periodEntries.map(e => dayjs(e.date).format('YYYY-MM-DD'))).size;
   const periodAvgTicket = periodEntries.length ? periodEntries.reduce((s, x) => s + Number(x.amount), 0) / periodEntries.length : 0;
   const topExpense = (pieExpenseData && pieExpenseData.length > 0) ? pieExpenseData[0].name : 'None';
   
-  // FIX: Explicitly limit to 6 recent items
-  const recent = (entries || []).slice(0, 6); 
+  // FIX: Strictly limiting recent transactions to 6 items
+  const recent = useMemo(() => (entries || []).slice(0, 6), [entries]);
 
   // --- ACTIONS ---
   const quickActions = [
-    { 
-      label: 'Add', 
-      icon: 'add-circle-outline', 
-      onPress: () => navigation.navigate('AddEntry'), 
-      primary: true 
-    },
-    { 
-      label: 'Stats', 
-      icon: 'bar-chart', 
-      onPress: () => navigation.navigate('Stats') 
-    },
-    { 
-      label: 'Settings', 
-      icon: 'settings', 
-      onPress: () => navigation.navigate('Settings') 
-    },
+    { label: 'Add', icon: 'add-circle-outline', onPress: () => navigation.navigate('AddEntry'), primary: true },
+    { label: 'Stats', icon: 'bar-chart', onPress: () => navigation.navigate('Stats') },
+    { label: 'Settings', icon: 'settings', onPress: () => navigation.navigate('Settings') },
   ];
 
   const highlights = [
@@ -323,7 +309,6 @@ const HomeScreen: React.FC = () => {
 
   const onLayoutContainer = (e: LayoutChangeEvent) => setContainerWidth(e.nativeEvent.layout.width);
 
-  // Auto Update Check
   useEffect(() => {
     if (!isOnline || isExpoGo || autoCheckRef.current) return;
     autoCheckRef.current = true;
@@ -361,8 +346,8 @@ const HomeScreen: React.FC = () => {
           data={recent}
           keyExtractor={(item) => item.local_id || Math.random().toString()}
           showsVerticalScrollIndicator={false}
-          // FIX: Heavily increased padding to clear bottom nav
-          contentContainerStyle={{ paddingBottom: 130 }} 
+          // FIX: Large padding to ensure bottom scrollability
+          contentContainerStyle={{ paddingBottom: 150 }} 
           ListHeaderComponent={
             <View style={responsiveContainerStyle}>
               
@@ -384,7 +369,7 @@ const HomeScreen: React.FC = () => {
                 </View>
               </Animated.View>
 
-              {/* --- HERO CARD (Gradient + Pulse) --- */}
+              {/* --- HERO CARD --- */}
               <Animated.View style={[styles.heroContainer, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
                 <Svg pointerEvents="none" style={StyleSheet.absoluteFill}>
                   <Defs>
@@ -398,7 +383,6 @@ const HomeScreen: React.FC = () => {
                   <Path d="M0 180 Q 100 120 400 220" fill="none" stroke="white" strokeWidth="30" strokeOpacity="0.05" />
                 </Svg>
 
-                {/* Pulse */}
                 <Animated.View style={[styles.heroGlow, { transform: [{ scale: pulseAnim }] }]} />
 
                 <View style={styles.heroContent}>
@@ -445,7 +429,7 @@ const HomeScreen: React.FC = () => {
                 </View>
               </Animated.View>
 
-              {/* --- QUICK ACTIONS (3 Items) --- */}
+              {/* --- QUICK ACTIONS --- */}
               <View style={styles.actionsGrid}>
                 {quickActions.map((action, i) => (
                   <TouchableOpacity 
@@ -477,7 +461,7 @@ const HomeScreen: React.FC = () => {
                 ))}
               </ScrollView>
 
-              {/* --- MODERN STATS WIDGET --- */}
+              {/* --- STATS WIDGET --- */}
               <View style={styles.statsWidget} onLayout={onLayoutContainer}>
                 <View style={styles.widgetHeader}>
                   <Text style={styles.sectionTitle}>Analysis</Text>
@@ -491,7 +475,6 @@ const HomeScreen: React.FC = () => {
                    <View style={styles.chartContainer}>
                       {chartType === 'pie' && PieChart && (
                          <View style={styles.rowCentered}>
-                            
                             <PieChart
                                data={pieExpenseData}
                                width={isTablet ? containerWidth * 0.5 : containerWidth}
@@ -579,8 +562,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   safeArea: { flex: 1 },
-  
-  // Header
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -601,8 +582,6 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border,
   },
   profileInitial: { fontSize: 18, fontWeight: '700', color: colors.primary },
-
-  // Hero
   heroContainer: {
     height: 200, borderRadius: 24, overflow: 'hidden', marginBottom: spacing(3),
     shadowColor: colors.primary, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.2, shadowRadius: 16, elevation: 8,
@@ -630,8 +609,6 @@ const styles = StyleSheet.create({
   verticalDivider: { width: 1, height: '60%', backgroundColor: 'rgba(255,255,255,0.2)' },
   statLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 10 },
   statValue: { color: 'white', fontSize: 14, fontWeight: '700' },
-
-  // Actions
   actionsGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 10, marginBottom: spacing(3) },
   actionBtn: { alignItems: 'center', gap: 6 },
   actionIconBox: {
@@ -642,8 +619,6 @@ const styles = StyleSheet.create({
   },
   actionIconBoxPrimary: { backgroundColor: colors.primary, borderColor: colors.primary },
   actionLabel: { fontSize: 12, fontWeight: '600', color: colors.text },
-
-  // Highlights
   highlightScroll: { paddingRight: 20, marginBottom: spacing(3), gap: 12 },
   highlightCard: {
     backgroundColor: colors.card, borderRadius: 18, padding: 12, minWidth: 130,
@@ -652,8 +627,6 @@ const styles = StyleSheet.create({
   highlightIcon: { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   highlightValue: { fontSize: 15, fontWeight: '700', color: colors.text },
   highlightLabel: { fontSize: 11, color: colors.muted },
-
-  // Stats Widget
   statsWidget: {
     backgroundColor: colors.card, borderRadius: 24, padding: 16, marginBottom: spacing(3),
     borderWidth: 1, borderColor: colors.border,
@@ -670,12 +643,8 @@ const styles = StyleSheet.create({
   legendValue: { fontSize: 12, color: colors.muted, fontWeight: '600' },
   noDataBox: { height: 150, alignItems: 'center', justifyContent: 'center', gap: 8 },
   noDataText: { color: colors.muted, fontSize: 13 },
-
-  // Recent List
   listHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   linkText: { color: colors.primary, fontWeight: '600', fontSize: 13 },
-  
-  // Compact Row
   compactRow: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card,
     borderRadius: 16, padding: 12, marginBottom: 8,
@@ -686,7 +655,6 @@ const styles = StyleSheet.create({
   compactTitle: { fontSize: 14, fontWeight: '600', color: colors.text, marginBottom: 2 },
   compactDate: { fontSize: 11, color: colors.muted },
   compactAmount: { fontSize: 14, fontWeight: '700' },
-  
   emptyState: { alignItems: 'center', marginTop: 20 },
   emptyText: { color: colors.muted },
 });
