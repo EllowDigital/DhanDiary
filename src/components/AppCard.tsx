@@ -1,12 +1,5 @@
 import React from 'react';
-import { 
-  View, 
-  StyleSheet, 
-  ViewStyle, 
-  StyleProp, 
-  Pressable, 
-  Platform 
-} from 'react-native';
+import { View, StyleSheet, ViewStyle, StyleProp, Pressable, Platform } from 'react-native';
 
 // --- Design Tokens (Replace with your own theme file) ---
 const colors = {
@@ -25,15 +18,14 @@ interface AppCardProps extends React.ComponentProps<typeof View> {
   disabled?: boolean;
 }
 
-const AppCard: React.FC<AppCardProps> = ({ 
-  children, 
-  style, 
-  variant = 'elevated', 
+const AppCard: React.FC<AppCardProps> = ({
+  children,
+  style,
+  variant = 'elevated',
   onPress,
   disabled,
-  ...rest 
+  ...rest
 }) => {
-  
   // 1. Determine base styles based on variant
   const variantStyles = {
     elevated: styles.elevated,
@@ -42,22 +34,14 @@ const AppCard: React.FC<AppCardProps> = ({
   };
 
   // 2. Base Container Style
-  const containerStyle = [
-    styles.card,
-    variantStyles[variant],
-    style,
-    disabled && styles.disabled,
-  ];
+  const containerStyle = [styles.card, variantStyles[variant], style, disabled && styles.disabled];
 
   // 3. Render as Pressable if interactive
   if (onPress) {
     return (
       <Pressable
         onPress={disabled ? undefined : onPress}
-        style={({ pressed }) => [
-          containerStyle,
-          pressed && !disabled && styles.pressed,
-        ]}
+        style={({ pressed }) => [containerStyle, pressed && !disabled && styles.pressed]}
         {...(rest as any)}
       >
         {children}
@@ -80,7 +64,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.cardBg,
     marginVertical: 6,
   },
-  
+
   // --- Variants ---
   elevated: {
     // Android
