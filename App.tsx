@@ -294,12 +294,12 @@ export default function App() {
   }
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <ToastProvider>
-        <SafeAreaProvider>
+    <SafeAreaProvider>
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
           <AppContent />
-        </SafeAreaProvider>
-      </ToastProvider>
-    </QueryClientProvider>
+        </ToastProvider>
+      </QueryClientProvider>
+    </SafeAreaProvider>
   );
 }
