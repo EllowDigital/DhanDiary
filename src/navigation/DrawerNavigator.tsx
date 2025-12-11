@@ -1,5 +1,5 @@
 import React from 'react';
-import { Dimensions, useWindowDimensions } from 'react-native';
+import { useWindowDimensions } from 'react-native';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 
 // Navigators & Screens
@@ -17,7 +17,7 @@ import TermsScreen from '../screens/TermsScreen';
 
 // Components & Theme
 import CustomDrawerContent from './CustomDrawerContent';
-import MaterialCommunityIcon from '@expo/vector-icons/MaterialCommunityIcons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors } from '../utils/design';
 
 const Drawer = createDrawerNavigator();
@@ -25,10 +25,15 @@ const Drawer = createDrawerNavigator();
 const DrawerNavigator = () => {
   const { width } = useWindowDimensions();
 
-  // Responsive Drawer Config
-  const isLargeScreen = width >= 768;
+  // --- RESPONSIVE CONFIG ---
+  const isLargeScreen = width >= 768; // Tablet breakpoint
+  
+  // On large screens, show drawer permanently on the left.
+  // On phones, it slides over as a modal.
   const drawerType = isLargeScreen ? 'permanent' : 'front';
-  const drawerWidth = Math.min(320, width * 0.75); // Cap width for tablets
+  
+  // Cap width so it doesn't look ridiculous on landscape tablets
+  const drawerWidth = Math.min(300, width * 0.75);
 
   return (
     <Drawer.Navigator
@@ -36,55 +41,57 @@ const DrawerNavigator = () => {
       screenOptions={{
         headerShown: false,
 
-        // Drawer Appearance
+        // Drawer Layout
         drawerType,
         drawerStyle: {
-          backgroundColor: colors.card,
+          backgroundColor: colors.card, // Match theme card background
           width: drawerWidth,
-          borderTopRightRadius: isLargeScreen ? 0 : 20,
-          borderBottomRightRadius: isLargeScreen ? 0 : 20,
+          borderRightWidth: isLargeScreen ? 1 : 0, // Divider for permanent drawer
+          borderRightColor: colors.border,
         },
 
         // Item Styling
         drawerActiveTintColor: colors.primary,
         drawerInactiveTintColor: colors.text,
-        drawerActiveBackgroundColor: colors.primarySoft,
+        drawerActiveBackgroundColor: colors.primarySoft || '#EEF2FF',
+        
         drawerLabelStyle: {
           fontSize: 14,
           fontWeight: '600',
-          marginLeft: -10,
+          marginLeft: -10, // Pull label closer to icon
         },
+        
         drawerItemStyle: {
           borderRadius: 12,
           paddingHorizontal: 8,
           marginVertical: 4,
         },
 
-        // Overlay
-        overlayColor: 'rgba(0,0,0,0.4)',
-        swipeEdgeWidth: width * 0.2, // Easier to swipe open
+        // Overlay (only for mobile 'front' mode)
+        overlayColor: 'rgba(0,0,0,0.5)',
+        swipeEdgeWidth: width * 0.25, // Make swipe area larger for easier opening
       }}
     >
-      {/* --- CORE --- */}
+      {/* --- DASHBOARD (Tabs) --- */}
       <Drawer.Screen
         name="HomeTabs"
         component={BottomTabNavigator}
         options={{
           title: 'Dashboard',
           drawerIcon: ({ color, size }) => (
-            <MaterialCommunityIcon name="view-dashboard-outline" color={color} size={size} />
+            <MaterialCommunityIcons name="view-dashboard-outline" color={color} size={size} />
           ),
         }}
       />
 
-      {/* --- TRANSACTIONS --- */}
+      {/* --- CORE ACTIONS --- */}
       <Drawer.Screen
         name="AddEntry"
         component={AddEntryScreen}
         options={{
           title: 'New Transaction',
           drawerIcon: ({ color, size }) => (
-            <MaterialCommunityIcon name="plus-circle-outline" color={color} size={size} />
+            <MaterialCommunityIcons name="plus-circle-outline" color={color} size={size} />
           ),
         }}
       />
@@ -95,7 +102,7 @@ const DrawerNavigator = () => {
         options={{
           title: 'History Log',
           drawerIcon: ({ color, size }) => (
-            <MaterialCommunityIcon name="history" color={color} size={size} />
+            <MaterialCommunityIcons name="history" color={color} size={size} />
           ),
         }}
       />
@@ -107,7 +114,7 @@ const DrawerNavigator = () => {
         options={{
           title: 'Income',
           drawerIcon: ({ color, size }) => (
-            <MaterialCommunityIcon name="arrow-down-bold-box-outline" color={color} size={size} />
+            <MaterialCommunityIcons name="arrow-down-bold-box-outline" color={color} size={size} />
           ),
         }}
       />
@@ -118,7 +125,7 @@ const DrawerNavigator = () => {
         options={{
           title: 'Expenses',
           drawerIcon: ({ color, size }) => (
-            <MaterialCommunityIcon name="arrow-up-bold-box-outline" color={color} size={size} />
+            <MaterialCommunityIcons name="arrow-up-bold-box-outline" color={color} size={size} />
           ),
         }}
       />
@@ -130,7 +137,7 @@ const DrawerNavigator = () => {
         options={{
           title: 'Analytics',
           drawerIcon: ({ color, size }) => (
-            <MaterialCommunityIcon name="chart-box-outline" color={color} size={size} />
+            <MaterialCommunityIcons name="chart-box-outline" color={color} size={size} />
           ),
         }}
       />
@@ -142,7 +149,7 @@ const DrawerNavigator = () => {
         options={{
           title: 'My Profile',
           drawerIcon: ({ color, size }) => (
-            <MaterialCommunityIcon name="account-circle-outline" color={color} size={size} />
+            <MaterialCommunityIcons name="account-circle-outline" color={color} size={size} />
           ),
         }}
       />
@@ -153,7 +160,7 @@ const DrawerNavigator = () => {
         options={{
           title: 'App Settings',
           drawerIcon: ({ color, size }) => (
-            <MaterialCommunityIcon name="cog-outline" color={color} size={size} />
+            <MaterialCommunityIcons name="cog-outline" color={color} size={size} />
           ),
         }}
       />
@@ -164,17 +171,18 @@ const DrawerNavigator = () => {
         options={{
           title: 'About',
           drawerIcon: ({ color, size }) => (
-            <MaterialCommunityIcon name="information-outline" color={color} size={size} />
+            <MaterialCommunityIcons name="information-outline" color={color} size={size} />
           ),
         }}
       />
 
+      {/* --- HIDDEN SCREENS (Navigable but not in menu) --- */}
       <Drawer.Screen
         name="PrivacyPolicy"
         component={PrivacyPolicyScreen}
         options={{
           title: 'Privacy Policy',
-          drawerItemStyle: { display: 'none' },
+          drawerItemStyle: { display: 'none' }, // Hides from drawer list
         }}
       />
 
