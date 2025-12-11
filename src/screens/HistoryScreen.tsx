@@ -8,11 +8,14 @@ import {
   Dimensions,
   ScrollView,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   LayoutAnimation,
   Platform,
   UIManager,
   Animated,
   StatusBar,
+  KeyboardAvoidingView,
+  Keyboard,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, Button, Input } from '@rneui/themed';
@@ -358,10 +361,17 @@ const HistoryScreen = () => {
     </View>
   );
 
+  const quickAmounts = ['500', '1000', '3000', '10000'];
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-      <ScreenHeader title="History" subtitle="Detailed transactions log" showScrollHint={false} />
+      <ScreenHeader
+        title="History"
+        subtitle="Detailed transactions log"
+        showScrollHint={false}
+        useSafeAreaPadding={false}
+      />
 
       <FlatList
         data={filtered}
@@ -395,70 +405,134 @@ const HistoryScreen = () => {
         transparent
         onRequestClose={() => setEditingEntry(null)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Edit Transaction</Text>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={{ flex: 1 }}
+        >
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                <View style={styles.sheetHandle} />
+                <View style={styles.modalHeaderRow}>
+                  <View>
+                    <Text style={styles.modalTitle}>Edit Transaction</Text>
+                    <Text style={styles.modalSubtitle}>
+                      Update the amount, category, note, and date.
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setEditingEntry(null)}
+                    style={styles.modalCloseBtn}
+                  >
+                    <MaterialIcon name="close" size={20} color={colors.text} />
+                  </TouchableOpacity>
+                </View>
 
-            <ScrollView>
-              <SimpleButtonGroup
-                buttons={['Expense', 'Income']}
-                selectedIndex={editTypeIndex}
-                onPress={setEditTypeIndex}
-                containerStyle={{ marginBottom: 16 }}
-              />
+                <ScrollView
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={{ paddingBottom: 12 }}
+                >
+                  <SimpleButtonGroup
+                    buttons={['Expense', 'Income']}
+                    selectedIndex={editTypeIndex}
+                    onPress={setEditTypeIndex}
+                    containerStyle={styles.typeToggle}
+                  />
 
-              <Input
-                label="Amount"
-                value={editAmount}
-                onChangeText={setEditAmount}
-                keyboardType="numeric"
-                inputContainerStyle={styles.modalInput}
-              />
+                  <Input
+                    label="Amount"
+                    value={editAmount}
+                    onChangeText={setEditAmount}
+                    keyboardType="numeric"
+                    inputContainerStyle={styles.modalInput}
+                    leftIcon={<MaterialIcon name="payments" size={18} color={colors.muted} />}
+                  />
 
-              <TouchableOpacity
-                style={styles.modalPickerBtn}
-                onPress={() => setShowCategoryPicker(true)}
-              >
-                <Text style={styles.modalPickerLabel}>
-                  Category:{' '}
-                  <Text style={{ fontWeight: '700', color: colors.primary }}>{editCategory}</Text>
-                </Text>
-                <MaterialIcon name="arrow-drop-down" size={24} color={colors.text} />
-              </TouchableOpacity>
+                  <View style={styles.quickRow}>
+                    {quickAmounts.map((preset) => (
+                      <TouchableOpacity
+                        key={preset}
+                        onPress={() => setEditAmount(preset)}
+                        style={styles.quickChip}
+                      >
+                        <Text style={styles.quickChipText}>₹{preset}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
 
-              <CategoryPickerModal
-                visible={showCategoryPicker}
-                onClose={() => setShowCategoryPicker(false)}
-                onSelect={(c) => {
-                  setEditCategory(c);
-                  setShowCategoryPicker(false);
-                }}
-              />
+                  <TouchableOpacity
+                    style={styles.modalPickerBtn}
+                    onPress={() => setShowCategoryPicker(true)}
+                  >
+                    <View>
+                      <Text style={styles.modalPickerLabel}>Category</Text>
+                      <Text style={styles.modalPickerValue}>{editCategory}</Text>
+                    </View>
+                    <MaterialIcon name="arrow-drop-down" size={24} color={colors.text} />
+                  </TouchableOpacity>
 
-              <Input
-                label="Note"
-                value={editNote}
-                onChangeText={setEditNote}
-                inputContainerStyle={styles.modalInput}
-              />
+                  <TouchableOpacity
+                    style={styles.modalPickerBtn}
+                    onPress={() => setShowEditDatePicker(true)}
+                  >
+                    <View>
+                      <Text style={styles.modalPickerLabel}>Date</Text>
+                      <Text style={styles.modalPickerValue}>
+                        {editDate ? editDate.toLocaleDateString() : 'Select a date'}
+                      </Text>
+                    </View>
+                    <MaterialIcon name="event" size={20} color={colors.text} />
+                  </TouchableOpacity>
 
-              <View style={styles.modalActions}>
-                <Button
-                  title="Cancel"
-                  type="outline"
-                  onPress={() => setEditingEntry(null)}
-                  containerStyle={{ flex: 1, marginRight: 8 }}
-                />
-                <Button
-                  title="Save"
-                  onPress={handleSaveEdit}
-                  containerStyle={{ flex: 1 }}
-                  buttonStyle={{ backgroundColor: colors.primary }}
-                />
+                  <CategoryPickerModal
+                    visible={showCategoryPicker}
+                    onClose={() => setShowCategoryPicker(false)}
+                    onSelect={(c) => {
+                      setEditCategory(c);
+                      setShowCategoryPicker(false);
+                    }}
+                  />
+
+                  {showEditDatePicker && (
+                    <DateTimePicker
+                      value={editDate || new Date()}
+                      mode="date"
+                      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                      onChange={(event, date) => {
+                        setShowEditDatePicker(false);
+                        if (date) setEditDate(date);
+                      }}
+                    />
+                  )}
+
+                  <Input
+                    label="Note"
+                    value={editNote}
+                    onChangeText={setEditNote}
+                    inputContainerStyle={styles.modalInput}
+                    placeholder="Add a short description"
+                    leftIcon={<MaterialIcon name="notes" size={18} color={colors.muted} />}
+                  />
+
+                  <View style={styles.modalActions}>
+                    <Button
+                      title="Cancel"
+                      type="outline"
+                      onPress={() => setEditingEntry(null)}
+                      containerStyle={{ flex: 1, marginRight: 8 }}
+                    />
+                    <Button
+                      title="Save Changes"
+                      onPress={handleSaveEdit}
+                      containerStyle={{ flex: 1 }}
+                      buttonStyle={{ backgroundColor: colors.primary }}
+                    />
+                  </View>
+                </ScrollView>
               </View>
-            </ScrollView>
-          </View>
-        </View>
+            </View>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -611,16 +685,64 @@ const styles = StyleSheet.create({
     padding: 20,
     maxHeight: '80%',
   },
+  sheetHandle: {
+    width: 46,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border,
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
   modalTitle: {
     fontSize: 18,
     fontWeight: '700',
-    marginBottom: 16,
-    textAlign: 'center',
     color: colors.text,
+  },
+  modalSubtitle: {
+    fontSize: 12,
+    color: colors.muted,
+    marginTop: 4,
+  },
+  modalCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  typeToggle: {
+    marginBottom: 16,
   },
   modalInput: {
     borderBottomWidth: 1,
     borderColor: colors.border,
+  },
+  quickRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  quickChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
+  },
+  quickChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.text,
   },
   modalPickerBtn: {
     flexDirection: 'row',
@@ -635,6 +757,11 @@ const styles = StyleSheet.create({
   modalPickerLabel: {
     fontSize: 14,
     color: colors.text,
+  },
+  modalPickerValue: {
+    fontSize: 13,
+    color: colors.muted,
+    marginTop: 2,
   },
   modalActions: {
     flexDirection: 'row',

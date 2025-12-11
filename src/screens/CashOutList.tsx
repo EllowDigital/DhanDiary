@@ -3,24 +3,28 @@ import {
   View,
   StyleSheet,
   FlatList,
-  Dimensions,
   TouchableOpacity,
   useWindowDimensions,
   Animated,
   Easing,
   StatusBar,
   Platform,
+  type ViewStyle,
 } from 'react-native';
-import type { ViewStyle } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, Button } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+
+// Custom Hooks & Components
 import { useEntries } from '../hooks/useEntries';
 import { useAuth } from '../hooks/useAuth';
-import TransactionCard from '../components/TransactionCard';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import useDelayedLoading from '../hooks/useDelayedLoading';
+import TransactionCard from '../components/TransactionCard';
 import FullScreenSpinner from '../components/FullScreenSpinner';
+import ScreenHeader from '../components/ScreenHeader';
+
+// Utils
 import {
   buildEntryDisplay,
   EntrySortMode,
@@ -28,58 +32,63 @@ import {
   summarizeEntries,
 } from '../utils/entryFilters';
 import { colors, spacing, shadows } from '../utils/design';
-import ScreenHeader from '../components/ScreenHeader';
 
 // --- CONSTANTS ---
 const TIME_FILTERS = [
-  { label: 'All', value: 'all' as const },
-  { label: '7 Days', value: '7d' as const },
-  { label: '30 Days', value: '30d' as const },
+  { label: 'All Time', value: 'all' as const },
+  { label: 'This Week', value: '7d' as const },
+  { label: 'This Month', value: '30d' as const },
 ];
 
 const SORT_OPTIONS = [
-  { label: 'Recent', value: 'recent' as const },
-  { label: 'Amount', value: 'amount' as const },
+  { label: 'Newest', value: 'recent' as const },
+  { label: 'Highest', value: 'amount' as const },
 ];
 
 const CashOutList = () => {
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const { user } = useAuth();
+
+  // Data Fetching
   const { entries, deleteEntry, isLoading, refetch } = useEntries(user?.id);
   const showLoading = useDelayedLoading(Boolean(isLoading), 200);
 
-  // State
+  // Local State
   const [timeFilter, setTimeFilter] = useState<EntryTimeframe>('all');
   const [sortMode, setSortMode] = useState<EntrySortMode>('recent');
 
-  // Responsive
-  const { width } = useWindowDimensions();
-  const isTablet = width >= 768;
-  const maxContentWidth = 700;
-  const containerStyle = useMemo<ViewStyle>(
-    () => ({
-      width: '100%',
-      maxWidth: maxContentWidth,
-      alignSelf: 'center',
-    }),
-    [maxContentWidth]
-  );
-
-  // --- ANIMATIONS ---
+  // Animation Refs
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(20)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
 
+  // --- RESPONSIVENESS ---
+  const isTablet = width >= 768;
+  const MAX_WIDTH = 700;
+
+  // Dynamic container style
+  const contentContainerStyle: ViewStyle = {
+    paddingHorizontal: isTablet ? 0 : 20,
+    paddingTop: insets.top + 10, // Breathing room at top
+    paddingBottom: insets.bottom + 80, // Space for bottom gestures
+    width: '100%',
+    maxWidth: MAX_WIDTH,
+    alignSelf: 'center',
+  };
+
+  // --- EFFECTS ---
   useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 500,
+        duration: 600,
         useNativeDriver: true,
         easing: Easing.out(Easing.cubic),
       }),
       Animated.timing(slideAnim, {
         toValue: 0,
-        duration: 600,
+        duration: 700,
         useNativeDriver: true,
         easing: Easing.out(Easing.cubic),
       }),
@@ -92,7 +101,7 @@ const CashOutList = () => {
     }, [refetch])
   );
 
-  // --- DATA PROCESSING ---
+  // --- DATA COMPUTATION ---
   const entryView = useMemo(
     () =>
       buildEntryDisplay(entries, {
@@ -109,41 +118,50 @@ const CashOutList = () => {
   );
 
   // --- HANDLERS ---
-  const handleEdit = (item: any) => {
-    navigation.navigate('History', { edit_item: item });
-  };
-
+  const handleEdit = (item: any) => navigation.navigate('History', { edit_item: item });
   const handleDelete = async (id: string) => {
     try {
       await deleteEntry(id);
     } catch (err) {
-      console.warn('Delete error', err);
+      console.warn(err);
     }
   };
 
-  // --- SUB-COMPONENTS ---
+  // --- RENDER HELPERS ---
+
+  // 1. Filter Pill
   const FilterPill = ({ label, active, onPress }: any) => (
     <TouchableOpacity
       onPress={onPress}
       activeOpacity={0.7}
       style={[styles.pill, active && styles.pillActive]}
+      hitSlop={{ top: 10, bottom: 10, left: 5, right: 5 }}
     >
       <Text style={[styles.pillText, active && styles.pillTextActive]}>{label}</Text>
     </TouchableOpacity>
   );
 
+  // 2. The Scrollable Header
   const renderHeader = () => (
-    <Animated.View
-      style={[containerStyle, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
-    >
-      {/* HERO CARD */}
+    <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+      {/* Page Title */}
+      <View style={{ marginBottom: 24 }}>
+        <ScreenHeader
+          title="Expenses"
+          subtitle="Track your daily spending"
+          showScrollHint={false}
+          useSafeAreaPadding={false}
+        />
+      </View>
+
+      {/* Hero Stats Card */}
       <View style={styles.heroCard}>
-        <View style={styles.heroHeader}>
+        <View style={styles.heroTopRow}>
           <View>
-            <Text style={styles.heroLabel}>Total Outflow</Text>
+            <Text style={styles.heroLabel}>Total Spent</Text>
             <Text style={styles.heroValue}>₹{summary.total.toLocaleString('en-IN')}</Text>
           </View>
-          <View style={styles.iconCircle}>
+          <View style={styles.heroIcon}>
             <MaterialIcon name="arrow-outward" size={24} color={colors.accentRed} />
           </View>
         </View>
@@ -151,97 +169,80 @@ const CashOutList = () => {
         <View style={styles.divider} />
 
         <View style={styles.statsRow}>
-          <View style={styles.statItem}>
+          <View style={styles.statCol}>
             <Text style={styles.statLabel}>Entries</Text>
-            <Text style={styles.statValue}>{summary.count}</Text>
+            <Text style={styles.statNum}>{summary.count}</Text>
           </View>
-          <View style={styles.statItem}>
-            <Text style={styles.statLabel}>Avg Spend</Text>
-            <Text style={styles.statValue}>₹{summary.avg.toFixed(0)}</Text>
+          <View style={styles.verticalDivider} />
+          <View style={styles.statCol}>
+            <Text style={styles.statLabel}>Average</Text>
+            <Text style={styles.statNum}>₹{summary.avg.toFixed(0)}</Text>
           </View>
-          <View style={[styles.statItem, { flex: 1.5 }]}>
+          <View style={styles.verticalDivider} />
+          <View style={[styles.statCol, { flex: 1.5 }]}>
             <Text style={styles.statLabel}>Top Category</Text>
-            <Text style={styles.statValue} numberOfLines={1}>
+            <Text style={styles.statNum} numberOfLines={1}>
               {summary.topCategory || '-'}
             </Text>
           </View>
         </View>
       </View>
 
-      {/* FILTERS ROW */}
-      <View style={styles.filterContainer}>
-        <MaterialIcon
-          name="filter-list"
-          size={20}
-          color={colors.muted}
-          style={{ marginRight: 8 }}
-        />
+      {/* Filters Section */}
+      <View style={styles.filterSection}>
         <FlatList
           horizontal
           showsHorizontalScrollIndicator={false}
           data={[...TIME_FILTERS, ...SORT_OPTIONS]}
           keyExtractor={(item) => item.label}
           renderItem={({ item }) => {
-            // Check if this specific filter is active in either category
             const isActive = item.value === timeFilter || item.value === sortMode;
-
+            const isSort = ['recent', 'amount'].includes(item.value);
             return (
               <FilterPill
                 label={item.label}
                 active={isActive}
                 onPress={() => {
-                  // Determine which state to update based on value type
-                  if (['all', '7d', '30d'].includes(item.value)) {
-                    setTimeFilter(item.value as EntryTimeframe);
-                  } else {
-                    setSortMode(item.value as EntrySortMode);
-                  }
+                  if (isSort) setSortMode(item.value as EntrySortMode);
+                  else setTimeFilter(item.value as EntryTimeframe);
                 }}
               />
             );
           }}
-          contentContainerStyle={{ gap: 8, paddingRight: 20 }}
+          contentContainerStyle={{ gap: 8, paddingBottom: 4 }}
         />
       </View>
+
+      {/* Section Label */}
+      <Text style={styles.listSectionTitle}>Spending History</Text>
     </Animated.View>
   );
 
-  const emptyComponent = !showLoading ? (
-    <View style={styles.emptyState}>
-      <View style={styles.emptyIcon}>
-        <MaterialIcon name="money-off" size={40} color={colors.muted} />
+  // 3. Empty State
+  const renderEmpty = () =>
+    !showLoading ? (
+      <View style={styles.emptyContainer}>
+        <View style={styles.emptyIconCircle}>
+          <MaterialIcon name="money-off" size={40} color={colors.muted} />
+        </View>
+        <Text style={styles.emptyTitle}>No Expenses Found</Text>
+        <Text style={styles.emptyText}>Any money you spend will be listed here.</Text>
+        <Button
+          title="Add Expense"
+          onPress={() => navigation.navigate('AddEntry', { type: 'out' })}
+          buttonStyle={styles.addBtn}
+          containerStyle={{ marginTop: 24, width: '100%', maxWidth: 200 }}
+        />
       </View>
-      <Text style={styles.emptyTitle}>No Expenses Found</Text>
-      <Text style={styles.emptyDesc}>You haven't logged any cash outflows for this period.</Text>
-      <Button
-        title="Log Expense"
-        onPress={() => navigation.navigate('AddEntry', { type: 'out' })}
-        buttonStyle={styles.addBtn}
-        titleStyle={{ fontWeight: '700' }}
-        containerStyle={{ marginTop: 20, width: 200 }}
-      />
-    </View>
-  ) : null;
+    ) : null;
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-      <View style={[containerStyle, { paddingHorizontal: isTablet ? 0 : 20 }]}>
-        <ScreenHeader title="Expenses" subtitle="Track your cash outflow" showScrollHint={false} />
-      </View>
 
       <FlatList
         data={entryView.sortedEntries}
         keyExtractor={(item) => item.local_id}
-        contentContainerStyle={[
-          styles.listContent,
-          { maxWidth: maxContentWidth, alignSelf: 'center', width: '100%' },
-        ]}
-        showsVerticalScrollIndicator={false}
-        ListHeaderComponent={renderHeader}
-        ListEmptyComponent={emptyComponent}
-        initialNumToRender={10}
-        maxToRenderPerBatch={10}
         renderItem={({ item }) => (
           <TransactionCard
             item={item}
@@ -249,125 +250,151 @@ const CashOutList = () => {
             onDelete={() => handleDelete(item.local_id)}
           />
         )}
+        // Layout
+        contentContainerStyle={contentContainerStyle}
+        showsVerticalScrollIndicator={false}
+        // Components
+        ListHeaderComponent={renderHeader}
+        ListEmptyComponent={renderEmpty}
+        // Performance
+        initialNumToRender={8}
+        maxToRenderPerBatch={10}
+        windowSize={10}
+        removeClippedSubviews={Platform.OS === 'android'}
       />
+
       <FullScreenSpinner visible={showLoading} />
-    </SafeAreaView>
+    </View>
   );
 };
 
 export default CashOutList;
 
 const styles = StyleSheet.create({
-  safe: {
+  root: {
     flex: 1,
     backgroundColor: colors.background,
   },
-  listContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 100,
-  },
 
-  /* HERO CARD */
+  /* HEADER AREA */
   heroCard: {
     backgroundColor: colors.card,
-    borderRadius: 20,
+    borderRadius: 24,
     padding: 20,
-    marginBottom: 20,
+    marginBottom: 24,
+    // Soft Red Shadow
+    shadowColor: colors.accentRed,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 4,
     borderWidth: 1,
-    borderColor: colors.border,
-    shadowColor: colors.text,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 3,
+    borderColor: 'rgba(239, 68, 68, 0.1)', // Subtle red border
   },
-  heroHeader: {
+  heroTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
   },
   heroLabel: {
-    fontSize: 13,
+    fontSize: 14,
     color: colors.muted,
+    fontWeight: '600',
+    marginBottom: 6,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    fontWeight: '600',
-    marginBottom: 4,
   },
   heroValue: {
-    fontSize: 32,
+    fontSize: 34,
     fontWeight: '800',
-    color: colors.accentRed, // Red for outflow
+    color: colors.text, // Kept dark for readability, icon provides color context
+    letterSpacing: -1,
   },
-  iconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: 'rgba(239, 68, 68, 0.1)', // Light red
+  heroIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   divider: {
     height: 1,
     backgroundColor: colors.border,
-    marginVertical: 16,
+    marginVertical: 18,
+    opacity: 0.6,
   },
   statsRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
   },
-  statItem: {
+  statCol: {
     flex: 1,
+  },
+  verticalDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: colors.border,
+    marginHorizontal: 12,
   },
   statLabel: {
     fontSize: 12,
     color: colors.muted,
     marginBottom: 4,
   },
-  statValue: {
+  statNum: {
     fontSize: 15,
     fontWeight: '700',
     color: colors.text,
   },
 
   /* FILTERS */
-  filterContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
+  filterSection: {
+    marginBottom: 24,
   },
   pill: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 20,
-    backgroundColor: colors.card,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 100,
+    backgroundColor: colors.surfaceMuted,
     borderWidth: 1,
     borderColor: colors.border,
-    marginRight: 8,
+    marginRight: 10,
   },
   pillActive: {
-    backgroundColor: colors.text,
+    backgroundColor: colors.text, // Dark active state for Expenses
     borderColor: colors.text,
   },
   pillText: {
     fontSize: 13,
     fontWeight: '600',
-    color: colors.text,
+    color: colors.muted,
   },
   pillTextActive: {
     color: colors.background,
   },
 
-  /* EMPTY STATE */
-  emptyState: {
-    alignItems: 'center',
-    marginTop: 40,
-    padding: 20,
+  /* LIST HEADERS */
+  listSectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 16,
+    marginLeft: 4,
   },
-  emptyIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+
+  /* EMPTY STATE */
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 60,
+    paddingHorizontal: 30,
+  },
+  emptyIconCircle: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
     backgroundColor: colors.surfaceMuted,
     alignItems: 'center',
     justifyContent: 'center',
@@ -379,15 +406,15 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginBottom: 8,
   },
-  emptyDesc: {
+  emptyText: {
     fontSize: 14,
     color: colors.muted,
     textAlign: 'center',
-    maxWidth: 250,
+    lineHeight: 20,
   },
   addBtn: {
     backgroundColor: colors.accentRed,
-    borderRadius: 12,
-    paddingVertical: 12,
+    borderRadius: 14,
+    paddingVertical: 14,
   },
 });

@@ -10,6 +10,7 @@ import {
 import { subscribeEntries } from '../utils/dbEvents';
 import { getSession, saveSession } from '../db/session';
 import { ensureCategory, DEFAULT_CATEGORY } from '../constants/categories';
+import { syncBothWays } from '../services/syncManager';
 
 /* ----------------------------------------------------------
    Helpers
@@ -61,6 +62,26 @@ const makeOptimisticEntry = (entry: any, sid: string) => {
 ---------------------------------------------------------- */
 export const useEntries = (userId?: string | null) => {
   const queryClient = useQueryClient();
+
+  const syncKickRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const requestSync = React.useCallback(() => {
+    try {
+      if (syncKickRef.current) clearTimeout(syncKickRef.current);
+      syncKickRef.current = setTimeout(() => {
+        syncKickRef.current = null;
+        syncBothWays().catch((err) => {
+          console.warn('Background sync after mutation failed', err);
+        });
+      }, 400);
+    } catch (e) {}
+  }, [syncBothWays]);
+
+  React.useEffect(() => {
+    return () => {
+      if (syncKickRef.current) clearTimeout(syncKickRef.current);
+    };
+  }, []);
 
   /* ---------------------- Fetch entries ---------------------- */
   const {
@@ -139,6 +160,7 @@ export const useEntries = (userId?: string | null) => {
     onSettled: async () => {
       const sid = await resolveUserId(userId);
       queryClient.invalidateQueries({ queryKey: ['entries', sid] });
+      requestSync();
     },
   });
 
@@ -200,6 +222,7 @@ export const useEntries = (userId?: string | null) => {
     onSettled: async () => {
       const sid = await resolveUserId(userId);
       queryClient.invalidateQueries({ queryKey: ['entries', sid] });
+      requestSync();
     },
   });
 
@@ -235,6 +258,7 @@ export const useEntries = (userId?: string | null) => {
     onSettled: async () => {
       const sid = await resolveUserId(userId);
       queryClient.invalidateQueries({ queryKey: ['entries', sid] });
+      requestSync();
     },
   });
 

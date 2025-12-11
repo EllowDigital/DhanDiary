@@ -8,42 +8,75 @@ import {
   Text,
   Animated,
   Easing,
+  Platform,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import { getSession } from '../db/session';
-import { colors, shadows, spacing } from '../utils/design';
+import { colors, shadows } from '../utils/design';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type SplashNavProp = NativeStackNavigationProp<RootStackParamList, 'Splash'>;
 
-const MIN_SPLASH_TIME_MS = 1500; // Gave it a bit more time to breathe
+const MIN_SPLASH_TIME_MS = 2000; // Increased slightly for animation enjoyment
 const MAX_SPLASH_WAIT_MS = 8000;
 
 const SplashScreen = () => {
   const navigation = useNavigation<SplashNavProp>();
   const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets(); // CRITICAL: Handles Android Gestures/Notches
 
-  // --- ANIMATION REFS (Standard RN Animated) ---
+  // --- ANIMATION VALUES ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.85)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
+  const scaleAnim = useRef(new Animated.Value(0.8)).current;
+  const slideAnim = useRef(new Animated.Value(50)).current;
+  const textSlideAnim = useRef(new Animated.Value(20)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
 
+  // Background "Breathing" Animation
+  const orbPulse = useRef(new Animated.Value(1)).current;
+  const orbTranslate = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
-    // 1. Entrance Animation
+    // 1. Background Ambient Animation (Loops forever)
+    Animated.loop(
+      Animated.parallel([
+        Animated.sequence([
+          Animated.timing(orbPulse, { toValue: 1.2, duration: 4000, useNativeDriver: true }),
+          Animated.timing(orbPulse, { toValue: 1, duration: 4000, useNativeDriver: true }),
+        ]),
+        Animated.sequence([
+          Animated.timing(orbTranslate, {
+            toValue: 15,
+            duration: 5000,
+            easing: Easing.sin,
+            useNativeDriver: true,
+          }),
+          Animated.timing(orbTranslate, {
+            toValue: 0,
+            duration: 5000,
+            easing: Easing.sin,
+            useNativeDriver: true,
+          }),
+        ]),
+      ])
+    ).start();
+
+    // 2. Entrance Sequence
     Animated.parallel([
+      // Logo Entrance
       Animated.timing(fadeAnim, {
         toValue: 1,
         duration: 800,
         useNativeDriver: true,
-        easing: Easing.out(Easing.cubic),
+        easing: Easing.out(Easing.quad),
       }),
       Animated.spring(scaleAnim, {
         toValue: 1,
-        friction: 6,
+        friction: 7,
         tension: 40,
         useNativeDriver: true,
       }),
@@ -51,16 +84,26 @@ const SplashScreen = () => {
         toValue: 0,
         duration: 800,
         useNativeDriver: true,
-        easing: Easing.out(Easing.cubic),
+        easing: Easing.out(Easing.back(1.5)),
       }),
+      // Text Staggered Entrance (slightly delayed)
+      Animated.sequence([
+        Animated.delay(300),
+        Animated.spring(textSlideAnim, {
+          toValue: 0,
+          friction: 8,
+          useNativeDriver: true,
+        }),
+      ]),
+      // Progress Bar
       Animated.timing(progressAnim, {
         toValue: 1,
-        duration: 1500,
-        useNativeDriver: false, // Width doesn't support native driver
+        duration: 1800,
+        useNativeDriver: false,
       }),
     ]).start();
 
-    // 2. Navigation Logic
+    // 3. Logic & Navigation
     const startedAt = Date.now();
     let hasNavigated = false;
     const timeoutIds: Array<ReturnType<typeof setTimeout>> = [];
@@ -68,12 +111,12 @@ const SplashScreen = () => {
     const runNavigation = (route: 'Auth' | 'Main') => {
       if (!hasNavigated) {
         hasNavigated = true;
-        // Smooth fade out before replacing
-        Animated.timing(fadeAnim, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: true,
-        }).start(() => {
+
+        // Exit Animation
+        Animated.parallel([
+          Animated.timing(fadeAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
+          Animated.timing(scaleAnim, { toValue: 1.1, duration: 300, useNativeDriver: true }),
+        ]).start(() => {
           navigation.replace(route);
         });
       }
@@ -96,8 +139,6 @@ const SplashScreen = () => {
     };
 
     checkSessionAndNavigate();
-
-    // Safety fallback
     timeoutIds.push(setTimeout(() => runNavigation('Auth'), MAX_SPLASH_WAIT_MS));
 
     return () => timeoutIds.forEach(clearTimeout);
@@ -108,43 +149,80 @@ const SplashScreen = () => {
     outputRange: ['0%', '100%'],
   });
 
+  // Dynamic Sizing based on screen width
+  const logoSize = Math.min(width * 0.35, 150); // 35% of width, max 150px
+  const footerBottom = Math.max(insets.bottom + 20, 30); // Dynamic bottom padding
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
-      {/* BACKGROUND */}
+      {/* BACKGROUND SVG */}
       <Svg style={StyleSheet.absoluteFill}>
         <Defs>
           <LinearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
             <Stop offset="0%" stopColor={colors.background} stopOpacity={1} />
-            <Stop offset="100%" stopColor="#F0F4FF" stopOpacity={1} />
+            <Stop offset="100%" stopColor="#Eef2ff" stopOpacity={1} />
           </LinearGradient>
         </Defs>
         <Rect width="100%" height="100%" fill="url(#bg)" />
       </Svg>
 
-      {/* DECORATIVE ORBS */}
-      <View
-        style={[styles.orb, { top: -100, right: -50, backgroundColor: `${colors.primary}10` }]}
+      {/* ANIMATED BACKGROUND ORBS */}
+      <Animated.View
+        style={[
+          styles.orb,
+          {
+            top: -height * 0.1,
+            right: -width * 0.1,
+            backgroundColor: `${colors.primary}15`,
+            transform: [{ scale: orbPulse }, { translateY: orbTranslate }],
+          },
+        ]}
       />
-      <View
-        style={[styles.orb, { bottom: -100, left: -50, backgroundColor: `${colors.secondary}10` }]}
+      <Animated.View
+        style={[
+          styles.orb,
+          {
+            bottom: -height * 0.1,
+            left: -width * 0.1,
+            backgroundColor: `${colors.secondary}15`,
+            transform: [{ scale: orbPulse }, { translateY: Animated.multiply(orbTranslate, -1) }],
+          },
+        ]}
       />
 
+      {/* MAIN CONTENT CENTER */}
       <View style={styles.centerContent}>
         {/* LOGO */}
         <Animated.View
           style={[
             styles.logoWrapper,
-            { opacity: fadeAnim, transform: [{ scale: scaleAnim }, { translateY: slideAnim }] },
+            {
+              width: logoSize,
+              height: logoSize,
+              borderRadius: logoSize * 0.25,
+              opacity: fadeAnim,
+              transform: [{ scale: scaleAnim }, { translateY: slideAnim }],
+            },
           ]}
         >
-          <Image source={require('../../assets/icon.png')} style={styles.logo} resizeMode="cover" />
+          <Image
+            source={require('../../assets/splash-icon.png')}
+            style={[styles.logo, { borderRadius: logoSize * 0.25 }]}
+            resizeMode="cover"
+          />
         </Animated.View>
 
-        {/* TEXT */}
-        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-          <Text style={styles.appName}>DhanDiary</Text>
+        {/* APP NAME & TAGLINE */}
+        <Animated.View
+          style={{
+            opacity: fadeAnim,
+            transform: [{ translateY: textSlideAnim }],
+            alignItems: 'center',
+          }}
+        >
+          <Text style={[styles.appName, { fontSize: Math.min(width * 0.1, 40) }]}>DhanDiary</Text>
           <Text style={styles.tagline}>Intelligent Finance Tracker</Text>
         </Animated.View>
 
@@ -154,11 +232,19 @@ const SplashScreen = () => {
         </View>
       </View>
 
-      {/* FOOTER BADGES */}
-      <Animated.View style={[styles.footer, { opacity: fadeAnim }]}>
+      {/* FOOTER BADGES - Safe Area Aware */}
+      <Animated.View
+        style={[
+          styles.footer,
+          {
+            opacity: fadeAnim,
+            bottom: footerBottom,
+          },
+        ]}
+      >
         <View style={styles.badgeRow}>
           <View style={styles.badge}>
-            <MaterialIcon name="bolt" size={16} color={colors.accentOrange} />
+            <MaterialIcon name="bolt" size={16} color={colors.accentOrange || '#F59E0B'} />
             <Text style={styles.badgeText}>Instant Sync</Text>
           </View>
           <View style={styles.divider} />
@@ -184,40 +270,44 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.background,
+    overflow: 'hidden', // Ensures orbs don't cause scrollbars
   },
   centerContent: {
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 10,
+    width: '100%',
+    paddingHorizontal: 20,
   },
 
   /* LOGO */
   logoWrapper: {
-    marginBottom: 24,
+    marginBottom: 30,
+    backgroundColor: 'white',
     shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.2,
-    shadowRadius: 20,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 15 },
+    shadowOpacity: 0.25,
+    shadowRadius: 30,
+    elevation: 12, // High elevation for Android depth
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   logo: {
-    width: 120,
-    height: 120,
-    borderRadius: 30,
-    backgroundColor: 'white',
+    width: '100%',
+    height: '100%',
   },
 
   /* TYPOGRAPHY */
   appName: {
-    fontSize: 40,
     fontWeight: '800',
     color: colors.text,
     textAlign: 'center',
     letterSpacing: -1,
+    includeFontPadding: false, // Fix vertical alignment on Android
   },
   tagline: {
     fontSize: 16,
-    color: colors.muted,
+    color: colors.muted || '#666',
     marginTop: 8,
     textAlign: 'center',
     fontWeight: '500',
@@ -226,11 +316,12 @@ const styles = StyleSheet.create({
 
   /* PROGRESS */
   progressTrack: {
-    width: 180,
+    width: '50%', // Responsive width
+    maxWidth: 200,
     height: 4,
     borderRadius: 2,
-    marginTop: 40,
-    backgroundColor: 'rgba(0,0,0,0.05)',
+    marginTop: 45,
+    backgroundColor: 'rgba(0,0,0,0.06)',
     overflow: 'hidden',
   },
   progressFill: {
@@ -242,29 +333,37 @@ const styles = StyleSheet.create({
   /* DECORATION */
   orb: {
     position: 'absolute',
-    width: 300,
-    height: 300,
-    borderRadius: 150,
+    width: 350,
+    height: 350,
+    borderRadius: 175,
   },
 
   /* FOOTER */
   footer: {
     position: 'absolute',
-    bottom: 40,
     alignItems: 'center',
     width: '100%',
+    paddingHorizontal: 20,
   },
   badgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'white',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 20,
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.9)', // Slight glass effect
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 30,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
-    ...shadows.small,
+    borderColor: 'rgba(255,255,255,1)',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 4,
   },
   badge: {
     flexDirection: 'row',
@@ -279,12 +378,13 @@ const styles = StyleSheet.create({
   divider: {
     width: 1,
     height: 14,
-    backgroundColor: colors.border,
-    marginHorizontal: 12,
+    backgroundColor: colors.border || '#E5E7EB',
+    marginHorizontal: 16,
   },
   powered: {
-    fontSize: 13,
-    color: colors.muted,
+    fontSize: 12,
+    color: colors.muted || '#888',
+    opacity: 0.8,
   },
   brand: {
     fontWeight: '700',

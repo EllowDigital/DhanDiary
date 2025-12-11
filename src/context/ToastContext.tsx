@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext } from 'react';
+import React, { createContext, useState, useContext, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 
 const ToastContext = createContext({ showToast: (msg: string) => {} });
@@ -8,13 +8,15 @@ export const useToast = () => useContext(ToastContext);
 export const ToastProvider = ({ children }: { children: React.ReactNode }) => {
   const [message, setMessage] = useState<string | null>(null);
 
-  const showToast = (msg: string) => {
+  const showToast = useCallback((msg: string) => {
     setMessage(msg);
     setTimeout(() => setMessage(null), 3000);
-  };
+  }, []);
+
+  const contextValue = useMemo(() => ({ showToast }), [showToast]);
 
   return (
-    <ToastContext.Provider value={{ showToast }}>
+    <ToastContext.Provider value={contextValue}>
       {children}
       {message && (
         <View style={styles.toast}>

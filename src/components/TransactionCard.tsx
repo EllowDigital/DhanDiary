@@ -6,6 +6,7 @@ import {
   Animated,
   Dimensions,
   Text as RNText,
+  ViewStyle,
 } from 'react-native';
 import { Text } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
@@ -23,9 +24,17 @@ type Props = {
   item: any;
   onEdit?: (item: any) => void;
   onDelete?: (local_id: string) => void;
+  enableSwipe?: boolean;
+  compact?: boolean;
 };
 
-const TransactionCardInner: React.FC<Props> = ({ item, onEdit, onDelete }) => {
+const TransactionCardInner: React.FC<Props> = ({
+  item,
+  onEdit,
+  onDelete,
+  enableSwipe = true,
+  compact = false,
+}) => {
   const anim = useRef(new Animated.Value(0.9)).current;
 
   useEffect(() => {
@@ -36,27 +45,103 @@ const TransactionCardInner: React.FC<Props> = ({ item, onEdit, onDelete }) => {
     }).start();
   }, []);
 
-  // LEFT ACTION (Edit)
-  const renderLeftActions = () => (
-    <RectButton
-      style={[styles.swipeAction, { backgroundColor: '#1E88E5' }]}
-      onPress={() => onEdit?.(item)}
-    >
-      <MaterialIcon name="edit" size={24} color="#fff" />
-      <RNText style={styles.swipeText}>Edit</RNText>
-    </RectButton>
+  const hasSwipeActions = Boolean(onEdit || onDelete);
+  const shouldSwipe = enableSwipe && hasSwipeActions;
+
+  const renderLeftActions = () =>
+    onEdit ? (
+      <RectButton
+        style={[styles.swipeAction, { backgroundColor: '#1E88E5' }]}
+        onPress={() => onEdit?.(item)}
+      >
+        <MaterialIcon name="edit" size={24} color="#fff" />
+        <RNText style={styles.swipeText}>Edit</RNText>
+      </RectButton>
+    ) : null;
+
+  const renderRightActions = () =>
+    onDelete ? (
+      <RectButton
+        style={[styles.swipeAction, { backgroundColor: '#D32F2F' }]}
+        onPress={() => onDelete?.(item.local_id)}
+      >
+        <MaterialIcon name="delete" size={24} color="#fff" />
+        <RNText style={styles.swipeText}>Delete</RNText>
+      </RectButton>
+    ) : null;
+
+  const cardStyles: ViewStyle[] = [styles.card];
+  if (compact) cardStyles.push(styles.cardCompact);
+
+  const cardContent = (
+    <Animated.View style={{ transform: [{ scale: anim }] }}>
+      <AppCard style={cardStyles}>
+        <View style={styles.row}>
+          {/* ICON */}
+          <View
+            style={[
+              styles.iconContainer,
+              { backgroundColor: item.type === 'in' ? '#E8F5E9' : '#FDECEA' },
+            ]}
+          >
+            <MaterialIcon
+              name={item.type === 'in' ? 'arrow-downward' : 'arrow-upward'}
+              size={26}
+              color={item.type === 'in' ? '#2E7D32' : '#C62828'}
+            />
+          </View>
+
+          {/* MAIN CONTENT */}
+          <View style={styles.middleContent}>
+            <Text style={styles.categoryText}>{ensureCategory(item.category)}</Text>
+            <Text style={styles.noteText}>{item.note || 'No description'}</Text>
+          </View>
+
+          {/* RIGHT SIDE */}
+          <View style={styles.rightSide}>
+            <Text
+              style={[
+                styles.amountText,
+                {
+                  color: item.type === 'in' ? '#2E7D32' : '#C62828',
+                },
+              ]}
+            >
+              {item.type === 'in' ? '+' : '-'}₹{Number(item.amount).toFixed(2)}
+            </Text>
+
+            <RNText style={styles.dateText}>
+              {(() => {
+                const d = dayjs(item.date || item.created_at);
+                return d.isValid() ? d.format('DD MMM YYYY') : '—';
+              })()}
+            </RNText>
+
+            {/* ACTION ICONS: Only show if handlers are provided */}
+            {(onEdit || onDelete) && (
+              <View style={styles.actionsRow}>
+                {onEdit && (
+                  <TouchableOpacity onPress={() => onEdit(item)} style={styles.iconButton}>
+                    <MaterialIcon name="edit" size={18} color="#444" />
+                  </TouchableOpacity>
+                )}
+                {onDelete && (
+                  <TouchableOpacity
+                    onPress={() => onDelete(item.local_id)}
+                    style={[styles.iconButton, { marginLeft: 12 }]}
+                  >
+                    <MaterialIcon name="delete" size={18} color="#D32F2F" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+          </View>
+        </View>
+      </AppCard>
+    </Animated.View>
   );
 
-  // RIGHT ACTION (Delete)
-  const renderRightActions = () => (
-    <RectButton
-      style={[styles.swipeAction, { backgroundColor: '#D32F2F' }]}
-      onPress={() => onDelete?.(item.local_id)}
-    >
-      <MaterialIcon name="delete" size={24} color="#fff" />
-      <RNText style={styles.swipeText}>Delete</RNText>
-    </RectButton>
-  );
+  if (!shouldSwipe) return cardContent;
 
   return (
     <Swipeable
@@ -64,72 +149,9 @@ const TransactionCardInner: React.FC<Props> = ({ item, onEdit, onDelete }) => {
       overshootRight={false}
       renderLeftActions={renderLeftActions}
       renderRightActions={renderRightActions}
+      enabled={shouldSwipe}
     >
-      <Animated.View style={{ transform: [{ scale: anim }] }}>
-        <AppCard style={styles.card}>
-          <View style={styles.row}>
-            {/* ICON */}
-            <View
-              style={[
-                styles.iconContainer,
-                { backgroundColor: item.type === 'in' ? '#E8F5E9' : '#FDECEA' },
-              ]}
-            >
-              <MaterialIcon
-                name={item.type === 'in' ? 'arrow-downward' : 'arrow-upward'}
-                size={26}
-                color={item.type === 'in' ? '#2E7D32' : '#C62828'}
-              />
-            </View>
-
-            {/* MAIN CONTENT */}
-            <View style={styles.middleContent}>
-              <Text style={styles.categoryText}>{ensureCategory(item.category)}</Text>
-              <Text style={styles.noteText}>{item.note || 'No description'}</Text>
-            </View>
-
-            {/* RIGHT SIDE */}
-            <View style={styles.rightSide}>
-              <Text
-                style={[
-                  styles.amountText,
-                  {
-                    color: item.type === 'in' ? '#2E7D32' : '#C62828',
-                  },
-                ]}
-              >
-                {item.type === 'in' ? '+' : '-'}₹{Number(item.amount).toFixed(2)}
-              </Text>
-
-              <RNText style={styles.dateText}>
-                {(() => {
-                  const d = dayjs(item.date || item.created_at);
-                  return d.isValid() ? d.format('DD MMM YYYY') : '—';
-                })()}
-              </RNText>
-
-              {/* ACTION ICONS: Only show if handlers are provided */}
-              {(onEdit || onDelete) && (
-                <View style={styles.actionsRow}>
-                  {onEdit && (
-                    <TouchableOpacity onPress={() => onEdit(item)} style={styles.iconButton}>
-                      <MaterialIcon name="edit" size={18} color="#444" />
-                    </TouchableOpacity>
-                  )}
-                  {onDelete && (
-                    <TouchableOpacity
-                      onPress={() => onDelete(item.local_id)}
-                      style={[styles.iconButton, { marginLeft: 12 }]}
-                    >
-                      <MaterialIcon name="delete" size={18} color="#D32F2F" />
-                    </TouchableOpacity>
-                  )}
-                </View>
-              )}
-            </View>
-          </View>
-        </AppCard>
-      </Animated.View>
+      {cardContent}
     </Swipeable>
   );
 };
@@ -145,7 +167,12 @@ const TransactionCard = React.memo(TransactionCardInner, (prev, next) => {
     }
   } catch (e) {}
   // assume handlers stable (caller should memoize) — otherwise re-render
-  return prev.onEdit === next.onEdit && prev.onDelete === next.onDelete;
+  return (
+    prev.onEdit === next.onEdit &&
+    prev.onDelete === next.onDelete &&
+    prev.enableSwipe === next.enableSwipe &&
+    prev.compact === next.compact
+  );
 });
 
 export default TransactionCard;
@@ -165,6 +192,9 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
     elevation: 3,
+  },
+  cardCompact: {
+    marginHorizontal: 0,
   },
 
   row: {

@@ -15,6 +15,7 @@ export type ScreenHeaderProps = {
   scrollHintThreshold?: number;
   onDismissScrollHint?: () => void;
   style?: StyleProp<ViewStyle>;
+  useSafeAreaPadding?: boolean;
 };
 
 const ScreenHeader: React.FC<ScreenHeaderProps> = ({
@@ -26,6 +27,7 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
   scrollHintThreshold = spacing(4),
   onDismissScrollHint,
   style,
+  useSafeAreaPadding = true,
 }) => {
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
@@ -64,9 +66,11 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
     onDismissScrollHint?.();
   };
 
+  const topPadding = (useSafeAreaPadding ? insets.top : 0) + spacing(1);
+
   return (
     <View
-      style={[styles.wrapper, { paddingTop: insets.top + spacing(1) }, style]}
+      style={[styles.wrapper, { paddingTop: topPadding }, style]}
       accessibilityRole="header"
       accessibilityLabel={`${title} header`}
     >

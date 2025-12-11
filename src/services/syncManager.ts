@@ -23,10 +23,23 @@ import {
   upsertLocalFromRemote,
   markLocalDeletedByRemoteId,
   markEntrySynced,
+  deleteLocalEntry,
 } from '../db/entries';
 import { query } from '../api/neonClient';
 import vexoService from './vexo';
 const Q = (sql: string, params: any[] = []) => query(sql, params, { retries: 2, timeoutMs: 15000 });
+type SyncConflictEvent = {
+  localId?: string;
+  remoteId?: string;
+  amount?: number;
+  category?: string;
+  message?: string;
+};
+
+type SyncConflictListener = (event: SyncConflictEvent) => void;
+
+const conflictListeners = new Set<SyncConflictListener>();
+
 let _unsubscribe: (() => void) | null = null;
 let _foregroundTimer: any = null;
 let _backgroundFetchInstance: any = null;
@@ -47,6 +60,23 @@ const safeQ = async (sql: string, params: any[] = []) => {
     } catch (e) {}
     throw err;
   }
+};
+
+export const subscribeSyncConflicts = (listener: SyncConflictListener) => {
+  conflictListeners.add(listener);
+  return () => {
+    conflictListeners.delete(listener);
+  };
+};
+
+const emitSyncConflict = (event: SyncConflictEvent) => {
+  conflictListeners.forEach((listener) => {
+    try {
+      listener(event);
+    } catch (err) {
+      console.warn('sync conflict listener failed', err);
+    }
+  });
 };
 
 // Run a callback inside a remote transaction. Rolls back on error.
@@ -81,52 +111,58 @@ export const syncPending = async () => {
   let deleted = 0;
 
   // Partition pending rows into deletions, inserts, updates
-  const deletions = pending
-    .filter((e) => e.is_deleted && e.remote_id)
-    .map((e) => String(e.remote_id));
-  const toMarkLocalDeletedOnly = pending.filter((e) => e.is_deleted && !e.remote_id);
+  const remoteDeletionEntries = pending.filter((e) => e.is_deleted && e.remote_id);
+  const localOnlyDeletions = pending.filter((e) => e.is_deleted && !e.remote_id);
   const inserts = pending.filter((e) => !e.remote_id && !e.is_deleted);
   const updates = pending.filter((e) => e.remote_id && e.need_sync);
 
+  const localsToDelete = new Set<string>();
+
   // Batch deletions (wrapped in transaction to avoid partial deletes)
-  if (deletions.length > 0) {
+  if (remoteDeletionEntries.length > 0) {
+    const remoteIds = remoteDeletionEntries.map((e) => String(e.remote_id));
     try {
       await runRemoteTransaction(async () => {
         // Soft-delete remotely so other devices can observe deletions via the `deleted` flag.
         const delRes = await safeQ(
           'UPDATE cash_entries SET deleted = true, updated_at = NOW(), need_sync = false WHERE id = ANY($1::uuid[]) RETURNING id',
-          [deletions]
+          [remoteIds]
         );
-        deleted += (delRes && delRes.length) || deletions.length;
+        deleted += (delRes && delRes.length) || remoteIds.length;
+        remoteDeletionEntries.forEach((entry) => localsToDelete.add(entry.local_id));
         return delRes;
       });
     } catch (err) {
       console.error('Failed to batch delete remote rows, falling back to per-row', err);
-      for (const rid of deletions) {
+      for (const entry of remoteDeletionEntries) {
         try {
           const res = await safeQ(
             'UPDATE cash_entries SET deleted = true, updated_at = NOW(), need_sync = false WHERE id = $1 RETURNING id',
-            [rid]
+            [entry.remote_id]
           );
           deleted += res && res.length ? res.length : 1;
+          localsToDelete.add(entry.local_id);
         } catch (e) {
-          console.error('Failed to delete remote row', rid, e);
+          console.error('Failed to delete remote row', entry.remote_id, e);
         }
       }
     }
-    // Mark local rows as synced where appropriate
-    for (const d of pending.filter((e) => e.is_deleted)) {
-      try {
-        await markEntrySynced(d.local_id, d.remote_id || undefined);
-      } catch (e) {}
-    }
   }
 
-  // If rows were marked deleted locally but had no remote_id, mark them synced (nothing to delete remotely)
-  for (const d of toMarkLocalDeletedOnly) {
-    try {
-      await markEntrySynced(d.local_id, undefined);
-    } catch (e) {}
+  // Locally created entries that were deleted before sync never hit the server — drop them now.
+  if (localOnlyDeletions.length > 0) {
+    localOnlyDeletions.forEach((entry) => localsToDelete.add(entry.local_id));
+    deleted += localOnlyDeletions.length;
+  }
+
+  if (localsToDelete.size > 0) {
+    for (const localId of localsToDelete) {
+      try {
+        await deleteLocalEntry(localId);
+      } catch (e) {
+        console.error('Failed to purge local entry after delete sync', localId, e);
+      }
+    }
   }
 
   // Batch inserts (wrap in transaction to avoid partial insert state on failure)
@@ -571,6 +607,13 @@ export const pullRemote = async () => {
             }
 
             // Conflict: both remote and local changed. To avoid data loss, push local as a new remote row
+            emitSyncConflict({
+              localId: local.local_id,
+              remoteId: String(r.id),
+              amount: typeof local.amount === 'number' ? Number(local.amount) : undefined,
+              category: local.category,
+              message: 'Detected conflicting edits. Keeping your latest change.',
+            });
             try {
               // Prefer updating the existing remote row (client-wins) instead of creating duplicates.
               const upd = await Q(

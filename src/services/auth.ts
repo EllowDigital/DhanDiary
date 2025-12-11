@@ -1,11 +1,19 @@
 import NetInfo from '@react-native-community/netinfo';
 import { query } from '../api/neonClient';
 import { saveSession, clearSession, getSession } from '../db/session';
-import { addPendingProfileUpdate, clearAllData, init as initDb } from '../db/localDb';
-import { getOfflineDbOwner, setOfflineDbOwner, clearOfflineDbOwner } from '../db/offlineOwner';
+import {
+  addPendingProfileUpdate,
+  clearAllData,
+  init as initDb,
+  wipeLocalDatabase,
+} from '../db/localDb';
+import { getOfflineDbOwner, setOfflineDbOwner } from '../db/offlineOwner';
 import sqlite from '../db/sqlite';
 import bcrypt from 'bcryptjs';
 import Constants from 'expo-constants';
+
+const resolveNeonUrl = () =>
+  (Constants?.expoConfig?.extra as any)?.NEON_URL || process.env.NEON_URL || null;
 
 // Utility: helper to fail fast on slow network operations
 // Increase default timeout to 15s for mobile networks which may be slower.
@@ -23,6 +31,42 @@ export const isOnline = async () => {
   const state = await NetInfo.fetch();
   // isInternetReachable can be null initially, so we check isConnected too
   return state.isConnected;
+};
+
+let neonWarmPromise: Promise<boolean> | null = null;
+let lastNeonWarm = 0;
+const NEON_WARM_CACHE_MS = 60_000;
+
+export const warmNeonConnection = async (opts: { force?: boolean; timeoutMs?: number } = {}) => {
+  const NEON_URL = resolveNeonUrl();
+  if (!NEON_URL) return false;
+  const online = await isOnline();
+  if (!online) return false;
+
+  const now = Date.now();
+  if (!opts.force && now - lastNeonWarm < NEON_WARM_CACHE_MS && !neonWarmPromise) return true;
+
+  if (!neonWarmPromise) {
+    const timeoutMs = opts.timeoutMs ?? 8000;
+    neonWarmPromise = withTimeout(query('SELECT 1'), timeoutMs)
+      .then(() => {
+        lastNeonWarm = Date.now();
+        return true;
+      })
+      .catch((err) => {
+        console.warn('Neon warm-up failed', err?.message || err);
+        return false;
+      })
+      .finally(() => {
+        neonWarmPromise = null;
+      });
+  }
+
+  try {
+    return await neonWarmPromise;
+  } catch (e) {
+    return false;
+  }
 };
 
 const prepareOfflineWorkspace = async (userId: string) => {
@@ -68,7 +112,7 @@ export const registerOnline = async (name: string, email: string, password: stri
   const salt = await bcrypt.genSalt(10);
   const hash = await bcrypt.hash(password, salt);
   // If NEON_URL is not configured, skip remote registration and create a local session for dev/test
-  const NEON_URL = (Constants?.expoConfig?.extra as any)?.NEON_URL || process.env.NEON_URL || null;
+  const NEON_URL = resolveNeonUrl();
   if (!NEON_URL) {
     const { v4: uuidv4 } = require('uuid');
     const id = uuidv4();
@@ -80,6 +124,9 @@ export const registerOnline = async (name: string, email: string, password: stri
   // Attempt remote Neon registration
   const online = await isOnline();
   if (!online) throw new Error('Online required for registration');
+
+  // Prime Neon so the actual registration query isn't blocked by cold starts
+  await warmNeonConnection({ force: true }).catch(() => {});
 
   // Check if user exists
   const existing = await query('SELECT id FROM users WHERE email = $1', [email]);
@@ -106,6 +153,8 @@ export const registerOnline = async (name: string, email: string, password: stri
 export const loginOnline = async (email: string, password: string) => {
   const online = await isOnline();
   if (!online) throw new Error('Online required for login');
+
+  await warmNeonConnection({ force: true }).catch(() => {});
 
   // fail fast on slow responses
   const result = await withTimeout(query('SELECT * FROM users WHERE email = $1', [email]), 20000);
@@ -136,18 +185,12 @@ export const logout = async () => {
     // ignore if syncManager can't be required
   }
 
-  const session = await getSession();
-  if (session?.id) {
-    try {
-      await setOfflineDbOwner(session.id);
-    } catch (e) {}
-  }
-  await clearSession();
+  await wipeLocalDatabase();
 };
 
 export const deleteAccount = async () => {
   // Delete remote user and their entries if NEON_URL is configured
-  const NEON_URL = (Constants?.expoConfig?.extra as any)?.NEON_URL || process.env.NEON_URL || null;
+  const NEON_URL = resolveNeonUrl();
   const session = await getSession();
   if (!session) throw new Error('No session');
   let remoteDeleted = 0;
@@ -178,13 +221,12 @@ export const deleteAccount = async () => {
   }
 
   // Clear local DB
-  await clearAllData();
-  await clearOfflineDbOwner();
+  await wipeLocalDatabase();
   return { remoteDeleted, userDeleted };
 };
 
 export const updateProfile = async (updates: { name?: string; email?: string }) => {
-  const NEON_URL = (Constants?.expoConfig?.extra as any)?.NEON_URL || process.env.NEON_URL || null;
+  const NEON_URL = resolveNeonUrl();
   const session = await getSession();
   if (!session) throw new Error('No session');
 
@@ -246,7 +288,7 @@ export const updateProfile = async (updates: { name?: string; email?: string }) 
 };
 
 export const changePassword = async (currentPassword: string, newPassword: string) => {
-  const NEON_URL = (Constants?.expoConfig?.extra as any)?.NEON_URL || process.env.NEON_URL || null;
+  const NEON_URL = resolveNeonUrl();
   const session = await getSession();
   if (!session) throw new Error('No session');
 

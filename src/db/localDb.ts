@@ -3,6 +3,7 @@ import migrations from './migrations';
 import * as entries from './entries';
 import * as session from './session';
 import * as syncQueue from './syncQueue';
+import { clearOfflineDbOwner } from './offlineOwner';
 
 // Adapter / compatibility layer for existing imports across the codebase.
 // New code should import modules from `src/db/{entries,session,syncQueue}` directly.
@@ -70,7 +71,7 @@ export const clearAllData = async (opts?: { includeSession?: boolean }) => {
   const db = await sqlite.open();
   try {
     if (opts?.includeSession !== false) {
-      await db.run('DELETE FROM local_users');
+      await session.clearSession();
     }
     await db.run('DELETE FROM local_entries');
     await db.run('DELETE FROM pending_profile_updates');
@@ -79,6 +80,20 @@ export const clearAllData = async (opts?: { includeSession?: boolean }) => {
   } catch (e) {
     // ignore partial failures
   }
+};
+
+export const wipeLocalDatabase = async () => {
+  await clearAllData();
+  try {
+    await clearOfflineDbOwner();
+  } catch (e) {}
+  try {
+    await sqlite.close();
+  } catch (e) {}
+  try {
+    await sqlite.deleteDbFile();
+  } catch (e) {}
+  _init = null;
 };
 
 export const isDbOperational = async () => {
@@ -191,4 +206,5 @@ export default {
   queueLocalRemoteMapping,
   flushQueuedLocalRemoteMappings,
   flushFallbackLocalEntries,
+  wipeLocalDatabase,
 };

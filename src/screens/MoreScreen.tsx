@@ -18,6 +18,8 @@ import { useNavigation, NavigationProp } from '@react-navigation/native';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { colors, spacing } from '../utils/design';
 import ScreenHeader from '../components/ScreenHeader';
+import appConfig from '../../app.json';
+const pkg = require('../../package.json');
 
 type RouteName = 'Settings' | 'About' | 'Account' | 'Stats' | string;
 
@@ -25,6 +27,7 @@ const MoreScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp<Record<string, object>>>();
   const [scrollOffset, setScrollOffset] = useState(0);
   const insets = useSafeAreaInsets();
+  const bottomContentPadding = useMemo(() => spacing(10) + insets.bottom + 56, [insets.bottom]);
 
   // --- ANIMATION SETUP ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -124,12 +127,13 @@ const MoreScreen: React.FC = () => {
         subtitle="Menu & Tools"
         scrollOffset={scrollOffset}
         showScrollHint
+        useSafeAreaPadding={false}
       />
 
       <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
         <ScrollView
           style={styles.container}
-          contentContainerStyle={[styles.content, { paddingBottom: 32 + insets.bottom }]}
+          contentContainerStyle={[styles.content, { paddingBottom: bottomContentPadding }]}
           onScroll={handleScroll}
           scrollEventThrottle={16}
           showsVerticalScrollIndicator={false}
@@ -164,7 +168,10 @@ const MoreScreen: React.FC = () => {
             ))}
           </View>
 
-          <Text style={styles.footnote}>DhanDiary v1.0.2 • Made with ❤️</Text>
+          <Text style={styles.footnote}>
+            DhanDiary v{pkg.version} (Build{' '}
+            {appConfig.expo.ios?.buildNumber || appConfig.expo.android?.versionCode}) • Made with ❤️
+          </Text>
         </ScrollView>
       </Animated.View>
     </SafeAreaView>

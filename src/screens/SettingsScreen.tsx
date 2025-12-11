@@ -19,12 +19,14 @@ import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { logout } from '../services/auth';
 import { useAuth } from '../hooks/useAuth';
 import { syncBothWays, getLastSyncTime, getLastSyncCount } from '../services/syncManager';
-import { clearAllData } from '../db/localDb';
+import { wipeLocalDatabase } from '../db/localDb';
 import { useNavigation } from '@react-navigation/native';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '../context/ToastContext';
 import { colors, spacing } from '../utils/design';
 import ScreenHeader from '../components/ScreenHeader';
+import appConfig from '../../app.json';
+const pkg = require('../../package.json');
 
 // Helper: Format Date
 const formatSyncDate = (isoString: string | null) => {
@@ -149,7 +151,8 @@ const SettingsScreen = () => {
           text: 'Yes, Delete Everything',
           style: 'destructive',
           onPress: async () => {
-            await clearAllData();
+            await wipeLocalDatabase();
+            query.clear();
             showToast('App reset complete');
             navigation.getParent()?.replace('Auth');
           },
@@ -165,7 +168,12 @@ const SettingsScreen = () => {
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       <SafeAreaView style={styles.safeArea}>
         <View style={containerStyle}>
-          <ScreenHeader title="Settings" subtitle="Preferences & Security" showScrollHint={false} />
+          <ScreenHeader
+            title="Settings"
+            subtitle="Preferences & Security"
+            showScrollHint={false}
+            useSafeAreaPadding={false}
+          />
         </View>
 
         <ScrollView
@@ -253,7 +261,7 @@ const SettingsScreen = () => {
                 <SettingsRow
                   icon="lock-outline"
                   label="Privacy Policy"
-                  onPress={() => {}}
+                  onPress={() => navigation.navigate('PrivacyPolicy')}
                   lastItem
                 />
               </View>
@@ -298,7 +306,10 @@ const SettingsScreen = () => {
                 <MaterialIcon name="logout" size={20} color={colors.accentRed} />
                 <Text style={styles.logoutText}>Sign Out</Text>
               </TouchableOpacity>
-              <Text style={styles.versionText}>v1.0.2 (Build 45)</Text>
+              <Text style={styles.versionText}>
+                v{pkg.version} (Build{' '}
+                {appConfig.expo.ios?.buildNumber || appConfig.expo.android?.versionCode})
+              </Text>
             </Animated.View>
           </View>
         </ScrollView>

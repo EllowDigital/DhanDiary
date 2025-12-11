@@ -1,34 +1,26 @@
 import React, { useEffect, useMemo, useRef } from 'react';
-import {
-  View,
-  StyleSheet,
-  Alert,
-  TouchableOpacity,
-  Animated,
-  Easing,
-  Image,
-  Platform,
-} from 'react-native';
+import { View, StyleSheet, Alert, TouchableOpacity, Animated, Easing, Image } from 'react-native';
 import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-navigation/drawer';
-import { Text, Button } from '@rneui/themed';
+import { Text } from '@rneui/themed';
 import { CommonActions } from '@react-navigation/native';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Logic & Utils
 import { logout } from '../services/auth';
-import { useAuth } from '../hooks/useAuth';
 import { colors, spacing, shadows } from '../utils/design';
+import appConfig from '../../app.json';
+const pkg = require('../../package.json');
+
+// CHANGED: Using splash-icon.png now
+const brandIcon = require('../../assets/splash-icon.png');
 
 const CustomDrawerContent = (props: DrawerContentComponentProps) => {
-  const { user } = useAuth();
+  const insets = useSafeAreaInsets();
 
   // --- ANIMATIONS ---
-  // Standard Animated API (Crash Proof)
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
-
-  // Create an array of animated values for staggered list items
-  // Assuming max 10 menu items for safety
   const listAnims = useRef([...Array(10)].map(() => new Animated.Value(0))).current;
 
   useEffect(() => {
@@ -60,19 +52,12 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
     Animated.stagger(50, staggerAnimations).start();
   }, []);
 
-  // --- LOGIC ---
-  const initials = useMemo(() => {
-    if (!user?.name) return 'U';
-    return user.name
-      .split(' ')
-      .slice(0, 2)
-      .map((c) => c[0])
-      .join('')
-      .toUpperCase();
-  }, [user?.name]);
+  const versionLabel = useMemo(() => {
+    const build = appConfig.expo.android?.versionCode ?? appConfig.expo.ios?.buildNumber;
+    return build ? `v${pkg.version} (Build ${build})` : `v${pkg.version}`;
+  }, []);
 
   const handleNavigate = (routeName: string) => {
-    // Handling nested navigators if needed
     if (routeName === 'HomeTabs') {
       props.navigation.dispatch(
         CommonActions.navigate({
@@ -83,8 +68,6 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
     } else {
       props.navigation.navigate(routeName);
     }
-    // Optional: Close drawer after tap
-    // props.navigation.closeDrawer();
   };
 
   const handleLogout = () => {
@@ -112,29 +95,28 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   return (
     <DrawerContentScrollView
       {...props}
-      contentContainerStyle={styles.container}
+      contentContainerStyle={[
+        styles.container,
+        {
+          paddingTop: insets.top + spacing(3),
+          paddingBottom: insets.bottom + spacing(4),
+        },
+      ]}
       showsVerticalScrollIndicator={false}
     >
       {/* PROFILE HEADER */}
       <Animated.View
         style={[styles.headerCard, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
       >
-        <View style={styles.userRow}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{initials}</Text>
+        <View style={styles.brandRow}>
+          {/* UPDATED: Wrapper logic changed (no border) */}
+          <View style={styles.brandIconWrap}>
+            <Image source={brandIcon} style={styles.brandIcon} resizeMode="cover" />
           </View>
-          <View style={styles.userInfo}>
-            <Text style={styles.userName} numberOfLines={1}>
-              {user?.name || 'Guest'}
-            </Text>
-            <Text style={styles.userEmail} numberOfLines={1}>
-              {user?.email || 'No email linked'}
-            </Text>
+          <View>
+            <Text style={styles.brandTitle}>DhanDiary</Text>
+            <Text style={styles.brandSubtitle}>Smarter money tracking</Text>
           </View>
-        </View>
-        <View style={styles.planBadge}>
-          <MaterialIcon name="verified" size={14} color={colors.primary} />
-          <Text style={styles.planText}>Standard Plan</Text>
         </View>
       </Animated.View>
 
@@ -152,13 +134,11 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
                 ? options.title
                 : route.name;
 
-          // Skip hidden routes if any
           const flattenedStyle = options.drawerItemStyle
             ? StyleSheet.flatten(options.drawerItemStyle)
             : undefined;
           if (flattenedStyle?.display === 'none') return null;
 
-          // Animation for this item
           const itemAnim = listAnims[index] || new Animated.Value(1);
           const itemTranslate = itemAnim.interpolate({
             inputRange: [0, 1],
@@ -176,7 +156,6 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
                 activeOpacity={0.7}
               >
                 <View style={[styles.iconBox, focused && styles.iconBoxActive]}>
-                  {/* Render Icon if provided in navigation options */}
                   {options.drawerIcon ? (
                     options.drawerIcon({
                       focused,
@@ -210,7 +189,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
           </View>
           <Text style={styles.logoutText}>Sign Out</Text>
         </TouchableOpacity>
-        <Text style={styles.versionText}>v1.0.2</Text>
+        <Text style={styles.versionText}>{versionLabel}</Text>
       </View>
     </DrawerContentScrollView>
   );
@@ -232,58 +211,42 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 16,
     marginBottom: 24,
-    borderWidth: 1,
-    borderColor: colors.border,
     ...shadows.small,
+    // Removed border here too for a cleaner look, optional
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.03)',
   },
-  userRow: {
+  brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    gap: 14,
+    marginBottom: 4, // Reduced margin to make card tighter
   },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    backgroundColor: colors.primarySoft,
+  brandIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 16, // Slightly softer radius
+    backgroundColor: colors.primarySoft || '#eff6ff',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
+    overflow: 'hidden', // Ensures the image respects the radius
+    // CHANGED: Removed borderWidth and borderColor
   },
-  avatarText: {
+  brandIcon: {
+    width: '100%', // Fill the container
+    height: '100%',
+  },
+  brandTitle: {
     fontSize: 20,
-    fontWeight: '700',
-    color: colors.primary,
-  },
-  userInfo: {
-    flex: 1,
-  },
-  userName: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '800',
     color: colors.text,
-    marginBottom: 2,
+    letterSpacing: -0.5,
   },
-  userEmail: {
-    fontSize: 12,
+  brandSubtitle: {
+    fontSize: 13,
     color: colors.muted,
-  },
-  planBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surfaceMuted,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    alignSelf: 'flex-start',
-    gap: 6,
-  },
-  planText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: colors.text,
+    marginTop: 2,
+    fontWeight: '500',
   },
 
   /* MENU */
@@ -298,17 +261,18 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     marginLeft: 8,
     letterSpacing: 0.5,
+    opacity: 0.7,
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
     borderRadius: 14,
     marginBottom: 8,
   },
   menuItemActive: {
-    backgroundColor: colors.primarySoft, // Light blue bg for active
+    backgroundColor: colors.primarySoft || '#eff6ff',
   },
   iconBox: {
     width: 32,
@@ -316,9 +280,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
   },
-  iconBoxActive: {
-    // Optional: distinct styling for active icon container
-  },
+  iconBoxActive: {},
   menuLabel: {
     fontSize: 15,
     fontWeight: '500',
@@ -338,21 +300,20 @@ const styles = StyleSheet.create({
 
   /* FOOTER */
   footer: {
-    marginTop: 20,
-    paddingBottom: 20,
+    marginTop: 16,
+    paddingBottom: 12,
   },
   divider: {
     height: 1,
-    backgroundColor: colors.border,
+    backgroundColor: colors.border || '#f3f4f6',
     marginBottom: 20,
   },
   logoutBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     borderRadius: 14,
-    // backgroundColor: 'rgba(239, 68, 68, 0.05)', // Optional red tint
   },
   logoutIconBox: {
     width: 32,
@@ -368,6 +329,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: colors.muted,
     marginTop: 16,
-    opacity: 0.5,
+    opacity: 0.4,
   },
 });

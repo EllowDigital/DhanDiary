@@ -11,7 +11,7 @@ import MoreScreen from '../screens/MoreScreen';
 // Components
 import AnimatedTabIcon from '../components/AnimatedTabIcon';
 import TabBarButton from '../components/TabBarButton';
-import { colors, shadows } from '../utils/design';
+import { colors } from '../utils/design';
 
 const Tab = createBottomTabNavigator();
 
@@ -19,62 +19,99 @@ const BottomTabNavigator = () => {
   const insets = useSafeAreaInsets();
 
   const screenOptions = useMemo(() => {
-    // --- POSITIONING LOGIC ---
-    // iOS: Sit exactly on top of the Home Indicator (insets.bottom).
-    // Android: Sit 16px from bottom (standard margin) as insets.bottom is usually 0 or included in navigation bar.
-    // This removes the "floating gap" look while respecting gestures.
     const isIOS = Platform.OS === 'ios';
-    const bottomPosition = isIOS ? insets.bottom : 16;
-    const tabHeight = 60; // Slightly more compact
+    const baseHorizontal = 16;
+    const tabHeight = 56;
+    const iosBottomInset = Math.max(insets.bottom, 10);
+    const androidGestureInset = Math.max(insets.bottom, 24);
+
+    const floatingOffsets = {
+      left: baseHorizontal + insets.left,
+      right: baseHorizontal + insets.right,
+    } as const;
+
+    const iosBottomPosition = iosBottomInset + 8;
+    const iosExtraBottomPadding = Math.max(iosBottomInset * 0.6, 8);
+    const iosTabBarHeight = tabHeight + iosExtraBottomPadding + 8;
+
+    const androidTabBarHeight = tabHeight + androidGestureInset + 16;
+
+    const tabBarStyle = isIOS
+      ? {
+          position: 'absolute',
+          bottom: iosBottomPosition,
+          left: floatingOffsets.left,
+          right: floatingOffsets.right,
+          height: iosTabBarHeight,
+          borderRadius: 30,
+          backgroundColor: colors.card,
+          borderWidth: 1,
+          borderColor: colors.border,
+          paddingBottom: iosExtraBottomPadding,
+          paddingTop: 10,
+          shadowColor: colors.shadow,
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.1,
+          shadowRadius: 12,
+          elevation: 8,
+        }
+      : {
+          // Android gets an anchored rail so it clears system gestures
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: androidTabBarHeight,
+          borderTopLeftRadius: 28,
+          borderTopRightRadius: 28,
+          borderBottomLeftRadius: 0,
+          borderBottomRightRadius: 0,
+          backgroundColor: colors.card,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          borderColor: colors.border,
+          paddingBottom: androidGestureInset,
+          paddingTop: 12,
+          paddingHorizontal: baseHorizontal,
+          shadowColor: colors.shadow,
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.08,
+          shadowRadius: 10,
+          elevation: 18,
+        };
+
+    const scenePaddingBottom = isIOS
+      ? iosTabBarHeight + iosBottomPosition
+      : androidTabBarHeight + 8;
 
     return {
       headerShown: false,
       tabBarActiveTintColor: colors.primary,
       tabBarInactiveTintColor: colors.muted,
       tabBarHideOnKeyboard: true,
+      tabBarStyle,
 
-      // Floating Pill Style
-      tabBarStyle: {
-        position: 'absolute',
-        bottom: bottomPosition,
-        left: 20,
-        right: 20,
-        height: tabHeight,
-        borderRadius: 30,
-        backgroundColor: colors.card,
-        borderWidth: 1,
-        borderColor: colors.border,
-        paddingBottom: 0,
-        paddingTop: 0,
-
-        // Shadow that blends better with the bottom
-        shadowColor: colors.shadow,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 12,
-        elevation: 8,
+      tabBarSafeAreaInsets: {
+        bottom: isIOS ? 0 : androidGestureInset,
       },
 
-      // Tab Items
       tabBarItemStyle: {
         height: tabHeight,
-        paddingVertical: 8,
+        paddingVertical: 6,
         borderRadius: 30,
       },
 
-      // Text Labels
       tabBarLabelStyle: {
         fontSize: 10,
         fontWeight: '700',
-        paddingBottom: 4,
+        paddingBottom: 0,
       },
 
-      // Background
       sceneContainerStyle: {
         backgroundColor: colors.background,
+        paddingBottom: scenePaddingBottom,
       },
     } as const;
-  }, [insets.bottom]);
+  }, [insets.bottom, insets.left, insets.right]);
 
   return (
     <View style={styles.container}>
