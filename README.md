@@ -1,103 +1,32 @@
-# Environment and Secrets
+# 📘 DhanDiary – Simple Personal Finance Tracker
 
-This project must not store secrets in source control. If you found a secret in `app.json` or in the Git history (for example `VEXO_API_KEY` or `NEON_URL`), take these steps:
+**DhanDiary** is a clean, fast, and offline-first **income & expense manager** built using **React Native (Expo)**.  
+Manage your daily finances effortlessly with a beautiful dashboard, history tracking, categories, and secure cloud backup.
 
-- Rotate the exposed keys immediately (contact the provider dashboard).
-- Remove the secret from the repository and purge history (see commands below).
-- Use environment variables or EAS secrets for runtime secrets.
+---
 
-Local development: copy `.env.example` -> `.env` and add your values.
+## ✨ Features
+- 🧾 Track **income & expenses** with notes  
+- 📊 Clean analytics & spending overview  
+- 💾 **Offline support** + Auto sync when online  
+- 🔐 **Encrypted cloud backup** (NeonDB)  
+- 📚 Full transaction history  
+- ⚡ Lightweight, smooth & beginner-friendly UI  
 
-Purge secret from git history (use with care):
+---
 
-```pwsh
-# Remove file with secrets from history (example using BFG or git filter-branch is recommended)
-git rm --cached app.json
-git commit -m "Remove hardcoded secrets from app.json"
-# Use BFG or git filter-repo to scrub the secret string from history
-# Example with git filter-repo (install separately):
-git filter-repo --replace-text replacements.txt
+## 📥 Download APK
 
-# Where replacements.txt contains a line like:
-# 5d3859ed-a3a5-47cc-8b4e-82396334ada4==[REMOVED]
-```
+Download the latest stable APK:
 
-After rewriting history, push with `--force` to remote and inform team members to re-clone.
+👉 **https://github.com/EllowDigital/DhanDiary/blob/master/shareapp-link.txt**
 
-# DhanDiary
+---
 
-A React Native (Expo) expense tracker with offline-first capabilities and NeonDB sync.
-
-## Setup
-
-1.  Clone repository.
-2.  Install dependencies: `npm install`
-3.  Create `.env` file with your NeonDB connection string:
-    ```
-    NEON_URL=postgres://user:password@host/dbname?sslmode=require
-    ```
-4.  Run app: `npx expo start`
-
-## Analytics (Vexo)
-
-This project supports Vexo analytics. Vexo requires native code and therefore works with development builds or bare React Native (not Expo Go).
-
-1. Create an account at Vexo and get an API key.
-2. Install the package:
+## 🚀 Development Setup
 
 ```bash
-npm install vexo-analytics
-# or
-yarn add vexo-analytics
-```
-
-3. Provide the key to your app using an environment variable or `app.json` extra (recommended for EAS):
-
-```env
-VEXO_API_KEY=your_key_here
-```
-
-4. The app initializes Vexo automatically in production builds if `VEXO_API_KEY` is set.
-
-## Features
-
-- **Authentication**: Online-only (Login/Register).
-- **Offline-First**: Add expenses/income offline. stored in local SQLite.
-- **Sync**: Automatically syncs local entries to NeonDB when internet is available.
-- **NeonDB**: Serverless Postgres for cloud storage.
-
-## Offline / Online Rules
-
-- Write operations (Add/Edit/Delete) always write to the local SQLite database immediately.
-- Entries are marked `is_synced = 0` after local changes; the background sync manager uploads unsynced rows to NeonDB when internet is available.
-- Deletions are soft: the app marks `is_deleted = 1` locally and the sync manager propagates deletions to the remote DB. A later purge/cleanup can remove fully deleted rows.
-- Authentication (Register/Login) is online-only — you must be connected to register or login the first time. After login the app operates offline with local session stored.
-
-## Settings & About
-
-- **Settings**: `Sync Now`, `Clear Local Data`, `Logout` are available under Settings. `Sync Now` triggers an immediate upload of unsynced entries to Neon (requires `NEON_URL` configured).
-- **About**: Shows developer, organization, and the current app version.
-
-## Architecture
-
-- **Frontend**: React Native (Expo), TypeScript, React Query, React Native Elements.
-- **Local DB**: Expo SQLite.
-- **Remote DB**: Neon (Postgres).
-- **Sync**: Custom sync manager in `src/services/syncManager.ts`.
-
-## Testing
-
-Run `npm test` to execute Jest tests.
-
-## Build / Migrate
-
-- To apply the remote schema to Neon (requires `NEON_URL` in `.env`):
-
-```powershell
-npm run migrate
-```
-
-## Notes
-
-- If you run into peer dependency issues during `npm install`, use `npm install --legacy-peer-deps` as a temporary workaround.
-- If you want transactions to have an explicit user-editable date (separate from `created_at`), add an `entry_date` column to the local and remote schemas.
+git clone https://github.com/EllowDigital/DhanDiary.git
+cd DhanDiary
+npm install
+npx expo start
