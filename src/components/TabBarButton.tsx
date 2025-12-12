@@ -1,62 +1,88 @@
-import React, { useEffect, useMemo, useRef } from 'react';
-import { Pressable, StyleSheet, Animated } from 'react-native';
+import React, { useEffect } from 'react';
+import { Pressable, StyleSheet, ViewStyle } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  withSpring,
+  useSharedValue,
+  withTiming,
+  interpolate,
+} from 'react-native-reanimated';
 
+// --- Types ---
 type Props = {
   children: React.ReactNode;
-  // react-navigation may pass an event argument to onPress; accept optional param
   onPress?: (e?: any) => void;
   accessibilityState?: { selected?: boolean };
+  style?: ViewStyle;
 };
 
-const TabBarButton = ({ children, onPress, accessibilityState }: Props) => {
+// --- Configuration ---
+const SPRING_CONFIG = {
+  damping: 12,
+  stiffness: 150,
+};
+
+const TabBarButton = ({ children, onPress, accessibilityState, style }: Props) => {
   const focused = !!accessibilityState?.selected;
-  const focusAnim = useRef(new Animated.Value(focused ? 1 : 0)).current;
 
+  // 1. Shared Values for Animation
+  const focusProgress = useSharedValue(focused ? 1 : 0);
+  const scale = useSharedValue(1);
+
+  // 2. Sync Focus State
   useEffect(() => {
-    Animated.spring(focusAnim, {
-      toValue: focused ? 1 : 0,
-      useNativeDriver: true,
-      tension: 140,
-      friction: 14,
-    }).start();
-  }, [focused, focusAnim]);
+    focusProgress.value = withSpring(focused ? 1 : 0, SPRING_CONFIG);
+  }, [focused]);
 
-  const highlightStyle = useMemo(
-    () => ({
-      opacity: focusAnim,
-      transform: [
-        {
-          scale: focusAnim.interpolate({
-            inputRange: [0, 1],
-            outputRange: [0.85, 1],
-          }),
-        },
-        {
-          translateY: focusAnim.interpolate({
-            inputRange: [0, 1],
-            outputRange: [10, 0],
-          }),
-        },
-      ],
-    }),
-    [focusAnim]
-  );
+  // 3. Press Handlers (Tactile Feedback)
+  const handlePressIn = () => {
+    scale.value = withSpring(0.9, { damping: 10, stiffness: 200 });
+  };
 
-  const contentTranslate = focusAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, -2],
+  const handlePressOut = () => {
+    scale.value = withSpring(1, SPRING_CONFIG);
+    onPress?.();
+  };
+
+  // 4. Animated Styles
+
+  // Background "Pill" Animation
+  const animatedBackgroundStyle = useAnimatedStyle(() => {
+    return {
+      opacity: interpolate(focusProgress.value, [0, 1], [0, 1]),
+      transform: [{ scale: interpolate(focusProgress.value, [0, 1], [0.5, 1]) }],
+    };
+  });
+
+  // Container Scale Animation (for Press effect)
+  const animatedContainerStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ scale: scale.value }],
+    };
+  });
+
+  // Icon Lift Animation (Optional: moves icon up slightly when focused)
+  const animatedContentStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ translateY: interpolate(focusProgress.value, [0, 1], [0, -2]) }],
+    };
   });
 
   return (
     <Pressable
-      onPress={onPress}
-      android_ripple={{ color: 'rgba(37,99,235,0.15)', borderless: true }}
-      style={({ pressed }) => [styles.container, pressed && styles.pressed]}
-      hitSlop={{ top: 6, bottom: 6, left: 12, right: 12 }}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      style={[styles.container, style]}
+      hitSlop={10}
+      accessibilityRole="button"
+      accessibilityState={accessibilityState}
     >
-      <Animated.View pointerEvents="none" style={[styles.cardBehind, highlightStyle]} />
-      <Animated.View style={[styles.content, { transform: [{ translateY: contentTranslate }] }]}>
-        {children}
+      <Animated.View style={[styles.wrapper, animatedContainerStyle]}>
+        {/* Active Background Indicator */}
+        <Animated.View style={[styles.activeBackground, animatedBackgroundStyle]} />
+
+        {/* Icon / Label Content */}
+        <Animated.View style={[styles.content, animatedContentStyle]}>{children}</Animated.View>
       </Animated.View>
     </Pressable>
   );
@@ -67,30 +93,23 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 4,
-    paddingHorizontal: 4,
   },
-  pressed: {
-    transform: [{ scale: 0.97 }],
+  wrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 50, // Fixed touch target size
+    height: 50,
   },
   content: {
-    zIndex: 2,
+    zIndex: 2, // Ensure icon sits above background
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cardBehind: {
+  activeBackground: {
     ...StyleSheet.absoluteFillObject,
-    left: 12,
-    right: 12,
-    top: 10,
-    bottom: 10,
-    borderRadius: 18,
-    backgroundColor: 'rgba(37,99,235,0.12)',
+    backgroundColor: 'rgba(99, 102, 241, 0.15)', // Light Indigo tint
+    borderRadius: 16,
     zIndex: 1,
-    shadowColor: '#0F172A',
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 5,
   },
 });
 

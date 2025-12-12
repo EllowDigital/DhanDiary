@@ -1,177 +1,224 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  StyleSheet,
+  LayoutChangeEvent,
+  Platform,
+  Pressable,
+  Text,
+  Dimensions,
+} from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { View, Platform, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, {
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  useSharedValue,
+} from 'react-native-reanimated';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
-// Screens
+// --- Placeholder Screens ---
 import HomeScreen from '../screens/HomeScreen';
 import HistoryScreen from '../screens/HistoryScreen';
 import MoreScreen from '../screens/MoreScreen';
 
-// Components
-import AnimatedTabIcon from '../components/AnimatedTabIcon';
-import TabBarButton from '../components/TabBarButton';
-import { colors } from '../utils/design';
+// --- Design Tokens ---
+const colors = {
+  primary: '#000000',
+  background: '#f7f8fa',
+  card: '#ffffff',
+  text: '#1A1A1A',
+  muted: '#9CA3AF',
+  border: '#E5E7EB',
+  shadow: '#000',
+  activeBackground: '#EEF2FF',
+};
+
+const TAB_HEIGHT = 60; // Height of the icon area
+const ICON_SIZE = 24;
 
 const Tab = createBottomTabNavigator();
 
-const BottomTabNavigator = () => {
-  const insets = useSafeAreaInsets();
+// --- Components ---
 
-  const screenOptions = useMemo(() => {
-    const isIOS = Platform.OS === 'ios';
-    const baseHorizontal = 16;
-    const tabHeight = 56;
-    const iosBottomInset = Math.max(insets.bottom, 10);
-    const androidGestureInset = Math.max(insets.bottom, 24);
+const TabButton = ({
+  isFocused,
+  label,
+  iconName,
+  onPress,
+  onLayout,
+}: {
+  isFocused: boolean;
+  label: string;
+  iconName: any;
+  onPress: () => void;
+  onLayout: (e: LayoutChangeEvent) => void;
+}) => {
+  const scale = useSharedValue(1);
+  const opacity = useSharedValue(isFocused ? 1 : 0.6);
 
-    const floatingOffsets = {
-      left: baseHorizontal + insets.left,
-      right: baseHorizontal + insets.right,
-    } as const;
+  useEffect(() => {
+    opacity.value = withTiming(isFocused ? 1 : 0.6, { duration: 200 });
+  }, [isFocused]);
 
-    const iosBottomPosition = iosBottomInset + 8;
-    const iosExtraBottomPadding = Math.max(iosBottomInset * 0.6, 8);
-    const iosTabBarHeight = tabHeight + iosExtraBottomPadding + 8;
+  const handlePressIn = () => {
+    scale.value = withSpring(0.9, { duration: 100 });
+  };
 
-    const androidTabBarHeight = tabHeight + androidGestureInset + 16;
+  const handlePressOut = () => {
+    scale.value = withSpring(1, { duration: 100 });
+    onPress();
+  };
 
-    const tabBarStyle = isIOS
-      ? {
-          position: 'absolute',
-          bottom: iosBottomPosition,
-          left: floatingOffsets.left,
-          right: floatingOffsets.right,
-          height: iosTabBarHeight,
-          borderRadius: 30,
-          backgroundColor: colors.card,
-          borderWidth: 1,
-          borderColor: colors.border,
-          paddingBottom: iosExtraBottomPadding,
-          paddingTop: 10,
-          shadowColor: colors.shadow,
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.1,
-          shadowRadius: 12,
-          elevation: 8,
-        }
-      : {
-          // Android gets an anchored rail so it clears system gestures
-          position: 'absolute',
-          left: 0,
-          right: 0,
-          bottom: 0,
-          height: androidTabBarHeight,
-          borderTopLeftRadius: 28,
-          borderTopRightRadius: 28,
-          borderBottomLeftRadius: 0,
-          borderBottomRightRadius: 0,
-          backgroundColor: colors.card,
-          borderTopWidth: StyleSheet.hairlineWidth,
-          borderColor: colors.border,
-          paddingBottom: androidGestureInset,
-          paddingTop: 12,
-          paddingHorizontal: baseHorizontal,
-          shadowColor: colors.shadow,
-          shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: 0.08,
-          shadowRadius: 10,
-          elevation: 18,
-        };
-
-    const scenePaddingBottom = isIOS
-      ? iosTabBarHeight + iosBottomPosition
-      : androidTabBarHeight + 8;
-
+  const animatedIconStyle = useAnimatedStyle(() => {
     return {
-      headerShown: false,
-      tabBarActiveTintColor: colors.primary,
-      tabBarInactiveTintColor: colors.muted,
-      tabBarHideOnKeyboard: true,
-      tabBarStyle,
+      transform: [{ scale: scale.value }],
+      opacity: opacity.value,
+    };
+  });
 
-      tabBarSafeAreaInsets: {
-        bottom: isIOS ? 0 : androidGestureInset,
-      },
-
-      tabBarItemStyle: {
-        height: tabHeight,
-        paddingVertical: 6,
-        borderRadius: 30,
-      },
-
-      tabBarLabelStyle: {
-        fontSize: 10,
-        fontWeight: '700',
-        paddingBottom: 0,
-      },
-
-      sceneContainerStyle: {
-        backgroundColor: colors.background,
-        paddingBottom: scenePaddingBottom,
-      },
-    } as const;
-  }, [insets.bottom, insets.left, insets.right]);
+  const animatedLabelStyle = useAnimatedStyle(() => {
+    return {
+      opacity: withTiming(isFocused ? 1 : 0, { duration: 200 }),
+      transform: [{ translateY: withTiming(isFocused ? 0 : 5, { duration: 200 }) }],
+      height: isFocused ? 'auto' : 0,
+    };
+  });
 
   return (
-    <View style={styles.container}>
-      <Tab.Navigator screenOptions={screenOptions as any}>
-        {/* DASHBOARD */}
-        <Tab.Screen
-          name="Dashboard"
-          component={HomeScreen}
-          options={{
-            tabBarLabel: 'Home',
-            tabBarIcon: ({ color, size, focused }) => (
-              <AnimatedTabIcon
-                library="mc"
-                name={focused ? 'view-dashboard' : 'view-dashboard-outline'}
-                color={color}
-                size={22}
-                focused={focused}
-              />
-            ),
-            tabBarButton: (props) => <TabBarButton {...props} />,
-          }}
+    <Pressable
+      onLayout={onLayout}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      style={styles.tabItem}
+    >
+      <Animated.View style={[styles.iconContainer, animatedIconStyle]}>
+        <MaterialCommunityIcons
+          name={iconName}
+          size={ICON_SIZE}
+          color={isFocused ? colors.primary : colors.muted}
         />
+      </Animated.View>
 
-        {/* HISTORY */}
-        <Tab.Screen
-          name="History"
-          component={HistoryScreen}
-          options={{
-            tabBarLabel: 'History',
-            tabBarIcon: ({ color, size, focused }) => (
-              <AnimatedTabIcon
-                library="material"
-                name="history"
-                color={color}
-                size={24}
-                focused={focused}
-              />
-            ),
-            tabBarButton: (props) => <TabBarButton {...props} />,
-          }}
-        />
+      <Animated.View style={animatedLabelStyle}>
+        <Text style={[styles.label, { color: isFocused ? colors.primary : colors.muted }]}>
+          {label}
+        </Text>
+      </Animated.View>
+    </Pressable>
+  );
+};
 
-        {/* MORE */}
-        <Tab.Screen
-          name="More"
-          component={MoreScreen}
-          options={{
-            tabBarLabel: 'Menu',
-            tabBarIcon: ({ color, size, focused }) => (
-              <AnimatedTabIcon
-                library="mc"
-                name={focused ? 'dots-horizontal-circle' : 'dots-horizontal'}
-                color={color}
-                size={22}
-                focused={focused}
-              />
-            ),
-            tabBarButton: (props) => <TabBarButton {...props} />,
-          }}
-        />
+const CustomTabBar = ({ state, descriptors, navigation }: any) => {
+  const insets = useSafeAreaInsets();
+  const [layout, setLayout] = useState({ width: 0, height: 0 });
+
+  const tabWidth = layout.width / state.routes.length;
+  const translateX = useSharedValue(0);
+
+  useEffect(() => {
+    if (tabWidth > 0) {
+      translateX.value = withSpring(state.index * tabWidth, {
+        damping: 15,
+        stiffness: 120,
+      });
+    }
+  }, [state.index, tabWidth]);
+
+  const animatedIndicatorStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ translateX: translateX.value }],
+      width: tabWidth - 20, // Padding inside the active area
+    };
+  });
+
+  const onTabbarLayout = (e: LayoutChangeEvent) => {
+    setLayout({
+      width: e.nativeEvent.layout.width,
+      height: e.nativeEvent.layout.height,
+    });
+  };
+
+  return (
+    <View
+      style={[
+        styles.tabBarContainer,
+        {
+          // We add the bottom inset here so the white background extends to the bottom edge
+          paddingBottom: insets.bottom,
+          // Calculate height to include safe area
+          height: TAB_HEIGHT + insets.bottom,
+        },
+      ]}
+    >
+      {/* This internal View holds the actual tab items and animation.
+        It sits at the top of the container.
+      */}
+      <View style={styles.tabBarContent} onLayout={onTabbarLayout}>
+        {tabWidth > 0 && (
+          <Animated.View
+            style={[
+              styles.activeBackground,
+              animatedIndicatorStyle,
+              { left: 10 }, // Center alignment correction
+            ]}
+          />
+        )}
+
+        {state.routes.map((route: any, index: number) => {
+          const { options } = descriptors[route.key];
+          const isFocused = state.index === index;
+
+          const onPress = () => {
+            const event = navigation.emit({
+              type: 'tabPress',
+              target: route.key,
+              canPreventDefault: true,
+            });
+
+            if (!isFocused && !event.defaultPrevented) {
+              navigation.navigate(route.name);
+            }
+          };
+
+          let iconName = 'circle';
+          if (route.name === 'Dashboard')
+            iconName = isFocused ? 'view-dashboard' : 'view-dashboard-outline';
+          if (route.name === 'History') iconName = 'history';
+          if (route.name === 'More')
+            iconName = isFocused ? 'dots-horizontal-circle' : 'dots-horizontal';
+
+          return (
+            <TabButton
+              key={route.key}
+              isFocused={isFocused}
+              label={options.tabBarLabel || route.name}
+              iconName={iconName}
+              onPress={onPress}
+              onLayout={(e) => {}}
+            />
+          );
+        })}
+      </View>
+    </View>
+  );
+};
+
+// --- Main Navigator ---
+
+const BottomTabNavigator = () => {
+  return (
+    <View style={styles.mainContainer}>
+      <Tab.Navigator
+        tabBar={(props) => <CustomTabBar {...props} />}
+        screenOptions={{
+          headerShown: false,
+        }}
+      >
+        <Tab.Screen name="Dashboard" component={HomeScreen} options={{ tabBarLabel: 'Home' }} />
+        <Tab.Screen name="History" component={HistoryScreen} options={{ tabBarLabel: 'History' }} />
+        <Tab.Screen name="More" component={MoreScreen} options={{ tabBarLabel: 'Menu' }} />
       </Tab.Navigator>
     </View>
   );
@@ -179,10 +226,67 @@ const BottomTabNavigator = () => {
 
 export default BottomTabNavigator;
 
+// --- Styles ---
+
 const styles = StyleSheet.create({
-  container: {
+  mainContainer: {
     flex: 1,
     backgroundColor: colors.background,
-    position: 'relative',
+  },
+  tabBarContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: colors.card,
+
+    // --- CURVED TOP CORNERS ---
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+
+    // Shadow
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 10, // Android Shadow
+
+    // Border for definition
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+
+    justifyContent: 'flex-start', // Align content to top
+  },
+  tabBarContent: {
+    flexDirection: 'row',
+    width: '100%',
+    height: TAB_HEIGHT, // Height of the interactive area
+    alignItems: 'center',
+    justifyContent: 'space-around',
+  },
+  tabItem: {
+    flex: 1,
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  iconContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  label: {
+    fontSize: 10,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  activeBackground: {
+    position: 'absolute',
+    height: TAB_HEIGHT - 16, // Smaller than full height
+    backgroundColor: colors.activeBackground,
+    borderRadius: 20, // Fully rounded pill
+    zIndex: 1,
   },
 });

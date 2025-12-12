@@ -1,6 +1,17 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
-import { colors } from '../utils/design';
+import { StyleSheet, Text, View, TouchableOpacity, Pressable } from 'react-native';
+import Animated, { FadeInUp, FadeOutUp } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+
+// --- Mock Colors (Replace with your '../utils/design') ---
+const colors = {
+  backgroundDark: '#1F2937', // Dark Grey/Black for contrast
+  textLight: '#F9FAFB',
+  textMuted: '#9CA3AF',
+  primary: '#10B981', // Green for update action
+  white: '#FFFFFF',
+};
 
 type Props = {
   visible: boolean;
@@ -10,21 +21,27 @@ type Props = {
   onClose?: () => void;
 };
 
-const UpdateBanner: React.FC<Props> = ({ visible, message, duration = 4000, onPress, onClose }) => {
-  const translateY = React.useRef(new Animated.Value(visible ? 0 : 1)).current;
+const UpdateBanner: React.FC<Props> = ({
+  visible,
+  message,
+  duration = 6000, // Increased default slightly for readability
+  onPress,
+  onClose,
+}) => {
+  const insets = useSafeAreaInsets();
 
+  // Auto-dismiss logic
   useEffect(() => {
-    Animated.spring(translateY, { toValue: visible ? 0 : 1, useNativeDriver: true }).start();
-    let t: any = null;
-    if (visible) {
-      t = setTimeout(() => {
-        if (onClose) {
-          onClose();
-        }
+    let timeoutRef: ReturnType<typeof setTimeout> | undefined;
+    if (visible && duration > 0) {
+      timeoutRef = setTimeout(() => {
+        onClose?.();
       }, duration);
     }
     return () => {
-      if (t) clearTimeout(t);
+      if (timeoutRef) {
+        clearTimeout(timeoutRef);
+      }
     };
   }, [visible, duration, onClose]);
 
@@ -32,29 +49,38 @@ const UpdateBanner: React.FC<Props> = ({ visible, message, duration = 4000, onPr
 
   return (
     <Animated.View
+      entering={FadeInUp.springify().damping(15)}
+      exiting={FadeOutUp}
       style={[
         styles.container,
-        {
-          transform: [
-            {
-              translateY: (translateY as any).interpolate({
-                inputRange: [0, 1],
-                outputRange: [0, 80],
-              }),
-            },
-          ],
-        },
+        { top: insets.top + 8 }, // Respect Safe Area + padding
       ]}
-      pointerEvents="box-none"
     >
-      <TouchableOpacity style={styles.banner} onPress={onPress} activeOpacity={0.9}>
-        <View style={styles.bannerContent}>
-          <Text style={styles.title}>New update available</Text>
-          <Text style={styles.subtitle}>{message || 'Tap to review and install'}</Text>
+      <TouchableOpacity style={styles.banner} activeOpacity={0.9} onPress={onPress}>
+        {/* Left Icon */}
+        <View style={styles.iconContainer}>
+          <MaterialCommunityIcons name="cloud-download-outline" size={24} color={colors.primary} />
         </View>
-        <View style={styles.ctaPill}>
-          <Text style={styles.ctaText}>Update</Text>
+
+        {/* Text Content */}
+        <View style={styles.content}>
+          <Text style={styles.title}>Update Available</Text>
+          <Text style={styles.subtitle} numberOfLines={1}>
+            {message || 'Tap to install the latest version'}
+          </Text>
         </View>
+
+        {/* Action Button */}
+        <View style={styles.actionButton}>
+          <Text style={styles.actionText}>Update</Text>
+        </View>
+
+        {/* Close Button (Optional) */}
+        {onClose && (
+          <Pressable onPress={onClose} hitSlop={12} style={styles.closeBtn}>
+            <MaterialCommunityIcons name="close" size={18} color={colors.textMuted} />
+          </Pressable>
+        )}
       </TouchableOpacity>
     </Animated.View>
   );
@@ -63,44 +89,61 @@ const UpdateBanner: React.FC<Props> = ({ visible, message, duration = 4000, onPr
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    top: 32,
     left: 16,
     right: 16,
-    zIndex: 2000,
+    zIndex: 9999,
   },
   banner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.text,
-    paddingVertical: 14,
-    paddingHorizontal: 18,
+    backgroundColor: colors.backgroundDark,
     borderRadius: 16,
-    width: '100%',
-    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+
+    // High-end Shadow
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
   },
-  bannerContent: {
-    flex: 1,
+  iconContainer: {
     marginRight: 12,
+    backgroundColor: 'rgba(16, 185, 129, 0.1)', // Very subtle green bg
+    padding: 8,
+    borderRadius: 12,
+  },
+  content: {
+    flex: 1,
+    marginRight: 8,
   },
   title: {
-    color: colors.card,
+    color: colors.textLight,
     fontWeight: '700',
-    marginBottom: 2,
     fontSize: 14,
+    marginBottom: 2,
   },
   subtitle: {
-    color: colors.mutedSoft,
-    fontSize: 13,
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: '500',
   },
-  ctaPill: {
-    backgroundColor: colors.accentGreen,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 24,
+  actionButton: {
+    backgroundColor: colors.primary,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    marginRight: 8,
   },
-  ctaText: {
+  actionText: {
     color: colors.white,
+    fontSize: 12,
     fontWeight: '700',
+  },
+  closeBtn: {
+    marginLeft: 4,
+    opacity: 0.8,
   },
 });
 

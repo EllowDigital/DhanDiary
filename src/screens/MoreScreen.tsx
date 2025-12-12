@@ -10,6 +10,7 @@ import {
   Animated,
   Easing,
   StatusBar,
+  useWindowDimensions,
   Platform,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -27,7 +28,18 @@ const MoreScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp<Record<string, object>>>();
   const [scrollOffset, setScrollOffset] = useState(0);
   const insets = useSafeAreaInsets();
-  const bottomContentPadding = useMemo(() => spacing(10) + insets.bottom + 56, [insets.bottom]);
+
+  // --- RESPONSIVE LOGIC ---
+  const { width, scale } = useWindowDimensions();
+
+  // Dynamic Width:
+  // - On Phones: Use 92% of screen width (spacing(2) margin on sides)
+  // - On Tablets: Cap at 600px width and center it
+  const isTablet = width >= 768;
+  const contentWidth = Math.min(width - spacing(4), 600);
+
+  // Calculate bottom padding to clear navigation bars
+  const bottomContentPadding = useMemo(() => spacing(10) + insets.bottom + 20, [insets.bottom]);
 
   // --- ANIMATION SETUP ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -45,7 +57,7 @@ const MoreScreen: React.FC = () => {
         toValue: 0,
         duration: 500,
         useNativeDriver: true,
-        easing: Easing.out(Easing.cubic),
+        easing: Easing.out(Easing.back(1.5)),
       }),
     ]).start();
   }, []);
@@ -57,33 +69,41 @@ const MoreScreen: React.FC = () => {
     [navigation]
   );
 
+  const handleEmail = useCallback(() => {
+    Linking.openURL('mailto:sarwanyadav26@outlook.com?subject=DhanDiary%20Support');
+  }, []);
+
+  const handleRoadmap = useCallback(() => {
+    Linking.openURL('https://ellowdigital.netlify.app');
+  }, []);
+
   // --- CONFIG ---
   const primaryLinks = useMemo(
     () => [
       {
         icon: 'bar-chart',
         label: 'Stats & Analytics',
-        description: 'Trends, spending, and reports',
+        description: 'Trends, spending reports',
         action: () => navigateParent('Stats'),
         color: colors.accentOrange,
       },
       {
         icon: 'person',
-        label: 'Account & Profile',
-        description: 'Security, personal info',
+        label: 'Account',
+        description: 'Profile, personal info',
         action: () => navigateParent('Account'),
         color: colors.primary,
       },
       {
-        icon: 'settings',
+        icon: 'tune',
         label: 'Settings',
         description: 'Preferences, data, backups',
         action: () => navigateParent('Settings'),
         color: colors.secondary,
       },
       {
-        icon: 'info',
-        label: 'About & Updates',
+        icon: 'info-outline',
+        label: 'About',
         description: 'Version info, release notes',
         action: () => navigateParent('About'),
         color: colors.accentBlue,
@@ -98,21 +118,18 @@ const MoreScreen: React.FC = () => {
         icon: 'map',
         label: 'Roadmap',
         description: 'See what is coming next',
-        action: () => Linking.openURL('https://ellowdigital.netlify.app'),
+        action: handleRoadmap,
         color: colors.accentGreen,
       },
       {
         icon: 'support-agent',
         label: 'Contact Support',
         description: 'Get help or report bugs',
-        action: () =>
-          Linking.openURL(
-            'mailto:sarwanyadav26@outlook.com?subject=DhanDiary%20Support&body=Hi%20team%2C'
-          ),
+        action: handleEmail,
         color: colors.accentRed,
       },
     ],
-    []
+    [handleRoadmap, handleEmail]
   );
 
   const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -120,61 +137,86 @@ const MoreScreen: React.FC = () => {
   }, []);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-      <ScreenHeader
-        title="More"
-        subtitle="Menu & Tools"
-        scrollOffset={scrollOffset}
-        showScrollHint
-        useSafeAreaPadding={false}
-      />
+      <SafeAreaView style={styles.safeArea}>
+        {/* Header Container - Aligned with content */}
+        <View style={{ alignItems: 'center', width: '100%' }}>
+          <View style={{ width: contentWidth }}>
+            <ScreenHeader
+              title="More"
+              subtitle="Menu & Tools"
+              scrollOffset={scrollOffset}
+              showScrollHint
+              useSafeAreaPadding={false}
+            />
+          </View>
+        </View>
 
-      <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-        <ScrollView
-          style={styles.container}
-          contentContainerStyle={[styles.content, { paddingBottom: bottomContentPadding }]}
-          onScroll={handleScroll}
-          scrollEventThrottle={16}
-          showsVerticalScrollIndicator={false}
+        <Animated.View
+          style={{
+            flex: 1,
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }],
+          }}
         >
-          {/* HERO CARD */}
-          <View style={styles.heroCard}>
-            <View style={styles.heroContent}>
-              <Text style={styles.heroEyebrow}>DhanDiary Hub</Text>
-              <Text style={styles.heroTitle}>Control Center</Text>
-              <Text style={styles.heroSubtitle}>
-                Manage your analytics, preferences, and account details from one place.
+          <ScrollView
+            style={styles.scroll}
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomContentPadding }]}
+            onScroll={handleScroll}
+            scrollEventThrottle={16}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Responsive Wrapper:
+                This View centers the content and enforces the max-width 
+                calculated in the logic above.
+            */}
+            <View style={[styles.responsiveWrapper, { width: contentWidth }]}>
+              {/* HERO CARD */}
+              <View style={styles.heroCard}>
+                <View style={styles.heroBgCircle} />
+
+                <View style={styles.heroContent}>
+                  <View style={styles.heroHeaderRow}>
+                    <Text style={styles.heroEyebrow}>DhanDiary Hub</Text>
+                    <MaterialIcon name="verified" size={16} color="rgba(255,255,255,0.6)" />
+                  </View>
+                  <Text style={styles.heroTitle} numberOfLines={1} adjustsFontSizeToFit>
+                    Control Center
+                  </Text>
+                  <Text style={styles.heroSubtitle}>
+                    Manage your analytics, preferences, and account details.
+                  </Text>
+                </View>
+                <View style={styles.heroIconPos}>
+                  <MaterialIcon name="dashboard" size={90} color="rgba(255,255,255,0.1)" />
+                </View>
+              </View>
+
+              {/* PRIMARY NAVIGATION */}
+              <Text style={styles.sectionLabel}>Essentials</Text>
+              <View style={styles.menuContainer}>
+                {primaryLinks.map((item, index) => (
+                  <MenuRow key={item.label} {...item} isLast={index === primaryLinks.length - 1} />
+                ))}
+              </View>
+
+              {/* SUPPORT NAVIGATION */}
+              <Text style={styles.sectionLabel}>Help & Info</Text>
+              <View style={styles.menuContainer}>
+                {supportLinks.map((item, index) => (
+                  <MenuRow key={item.label} {...item} isLast={index === supportLinks.length - 1} />
+                ))}
+              </View>
+
+              <Text style={styles.footnote}>
+                v{pkg.version} ({appConfig.expo.version || '1.0.0'}) • Made with ❤️
               </Text>
             </View>
-            <View style={styles.heroIconBg}>
-              <MaterialIcon name="dashboard" size={80} color="rgba(0,0,0,0.05)" />
-            </View>
-          </View>
-
-          {/* PRIMARY NAVIGATION */}
-          <Text style={styles.sectionLabel}>Essentials</Text>
-          <View style={styles.menuContainer}>
-            {primaryLinks.map((item, index) => (
-              <MenuRow key={item.label} {...item} isLast={index === primaryLinks.length - 1} />
-            ))}
-          </View>
-
-          {/* SUPPORT NAVIGATION */}
-          <Text style={styles.sectionLabel}>Help & Info</Text>
-          <View style={styles.menuContainer}>
-            {supportLinks.map((item, index) => (
-              <MenuRow key={item.label} {...item} isLast={index === supportLinks.length - 1} />
-            ))}
-          </View>
-
-          <Text style={styles.footnote}>
-            DhanDiary v{pkg.version} (Build{' '}
-            {appConfig.expo.ios?.buildNumber || appConfig.expo.android?.versionCode}) • Made with ❤️
-          </Text>
-        </ScrollView>
-      </Animated.View>
-    </SafeAreaView>
+          </ScrollView>
+        </Animated.View>
+      </SafeAreaView>
+    </View>
   );
 };
 
@@ -190,73 +232,102 @@ const MenuRow = ({ icon, label, description, action, color, isLast }: any) => (
       <MaterialIcon name={icon} size={22} color={color} />
     </View>
     <View style={styles.rowTextContainer}>
-      <Text style={styles.rowTitle}>{label}</Text>
-      <Text style={styles.rowDesc}>{description}</Text>
+      <Text style={styles.rowTitle} numberOfLines={1}>
+        {label}
+      </Text>
+      <Text style={styles.rowDesc} numberOfLines={1} ellipsizeMode="tail">
+        {description}
+      </Text>
     </View>
-    <MaterialIcon name="chevron-right" size={22} color={colors.border} />
+    <MaterialIcon name="chevron-right" size={24} color={colors.border} />
   </TouchableOpacity>
 );
 
 /* --- STYLES --- */
 
 const styles = StyleSheet.create({
-  safeArea: {
+  root: {
     flex: 1,
     backgroundColor: colors.background,
   },
-  container: {
+  safeArea: {
     flex: 1,
   },
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 10,
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    alignItems: 'center', // Essential for centering the responsiveWrapper
+    paddingTop: spacing(2),
+  },
+  responsiveWrapper: {
+    // Width is handled dynamically inline
+    flexDirection: 'column',
   },
 
   /* HERO */
   heroCard: {
-    backgroundColor: colors.card,
+    backgroundColor: colors.primary,
     borderRadius: 24,
     padding: 24,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: colors.border,
+    marginBottom: 28,
     overflow: 'hidden',
     position: 'relative',
-    // Shadow
-    shadowColor: colors.text,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 3,
+    // Android Shadow
+    elevation: 8,
+    // iOS Shadow
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+  },
+  heroBgCircle: {
+    position: 'absolute',
+    top: -50,
+    right: -50,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(255,255,255,0.1)',
   },
   heroContent: {
     zIndex: 2,
+    // Ensure text doesn't overlap with the background icon on small screens
+    paddingRight: 60,
   },
-  heroIconBg: {
+  heroHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
+  heroIconPos: {
     position: 'absolute',
     right: -10,
-    bottom: -10,
+    bottom: -15,
     zIndex: 1,
+    transform: [{ rotate: '-10deg' }],
   },
   heroEyebrow: {
     fontSize: 12,
     fontWeight: '700',
-    color: colors.primary,
+    color: 'rgba(255,255,255,0.8)',
     textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 6,
+    letterSpacing: 1.2,
   },
   heroTitle: {
     fontSize: 26,
     fontWeight: '800',
-    color: colors.text,
+    color: '#FFFFFF',
     marginBottom: 6,
+    letterSpacing: -0.5,
   },
   heroSubtitle: {
     fontSize: 14,
-    color: colors.muted,
+    color: 'rgba(255,255,255,0.85)',
     lineHeight: 20,
-    maxWidth: '85%',
+    fontWeight: '500',
   },
 
   /* SECTION & MENU */
@@ -276,6 +347,13 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     marginBottom: 24,
     overflow: 'hidden',
+    // Android Shadow
+    elevation: 2,
+    // iOS Shadow
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.02,
+    shadowRadius: 8,
   },
 
   /* ROW */
@@ -284,32 +362,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border, // Very subtle separator
+    borderBottomColor: colors.surfaceMuted || '#F3F4F6',
     backgroundColor: colors.card,
   },
   rowLast: {
     borderBottomWidth: 0,
   },
   iconBox: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 14,
+    marginRight: 16,
   },
   rowTextContainer: {
     flex: 1,
+    justifyContent: 'center',
+    marginRight: 8, // Prevent text touching the arrow
   },
   rowTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: colors.text,
+    marginBottom: 2,
   },
   rowDesc: {
     fontSize: 13,
     color: colors.muted,
-    marginTop: 2,
   },
 
   /* FOOTER */
@@ -318,7 +398,7 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 12,
     marginTop: 8,
-    opacity: 0.6,
+    opacity: 0.5,
   },
 });
 

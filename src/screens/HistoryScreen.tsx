@@ -1,21 +1,21 @@
-import React, { useMemo, useState, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useRef, useCallback } from 'react';
 import {
   View,
   StyleSheet,
   FlatList,
   Alert,
   Modal,
-  Dimensions,
   ScrollView,
   TouchableOpacity,
   TouchableWithoutFeedback,
   LayoutAnimation,
   Platform,
   UIManager,
-  Animated,
   StatusBar,
   KeyboardAvoidingView,
   Keyboard,
+  useWindowDimensions,
+  Animated,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, Button, Input } from '@rneui/themed';
@@ -25,76 +25,130 @@ import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useEntries } from '../hooks/useEntries';
 import { useAuth } from '../hooks/useAuth';
-import TransactionCard from '../components/TransactionCard';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useToast } from '../context/ToastContext';
 import runInBackground from '../utils/background';
-import { getEntryByLocalId } from '../db/entries';
 import useDelayedLoading from '../hooks/useDelayedLoading';
 import FullScreenSpinner from '../components/FullScreenSpinner';
-import { colors, shadows, spacing } from '../utils/design';
-import { DEFAULT_CATEGORY, FALLBACK_CATEGORY, ensureCategory } from '../constants/categories';
+import { colors, spacing } from '../utils/design';
+import { DEFAULT_CATEGORY, ensureCategory } from '../constants/categories';
 import ScreenHeader from '../components/ScreenHeader';
+import dayjs from 'dayjs';
+import { Swipeable } from 'react-native-gesture-handler';
 
 // Enable LayoutAnimation for Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const scale = SCREEN_WIDTH / 390;
-const font = (s: number) => Math.round(s * scale);
+// --- SWIPEABLE LIST ITEM ---
+const SwipeableHistoryItem = React.memo(({ item, onEdit, onDelete }: any) => {
+  const isIncome = item.type === 'in';
+  const color = isIncome ? colors.accentGreen : colors.text;
+  const iconName = isIncome ? 'arrow-downward' : 'arrow-upward';
+  const dateStr = dayjs(item.date || item.created_at).format('MMM D, h:mm A');
+  const swipeableRef = useRef<Swipeable>(null);
 
-// --- ANIMATED LIST ITEM ---
-const AnimatedTransaction = ({ item, index, onEdit, onDelete }: any) => {
-  const anim = useRef(new Animated.Value(0)).current;
+  // Left Action (Revealed when Swiping Right ->) => EDIT
+  const renderLeftActions = (progress: any, dragX: any) => {
+    const scale = dragX.interpolate({
+      inputRange: [0, 80],
+      outputRange: [0, 1],
+      extrapolate: 'clamp',
+    });
+    return (
+      <TouchableOpacity
+        style={styles.leftAction}
+        onPress={() => {
+          swipeableRef.current?.close();
+          onEdit();
+        }}
+      >
+        <Animated.View style={{ transform: [{ scale }], alignItems: 'center' }}>
+          <MaterialIcon name="edit" size={24} color="white" />
+          <Text style={styles.actionText}>Edit</Text>
+        </Animated.View>
+      </TouchableOpacity>
+    );
+  };
 
-  useEffect(() => {
-    Animated.timing(anim, {
-      toValue: 1,
-      duration: 300,
-      delay: index * 30, // Stagger effect
-      useNativeDriver: true,
-    }).start();
-  }, []);
+  // Right Action (Revealed when Swiping Left <-) => DELETE
+  const renderRightActions = (progress: any, dragX: any) => {
+    const scale = dragX.interpolate({
+      inputRange: [-80, 0],
+      outputRange: [1, 0],
+      extrapolate: 'clamp',
+    });
+    return (
+      <TouchableOpacity
+        style={styles.rightAction}
+        onPress={() => {
+          swipeableRef.current?.close();
+          onDelete();
+        }}
+      >
+        <Animated.View style={{ transform: [{ scale }], alignItems: 'center' }}>
+          <MaterialIcon name="delete" size={24} color="white" />
+          <Text style={styles.actionText}>Delete</Text>
+        </Animated.View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
-    <Animated.View
-      style={{
-        opacity: anim,
-        transform: [
-          {
-            translateY: anim.interpolate({
-              inputRange: [0, 1],
-              outputRange: [20, 0],
-            }),
-          },
-        ],
-        marginBottom: 12,
-      }}
+    <Swipeable
+      ref={swipeableRef}
+      renderLeftActions={renderLeftActions}
+      renderRightActions={renderRightActions}
+      containerStyle={styles.swipeContainer}
+      friction={2}
+      leftThreshold={40}
+      rightThreshold={40}
     >
-      <TransactionCard item={item} onEdit={onEdit} onDelete={onDelete} />
-    </Animated.View>
+      <View style={styles.compactRow}>
+        <View style={[styles.compactIcon, { backgroundColor: isIncome ? '#ecfdf5' : '#fef2f2' }]}>
+          <MaterialIcon
+            name={iconName}
+            size={18}
+            color={isIncome ? colors.accentGreen : colors.accentRed}
+          />
+        </View>
+        <View style={styles.compactContent}>
+          <View style={styles.compactHeader}>
+            <Text style={styles.compactCategory} numberOfLines={1}>
+              {item.category}
+            </Text>
+            <Text style={[styles.compactAmount, { color }]}>
+              {isIncome ? '+' : '-'}₹{Number(item.amount).toLocaleString()}
+            </Text>
+          </View>
+          <View style={styles.compactSubRow}>
+            <Text style={styles.compactNote} numberOfLines={1}>
+              {item.note || 'No description'}
+            </Text>
+            <Text style={styles.compactDate}>{dateStr}</Text>
+          </View>
+        </View>
+      </View>
+    </Swipeable>
   );
-};
+});
 
 const HistoryScreen = () => {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { entries = [], isLoading, updateEntry, deleteEntry } = useEntries(user?.id);
-  const navigation = useNavigation<any>();
-  const route = useRoute<any>();
   const { showToast } = useToast();
-
   const showLoading = useDelayedLoading(Boolean(isLoading));
+  const { width } = useWindowDimensions();
 
   // --- FILTERS STATE ---
-  const [filtersVisible, setFiltersVisible] = useState(false);
+  const [filtersExpanded, setFiltersExpanded] = useState(false);
+  const [quickFilter, setQuickFilter] = useState<'ALL' | 'WEEK' | 'MONTH'>('ALL');
+
+  // Advanced Filters
   const [typeIndex, setTypeIndex] = useState(0); // 0:All, 1:In, 2:Out
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
-  const [amountMin, setAmountMin] = useState<string>('');
-  const [amountMax, setAmountMax] = useState<string>('');
   const [categoryFilter, setCategoryFilter] = useState('');
 
   // Picker visibility
@@ -111,21 +165,19 @@ const HistoryScreen = () => {
   const [showEditDatePicker, setShowEditDatePicker] = useState(false);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
 
-  // --- ANIMATIONS ---
-  const heroOpacity = useRef(new Animated.Value(0)).current;
-  const heroTranslate = useRef(new Animated.Value(20)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(heroOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
-      Animated.spring(heroTranslate, { toValue: 0, useNativeDriver: true }),
-    ]).start();
-  }, []);
-
   // --- FILTER LOGIC ---
   const filtered = useMemo(() => {
     let list = entries || [];
 
+    // Quick Filters (Pre-computation)
+    const now = dayjs();
+    if (quickFilter === 'WEEK') {
+      list = list.filter((e) => dayjs(e.created_at).isAfter(now.subtract(7, 'day')));
+    } else if (quickFilter === 'MONTH') {
+      list = list.filter((e) => dayjs(e.created_at).isSame(now, 'month'));
+    }
+
+    // Advanced Filters
     if (typeIndex === 1) list = list.filter((e) => e.type === 'in');
     if (typeIndex === 2) list = list.filter((e) => e.type === 'out');
 
@@ -137,13 +189,8 @@ const HistoryScreen = () => {
       list = list.filter((e) => (e.category || '').toLowerCase().includes(q));
     }
 
-    const min = parseFloat(amountMin);
-    const max = parseFloat(amountMax);
-    if (!isNaN(min)) list = list.filter((e) => Number(e.amount) >= min);
-    if (!isNaN(max)) list = list.filter((e) => Number(e.amount) <= max);
-
     return list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-  }, [entries, typeIndex, startDate, endDate, categoryFilter, amountMin, amountMax]);
+  }, [entries, typeIndex, startDate, endDate, categoryFilter, quickFilter]);
 
   // --- SUMMARY STATS ---
   const summary = useMemo(() => {
@@ -155,8 +202,6 @@ const HistoryScreen = () => {
       else totalOut += val;
     });
     return {
-      totalIn,
-      totalOut,
       net: totalIn - totalOut,
       count: filtered.length,
     };
@@ -165,7 +210,7 @@ const HistoryScreen = () => {
   // --- HANDLERS ---
   const toggleFilters = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setFiltersVisible(!filtersVisible);
+    setFiltersExpanded(!filtersExpanded);
   };
 
   const clearFilters = () => {
@@ -173,18 +218,17 @@ const HistoryScreen = () => {
     setStartDate(null);
     setEndDate(null);
     setCategoryFilter('');
-    setAmountMin('');
-    setAmountMax('');
+    setQuickFilter('ALL');
   };
 
-  const openEdit = (item: any) => {
+  const openEdit = useCallback((item: any) => {
     setEditingEntry(item);
     setEditAmount(String(item.amount));
     setEditCategory(ensureCategory(item.category));
     setEditNote(item.note || '');
     setEditTypeIndex(item.type === 'in' ? 1 : 0);
     setEditDate(new Date(item.date || item.created_at));
-  };
+  }, []);
 
   const handleSaveEdit = async () => {
     if (!editingEntry) return;
@@ -192,7 +236,7 @@ const HistoryScreen = () => {
     if (isNaN(amt) || amt <= 0)
       return Alert.alert('Invalid Amount', 'Please enter a valid number.');
 
-    setEditingEntry(null); // Close optimistic
+    setEditingEntry(null);
     showToast('Updating...');
 
     runInBackground(async () => {
@@ -212,119 +256,122 @@ const HistoryScreen = () => {
     });
   };
 
-  const handleDelete = (id: string) => {
-    Alert.alert('Confirm Delete', 'Are you sure?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => {
-          showToast('Deleting...');
-          runInBackground(async () => {
-            await deleteEntry(id);
-            showToast('Transaction deleted');
-          });
+  const handleDelete = useCallback(
+    (id: string) => {
+      Alert.alert('Delete Transaction', 'This cannot be undone.', [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            // Visual feedback before deletion
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            showToast('Deleting...');
+            runInBackground(async () => {
+              await deleteEntry(id);
+              showToast('Deleted');
+            });
+          },
         },
-      },
-    ]);
-  };
+      ]);
+    },
+    [deleteEntry, showToast]
+  );
 
-  // --- RENDER HEADER ---
+  const quickAmounts = ['100', '500', '1000', '2000'];
+
+  // --- HEADER RENDER ---
   const renderHeader = () => (
-    <View style={styles.headerWrapper}>
-      <Animated.View style={{ opacity: heroOpacity, transform: [{ translateY: heroTranslate }] }}>
-        <View style={styles.heroCard}>
-          <View style={styles.heroRow}>
-            <View>
-              <Text style={styles.heroLabel}>Net Balance</Text>
-              <Text
-                style={[
-                  styles.heroValue,
-                  { color: summary.net >= 0 ? colors.primary : colors.accentRed },
-                ]}
-              >
-                {summary.net >= 0 ? '+' : ''}₹{Math.abs(summary.net).toLocaleString()}
-              </Text>
-            </View>
-            <View style={styles.countBadge}>
-              <Text style={styles.countText}>{summary.count} items</Text>
-            </View>
-          </View>
-
-          <View style={styles.divider} />
-
-          <View style={styles.statsRow}>
-            <View>
-              <Text style={styles.statLabel}>Income</Text>
-              <Text style={[styles.statValue, { color: colors.accentGreen }]}>
-                ₹{summary.totalIn.toLocaleString()}
-              </Text>
-            </View>
-            <View style={{ alignItems: 'flex-end' }}>
-              <Text style={styles.statLabel}>Expense</Text>
-              <Text style={[styles.statValue, { color: colors.accentRed }]}>
-                ₹{summary.totalOut.toLocaleString()}
-              </Text>
-            </View>
-          </View>
+    <View style={styles.headerContainer}>
+      {/* Compact Summary Card */}
+      <View style={styles.compactHero}>
+        <View>
+          <Text style={styles.heroLabel}>Net Result (Selected Period)</Text>
+          <Text
+            style={[
+              styles.heroValue,
+              { color: summary.net >= 0 ? colors.primary : colors.accentRed },
+            ]}
+          >
+            {summary.net >= 0 ? '+' : ''}₹{Math.abs(summary.net).toLocaleString()}
+          </Text>
         </View>
-      </Animated.View>
-
-      <TouchableOpacity style={styles.filterBar} onPress={toggleFilters} activeOpacity={0.8}>
-        <View style={styles.filterLeft}>
-          <MaterialIcon name="filter-list" size={20} color={colors.primary} />
-          <Text style={styles.filterTitle}>Filters</Text>
+        <View style={styles.countChip}>
+          <Text style={styles.countText}>{summary.count} Txns</Text>
         </View>
-        <MaterialIcon
-          name={filtersVisible ? 'expand-less' : 'expand-more'}
-          size={24}
-          color={colors.muted}
-        />
-      </TouchableOpacity>
+      </View>
 
-      {filtersVisible && (
-        <View style={styles.filterPanel}>
+      {/* Quick Filter Chips */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.chipRow}
+      >
+        {['ALL', 'WEEK', 'MONTH'].map((f) => (
+          <TouchableOpacity
+            key={f}
+            onPress={() => setQuickFilter(f as any)}
+            style={[styles.filterChip, quickFilter === f && styles.filterChipActive]}
+          >
+            <Text style={[styles.filterChipText, quickFilter === f && styles.filterChipTextActive]}>
+              {f === 'ALL' ? 'All Time' : f === 'WEEK' ? 'This Week' : 'This Month'}
+            </Text>
+          </TouchableOpacity>
+        ))}
+        <TouchableOpacity style={styles.filterIconBtn} onPress={toggleFilters}>
+          <MaterialIcon
+            name="tune"
+            size={20}
+            color={filtersExpanded ? colors.primary : colors.muted}
+          />
+        </TouchableOpacity>
+      </ScrollView>
+
+      {/* Expandable Advanced Filters */}
+      {filtersExpanded && (
+        <View style={styles.advancedFilters}>
           <SimpleButtonGroup
-            buttons={['All', 'Income', 'Expense']}
+            buttons={['All Types', 'Income', 'Expense']}
             selectedIndex={typeIndex}
             onPress={setTypeIndex}
-            containerStyle={{ marginBottom: 12 }}
+            containerStyle={{ marginBottom: 12, height: 36 }}
+            textStyle={{ fontSize: 13 }}
           />
 
           <View style={styles.dateRow}>
             <Button
-              title={startDate ? startDate.toLocaleDateString() : 'Start Date'}
+              title={startDate ? dayjs(startDate).format('DD MMM') : 'Start'}
               type="outline"
               buttonStyle={styles.dateBtn}
               titleStyle={styles.dateBtnText}
               onPress={() => setShowStartPicker(true)}
               icon={
                 <MaterialIcon
-                  name="event"
-                  size={16}
+                  name="calendar-today"
+                  size={14}
                   color={colors.primary}
-                  style={{ marginRight: 6 }}
+                  style={{ marginRight: 4 }}
                 />
               }
             />
+            <Text style={{ alignSelf: 'center', color: colors.muted }}>-</Text>
             <Button
-              title={endDate ? endDate.toLocaleDateString() : 'End Date'}
+              title={endDate ? dayjs(endDate).format('DD MMM') : 'End'}
               type="outline"
               buttonStyle={styles.dateBtn}
               titleStyle={styles.dateBtnText}
               onPress={() => setShowEndPicker(true)}
               icon={
                 <MaterialIcon
-                  name="event"
-                  size={16}
+                  name="calendar-today"
+                  size={14}
                   color={colors.primary}
-                  style={{ marginRight: 6 }}
+                  style={{ marginRight: 4 }}
                 />
               }
             />
           </View>
 
-          {/* DATE PICKERS (Platform specific handling) */}
           {(showStartPicker || showEndPicker) && (
             <DateTimePicker
               value={new Date()}
@@ -343,54 +390,70 @@ const HistoryScreen = () => {
           )}
 
           <Input
-            placeholder="Search category..."
+            placeholder="Search category or notes..."
             value={categoryFilter}
             onChangeText={setCategoryFilter}
             inputContainerStyle={styles.searchInput}
-            leftIcon={<MaterialIcon name="search" size={20} color={colors.muted} />}
+            inputStyle={{ fontSize: 14 }}
+            leftIcon={<MaterialIcon name="search" size={18} color={colors.muted} />}
           />
 
-          <Button
-            title="Clear All Filters"
-            type="clear"
-            titleStyle={{ color: colors.accentRed, fontSize: 13 }}
-            onPress={clearFilters}
-          />
+          <TouchableOpacity onPress={clearFilters} style={{ alignSelf: 'flex-end' }}>
+            <Text style={styles.clearText}>Reset Filters</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* User Hint for Swipe */}
+      {filtered.length > 0 && (
+        <View style={styles.tipContainer}>
+          <MaterialIcon name="touch-app" size={14} color={colors.muted} />
+          <Text style={styles.tipText}>
+            Swipe <Text style={{ fontWeight: '700', color: colors.primary }}>Left</Text> to Delete •
+            Swipe <Text style={{ fontWeight: '700', color: colors.accentRed }}>Right</Text> to Edit
+          </Text>
         </View>
       )}
     </View>
   );
 
-  const quickAmounts = ['500', '1000', '3000', '10000'];
-
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-      <ScreenHeader
-        title="History"
-        subtitle="Detailed transactions log"
-        showScrollHint={false}
-        useSafeAreaPadding={false}
-      />
+
+      <View style={{ paddingHorizontal: width >= 768 ? spacing(4) : 0 }}>
+        <ScreenHeader
+          title="History"
+          subtitle="Transaction log"
+          showScrollHint={false}
+          useSafeAreaPadding={false}
+        />
+      </View>
 
       <FlatList
         data={filtered}
         keyExtractor={(item) => item.local_id}
-        renderItem={({ item, index }) => (
-          <AnimatedTransaction
+        renderItem={({ item }) => (
+          <SwipeableHistoryItem
             item={item}
-            index={index}
             onEdit={() => openEdit(item)}
             onDelete={() => handleDelete(item.local_id)}
           />
         )}
         ListHeaderComponent={renderHeader}
-        contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 20 }]}
+        contentContainerStyle={[
+          styles.listContent,
+          { paddingBottom: insets.bottom + 80 },
+          width >= 768 && { paddingHorizontal: spacing(4) },
+        ]}
+        initialNumToRender={15}
+        maxToRenderPerBatch={10}
+        windowSize={5}
         ListEmptyComponent={
           !showLoading ? (
             <View style={styles.emptyState}>
-              <MaterialIcon name="history" size={64} color={colors.border} />
-              <Text style={styles.emptyText}>No transactions found</Text>
+              <MaterialIcon name="receipt-long" size={48} color={colors.border} />
+              <Text style={styles.emptyText}>No records found</Text>
             </View>
           ) : null
         }
@@ -411,32 +474,23 @@ const HistoryScreen = () => {
         >
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
             <View style={styles.modalOverlay}>
-              <View style={styles.modalContent}>
+              <View
+                style={[styles.modalContent, { maxWidth: 600, alignSelf: 'center', width: '100%' }]}
+              >
                 <View style={styles.sheetHandle} />
                 <View style={styles.modalHeaderRow}>
-                  <View>
-                    <Text style={styles.modalTitle}>Edit Transaction</Text>
-                    <Text style={styles.modalSubtitle}>
-                      Update the amount, category, note, and date.
-                    </Text>
-                  </View>
-                  <TouchableOpacity
-                    onPress={() => setEditingEntry(null)}
-                    style={styles.modalCloseBtn}
-                  >
-                    <MaterialIcon name="close" size={20} color={colors.text} />
+                  <Text style={styles.modalTitle}>Edit Transaction</Text>
+                  <TouchableOpacity onPress={() => setEditingEntry(null)} style={styles.closeBtn}>
+                    <MaterialIcon name="close" size={22} color={colors.text} />
                   </TouchableOpacity>
                 </View>
 
-                <ScrollView
-                  showsVerticalScrollIndicator={false}
-                  contentContainerStyle={{ paddingBottom: 12 }}
-                >
+                <ScrollView showsVerticalScrollIndicator={false}>
                   <SimpleButtonGroup
                     buttons={['Expense', 'Income']}
                     selectedIndex={editTypeIndex}
                     onPress={setEditTypeIndex}
-                    containerStyle={styles.typeToggle}
+                    containerStyle={{ marginBottom: 16 }}
                   />
 
                   <Input
@@ -445,7 +499,7 @@ const HistoryScreen = () => {
                     onChangeText={setEditAmount}
                     keyboardType="numeric"
                     inputContainerStyle={styles.modalInput}
-                    leftIcon={<MaterialIcon name="payments" size={18} color={colors.muted} />}
+                    leftIcon={<MaterialIcon name="currency-rupee" size={16} color={colors.muted} />}
                   />
 
                   <View style={styles.quickRow}>
@@ -460,80 +514,74 @@ const HistoryScreen = () => {
                     ))}
                   </View>
 
-                  <TouchableOpacity
-                    style={styles.modalPickerBtn}
-                    onPress={() => setShowCategoryPicker(true)}
-                  >
-                    <View>
-                      <Text style={styles.modalPickerLabel}>Category</Text>
-                      <Text style={styles.modalPickerValue}>{editCategory}</Text>
-                    </View>
-                    <MaterialIcon name="arrow-drop-down" size={24} color={colors.text} />
-                  </TouchableOpacity>
+                  <View style={styles.rowInputs}>
+                    <TouchableOpacity
+                      style={styles.pickerBtn}
+                      onPress={() => setShowCategoryPicker(true)}
+                    >
+                      <Text style={styles.pickerLabel}>Category</Text>
+                      <View style={styles.pickerValueRow}>
+                        <Text style={styles.pickerValue}>{editCategory}</Text>
+                        <MaterialIcon name="arrow-drop-down" size={20} color={colors.muted} />
+                      </View>
+                    </TouchableOpacity>
 
-                  <TouchableOpacity
-                    style={styles.modalPickerBtn}
-                    onPress={() => setShowEditDatePicker(true)}
-                  >
-                    <View>
-                      <Text style={styles.modalPickerLabel}>Date</Text>
-                      <Text style={styles.modalPickerValue}>
-                        {editDate ? editDate.toLocaleDateString() : 'Select a date'}
-                      </Text>
-                    </View>
-                    <MaterialIcon name="event" size={20} color={colors.text} />
-                  </TouchableOpacity>
-
-                  <CategoryPickerModal
-                    visible={showCategoryPicker}
-                    onClose={() => setShowCategoryPicker(false)}
-                    onSelect={(c) => {
-                      setEditCategory(c);
-                      setShowCategoryPicker(false);
-                    }}
-                  />
-
-                  {showEditDatePicker && (
-                    <DateTimePicker
-                      value={editDate || new Date()}
-                      mode="date"
-                      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                      onChange={(event, date) => {
-                        setShowEditDatePicker(false);
-                        if (date) setEditDate(date);
-                      }}
-                    />
-                  )}
+                    <TouchableOpacity
+                      style={styles.pickerBtn}
+                      onPress={() => setShowEditDatePicker(true)}
+                    >
+                      <Text style={styles.pickerLabel}>Date</Text>
+                      <View style={styles.pickerValueRow}>
+                        <Text style={styles.pickerValue}>
+                          {editDate ? dayjs(editDate).format('DD MMM YYYY') : 'Select'}
+                        </Text>
+                        <MaterialIcon name="event" size={18} color={colors.muted} />
+                      </View>
+                    </TouchableOpacity>
+                  </View>
 
                   <Input
                     label="Note"
                     value={editNote}
                     onChangeText={setEditNote}
                     inputContainerStyle={styles.modalInput}
-                    placeholder="Add a short description"
-                    leftIcon={<MaterialIcon name="notes" size={18} color={colors.muted} />}
+                    placeholder="Description..."
+                    leftIcon={<MaterialIcon name="edit" size={16} color={colors.muted} />}
                   />
 
-                  <View style={styles.modalActions}>
-                    <Button
-                      title="Cancel"
-                      type="outline"
-                      onPress={() => setEditingEntry(null)}
-                      containerStyle={{ flex: 1, marginRight: 8 }}
-                    />
-                    <Button
-                      title="Save Changes"
-                      onPress={handleSaveEdit}
-                      containerStyle={{ flex: 1 }}
-                      buttonStyle={{ backgroundColor: colors.primary }}
-                    />
-                  </View>
+                  <Button
+                    title="Save Changes"
+                    onPress={handleSaveEdit}
+                    buttonStyle={{ backgroundColor: colors.primary, borderRadius: 12, height: 50 }}
+                    containerStyle={{ marginTop: 10 }}
+                  />
                 </ScrollView>
               </View>
             </View>
           </TouchableWithoutFeedback>
         </KeyboardAvoidingView>
       </Modal>
+
+      <CategoryPickerModal
+        visible={showCategoryPicker}
+        onClose={() => setShowCategoryPicker(false)}
+        onSelect={(c) => {
+          setEditCategory(c);
+          setShowCategoryPicker(false);
+        }}
+      />
+
+      {showEditDatePicker && (
+        <DateTimePicker
+          value={editDate || new Date()}
+          mode="date"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          onChange={(e, d) => {
+            setShowEditDatePicker(false);
+            if (d) setEditDate(d);
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 };
@@ -547,109 +595,108 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: 16,
-    paddingTop: 8,
   },
-  headerWrapper: {
-    marginBottom: 16,
+  headerContainer: {
+    marginBottom: 8,
+    marginTop: 16,
   },
-  /* HERO CARD */
-  heroCard: {
-    backgroundColor: colors.card,
-    borderRadius: 20,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
-    shadowColor: colors.text,
-    shadowOpacity: 0.05,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 10,
-    elevation: 3,
-    marginBottom: 16,
-  },
-  heroRow: {
+
+  /* COMPACT HERO */
+  compactHero: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   heroLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: colors.muted,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 4,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   heroValue: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: '800',
+    marginTop: 2,
   },
-  countBadge: {
+  countChip: {
     backgroundColor: colors.surfaceMuted,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
   },
   countText: {
     fontSize: 12,
     fontWeight: '600',
     color: colors.text,
   },
-  divider: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginVertical: 16,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  statLabel: {
-    fontSize: 12,
-    color: colors.muted,
-    marginBottom: 2,
-  },
-  statValue: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  /* FILTER BAR */
-  filterBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.card,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  filterLeft: {
+
+  /* CHIPS */
+  chipRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    marginBottom: 4,
+    paddingRight: 10,
   },
-  filterTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  filterPanel: {
+  filterChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
     backgroundColor: colors.card,
-    marginTop: 8,
-    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  filterChipActive: {
+    backgroundColor: colors.text,
+    borderColor: colors.text,
+  },
+  filterChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.muted,
+  },
+  filterChipTextActive: {
+    color: colors.background,
+  },
+  filterIconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.card,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginLeft: 4,
+  },
+
+  /* ADVANCED FILTERS */
+  advancedFilters: {
+    marginTop: 12,
+    backgroundColor: colors.card,
     padding: 16,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: colors.border,
   },
   dateRow: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     marginBottom: 12,
-    gap: 8,
+    gap: 10,
   },
   dateBtn: {
     borderColor: colors.border,
     borderRadius: 8,
-    paddingVertical: 8,
+    height: 36,
+    paddingVertical: 0,
+    minWidth: 100,
   },
   dateBtnText: {
     fontSize: 12,
@@ -659,67 +706,162 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceMuted,
     borderBottomWidth: 0,
     borderRadius: 10,
-    paddingHorizontal: 8,
     height: 40,
+    paddingHorizontal: 8,
   },
+  clearText: {
+    color: colors.accentRed,
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 8,
+  },
+
+  /* TIP */
+  tipContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+    marginBottom: 8,
+    gap: 6,
+    opacity: 0.8,
+  },
+  tipText: {
+    fontSize: 12,
+    color: colors.muted,
+  },
+
+  /* COMPACT ITEM */
+  swipeContainer: {
+    marginBottom: 8,
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  compactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.03)',
+    height: 72,
+  },
+  compactIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  compactContent: {
+    flex: 1,
+  },
+  compactHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 2,
+  },
+  compactCategory: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+    flex: 1,
+    marginRight: 8,
+  },
+  compactAmount: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  compactSubRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  compactNote: {
+    fontSize: 12,
+    color: colors.muted,
+    flex: 1,
+    marginRight: 8,
+  },
+  compactDate: {
+    fontSize: 11,
+    color: colors.subtleText,
+  },
+
+  /* SWIPE ACTIONS */
+  leftAction: {
+    backgroundColor: '#3b82f6', // Blue for Edit (Appears on Left when Swiping Right)
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 80,
+    height: '100%',
+    borderRadius: 14,
+    marginRight: 10,
+  },
+  rightAction: {
+    backgroundColor: '#ef4444', // Red for Delete (Appears on Right when Swiping Left)
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 80,
+    height: '100%',
+    borderRadius: 14,
+    marginLeft: 10,
+  },
+  actionText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 4,
+  },
+
   /* EMPTY STATE */
   emptyState: {
     alignItems: 'center',
-    paddingVertical: 40,
+    paddingVertical: 60,
+    opacity: 0.6,
   },
   emptyText: {
+    marginTop: 12,
     color: colors.muted,
-    marginTop: 8,
-    fontSize: 14,
+    fontSize: 15,
   },
+
   /* MODAL */
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    padding: 20,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
   },
   modalContent: {
     backgroundColor: colors.card,
-    borderRadius: 20,
-    padding: 20,
-    maxHeight: '80%',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    maxHeight: '85%',
   },
   sheetHandle: {
-    width: 46,
+    width: 40,
     height: 4,
-    borderRadius: 2,
     backgroundColor: colors.border,
+    borderRadius: 2,
     alignSelf: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
   },
   modalHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
     color: colors.text,
   },
-  modalSubtitle: {
-    fontSize: 12,
-    color: colors.muted,
-    marginTop: 4,
-  },
-  modalCloseBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.border,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  typeToggle: {
-    marginBottom: 16,
+  closeBtn: {
+    padding: 4,
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: 20,
   },
   modalInput: {
     borderBottomWidth: 1,
@@ -727,44 +869,48 @@ const styles = StyleSheet.create({
   },
   quickRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: 8,
-    marginBottom: 16,
+    marginBottom: 20,
   },
   quickChip: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 999,
+    borderRadius: 8,
+    backgroundColor: colors.surfaceMuted,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.surfaceMuted,
   },
   quickChipText: {
     fontSize: 12,
-    fontWeight: '600',
     color: colors.text,
+    fontWeight: '600',
   },
-  modalPickerBtn: {
+  rowInputs: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+  },
+  pickerBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    padding: 12,
+  },
+  pickerLabel: {
+    fontSize: 11,
+    color: colors.muted,
+    marginBottom: 4,
+    textTransform: 'uppercase',
+  },
+  pickerValueRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    marginBottom: 16,
   },
-  modalPickerLabel: {
+  pickerValue: {
     fontSize: 14,
     color: colors.text,
-  },
-  modalPickerValue: {
-    fontSize: 13,
-    color: colors.muted,
-    marginTop: 2,
-  },
-  modalActions: {
-    flexDirection: 'row',
-    marginTop: 20,
+    fontWeight: '500',
   },
 });

@@ -9,10 +9,11 @@ import {
   Easing,
   useWindowDimensions,
   StatusBar,
+  ActivityIndicator,
 } from 'react-native';
 import type { ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, Text } from '@rneui/themed';
+import { Text } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 
 // --- LOGIC IMPORTS ---
@@ -59,10 +60,12 @@ const SettingsScreen = () => {
     [horizontalPadding]
   );
 
-  // --- SAFE ANIMATION SETUP ---
-  // Create an array of 6 Animated Values (enough for all sections + extras)
-  // This prevents the "undefined" error if we access an index that doesn't exist
+  // --- ANIMATION SETUP ---
+  // Entrance Stagger
   const animValues = useRef([...Array(6)].map(() => new Animated.Value(0))).current;
+
+  // Sync Spin Animation
+  const spinValue = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const animations = animValues.map((anim) =>
@@ -73,23 +76,18 @@ const SettingsScreen = () => {
         useNativeDriver: true,
       })
     );
-    Animated.stagger(80, animations).start();
+    Animated.stagger(60, animations).start();
   }, []);
 
-  // CRASH FIX: Added a safety check here
   const getAnimStyle = (index: number) => {
-    const anim = animValues[index];
-
-    // If the animation value doesn't exist, return empty style instead of crashing
-    if (!anim) return {};
-
+    const anim = animValues[index] || new Animated.Value(1); // Fallback to prevent crash
     return {
       opacity: anim,
       transform: [
         {
           translateY: anim.interpolate({
             inputRange: [0, 1],
-            outputRange: [15, 0],
+            outputRange: [20, 0],
           }),
         },
       ],
@@ -107,6 +105,28 @@ const SettingsScreen = () => {
       setLastSyncedCount(await getLastSyncCount());
     })();
   }, []);
+
+  // Sync Animation Logic
+  useEffect(() => {
+    if (syncing) {
+      Animated.loop(
+        Animated.timing(spinValue, {
+          toValue: 1,
+          duration: 1000,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        })
+      ).start();
+    } else {
+      spinValue.stopAnimation();
+      spinValue.setValue(0);
+    }
+  }, [syncing]);
+
+  const spin = spinValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
 
   // --- HANDLERS ---
   const handleLogout = () => {
@@ -126,6 +146,7 @@ const SettingsScreen = () => {
   };
 
   const handleSync = async () => {
+    if (syncing) return;
     setSyncing(true);
     try {
       const stats = await syncBothWays();
@@ -178,7 +199,7 @@ const SettingsScreen = () => {
 
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 120 }}
+          contentContainerStyle={{ paddingBottom: 100 }}
         >
           <View style={containerStyle}>
             {/* 1. PROFILE CARD */}
@@ -190,13 +211,13 @@ const SettingsScreen = () => {
                   </View>
                   <View style={styles.profileInfo}>
                     <Text style={styles.profileName}>{user?.name || 'User'}</Text>
-                    <Text style={styles.profileEmail}>{user?.email || 'No email'}</Text>
+                    <Text style={styles.profileEmail}>{user?.email || 'No email linked'}</Text>
                   </View>
                   <TouchableOpacity
                     style={styles.editButton}
                     onPress={() => navigation.navigate('Account')}
                   >
-                    <MaterialIcon name="chevron-right" size={24} color={colors.muted} />
+                    <MaterialIcon name="edit" size={20} color={colors.primary} />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -208,43 +229,51 @@ const SettingsScreen = () => {
               <View style={styles.card}>
                 <View style={styles.syncHeader}>
                   <View style={[styles.iconBox, { backgroundColor: colors.primarySoft }]}>
-                    <MaterialIcon name="cloud-sync" size={22} color={colors.primary} />
+                    <Animated.View style={{ transform: [{ rotate: spin }] }}>
+                      <MaterialIcon name="sync" size={24} color={colors.primary} />
+                    </Animated.View>
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.cardTitle}>Cloud Sync</Text>
-                    <Text style={styles.cardSub}>Keep your records backed up</Text>
+                    <Text style={styles.cardSub}>
+                      {syncing ? 'Synchronizing records...' : 'Keep your records backed up'}
+                    </Text>
                   </View>
                 </View>
 
-                <View style={styles.divider} />
-
-                <View style={styles.statRow}>
+                <View style={styles.statGrid}>
                   <View style={styles.statItem}>
-                    <Text style={styles.statLabel}>Last Sync</Text>
+                    <Text style={styles.statLabel}>LAST SYNC</Text>
                     <Text style={styles.statValue}>{formatSyncDate(lastSynced)}</Text>
                   </View>
-                  <View style={styles.dividerVertical} />
                   <View style={styles.statItem}>
-                    <Text style={styles.statLabel}>Entries</Text>
-                    <Text style={styles.statValue}>{lastSyncedCount}</Text>
+                    <Text style={styles.statLabel}>ITEMS</Text>
+                    <Text style={styles.statValue}>{lastSyncedCount} Records</Text>
                   </View>
                 </View>
 
-                <Button
-                  title={syncing ? 'Syncing...' : 'Sync Now'}
+                <TouchableOpacity
+                  style={[styles.syncButton, syncing && styles.syncButtonDisabled]}
                   onPress={handleSync}
-                  loading={syncing}
-                  icon={
-                    <MaterialIcon name="sync" size={18} color="white" style={{ marginRight: 8 }} />
-                  }
-                  buttonStyle={styles.syncBtn}
-                  titleStyle={styles.syncBtnTitle}
-                  containerStyle={{ marginTop: 12 }}
-                />
+                  disabled={syncing}
+                  activeOpacity={0.8}
+                >
+                  {syncing ? (
+                    <ActivityIndicator color="#fff" size="small" style={{ marginRight: 8 }} />
+                  ) : (
+                    <MaterialIcon
+                      name="cloud-upload"
+                      size={18}
+                      color="#fff"
+                      style={{ marginRight: 8 }}
+                    />
+                  )}
+                  <Text style={styles.syncButtonText}>{syncing ? 'Syncing...' : 'Sync Now'}</Text>
+                </TouchableOpacity>
               </View>
             </Animated.View>
 
-            {/* 3. GENERAL SETTINGS */}
+            {/* 3. GENERAL SETTINGS (Notification Removed) */}
             <Animated.View style={getAnimStyle(2)}>
               <Text style={styles.sectionLabel}>General</Text>
               <View style={styles.card}>
@@ -254,14 +283,19 @@ const SettingsScreen = () => {
                   onPress={() => navigation.navigate('Account')}
                 />
                 <SettingsRow
-                  icon="notifications-none"
-                  label="Notifications"
-                  onPress={() => showToast('Coming soon')}
-                />
-                <SettingsRow
                   icon="lock-outline"
                   label="Privacy Policy"
                   onPress={() => navigation.navigate('PrivacyPolicy')}
+                />
+                <SettingsRow
+                  icon="gavel"
+                  label="Terms of Use"
+                  onPress={() => navigation.navigate('Terms')}
+                />
+                <SettingsRow
+                  icon="fact-check"
+                  label="End User License"
+                  onPress={() => navigation.navigate('Eula')}
                   lastItem
                 />
               </View>
@@ -270,23 +304,16 @@ const SettingsScreen = () => {
             {/* 4. DANGER ZONE */}
             <Animated.View style={getAnimStyle(3)}>
               <View style={styles.dangerHeaderRow}>
-                <MaterialIcon name="warning" size={16} color={colors.accentRed} />
-                <Text
-                  style={[
-                    styles.sectionLabel,
-                    { color: colors.accentRed, marginTop: 0, marginBottom: 0 },
-                  ]}
-                >
-                  Danger Zone
-                </Text>
+                <MaterialIcon name="error-outline" size={18} color={colors.accentRed} />
+                <Text style={styles.dangerLabel}>Danger Zone</Text>
               </View>
 
               <View style={styles.dangerCard}>
-                <View style={styles.dangerStrip} />
                 <View style={styles.dangerContent}>
                   <Text style={styles.dangerTitle}>Reset Application</Text>
                   <Text style={styles.dangerDesc}>
-                    Clears all local databases, cached images, and session data.
+                    Clears all local databases, cached images, and session data. Use this if the app
+                    is behaving unexpectedly.
                   </Text>
                   <TouchableOpacity
                     style={styles.dangerBtn}
@@ -300,15 +327,15 @@ const SettingsScreen = () => {
               </View>
             </Animated.View>
 
-            {/* 5. LOGOUT BUTTON */}
+            {/* 5. LOGOUT */}
             <Animated.View style={[getAnimStyle(4), { marginTop: 24 }]}>
-              <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+              <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.7}>
                 <MaterialIcon name="logout" size={20} color={colors.accentRed} />
                 <Text style={styles.logoutText}>Sign Out</Text>
               </TouchableOpacity>
+
               <Text style={styles.versionText}>
-                v{pkg.version} (Build{' '}
-                {appConfig.expo.ios?.buildNumber || appConfig.expo.android?.versionCode})
+                v{pkg.version} ({appConfig.expo.version || '1.0.0'})
               </Text>
             </Animated.View>
           </View>
@@ -352,19 +379,20 @@ const styles = StyleSheet.create({
     marginTop: 24,
     marginLeft: 4,
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
+    letterSpacing: 0.5,
   },
 
   /* CARDS GLOBAL */
   card: {
     backgroundColor: colors.card,
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: colors.border,
     padding: 16,
-    shadowColor: colors.text,
+    // Soft Shadow
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.02,
+    shadowOpacity: 0.03,
     shadowRadius: 8,
     elevation: 2,
   },
@@ -372,49 +400,58 @@ const styles = StyleSheet.create({
   /* PROFILE */
   profileCard: {
     backgroundColor: colors.card,
-    borderRadius: 20,
+    borderRadius: 22,
     padding: 16,
     borderWidth: 1,
     borderColor: colors.border,
     marginTop: 8,
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.08,
     shadowRadius: 12,
-    elevation: 3,
+    elevation: 4,
   },
   profileRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   avatarContainer: {
-    width: 52,
-    height: 52,
-    borderRadius: 18,
-    backgroundColor: colors.primarySoft,
+    width: 56,
+    height: 56,
+    borderRadius: 20,
+    backgroundColor: colors.primarySoft || '#EEF2FF',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 14,
+    marginRight: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
   },
   avatarText: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '700',
     color: colors.primary,
   },
   profileInfo: {
     flex: 1,
+    justifyContent: 'center',
   },
   profileName: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '700',
     color: colors.text,
+    marginBottom: 2,
   },
   profileEmail: {
     fontSize: 13,
     color: colors.muted,
   },
   editButton: {
-    padding: 8,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: colors.surfaceMuted || '#F5F5F5',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   /* SYNC */
@@ -424,9 +461,9 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   iconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -440,59 +477,68 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.muted,
   },
-  divider: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginBottom: 16,
-  },
-  dividerVertical: {
-    width: 1,
-    height: '100%',
-    backgroundColor: colors.border,
-  },
-  statRow: {
+  statGrid: {
     flexDirection: 'row',
-    gap: 16,
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   statItem: {
     flex: 1,
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: colors.muted,
+    fontWeight: '700',
     marginBottom: 4,
+    textTransform: 'uppercase',
   },
   statValue: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: colors.text,
   },
-  syncBtn: {
+  syncButton: {
     backgroundColor: colors.primary,
-    borderRadius: 12,
-    paddingVertical: 12,
+    borderRadius: 14,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  syncBtnTitle: {
+  syncButtonDisabled: {
+    opacity: 0.7,
+  },
+  syncButtonText: {
+    color: '#fff',
     fontWeight: '700',
-    fontSize: 14,
+    fontSize: 15,
   },
 
   /* SETTINGS ROWS */
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: colors.surfaceMuted,
+    borderBottomColor: colors.surfaceMuted || '#F0F0F0',
   },
   rowIcon: {
-    width: 34,
-    height: 34,
+    width: 36,
+    height: 36,
     borderRadius: 10,
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: colors.surfaceMuted || '#F5F5F5',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: 14,
   },
   rowLabel: {
     flex: 1,
@@ -510,56 +556,53 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     marginLeft: 4,
   },
+  dangerLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.accentRed,
+    textTransform: 'uppercase',
+  },
   dangerCard: {
     backgroundColor: '#FEF2F2', // Light red bg
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#FCA5A5', // Light red border
-    overflow: 'hidden',
-    flexDirection: 'row',
-  },
-  dangerStrip: {
-    width: 6,
-    backgroundColor: colors.accentRed,
+    borderColor: '#FECACA', // Light red border
+    padding: 16,
   },
   dangerContent: {
     flex: 1,
-    padding: 16,
   },
   dangerTitle: {
     fontSize: 16,
     fontWeight: '700',
     color: colors.accentRed,
-    marginBottom: 4,
+    marginBottom: 6,
   },
   dangerDesc: {
     fontSize: 13,
-    color: colors.text,
-    opacity: 0.7,
+    color: '#7F1D1D', // Darker red for text
+    opacity: 0.8,
     marginBottom: 16,
-    lineHeight: 18,
+    lineHeight: 20,
   },
   dangerBtn: {
-    backgroundColor: colors.accentRed,
+    backgroundColor: '#fff',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 12,
     borderRadius: 12,
     gap: 8,
-    shadowColor: colors.accentRed,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
   },
   dangerBtnText: {
-    color: 'white',
+    color: colors.accentRed,
     fontWeight: '700',
     fontSize: 14,
   },
 
-  /* FOOTER & LOGOUT */
+  /* FOOTER */
   logoutBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -581,6 +624,6 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 12,
     marginTop: 20,
-    opacity: 0.6,
+    opacity: 0.5,
   },
 });

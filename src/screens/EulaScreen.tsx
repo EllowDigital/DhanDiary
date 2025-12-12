@@ -14,53 +14,62 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import ScreenHeader from '../components/ScreenHeader';
 import { colors, spacing } from '../utils/design';
 
-// --- Configuration ---
-const LAST_UPDATED = 'December 10, 2025';
+const LAST_UPDATED = 'December 12, 2025';
 const CONTACT_EMAIL_PRIMARY = 'ellowdigitalindia@gmail.com';
 const CONTACT_EMAIL_SECONDARY = 'sarwanyadav6174@gmail.com';
 
-// --- Data ---
 const sections = [
   {
-    id: 'usage',
-    icon: 'file-document-edit-outline',
-    title: 'Using DhanDiary',
-    body: 'DhanDiary is provided for tracking your personal finances. You may not use the app for unlawful activity, automated scraping, or to host malicious content. We reserve the right to suspend accounts that abuse the service.',
+    id: 'license',
+    icon: 'file-certificate-outline',
+    title: 'License Grant',
+    body: 'We grant you a limited, revocable, non-transferable license to install and use DhanDiary on devices you own or control for personal finance or internal business record keeping.',
   },
   {
-    id: 'security',
-    icon: 'shield-lock-outline',
-    title: 'Accounts & Security',
-    body: 'Keep your password secret and device secure. You are responsible for transactions recorded using your credentials. If you suspect unauthorized access, change your password immediately and contact support.',
+    id: 'restrictions',
+    icon: 'shield-key-outline',
+    title: 'Usage Restrictions',
+    body: 'You may not rent, sell, sublicense, reverse engineer, or circumvent safeguards inside the app. Only modify or decompile when local law explicitly allows it.',
   },
   {
-    id: 'data',
-    icon: 'cloud-check-outline',
-    title: 'Local & Cloud Data',
-    body: 'Your entries are stored on your device first. When you log in, the app syncs with EllowDigital servers. Deleting the app does not automatically erase cloud backups—submit a deletion request to purge cloud data.',
-  },
-  {
-    id: 'payments',
-    icon: 'credit-card-outline',
-    title: 'Payments',
-    body: 'The current version of DhanDiary is free. If we add paid features in the future, pricing and billing terms will be communicated clearly inside the app before any charge is applied.',
-  },
-  {
-    id: 'availability',
-    icon: 'server-network',
-    title: 'Availability',
-    body: 'We strive for high uptime but cannot guarantee uninterrupted service. Scheduled maintenance or infrastructure partners (like Neon DB and Expo services) may occasionally cause brief downtime.',
-  },
-  {
-    id: 'changes',
+    id: 'updates',
     icon: 'update',
-    title: 'Changes',
-    body: 'We may update these Terms to reflect new features or regulations. Significant changes will be highlighted in-app. Continued use of DhanDiary implies acceptance of the updated Terms.',
+    title: 'Updates & Support',
+    body: 'Future patches may install automatically. While we aim to keep the product reliable, we are not obligated to deliver ongoing updates or support.',
+  },
+  {
+    id: 'ownership',
+    icon: 'copyright',
+    title: 'Ownership',
+    body: 'EllowDigital retains all intellectual property rights to DhanDiary and its trademarks. This EULA does not transfer any ownership to you.',
+  },
+  {
+    id: 'components',
+    icon: 'puzzle-outline',
+    title: 'Third-Party Components',
+    body: 'The app may include open-source or third-party libraries covered by their own licenses. Those terms remain in effect for the relevant components.',
+  },
+  {
+    id: 'termination',
+    icon: 'close-circle-outline',
+    title: 'Termination',
+    body: 'This license ends if you fail to comply with these terms. When terminated, uninstall DhanDiary and delete all copies in your possession.',
+  },
+  {
+    id: 'export',
+    icon: 'airplane-takeoff',
+    title: 'Export Compliance',
+    body: 'You agree to follow all export and compliance laws that apply to software originating from India and any other relevant jurisdiction.',
+  },
+  {
+    id: 'warranty',
+    icon: 'alert-circle-outline',
+    title: 'Warranty & Liability',
+    body: 'DhanDiary is provided “as is.” We disclaim implied warranties and limit liability to the fees you paid (or INR 500 if unpaid). We are not liable for indirect or consequential damages.',
   },
 ];
 
-// --- Component for individual sections ---
-const TermSection = ({ item }: { item: (typeof sections)[0] }) => (
+const EulaSection = ({ item }: { item: (typeof sections)[0] }) => (
   <View style={styles.card}>
     <View style={styles.cardHeader}>
       <MaterialCommunityIcons
@@ -75,7 +84,7 @@ const TermSection = ({ item }: { item: (typeof sections)[0] }) => (
   </View>
 );
 
-const TermsScreen = () => {
+const EulaScreen = () => {
   const handleEmailPress = async () => {
     const url = `mailto:${CONTACT_EMAIL_PRIMARY}`;
     const supported = await Linking.canOpenURL(url);
@@ -88,8 +97,8 @@ const TermsScreen = () => {
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       <SafeAreaView style={styles.safeArea}>
         <ScreenHeader
-          title="Terms of Use"
-          subtitle="Understand your rights & responsibilities"
+          title="End User License"
+          subtitle="Terms for installing & using DhanDiary"
           showScrollHint={false}
           useSafeAreaPadding={false}
         />
@@ -99,26 +108,22 @@ const TermsScreen = () => {
           contentContainerStyle={styles.contentContainer}
           showsVerticalScrollIndicator={false}
         >
-          {/* Intro Text */}
           <Text style={styles.leadText}>
-            Please read these Terms carefully before using{' '}
-            <Text style={styles.bold}>DhanDiary</Text>. By creating an account or continuing to use
-            the app, you agree to the rules below.
+            By downloading or using <Text style={styles.bold}>DhanDiary</Text>, you agree to this
+            End User License Agreement. If you do not agree, you must uninstall the app.
           </Text>
 
-          {/* Mapped Sections */}
           {sections.map((section) => (
-            <TermSection key={section.id} item={section} />
+            <EulaSection key={section.id} item={section} />
           ))}
 
-          {/* Contact Section (Distinct Style) */}
           <View style={[styles.card, styles.contactCard]}>
             <View style={styles.cardHeader}>
               <MaterialCommunityIcons name="email-fast-outline" size={22} color={colors.text} />
-              <Text style={styles.cardTitle}>Contact Us</Text>
+              <Text style={styles.cardTitle}>Contact</Text>
             </View>
             <Text style={styles.cardBody}>
-              Have questions? We'll get back to you within a few business days.
+              Questions about this license? Reach out and we will reply within a few business days.
             </Text>
 
             <TouchableOpacity onPress={handleEmailPress}>
@@ -127,7 +132,6 @@ const TermsScreen = () => {
             <Text style={styles.secondaryEmail}>{CONTACT_EMAIL_SECONDARY}</Text>
           </View>
 
-          {/* Footer */}
           <View style={styles.footer}>
             <Text style={styles.footerText}>Last updated: {LAST_UPDATED}</Text>
           </View>
@@ -137,7 +141,7 @@ const TermsScreen = () => {
   );
 };
 
-export default TermsScreen;
+export default EulaScreen;
 
 const styles = StyleSheet.create({
   root: {
@@ -160,20 +164,17 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     color: colors.subtleText || '#666',
-    marginBottom: spacing(1),
   },
   bold: {
     fontWeight: '700',
     color: colors.text,
   },
-  // Card Styling
   card: {
     backgroundColor: colors.card || '#fff',
     borderRadius: 16,
     padding: spacing(2),
     borderWidth: 1,
     borderColor: colors.border || '#e0e0e0',
-    // Shadow for depth
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.03,
@@ -199,7 +200,6 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     color: colors.muted || '#555',
   },
-  // Contact Specifics
   contactCard: {
     backgroundColor: colors.background === '#000' ? '#222' : '#F9FAFB',
   },
@@ -215,7 +215,6 @@ const styles = StyleSheet.create({
     color: colors.muted || '#888',
     marginTop: 4,
   },
-  // Footer
   footer: {
     marginTop: spacing(1),
     alignItems: 'center',

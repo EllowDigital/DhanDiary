@@ -8,6 +8,7 @@ import LoginScreen from './src/screens/LoginScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
 import PrivacyPolicyScreen from './src/screens/PrivacyPolicyScreen';
 import TermsScreen from './src/screens/TermsScreen';
+import EulaScreen from './src/screens/EulaScreen';
 import { RootStackParamList, AuthStackParamList, MainStackParamList } from './src/types/navigation';
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
@@ -20,6 +21,7 @@ const AuthNavigator = () => (
     <AuthStack.Screen name="Register" component={RegisterScreen} />
     <AuthStack.Screen name="Terms" component={TermsScreen} />
     <AuthStack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
+    <AuthStack.Screen name="Eula" component={EulaScreen} />
   </AuthStack.Navigator>
 );
 
@@ -294,12 +296,12 @@ export default function App() {
   }
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <ToastProvider>
-        <SafeAreaProvider>
+    <SafeAreaProvider>
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
           <AppContent />
-        </SafeAreaProvider>
-      </ToastProvider>
-    </QueryClientProvider>
+        </ToastProvider>
+      </QueryClientProvider>
+    </SafeAreaProvider>
   );
 }
