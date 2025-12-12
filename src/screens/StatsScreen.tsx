@@ -26,11 +26,12 @@ import ScreenHeader from '../components/ScreenHeader';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import DailyTrendChart from '../components/charts/DailyTrendChart';
 
-// --- CONFIG ---
+// --- ANIMATION CONFIG ---
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
+// --- COLOR UTILS ---
 const hexToRgb = (hex: string) => {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
   return result
@@ -40,40 +41,44 @@ const hexToRgb = (hex: string) => {
 
 const FILTERS = ['7D', '30D', 'Month', 'Year'];
 
-// Modern Palette
-const CHART_COLORS = [
-  '#F87171', // Red
-  '#60A5FA', // Blue
-  '#FBBF24', // Amber
-  '#34D399', // Emerald
-  '#818CF8', // Indigo
-  '#A78BFA', // Violet
-];
+// Chart Colors
+const PIE_COLORS = ['#FF6B6B', '#4ECDC4', '#FFD93D', '#6C5CE7', '#A8E6CF', '#FD79A8'];
 
 const chartConfig = {
   backgroundColor: 'transparent',
   backgroundGradientFrom: '#ffffff',
   backgroundGradientTo: '#ffffff',
   decimalPlaces: 0,
-  color: (opacity = 1) => `rgba(${hexToRgb(colors.primary)}, ${opacity})`,
-  labelColor: (opacity = 1) => `rgba(${hexToRgb(colors.subtleText)}, ${opacity})`,
-  barPercentage: 0.7,
-  fillShadowGradient: colors.primary,
-  fillShadowGradientOpacity: 1,
+  color: (opacity = 1) => `rgba(${hexToRgb(colors.primary || '#6200ee')}, ${opacity})`,
+  labelColor: (opacity = 1) => `rgba(0,0,0, ${opacity})`,
 };
 
+// --- TYPES ---
+interface PieDataPoint {
+  name: string;
+  population: number;
+  color: string;
+  legendFontColor: string;
+  legendFontSize: number;
+}
+
+interface TrendDataPoint {
+  label: string;
+  value: number;
+}
+
 const StatsScreen = () => {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const { user, loading: authLoading } = useAuth();
   const { entries = [], isLoading, refetch } = useEntries(user?.id);
 
-  // Animation Refs
+  // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
 
-  const [filter, setFilter] = useState('30D');
+  const [filter, setFilter] = useState('7D');
 
-  // Load Data & Animate
+  // --- DATA LOADING ---
   useEffect(() => {
     const unsub = subscribeEntries(() => {
       try {
@@ -81,19 +86,21 @@ const StatsScreen = () => {
       } catch (e) {}
     });
     Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
-      Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, damping: 15 }),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+      Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, damping: 20 }),
     ]).start();
     return () => unsub();
   }, [refetch]);
 
-  // --- RESPONSIVE CALCS ---
+  // --- RESPONSIVE LAYOUT CALCS ---
   const isTablet = width > 700;
-  const containerWidth = Math.min(760, width - spacing(isTablet ? 3 : 2));
-  const donutSize = Math.max(160, Math.min(isTablet ? 260 : 210, containerWidth - spacing(4)));
-  const innerSize = Math.round(donutSize * 0.58);
+  const isSmallPhone = width < 380;
 
-  // --- DATA PROCESSING ---
+  const containerWidth = Math.min(760, width - 32);
+  const donutSize = isTablet ? 280 : Math.min(width * 0.55, 220);
+  const innerSize = Math.round(donutSize * 0.6);
+
+  // --- STATS LOGIC ---
   const filteredEntries = useMemo(() => {
     const startDate = getStartDateForFilter(filter);
     return entries.filter((e: any) => {
@@ -102,10 +109,10 @@ const StatsScreen = () => {
     });
   }, [entries, filter]);
 
-  // 1. Totals
+  // Totals
   const stats = useMemo(() => {
     return filteredEntries.reduce(
-      (acc, entry) => {
+      (acc: { totalIn: number; totalOut: number; net: number }, entry: any) => {
         const amount = Number(entry.amount) || 0;
         if (entry.type === 'in') acc.totalIn += amount;
         else acc.totalOut += amount;
@@ -116,151 +123,100 @@ const StatsScreen = () => {
   }, [filteredEntries]);
   stats.net = stats.totalIn - stats.totalOut;
 
-  // 2. Advanced Metrics
+  // Ratios
   const savingsRate = stats.totalIn > 0 ? Math.max(0, (stats.net / stats.totalIn) * 100) : 0;
 
   const maxExpense = useMemo(() => {
-    const expenses = filteredEntries.filter((e) => e.type === 'out').map((e) => Number(e.amount));
+    const expenses = filteredEntries
+      .filter((e: any) => e.type === 'out')
+      .map((e: any) => Number(e.amount));
     return expenses.length ? Math.max(...expenses) : 0;
   }, [filteredEntries]);
 
   const maxIncome = useMemo(() => {
-    const incomes = filteredEntries.filter((e) => e.type === 'in').map((e) => Number(e.amount));
+    const incomes = filteredEntries
+      .filter((e: any) => e.type === 'in')
+      .map((e: any) => Number(e.amount));
     return incomes.length ? Math.max(...incomes) : 0;
   }, [filteredEntries]);
 
-  // 3. Donut Data
-  const pieData = useMemo(() => {
-    const expenseCategories = filteredEntries
-      .filter((e) => e.type === 'out')
-      .reduce(
-        (acc, e) => {
-          const cat = ensureCategory(e.category);
-          acc[cat] = (acc[cat] || 0) + Number(e.amount);
-          return acc;
-        },
-        {} as { [key: string]: number }
-      );
+  // Chart Data
+  const dailyTrend = useMemo(() => {
+    const labels: string[] = [];
+    const values: number[] = []; // Explicitly typed as number[]
+    const indexByKey = new Map<string, number>();
+    const now = dayjs();
+    const startDate = getStartDateForFilter(filter, now);
+    const days = getDaysCountForFilter(filter, now);
 
-    return Object.entries(expenseCategories)
-      .map(([name, population], index) => ({
+    for (let i = 0; i < days; i++) {
+      const d = startDate.add(i, 'day');
+      const key = d.format('YYYY-MM-DD');
+      labels.push(d.format(days > 15 ? 'DD' : 'ddd'));
+      values.push(0);
+      indexByKey.set(key, i);
+    }
+
+    filteredEntries.forEach((e: any) => {
+      if (e.type === 'out') {
+        const key = dayjs(e.date).format('YYYY-MM-DD');
+        const idx = indexByKey.get(key);
+        if (idx !== undefined) values[idx] += Number(e.amount);
+      }
+    });
+
+    return labels.map((l, i) => ({ label: l, value: values[i] }));
+  }, [filteredEntries, filter]);
+
+  // Donut Data
+  const pieData = useMemo<PieDataPoint[]>(() => {
+    // Added Record<string, number> to handle the accumulator index type error
+    const cats = filteredEntries
+      .filter((e: any) => e.type === 'out')
+      .reduce<Record<string, number>>((acc, e: any) => {
+        const c = ensureCategory(e.category);
+        acc[c] = (acc[c] || 0) + Number(e.amount);
+        return acc;
+      }, {});
+
+    return Object.entries(cats)
+      .map(([name, val], i) => ({
         name,
-        population,
-        color: CHART_COLORS[index % CHART_COLORS.length],
-        legendFontColor: colors.text,
+        population: val,
+        color: PIE_COLORS[i % PIE_COLORS.length],
+        legendFontColor: '#333',
         legendFontSize: 12,
       }))
       .sort((a, b) => b.population - a.population);
   }, [filteredEntries]);
 
-  const topCategoryName = pieData.length > 0 ? pieData[0].name : 'None';
+  const hasTrendData = dailyTrend.some((d) => d.value > 0);
+  const trendTotal = dailyTrend.reduce((a, b) => a + b.value, 0);
+  const activeDays = dailyTrend.filter((d) => d.value > 0).length;
+  const avgDaily = activeDays ? Math.round(trendTotal / activeDays) : 0;
 
-  // 4. Scrollable Bar Chart Data
-  const dailyTrend = useMemo(() => {
-    const labels: string[] = [];
-    const values: number[] = [];
-    const indexByKey = new Map<string, number>();
-    const now = dayjs();
-
-    if (filter === 'Year') {
-      for (let i = 0; i < 12; i++) {
-        const monthLabel = now.month(i).format('MMM');
-        labels.push(monthLabel);
-        values.push(0);
-        indexByKey.set(monthLabel, i);
-      }
-    } else {
-      const startDate = getStartDateForFilter(filter, now);
-      const days = getDaysCountForFilter(filter, now);
-      const displayFormat = days > 30 ? 'D' : days > 15 ? 'DD' : 'ddd';
-
-      for (let i = 0; i < days; i++) {
-        const date = startDate.add(i, 'day');
-        const labelKey = date.format('YYYY-MM-DD');
-        labels.push(date.format(displayFormat));
-        values.push(0);
-        indexByKey.set(labelKey, i);
-      }
-    }
-
-    filteredEntries.forEach((entry: any) => {
-      const rawDate = dayjs(entry.date || entry.created_at);
-      const amount = Number(entry.amount) || 0;
-      const key = filter === 'Year' ? rawDate.format('MMM') : rawDate.format('YYYY-MM-DD');
-      const targetIndex = indexByKey.get(key);
-      if (targetIndex !== undefined && entry.type === 'out') {
-        values[targetIndex] += amount;
-      }
-    });
-
-    return labels.map((label, index) => ({ label, value: values[index] || 0 }));
-  }, [filteredEntries, filter]);
-
-  const trendChartWidth = useMemo(() => {
-    const dataPoints = dailyTrend.length;
-    const step = dataPoints > 45 ? 28 : dataPoints > 31 ? (isTablet ? 42 : 48) : isTablet ? 52 : 60;
-    const minWidth = containerWidth - spacing(2);
-    return Math.max(minWidth, dataPoints * step, 260);
-  }, [dailyTrend.length, containerWidth, isTablet]);
-
-  const dateRangeLabel = useMemo(() => {
-    const now = dayjs();
-    const start = getStartDateForFilter(filter, now);
-    const end = filter === 'Year' ? now.endOf('month') : now;
-    const sameMonth = start.format('MMM') === end.format('MMM');
-    const sameYear = start.year() === end.year();
-    if (filter === 'Year') {
-      return `${start.startOf('year').format('MMM YYYY')} - ${end.format('MMM YYYY')}`;
-    }
-    if (sameMonth && sameYear) return `${start.format('D MMM')} - ${end.format('D MMM YYYY')}`;
-    if (sameYear) return `${start.format('D MMM')} - ${end.format('D MMM YYYY')}`;
-    return `${start.format('D MMM YYYY')} - ${end.format('D MMM YYYY')}`;
-  }, [filter]);
-
-  const hasTrendData = useMemo(() => dailyTrend.some((point) => point.value > 0), [dailyTrend]);
-  const activeTrendDays = useMemo(
-    () => dailyTrend.filter((point) => point.value > 0).length,
-    [dailyTrend]
+  // Explicitly typed reduction to handle the null initial value
+  const peakDay = dailyTrend.reduce<TrendDataPoint | null>(
+    (a, b) => (!a || b.value > a.value ? b : a),
+    null
   );
-  const totalTrendExpense = useMemo(
-    () => dailyTrend.reduce((sum, point) => sum + point.value, 0),
-    [dailyTrend]
-  );
-  const averageDailyExpense = activeTrendDays ? Math.round(totalTrendExpense / activeTrendDays) : 0;
-  const peakTrendDay = useMemo(() => {
-    return dailyTrend.reduce<{ label: string; value: number } | null>((best, point) => {
-      if (!best || point.value > best.value) return point;
-      return best;
-    }, null);
-  }, [dailyTrend]);
 
-  const handleFilterPress = (nextFilter: string) => {
-    if (nextFilter === filter) return;
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setFilter(nextFilter);
+  const handleFilterPress = (f: string) => {
+    if (f !== filter) {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setFilter(f);
+    }
   };
 
-  if (isLoading || authLoading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
-  }
+  if (isLoading || authLoading)
+    return <ActivityIndicator style={styles.centered} size="large" color={colors.primary} />;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F7F9FC" />
 
-      {/* HEADER WRAPPER */}
-      <View
-        style={{
-          width: '100%',
-          maxWidth: 700,
-          alignSelf: 'center',
-          paddingHorizontal: isTablet ? 0 : spacing(2),
-        }}
-      >
+      {/* HEADER */}
+      <View style={[styles.headerContainer, { width: containerWidth }]}>
         <ScreenHeader
           title="Analytics"
           subtitle="Financial health overview"
@@ -271,7 +227,10 @@ const StatsScreen = () => {
 
       <ScrollView
         style={styles.container}
-        contentContainerStyle={[styles.scrollContent, { alignItems: 'center' }]}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: Math.max(120, height * 0.15) },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         <Animated.View
@@ -279,156 +238,155 @@ const StatsScreen = () => {
             opacity: fadeAnim,
             transform: [{ translateY: slideAnim }],
             width: containerWidth,
+            alignSelf: 'center',
           }}
         >
-          {/* FILTER TABS */}
-          <View style={styles.filterContainer}>
+          {/* 1. FILTER TABS */}
+          <View style={styles.segmentControl}>
             {FILTERS.map((f) => {
               const isActive = filter === f;
               return (
                 <Pressable
                   key={f}
-                  style={[styles.filterPill, isActive && styles.filterPillActive]}
+                  style={[styles.segmentBtn, isActive && styles.segmentBtnActive]}
                   onPress={() => handleFilterPress(f)}
                 >
-                  <Text style={[styles.filterText, isActive && styles.filterTextActive]}>{f}</Text>
+                  <Text style={[styles.segmentText, isActive && styles.segmentTextActive]}>
+                    {f}
+                  </Text>
                 </Pressable>
               );
             })}
           </View>
 
-          {/* NET BALANCE HERO */}
-          <View style={[styles.card, styles.heroCard]}>
-            <View style={styles.heroHeader}>
-              <Text style={styles.cardTitle}>Net Balance</Text>
+          {/* 2. NET BALANCE CARD */}
+          <View style={styles.card}>
+            <View style={styles.rowBetween}>
+              <Text style={styles.labelMuted}>NET BALANCE</Text>
               <View
-                style={[
-                  styles.trendBadge,
-                  { backgroundColor: stats.net >= 0 ? '#dcfce7' : '#fee2e2' },
-                ]}
+                style={[styles.badge, { backgroundColor: stats.net >= 0 ? '#E8F5E9' : '#FFEBEE' }]}
               >
                 <MaterialIcon
                   name={stats.net >= 0 ? 'trending-up' : 'trending-down'}
                   size={16}
-                  color={stats.net >= 0 ? colors.accentGreen : colors.accentRed}
+                  color={stats.net >= 0 ? '#2E7D32' : '#C62828'}
                 />
-                <Text
-                  style={[
-                    styles.trendText,
-                    { color: stats.net >= 0 ? colors.accentGreen : colors.accentRed },
-                  ]}
-                >
+                <Text style={[styles.badgeText, { color: stats.net >= 0 ? '#2E7D32' : '#C62828' }]}>
                   {stats.net >= 0 ? 'Surplus' : 'Deficit'}
                 </Text>
               </View>
             </View>
 
             <Text
-              style={[
-                styles.heroValue,
-                { color: stats.net >= 0 ? colors.accentGreen : colors.accentRed },
-              ]}
+              style={[styles.bigValue, { color: stats.net >= 0 ? '#2E7D32' : '#C62828' }]}
+              adjustsFontSizeToFit
+              numberOfLines={1}
             >
               {stats.net >= 0 ? '+' : ''}₹{Math.abs(stats.net).toLocaleString()}
             </Text>
 
             <View style={styles.divider} />
 
-            <View style={styles.heroRow}>
-              <View style={styles.heroCol}>
-                <Text style={styles.heroLabel}>Total Income</Text>
-                <Text style={styles.incomeValue}>₹{stats.totalIn.toLocaleString()}</Text>
+            <View style={styles.rowBetween}>
+              <View>
+                <Text style={styles.labelMutedSmall}>Income</Text>
+                <Text style={styles.subValueGreen}>₹{stats.totalIn.toLocaleString()}</Text>
               </View>
-              <View style={[styles.heroCol, { alignItems: 'flex-end' }]}>
-                <Text style={styles.heroLabel}>Total Expense</Text>
-                <Text style={styles.expenseValue}>₹{stats.totalOut.toLocaleString()}</Text>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={styles.labelMutedSmall}>Expense</Text>
+                <Text style={styles.subValueRed}>₹{stats.totalOut.toLocaleString()}</Text>
               </View>
             </View>
           </View>
 
-          {/* QUICK STATS GRID */}
+          {/* 3. RESPONSIVE GRID */}
           <View style={styles.gridContainer}>
-            <View style={[styles.card, styles.gridItem]}>
-              <MaterialIcon name="savings" size={24} color={colors.primary} />
-              <Text style={styles.gridValue}>{savingsRate.toFixed(0)}%</Text>
-              <Text style={styles.gridLabel}>Savings Rate</Text>
+            <View style={[styles.gridCard, isSmallPhone && styles.gridCardFull]}>
+              <View style={[styles.iconBox, { backgroundColor: '#E3F2FD' }]}>
+                <MaterialIcon name="savings" size={24} color="#1976D2" />
+              </View>
+              <View style={styles.gridContent}>
+                <Text style={styles.gridValue}>{savingsRate.toFixed(0)}%</Text>
+                <Text style={styles.gridLabel} numberOfLines={1}>
+                  Savings Rate
+                </Text>
+              </View>
             </View>
-            <View style={[styles.card, styles.gridItem]}>
-              <MaterialIcon name="arrow-upward" size={24} color={colors.accentGreen} />
-              <Text style={styles.gridValue}>₹{maxIncome.toLocaleString()}</Text>
-              <Text style={styles.gridLabel}>Max Income</Text>
+
+            <View style={[styles.gridCard, isSmallPhone && styles.gridCardFull]}>
+              <View style={[styles.iconBox, { backgroundColor: '#E8F5E9' }]}>
+                <MaterialIcon name="arrow-upward" size={24} color="#2E7D32" />
+              </View>
+              <View style={styles.gridContent}>
+                <Text style={styles.gridValue} adjustsFontSizeToFit numberOfLines={1}>
+                  ₹{maxIncome > 10000 ? (maxIncome / 1000).toFixed(1) + 'k' : maxIncome}
+                </Text>
+                <Text style={styles.gridLabel} numberOfLines={1}>
+                  Max Income
+                </Text>
+              </View>
             </View>
-            <View style={[styles.card, styles.gridItem]}>
-              <MaterialIcon name="arrow-downward" size={24} color={colors.accentRed} />
-              <Text style={styles.gridValue}>₹{maxExpense.toLocaleString()}</Text>
-              <Text style={styles.gridLabel}>Max Expense</Text>
+
+            <View style={[styles.gridCard, isSmallPhone && styles.gridCardFull]}>
+              <View style={[styles.iconBox, { backgroundColor: '#FFEBEE' }]}>
+                <MaterialIcon name="arrow-downward" size={24} color="#C62828" />
+              </View>
+              <View style={styles.gridContent}>
+                <Text style={styles.gridValue} adjustsFontSizeToFit numberOfLines={1}>
+                  ₹{maxExpense > 10000 ? (maxExpense / 1000).toFixed(1) + 'k' : maxExpense}
+                </Text>
+                <Text style={styles.gridLabel} numberOfLines={1}>
+                  Max Expense
+                </Text>
+              </View>
             </View>
           </View>
 
-          {/* SCROLLABLE TREND CHART */}
+          {/* 4. TREND CHART */}
           <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>Daily Expense Trend</Text>
-                <Text style={styles.rangeSubtitle}>{dateRangeLabel}</Text>
+            <View style={styles.rowBetween}>
+              <View>
+                <Text style={styles.cardTitle}>Daily Trend</Text>
+                <Text style={styles.cardSubtitle}>7 Dec - 13 Dec 2025</Text>
               </View>
-              {/* Show Hint if content overflows */}
-              {trendChartWidth > containerWidth && (
-                <View style={styles.scrollHintContainer}>
-                  <Text style={styles.scrollHint}>Swipe</Text>
-                  <MaterialIcon name="arrow-forward" size={14} color={colors.primary} />
+              <MaterialIcon name="bar-chart" size={24} color="#90A4AE" />
+            </View>
+
+            <View style={[styles.rowBetween, { marginTop: 20, marginBottom: 10 }]}>
+              <View>
+                <Text style={styles.labelMutedSmall}>DAILY AVG</Text>
+                <Text style={styles.chartStatValue}>₹{avgDaily}</Text>
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={styles.labelMutedSmall}>PEAK DAY</Text>
+                <Text style={styles.chartStatValue}>₹{peakDay ? peakDay.value : 0}</Text>
+              </View>
+            </View>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingRight: 20 }}
+            >
+              {hasTrendData ? (
+                <DailyTrendChart
+                  data={dailyTrend}
+                  width={Math.max(containerWidth - 40, dailyTrend.length * 50)}
+                />
+              ) : (
+                <View style={styles.emptyChart}>
+                  <Text style={styles.emptyText}>No spending data for this period</Text>
                 </View>
               )}
-            </View>
-
-            {hasTrendData ? (
-              <>
-                <View style={styles.trendSummaryRow}>
-                  <View style={styles.trendSummaryItem}>
-                    <Text style={styles.trendSummaryLabel}>Avg Daily Spend</Text>
-                    <Text style={styles.trendSummaryValue}>
-                      ₹{averageDailyExpense.toLocaleString()}
-                    </Text>
-                    <Text style={styles.trendSummarySub}>
-                      {activeTrendDays || 0} active {activeTrendDays === 1 ? 'day' : 'days'}
-                    </Text>
-                  </View>
-                  <View style={styles.trendSummaryDivider} />
-                  <View style={[styles.trendSummaryItem, { alignItems: 'flex-end' }]}>
-                    <Text style={styles.trendSummaryLabel}>Peak Day</Text>
-                    <Text style={styles.trendSummaryValue}>{peakTrendDay?.label || '--'}</Text>
-                    <Text style={styles.trendSummarySub}>
-                      ₹{peakTrendDay ? peakTrendDay.value.toLocaleString() : 0}
-                    </Text>
-                  </View>
-                </View>
-
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ paddingRight: spacing(2) }}
-                >
-                  <DailyTrendChart data={dailyTrend} width={trendChartWidth} />
-                </ScrollView>
-              </>
-            ) : (
-              <View style={styles.emptyChart}>
-                <Text style={styles.emptyText}>No spending data available</Text>
-              </View>
-            )}
+            </ScrollView>
           </View>
 
-          {/* DONUT CHART */}
+          {/* 5. DONUT */}
           <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <Text style={styles.cardTitle}>Spending Breakdown</Text>
-            </View>
-
+            <Text style={styles.cardTitle}>Expense Breakdown</Text>
             {pieData.length > 0 ? (
-              <View style={styles.donutContainer}>
-                <View
-                  style={{ position: 'relative', alignItems: 'center', justifyContent: 'center' }}
-                >
+              <View style={{ alignItems: 'center', marginTop: 20 }}>
+                <View style={{ width: donutSize, height: donutSize }}>
                   <PieChart
                     data={pieData}
                     width={donutSize}
@@ -436,12 +394,11 @@ const StatsScreen = () => {
                     chartConfig={chartConfig}
                     accessor="population"
                     backgroundColor="transparent"
-                    paddingLeft={`${donutSize / 4}`}
-                    absolute={false}
+                    // FIX: paddingLeft requires string
+                    paddingLeft={String(donutSize / 4)}
                     hasLegend={false}
-                    center={[0, 0]}
+                    absolute={false}
                   />
-                  {/* DONUT HOLE */}
                   <View
                     style={[
                       styles.donutHole,
@@ -449,27 +406,27 @@ const StatsScreen = () => {
                         width: innerSize,
                         height: innerSize,
                         borderRadius: innerSize / 2,
-                        left: (donutSize - innerSize) / 2,
                         top: (donutSize - innerSize) / 2,
+                        left: (donutSize - innerSize) / 2,
                       },
                     ]}
                   >
-                    <Text style={styles.holeAmount}>₹{stats.totalOut.toLocaleString()}</Text>
-                    <Text style={styles.holeLabel} numberOfLines={1}>
-                      {topCategoryName}
+                    <Text style={styles.holeValue} adjustsFontSizeToFit numberOfLines={1}>
+                      ₹
+                      {stats.totalOut > 999
+                        ? (stats.totalOut / 1000).toFixed(1) + 'k'
+                        : stats.totalOut}
                     </Text>
                   </View>
                 </View>
 
-                {/* Custom Legend */}
                 <View style={styles.legendContainer}>
-                  {pieData.slice(0, 6).map((item, index) => (
-                    <View key={index} style={styles.legendItem}>
-                      <View style={[styles.legendDot, { backgroundColor: item.color }]} />
-                      <Text style={styles.legendText} numberOfLines={1}>
-                        {item.name}
-                      </Text>
-                      <Text style={styles.legendValue}>
+                  {pieData.slice(0, 4).map((item, i) => (
+                    <View key={i} style={styles.legendItem}>
+                      <View style={[styles.dot, { backgroundColor: item.color }]} />
+                      <Text style={styles.legendText}>{item.name}</Text>
+                      {/* FIX: Explicitly typed 'item' now has population */}
+                      <Text style={styles.legendNum}>
                         {Math.round((item.population / stats.totalOut) * 100)}%
                       </Text>
                     </View>
@@ -477,9 +434,9 @@ const StatsScreen = () => {
                 </View>
               </View>
             ) : (
-              <View style={styles.emptyChart}>
-                <Text style={styles.emptyText}>No expenses recorded</Text>
-              </View>
+              <Text style={[styles.emptyText, { textAlign: 'center', padding: 20 }]}>
+                No expenses
+              </Text>
             )}
           </View>
         </Animated.View>
@@ -493,290 +450,134 @@ export default StatsScreen;
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: '#F7F9FC',
   },
-  container: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: 40,
-    paddingTop: 10,
-    paddingHorizontal: spacing(2),
-  },
-  centered: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  headerContainer: { alignSelf: 'center', marginBottom: 10, paddingHorizontal: 4 },
+  container: { flex: 1 },
+  scrollContent: { paddingTop: 10, paddingHorizontal: 16 },
 
-  /* FILTERS */
-  filterContainer: {
+  // --- FILTER ---
+  segmentControl: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    backgroundColor: colors.card,
-    borderRadius: 14,
+    backgroundColor: '#fff',
+    borderRadius: 12,
     padding: 4,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  filterPill: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: 'center',
-    borderRadius: 10,
-  },
-  filterPillActive: {
-    backgroundColor: colors.primary,
-    elevation: 2,
-    shadowColor: colors.primary,
+    marginBottom: 16,
+    elevation: 1,
+    shadowOpacity: 0.05,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
   },
-  filterText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.muted,
-  },
-  filterTextActive: {
-    color: 'white',
-  },
+  segmentBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 8 },
+  segmentBtnActive: { backgroundColor: '#3D5AFE' },
+  segmentText: { color: '#90A4AE', fontWeight: '600', fontSize: 13 },
+  segmentTextActive: { color: '#fff' },
 
-  /* CARDS */
+  // --- CARDS ---
   card: {
-    width: '100%',
-    backgroundColor: colors.card,
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
+    shadowOpacity: 0.04,
+    shadowOffset: { width: 0, height: 4 },
     shadowRadius: 8,
     elevation: 2,
   },
-  heroCard: {
-    backgroundColor: '#fff',
-    borderColor: '#e5e5e5',
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  scrollHintContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: colors.surfaceMuted,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  scrollHint: {
-    fontSize: 11,
-    color: colors.primary,
-    fontWeight: '600',
-  },
+  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  divider: { height: 1, backgroundColor: '#F0F0F0', marginVertical: 16 },
 
-  /* HERO STATS */
-  heroHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  heroValue: {
-    fontSize: 32,
-    fontWeight: '800',
-    marginBottom: 16,
-  },
-  trendBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    gap: 4,
-  },
-  trendText: {
+  // --- TYPOGRAPHY ---
+  labelMuted: {
     fontSize: 12,
     fontWeight: '700',
-  },
-  divider: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginBottom: 16,
-  },
-  heroRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  heroCol: {
-    flex: 1,
-  },
-  heroLabel: {
-    fontSize: 12,
-    color: colors.muted,
-    marginBottom: 4,
+    color: '#90A4AE',
     textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  incomeValue: {
-    fontSize: 18,
+  labelMutedSmall: {
+    fontSize: 11,
     fontWeight: '700',
-    color: colors.accentGreen,
-  },
-  expenseValue: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.accentRed,
+    color: '#90A4AE',
+    textTransform: 'uppercase',
+    marginBottom: 4,
   },
 
-  /* GRID */
+  badge: {
+    flexDirection: 'row',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignItems: 'center',
+    gap: 4,
+  },
+  badgeText: { fontSize: 12, fontWeight: '700' },
+
+  bigValue: { fontSize: 32, fontWeight: '800', marginTop: 8 },
+  subValueGreen: { fontSize: 18, fontWeight: '700', color: '#2E7D32' },
+  subValueRed: { fontSize: 18, fontWeight: '700', color: '#C62828' },
+
+  cardTitle: { fontSize: 18, fontWeight: '700', color: '#263238' },
+  cardSubtitle: { fontSize: 12, color: '#90A4AE', marginTop: 2 },
+  chartStatValue: { fontSize: 16, fontWeight: '700', color: '#263238' },
+
+  // --- SMART GRID ---
   gridContainer: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 20,
     flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 16,
     justifyContent: 'space-between',
   },
-  gridItem: {
+  gridCard: {
     flex: 1,
-    marginBottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 16,
-    minWidth: 110,
-    flexBasis: '30%',
-    maxWidth: '48%',
-  },
-  gridValue: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.text,
-    marginTop: 6,
-  },
-  gridLabel: {
-    fontSize: 11,
-    color: colors.muted,
-  },
-
-  /* TREND SUMMARY */
-  trendSummaryRow: {
+    minWidth: '30%',
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 16,
     flexDirection: 'row',
-    alignItems: 'stretch',
-    gap: 16,
-    rowGap: 12,
-    flexWrap: 'wrap',
-    marginBottom: 12,
-  },
-  trendSummaryItem: {
-    flex: 1,
-    minWidth: 140,
-  },
-  trendSummaryLabel: {
-    fontSize: 12,
-    color: colors.muted,
-    textTransform: 'uppercase',
-    marginBottom: 4,
-  },
-  trendSummaryValue: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  trendSummarySub: {
-    fontSize: 12,
-    color: colors.muted,
-    marginTop: 2,
-  },
-  trendSummaryDivider: {
-    width: 1,
-    backgroundColor: colors.border,
-    opacity: 0.6,
-    alignSelf: 'stretch',
-  },
-
-  rangeSubtitle: {
-    fontSize: 12,
-    color: colors.muted,
-    marginTop: 2,
-  },
-
-  /* DONUT CHART */
-  donutContainer: {
     alignItems: 'center',
-    justifyContent: 'center',
-  },
-  donutHole: {
-    position: 'absolute',
-    backgroundColor: colors.card,
-    alignItems: 'center',
-    justifyContent: 'center',
+    gap: 12,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.03,
     shadowRadius: 4,
     elevation: 2,
   },
-  holeAmount: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: colors.accentRed,
+  gridCardFull: { minWidth: '48%' },
+  iconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  holeLabel: {
-    fontSize: 12,
-    color: colors.muted,
-    marginTop: 2,
-    maxWidth: 100,
+  gridContent: { flex: 1 },
+  gridValue: { fontSize: 16, fontWeight: '700', color: '#263238' },
+  gridLabel: { fontSize: 11, color: '#90A4AE', marginTop: 2 },
+
+  // --- CHART HELPERS ---
+  emptyChart: { height: 150, justifyContent: 'center', alignItems: 'center' },
+  emptyText: { color: '#B0BEC5', fontStyle: 'italic' },
+
+  donutHole: {
+    position: 'absolute',
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 2,
   },
+  holeValue: { fontSize: 20, fontWeight: '800', color: '#263238' },
+
   legendContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    gap: 10,
-    marginTop: 20,
+    gap: 16,
+    marginTop: 16,
   },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surfaceMuted,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  legendDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 6,
-  },
-  legendText: {
-    fontSize: 11,
-    color: colors.text,
-    marginRight: 4,
-    fontWeight: '500',
-  },
-  legendValue: {
-    fontSize: 11,
-    color: colors.muted,
-    fontWeight: '700',
-  },
-  emptyChart: {
-    height: 150,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyText: {
-    color: colors.muted,
-    fontStyle: 'italic',
-  },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  dot: { width: 10, height: 10, borderRadius: 5 },
+  legendText: { fontSize: 12, color: '#546E7A', fontWeight: '500' },
+  legendNum: { fontSize: 12, color: '#263238', fontWeight: '700' },
 });
