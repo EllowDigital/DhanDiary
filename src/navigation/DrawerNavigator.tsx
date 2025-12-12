@@ -14,6 +14,7 @@ import AccountManagementScreen from '../screens/AccountManagementScreen';
 import AboutScreen from '../screens/AboutScreen';
 import PrivacyPolicyScreen from '../screens/PrivacyPolicyScreen';
 import TermsScreen from '../screens/TermsScreen';
+import EulaScreen from '../screens/EulaScreen';
 
 // Components & Theme
 import CustomDrawerContent from './CustomDrawerContent';
@@ -191,6 +192,15 @@ const DrawerNavigator = () => {
         component={TermsScreen}
         options={{
           title: 'Terms of Use',
+          drawerItemStyle: { display: 'none' },
+        }}
+      />
+
+      <Drawer.Screen
+        name="Eula"
+        component={EulaScreen}
+        options={{
+          title: 'End User License',
           drawerItemStyle: { display: 'none' },
         }}
       />

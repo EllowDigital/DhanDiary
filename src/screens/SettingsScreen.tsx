@@ -286,6 +286,16 @@ const SettingsScreen = () => {
                   icon="lock-outline"
                   label="Privacy Policy"
                   onPress={() => navigation.navigate('PrivacyPolicy')}
+                />
+                <SettingsRow
+                  icon="gavel"
+                  label="Terms of Use"
+                  onPress={() => navigation.navigate('Terms')}
+                />
+                <SettingsRow
+                  icon="fact-check"
+                  label="End User License"
+                  onPress={() => navigation.navigate('Eula')}
                   lastItem
                 />
               </View>
