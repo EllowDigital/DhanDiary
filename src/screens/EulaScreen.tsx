@@ -109,8 +109,8 @@ const EulaScreen = () => {
           showsVerticalScrollIndicator={false}
         >
           <Text style={styles.leadText}>
-            By downloading or using <Text style={styles.bold}>DhanDiary</Text>, you agree to this End
-            User License Agreement. If you do not agree, you must uninstall the app.
+            By downloading or using <Text style={styles.bold}>DhanDiary</Text>, you agree to this
+            End User License Agreement. If you do not agree, you must uninstall the app.
           </Text>
 
           {sections.map((section) => (
