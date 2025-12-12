@@ -14,30 +14,34 @@ Manage your daily finances effortlessly with a beautiful dashboard, history trac
 ---
 
 ## ✨ Features
-* 🧾 **Smart Tracking:** Track income & expenses with notes.
-* 📊 **Analytics:** Clean analytics & spending overview.
-* 💾 **Offline-First:** Works offline with auto-sync when online.
-* 🔐 **Secure:** Encrypted cloud backup via NeonDB.
-* 📚 **History:** Full transaction history log.
-* ⚡ **Performance:** Lightweight, smooth & beginner-friendly UI.
+
+- 🧾 **Smart Tracking:** Track income & expenses with notes.
+- 📊 **Analytics:** Clean analytics & spending overview.
+- 💾 **Offline-First:** Works offline with auto-sync when online.
+- 🔐 **Secure:** Encrypted cloud backup via NeonDB.
+- 📚 **History:** Full transaction history log.
+- ⚡ **Performance:** Lightweight, smooth & beginner-friendly UI.
 
 ---
 
 ## 🛠️ Tech Stack
-* **Framework:** React Native (Expo)
-* **Routing:** Expo Router
-* **Database:** NeonDB (Cloud Backup)
-* **Local Storage:** Async Storage
-* **Language:** TypeScript / JavaScript
+
+- **Framework:** React Native (Expo)
+- **Routing:** Expo Router
+- **Database:** NeonDB (Cloud Backup)
+- **Local Storage:** Async Storage
+- **Language:** TypeScript / JavaScript
 
 ---
 
 ## 🔒 Privacy
+
 Your privacy is our priority:
-* **User data is encrypted.**
-* **No ads, no trackers.**
-* Cloud backup is optional & secure.
-* **Privacy Policy:** [Add your link here]
+
+- **User data is encrypted.**
+- **No ads, no trackers.**
+- Cloud backup is optional & secure.
+- **Privacy Policy:** [Add your link here]
 
 ---
 
@@ -53,10 +57,11 @@ You can download the latest stable APK directly from the link below or via Sourc
 
 **Sarwan – EllowDigital**
 
-* 📧 **Developer Email:** sarwanyadav6174@gmail.com
-* 📧 **Team Email:** ellowdigitalindia@gmail.com
+- 📧 **Developer Email:** sarwanyadav6174@gmail.com
+- 📧 **Team Email:** ellowdigitalindia@gmail.com
 
 ---
 
 ## ⭐ Support
+
 If you like this project and find it useful, please consider giving it a ⭐ **star on GitHub!**
