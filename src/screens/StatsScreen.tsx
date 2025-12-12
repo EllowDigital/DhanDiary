@@ -19,11 +19,12 @@ import { useAuth } from '../hooks/useAuth';
 import { subscribeEntries } from '../utils/dbEvents';
 import dayjs from 'dayjs';
 import { getStartDateForFilter, getDaysCountForFilter } from '../utils/stats';
-import { BarChart, PieChart } from 'react-native-chart-kit';
+import { PieChart } from 'react-native-chart-kit';
 import { colors, spacing } from '../utils/design';
 import { ensureCategory } from '../constants/categories';
 import ScreenHeader from '../components/ScreenHeader';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
+import DailyTrendChart from '../components/charts/DailyTrendChart';
 
 // --- CONFIG ---
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -88,9 +89,9 @@ const StatsScreen = () => {
 
   // --- RESPONSIVE CALCS ---
   const isTablet = width > 700;
-  const containerWidth = isTablet ? 700 : width - spacing(4);
-  const donutSize = 220;
-  const innerSize = 130;
+  const containerWidth = Math.min(760, width - spacing(isTablet ? 3 : 2));
+  const donutSize = Math.max(160, Math.min(isTablet ? 260 : 210, containerWidth - spacing(4)));
+  const innerSize = Math.round(donutSize * 0.58);
 
   // --- DATA PROCESSING ---
   const filteredEntries = useMemo(() => {
@@ -155,7 +156,7 @@ const StatsScreen = () => {
   const topCategoryName = pieData.length > 0 ? pieData[0].name : 'None';
 
   // 4. Scrollable Bar Chart Data
-  const seriesData = useMemo(() => {
+  const dailyTrend = useMemo(() => {
     const labels: string[] = [];
     const values: number[] = [];
     const indexByKey = new Map<string, number>();
@@ -171,7 +172,7 @@ const StatsScreen = () => {
     } else {
       const startDate = getStartDateForFilter(filter, now);
       const days = getDaysCountForFilter(filter, now);
-      const displayFormat = days > 15 ? 'DD' : 'ddd'; // Show Day number if dense
+      const displayFormat = days > 30 ? 'D' : days > 15 ? 'DD' : 'ddd';
 
       for (let i = 0; i < days; i++) {
         const date = startDate.add(i, 'day');
@@ -187,26 +188,51 @@ const StatsScreen = () => {
       const amount = Number(entry.amount) || 0;
       const key = filter === 'Year' ? rawDate.format('MMM') : rawDate.format('YYYY-MM-DD');
       const targetIndex = indexByKey.get(key);
-      if (targetIndex !== undefined) {
-        // Show Net Flow (Income - Expense) or just Income/Expense based on preference
-        // Here we show Expense as positive bars for visualization
-        if (entry.type === 'out') values[targetIndex] += amount;
+      if (targetIndex !== undefined && entry.type === 'out') {
+        values[targetIndex] += amount;
       }
     });
 
-    return {
-      labels,
-      datasets: [{ data: values }],
-    };
+    return labels.map((label, index) => ({ label, value: values[index] || 0 }));
   }, [filteredEntries, filter]);
 
-  // --- DYNAMIC CHART WIDTH CALCULATION ---
-  const dynamicChartWidth = useMemo(() => {
-    const dataPoints = seriesData.labels.length;
-    const step = 45; // Width per bar
-    const calculated = dataPoints * step;
-    return Math.max(containerWidth - 32, calculated);
-  }, [seriesData.labels.length, containerWidth]);
+  const trendChartWidth = useMemo(() => {
+    const dataPoints = dailyTrend.length;
+    const step = dataPoints > 45 ? 28 : dataPoints > 31 ? (isTablet ? 42 : 48) : isTablet ? 52 : 60;
+    const minWidth = containerWidth - spacing(2);
+    return Math.max(minWidth, dataPoints * step, 260);
+  }, [dailyTrend.length, containerWidth, isTablet]);
+
+  const dateRangeLabel = useMemo(() => {
+    const now = dayjs();
+    const start = getStartDateForFilter(filter, now);
+    const end = filter === 'Year' ? now.endOf('month') : now;
+    const sameMonth = start.format('MMM') === end.format('MMM');
+    const sameYear = start.year() === end.year();
+    if (filter === 'Year') {
+      return `${start.startOf('year').format('MMM YYYY')} - ${end.format('MMM YYYY')}`;
+    }
+    if (sameMonth && sameYear) return `${start.format('D MMM')} - ${end.format('D MMM YYYY')}`;
+    if (sameYear) return `${start.format('D MMM')} - ${end.format('D MMM YYYY')}`;
+    return `${start.format('D MMM YYYY')} - ${end.format('D MMM YYYY')}`;
+  }, [filter]);
+
+  const hasTrendData = useMemo(() => dailyTrend.some((point) => point.value > 0), [dailyTrend]);
+  const activeTrendDays = useMemo(
+    () => dailyTrend.filter((point) => point.value > 0).length,
+    [dailyTrend]
+  );
+  const totalTrendExpense = useMemo(
+    () => dailyTrend.reduce((sum, point) => sum + point.value, 0),
+    [dailyTrend]
+  );
+  const averageDailyExpense = activeTrendDays ? Math.round(totalTrendExpense / activeTrendDays) : 0;
+  const peakTrendDay = useMemo(() => {
+    return dailyTrend.reduce<{ label: string; value: number } | null>((best, point) => {
+      if (!best || point.value > best.value) return point;
+      return best;
+    }, null);
+  }, [dailyTrend]);
 
   const handleFilterPress = (nextFilter: string) => {
     if (nextFilter === filter) return;
@@ -339,12 +365,15 @@ const StatsScreen = () => {
             </View>
           </View>
 
-          {/* SCROLLABLE BAR CHART (Cash Flow) */}
+          {/* SCROLLABLE TREND CHART */}
           <View style={styles.card}>
             <View style={styles.cardHeader}>
-              <Text style={styles.cardTitle}>Daily Expense Trend</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.cardTitle}>Daily Expense Trend</Text>
+                <Text style={styles.rangeSubtitle}>{dateRangeLabel}</Text>
+              </View>
               {/* Show Hint if content overflows */}
-              {dynamicChartWidth > containerWidth && (
+              {trendChartWidth > containerWidth && (
                 <View style={styles.scrollHintContainer}>
                   <Text style={styles.scrollHint}>Swipe</Text>
                   <MaterialIcon name="arrow-forward" size={14} color={colors.primary} />
@@ -352,28 +381,36 @@ const StatsScreen = () => {
               )}
             </View>
 
-            {seriesData.datasets[0].data.some((d) => d > 0) ? (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingRight: 20 }}
-              >
-                <BarChart
-                  data={seriesData}
-                  width={dynamicChartWidth}
-                  height={220}
-                  chartConfig={{
-                    ...chartConfig,
-                    fillShadowGradient: colors.accentRed, // Red bars for expense
-                    fillShadowGradientOpacity: 1,
-                  }}
-                  style={styles.chart}
-                  yAxisLabel="₹"
-                  yAxisSuffix=""
-                  fromZero
-                  showValuesOnTopOfBars={filter === '7D'} // Only show values on sparse charts
-                />
-              </ScrollView>
+            {hasTrendData ? (
+              <>
+                <View style={styles.trendSummaryRow}>
+                  <View style={styles.trendSummaryItem}>
+                    <Text style={styles.trendSummaryLabel}>Avg Daily Spend</Text>
+                    <Text style={styles.trendSummaryValue}>
+                      ₹{averageDailyExpense.toLocaleString()}
+                    </Text>
+                    <Text style={styles.trendSummarySub}>
+                      {activeTrendDays || 0} active {activeTrendDays === 1 ? 'day' : 'days'}
+                    </Text>
+                  </View>
+                  <View style={styles.trendSummaryDivider} />
+                  <View style={[styles.trendSummaryItem, { alignItems: 'flex-end' }]}>
+                    <Text style={styles.trendSummaryLabel}>Peak Day</Text>
+                    <Text style={styles.trendSummaryValue}>{peakTrendDay?.label || '--'}</Text>
+                    <Text style={styles.trendSummarySub}>
+                      ₹{peakTrendDay ? peakTrendDay.value.toLocaleString() : 0}
+                    </Text>
+                  </View>
+                </View>
+
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ paddingRight: spacing(2) }}
+                >
+                  <DailyTrendChart data={dailyTrend} width={trendChartWidth} />
+                </ScrollView>
+              </>
             ) : (
               <View style={styles.emptyChart}>
                 <Text style={styles.emptyText}>No spending data available</Text>
@@ -464,6 +501,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 40,
     paddingTop: 10,
+    paddingHorizontal: spacing(2),
   },
   centered: {
     flex: 1,
@@ -506,6 +544,7 @@ const styles = StyleSheet.create({
 
   /* CARDS */
   card: {
+    width: '100%',
     backgroundColor: colors.card,
     borderRadius: 20,
     padding: 16,
@@ -606,6 +645,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     marginBottom: 20,
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
   },
   gridItem: {
     flex: 1,
@@ -613,6 +654,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 16,
+    minWidth: 110,
+    flexBasis: '30%',
+    maxWidth: '48%',
   },
   gridValue: {
     fontSize: 16,
@@ -625,11 +669,46 @@ const styles = StyleSheet.create({
     color: colors.muted,
   },
 
-  /* CHART */
-  chart: {
-    borderRadius: 16,
-    paddingRight: 0,
-    marginVertical: 8,
+  /* TREND SUMMARY */
+  trendSummaryRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 16,
+    rowGap: 12,
+    flexWrap: 'wrap',
+    marginBottom: 12,
+  },
+  trendSummaryItem: {
+    flex: 1,
+    minWidth: 140,
+  },
+  trendSummaryLabel: {
+    fontSize: 12,
+    color: colors.muted,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  trendSummaryValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  trendSummarySub: {
+    fontSize: 12,
+    color: colors.muted,
+    marginTop: 2,
+  },
+  trendSummaryDivider: {
+    width: 1,
+    backgroundColor: colors.border,
+    opacity: 0.6,
+    alignSelf: 'stretch',
+  },
+
+  rangeSubtitle: {
+    fontSize: 12,
+    color: colors.muted,
+    marginTop: 2,
   },
 
   /* DONUT CHART */
