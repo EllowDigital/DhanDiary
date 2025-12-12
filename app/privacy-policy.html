@@ -2,207 +2,158 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Privacy Policy — DhanDiary</title>
-  <style>
-    :root{
-      --bg:#f7fafc;
-      --card:#ffffff;
-      --muted:#6b7280;
-      --accent:#0ea5a0;
-      --accent-2:#0f766e;
-      --glass: rgba(255,255,255,0.6);
-      --maxw:900px;
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
-    }
-    html,body{height:100%}
-    body{
-      margin:0;
-      background:linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
-      color:#0f172a;
-      -webkit-font-smoothing:antialiased;
-      -moz-osx-font-smoothing:grayscale;
-      line-height:1.6;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      padding:32px;
-    }
-    .container{
-      width:100%;
-      max-width:var(--maxw);
-      background:var(--card);
-      border-radius:12px;
-      box-shadow:0 8px 30px rgba(15,23,42,0.08);
-      overflow:hidden;
-      border:1px solid rgba(15,23,42,0.03);
-    }
-    header{
-      display:flex;
-      gap:16px;
-      align-items:center;
-      padding:28px 32px;
-      background:linear-gradient(90deg,var(--accent) 0%, var(--accent-2) 100%);
-      color:white;
-    }
-    .logo{
-      width:64px;
-      height:64px;
-      border-radius:12px;
-      background:rgba(255,255,255,0.12);
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      font-weight:700;
-      font-size:20px;
-      box-shadow:inset 0 -2px 0 rgba(0,0,0,0.06);
-    }
-    header h1{
-      margin:0;
-      font-size:20px;
-      letter-spacing:0.2px;
-    }
-    header p{margin:0;opacity:0.95;font-size:13px;color:rgba(255,255,255,0.92)}
-    main{padding:28px 32px;}
-    h2{margin-top:18px;margin-bottom:10px;font-size:16px;color:#0f172a}
-    p.lead{margin:0;color:var(--muted)}
-    .section{margin-bottom:18px;padding-bottom:12px;border-bottom:1px dashed rgba(15,23,42,0.04)}
-    ul{margin:8px 0 0 20px;color:var(--muted)}
-    .note{background:linear-gradient(90deg,#f1f9f8, #fbfdff);padding:12px;border-radius:8px;border:1px solid rgba(15,23,42,0.03);color:#0f172a}
-    footer{padding:18px 32px;background:linear-gradient(180deg, rgba(14,165,160,0.06), transparent)}
-    .contact{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-    a.email{color:var(--accent-2);text-decoration:none;font-weight:600}
-    @media (max-width:600px){
-      body{padding:16px}
-      header{padding:18px}
-      main{padding:18px}
-    }
-  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Privacy Policy &mdash; DhanDiary</title>
+  <meta name="description" content="How DhanDiary collects, stores, protects, and shares your finance data across mobile and cloud experiences." />
+  <link rel="stylesheet" href="policies.css" />
 </head>
 <body>
-  <div class="container" role="main" aria-labelledby="title">
-    <header>
-      <div class="logo" aria-hidden="true">₹D</div>
-      <div>
-        <h1 id="title">Privacy Policy — DhanDiary</h1>
-        <p>Last updated: <strong>12 December 2025</strong></p>
-      </div>
-    </header>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <div class="page-shell">
+    <div class="card-frame">
+      <header class="hero">
+        <div class="eyebrow">DhanDiary Legal</div>
+        <h1>Privacy Policy</h1>
+        <p>DhanDiary ("we", "our", "us") provides finance tools that keep your information private by design. This policy explains which data we collect, why we collect it, and how you can stay in control.</p>
+        <div class="badge" aria-live="polite">Last updated: 12 December 2025</div>
+        <nav class="doc-switch" aria-label="Legal documents">
+          <a href="privacy-policy.html" aria-current="page">Privacy Policy</a>
+          <a href="terms.html">Terms &amp; Conditions</a>
+          <a href="eula.html">EULA</a>
+        </nav>
+      </header>
 
-    <main>
-      <section class="section">
-        <p class="lead">DhanDiary ("we", "our", "us") is a personal finance mobile application that helps users track income, expenses and savings. This Privacy Policy explains what information we collect, how we use it, how we store it, and your rights regarding your data.</p>
-      </section>
+      <nav class="section-nav" aria-label="On this page">
+        <a href="#data-we-collect">Data We Collect</a>
+        <a href="#how-we-use-data">How We Use Data</a>
+        <a href="#cloud-backup">Cloud &amp; Sync</a>
+        <a href="#security">Security</a>
+        <a href="#sharing">Sharing</a>
+        <a href="#rights">Your Rights</a>
+        <a href="#children">Children</a>
+        <a href="#changes">Policy Changes</a>
+        <a href="#contact">Contact</a>
+      </nav>
 
-      <section class="section" aria-labelledby="collect">
-        <h2 id="collect">1. Information We Collect</h2>
-        <div class="note">
-          <strong>Personal information (provided by you):</strong>
+      <main id="content">
+        <section id="data-we-collect" class="section-card" aria-labelledby="collect-title">
+          <h2 id="collect-title">1. Data We Collect</h2>
+          <div class="callout">
+            We only collect the data needed to provide budgeting, sync, and support services.
+          </div>
+          <div class="three-col">
+            <article>
+              <strong>Profile details</strong>
+              <p>Name (optional) and email address for account creation, authentication, and support.</p>
+            </article>
+            <article>
+              <strong>Finance entries</strong>
+              <p>Income and expense records, categories, notes, attachments, and metadata you add to the app.</p>
+            </article>
+            <article>
+              <strong>Diagnostics</strong>
+              <p>Device model, OS version, crash logs, and anonymized usage data that help us improve stability.</p>
+            </article>
+          </div>
+        </section>
+
+        <section id="how-we-use-data" class="section-card" aria-labelledby="use-title">
+          <h2 id="use-title">2. How We Use Data</h2>
           <ul>
-            <li>Name (optional — used for account identification)</li>
-            <li>Email address (used for registration, login, and backup/restore)</li>
+            <li>Show ledgers, charts, insights, and reminders inside the DhanDiary apps.</li>
+            <li>Authenticate you securely and keep your account in sync across devices.</li>
+            <li>Provide optional backups and restores via NeonDB infrastructure.</li>
+            <li>Research bugs or performance bottlenecks (aggregated metrics only).</li>
           </ul>
-        </div>
+          <p class="callout">We never sell or rent personal data. Marketing partners do not receive your finance information.</p>
+        </section>
 
-        <div style="margin-top:10px">
-          <strong>Transaction & financial data:</strong>
+        <section id="cloud-backup" class="section-card" aria-labelledby="backup-title">
+          <h2 id="backup-title">3. Cloud Backup &amp; NeonDB</h2>
+          <div class="timeline">
+            <div class="timeline-item">
+              <strong>Opt-in</strong>
+              <p>Cloud sync is optional. If disabled, all records stay encrypted on your device only.</p>
+            </div>
+            <div class="timeline-item">
+              <strong>Transit</strong>
+              <p>When enabled, entries travel over HTTPS (TLS 1.2+) to NeonDB-managed storage.</p>
+            </div>
+            <div class="timeline-item">
+              <strong>At rest</strong>
+              <p>NeonDB encrypts storage at rest per their compliance controls. Only authenticated sessions tied to your account can retrieve data.</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="security" class="section-card" aria-labelledby="security-title">
+          <h2 id="security-title">4. Security Practices</h2>
           <ul>
-            <li>Income and expense entries (amount, category, date, note)</li>
-            <li>Transaction history and related metadata</li>
+            <li>Key material and credentials are stored in secure vaults with rotation policies.</li>
+            <li>Transport security enforced across the app, API, and admin tooling.</li>
+            <li>Application code undergoes regular dependency updates and vulnerability scans.</li>
+            <li>Access to production data is limited to authorized engineers supporting incidents.</li>
           </ul>
-        </div>
+        </section>
 
-        <div style="margin-top:10px">
-          <strong>Device & technical data (non-personal):</strong>
+        <section id="sharing" class="section-card" aria-labelledby="sharing-title">
+          <h2 id="sharing-title">5. Sharing &amp; Third Parties</h2>
+          <p>We do not grant third-party marketers access to your personal or financial data. The limited partners we use act as processors:</p>
           <ul>
-            <li>App usage statistics (anonymous)</li>
-            <li>Device model, OS version (for diagnostics)</li>
+            <li><strong>NeonDB</strong> &mdash; encrypted database hosting for backup and sync.</li>
+            <li><strong>Authentication providers</strong> (if you choose social login) &mdash; identity verification only.</li>
+            <li><strong>Analytics &amp; crash tooling</strong> &mdash; aggregated usage for reliability tracking.</li>
           </ul>
-        </div>
-      </section>
+        </section>
 
-      <section class="section" aria-labelledby="use">
-        <h2 id="use">2. How We Use Your Information</h2>
-        <p class="lead">We use data only to provide and improve the App’s core functionality:</p>
-        <ul>
-          <li>Store and display your income/expense records and history.</li>
-          <li>Provide analytics and charts about your spending.</li>
-          <li>Enable secure cloud backup & restore (NeonDB) when you opt-in.</li>
-          <li>Diagnose technical issues and improve performance (anonymous).</li>
-        </ul>
-        <p class="lead" style="margin-top:8px"><strong>We do not sell or rent personal data to third parties.</strong></p>
-      </section>
+        <section id="rights" class="section-card" aria-labelledby="rights-title">
+          <h2 id="rights-title">6. Your Rights</h2>
+          <div class="three-col">
+            <article>
+              <strong>Access &amp; portability</strong>
+              <p>Request an export of your ledger data or use in-app export tools when available.</p>
+            </article>
+            <article>
+              <strong>Deletion</strong>
+              <p>Clear local data in settings or email us to remove backups from NeonDB.</p>
+            </article>
+            <article>
+              <strong>Preference management</strong>
+              <p>Toggle cloud sync, marketing emails, or crash reporting inside the app at any time.</p>
+            </article>
+          </div>
+        </section>
 
-      <section class="section" aria-labelledby="backup">
-        <h2 id="backup">3. Cloud Backup & NeonDB</h2>
-        <p class="lead">If you enable cloud backup or sync, your data is transmitted to and stored on NeonDB servers in encrypted form. Backup is optional — if you never enable cloud sync, your data remains local to your device.</p>
-        <ul>
-          <li>Data is encrypted in transit (HTTPS, TLS 1.2+).</li>
-          <li>Stored data is encrypted at rest by NeonDB (provider controls encryption per their practices).</li>
-          <li>Only authenticated users can access their backups.</li>
-        </ul>
-      </section>
+        <section class="section-card" aria-labelledby="retention-title">
+          <h2 id="retention-title">7. Retention &amp; Data Residency</h2>
+          <p>Local data lives on your device until you delete the app or clear storage. Cloud backups stay active while your account remains in good standing or until a deletion request is completed. NeonDB currently provisions infrastructure in regions compliant with applicable Indian and global privacy regulations.</p>
+        </section>
 
-      <section class="section" aria-labelledby="security">
-        <h2 id="security">4. Data Security</h2>
-        <p class="lead">We implement reasonable technical and organizational measures to protect your data:</p>
-        <ul>
-          <li>Encryption in transit (HTTPS) for all network communications.</li>
-          <li>Encrypted storage for backups and secure access control to backend credentials.</li>
-          <li>Regular code maintenance and security patches.</li>
-        </ul>
-      </section>
+        <section id="children" class="section-card" aria-labelledby="children-title">
+          <h2 id="children-title">8. Children&rsquo;s Privacy</h2>
+          <p>DhanDiary is not directed to children under 13 and we do not knowingly collect personal data from them. If you believe a child provided personal information, reach out via the contact methods below so we can remove it.</p>
+        </section>
 
-      <section class="section" aria-labelledby="sharing">
-        <h2 id="sharing">5. Sharing & Third-Party Services</h2>
-        <p class="lead">We do not share your personal or financial data with third-party marketers or sell your information. The only third-parties involved may include:</p>
-        <ul>
-          <li><strong>NeonDB</strong> — for optional cloud backup and restore functionality.</li>
-          <li>Authentication providers (only if you opt to sign in via Google or similar — used solely to verify identity).</li>
-        </ul>
-      </section>
+        <section id="changes" class="section-card" aria-labelledby="changes-title">
+          <h2 id="changes-title">9. Changes to This Policy</h2>
+          <p>We may update this document to reflect new features, legal requirements, or security practices. Material updates will be announced in-app and via release notes, and the effective date above will change.</p>
+        </section>
 
-      <section class="section" aria-labelledby="rights">
-        <h2 id="rights">6. Your Rights & Data Deletion</h2>
-        <p class="lead">You have control over your data:</p>
-        <ul>
-          <li><strong>Delete locally:</strong> You may clear app data or uninstall the app to remove local records.</li>
-          <li><strong>Delete backups:</strong> Use the account settings to delete your cloud backup, or request deletion via email (contact details below).</li>
-          <li><strong>Data portability:</strong> You may export your transaction history (if export feature is provided) and transfer it elsewhere.</li>
-        </ul>
-      </section>
+        <section id="contact" class="section-card" aria-labelledby="contact-title">
+          <h2 id="contact-title">10. Contact Us</h2>
+          <p>Reach out for privacy questions, export/deletion requests, or compliance inquiries:</p>
+          <div class="contact-grid">
+            <span>Developer: <a href="mailto:sarwanyadav6174@gmail.com">sarwanyadav6174@gmail.com</a></span>
+            <span>Team: <a href="mailto:ellowdigitalindia@gmail.com">ellowdigitalindia@gmail.com</a></span>
+          </div>
+        </section>
+      </main>
 
-      <section class="section" aria-labelledby="children">
-        <h2 id="children">7. Children</h2>
-        <p class="lead">DhanDiary is not intended for children under 13. We do not knowingly collect personal information from children under 13. If you become aware that such information has been provided, please contact us and we will remove it.</p>
-      </section>
-
-      <section class="section" aria-labelledby="changes">
-        <h2 id="changes">8. Changes to This Policy</h2>
-        <p class="lead">We may update this policy from time to time. Material changes will include an updated "Last updated" date. Continued use of the App after changes constitutes acceptance.</p>
-      </section>
-
-      <section class="section" aria-labelledby="contact">
-        <h2 id="contact">9. Contact Us</h2>
-        <p class="lead">If you have any questions, requests for deletion, or privacy concerns, contact us at either:</p>
-        <div class="contact" style="margin-top:8px">
-          <div>Developer: <a class="email" href="mailto:sarwanyadav6174@gmail">sarwanyadav6174@gmail</a></div>
-          <div>Team / Organization: <a class="email" href="mailto:ellowdigitalindia@gmail.com">ellowdigitalindia@gmail.com</a></div>
-        </div>
-        <p style="margin-top:12px;color:var(--muted)">We aim to respond to all legitimate requests within a reasonable timeframe.</p>
-      </section>
-
-      <section style="margin-top:6px">
-        <p style="font-size:13px;color:var(--muted)">This Privacy Policy applies to the DhanDiary mobile application and to any associated services we provide. By using DhanDiary, you acknowledge that you have read and understood this policy.</p>
-      </section>
-    </main>
-
-    <footer>
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
-        <div style="font-size:13px;color:var(--muted)">© <strong>DhanDiary</strong> — EllowDigital</div>
-        <div style="font-size:13px;color:var(--muted)">Last updated: <strong>12 December 2025</strong></div>
-      </div>
-    </footer>
+      <footer>
+        <span>&copy; DhanDiary &ndash; EllowDigital</span>
+        <span>Need something else? <a href="terms.html">Terms</a> &bull; <a href="eula.html">EULA</a> &bull; <a href="privacy-policy.html">Privacy</a></span>
+      </footer>
+    </div>
   </div>
 </body>
 </html>
