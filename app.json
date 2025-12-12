@@ -21,7 +21,6 @@
     "android": {
       "package": "com.ellowdigital.dhandiary",
       "versionCode": 122,
-      "minSdkVersion": 24,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -44,7 +43,8 @@
             },
             "abiFilters": [
               "arm64-v8a"
-            ]
+            ],
+            "minSdkVersion": 24
           }
         }
       ]
