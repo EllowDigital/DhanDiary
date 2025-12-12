@@ -39,7 +39,7 @@ const theme = {
   accentGreen: '#10B981',
   accentRed: '#EF4444',
   heroBg: '#0F172A',
-  border: '#F1F5F9',
+  border: '#E2E8F0', // Slightly darker border for the grid
 };
 
 // --- CONSTANTS ---
@@ -52,11 +52,6 @@ const AboutScreen: React.FC = () => {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const isExpoGo = Constants.appOwnership === 'expo';
-
-  // --- RESPONSIVE CALCULATIONS ---
-  // Calculate card width: (Screen Width - Side Padding (40) - Gap (12)) / 2
-  const cardWidth = (width - 40 - 12) / 2;
-  const isSmallScreen = width < 360;
 
   // --- ANIMATIONS ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -91,7 +86,7 @@ const AboutScreen: React.FC = () => {
     });
   }, []);
 
-  // --- UPDATE LOGIC ---
+  // --- UPDATE LOGIC (Original) ---
   const checkForUpdates = useCallback(async () => {
     if (isExpoGo) return Alert.alert('Expo Go', 'OTA updates are not supported in Expo Go.');
 
@@ -136,7 +131,7 @@ const AboutScreen: React.FC = () => {
 
   // --- INFO DATA ---
   const updateId = Updates.updateId || 'Embedded';
-  const shortId = updateId === 'Embedded' ? updateId : updateId.substring(0, 8) + '...';
+  const shortId = updateId === 'Embedded' ? updateId : updateId.substring(0, 6);
 
   const copyUpdateId = () => {
     Clipboard.setString(updateId);
@@ -153,19 +148,17 @@ const AboutScreen: React.FC = () => {
 
   const infoGrid = useMemo(
     () => [
-      { label: 'Version', value: pkg.version, icon: 'tag', color: theme.primary },
-      { label: 'Channel', value: BUILD_TYPE, icon: 'layers', color: theme.primary },
+      { label: 'Version', value: pkg.version, icon: 'tag' },
+      { label: 'Channel', value: BUILD_TYPE, icon: 'layers' },
       {
         label: 'Env',
         value: process.env.NODE_ENV === 'production' ? 'Prod' : 'Dev',
         icon: 'code',
-        color: theme.primary,
       },
       {
         label: 'Build ID',
         value: shortId,
         icon: 'fingerprint',
-        color: theme.primary,
         onPress: copyUpdateId,
       },
     ],
@@ -190,15 +183,11 @@ const AboutScreen: React.FC = () => {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        overScrollMode="never" // Android specific: removes the stretch effect
-        contentContainerStyle={[
-          styles.scrollContent,
-          // CRITICAL: Ensure padding accounts for bottom navigation bar (gestures)
-          { paddingBottom: insets.bottom + 80 },
-        ]}
+        overScrollMode="never"
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 80 }]}
       >
         <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-          {/* 1. HERO CARD */}
+          {/* 1. HERO CARD (Original Design) */}
           <View style={styles.heroCard}>
             <View style={styles.heroContent}>
               <Image
@@ -230,30 +219,21 @@ const AboutScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* 2. SYSTEM INFO GRID (Responsive) */}
+          {/* 2. SYSTEM INFO (NEW COMPACT / MINIMAL DESIGN) */}
           <Text style={styles.sectionHeader}>System Information</Text>
-          <View style={styles.gridContainer}>
-            {infoGrid.map((item, idx) => (
-              <TouchableOpacity
-                key={idx}
-                style={[styles.gridCard, { width: cardWidth }]} // Responsive Width applied here
-                activeOpacity={item.onPress ? 0.7 : 1}
-                onPress={item.onPress}
-              >
-                <View style={[styles.iconBox, { backgroundColor: theme.primarySoft }]}>
-                  <MaterialIcon name={item.icon as any} size={20} color={item.color} />
-                </View>
-                <View>
-                  <Text style={styles.gridLabel}>{item.label}</Text>
-                  <Text style={styles.gridValue} numberOfLines={1}>
-                    {item.value}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            ))}
+          <View style={styles.denseGrid}>
+            <View style={styles.gridRow}>
+              <GridItem item={infoGrid[0]} borderRight />
+              <GridItem item={infoGrid[1]} />
+            </View>
+            <View style={styles.gridDivider} />
+            <View style={styles.gridRow}>
+              <GridItem item={infoGrid[2]} borderRight />
+              <GridItem item={infoGrid[3]} />
+            </View>
           </View>
 
-          {/* 3. UPDATES & ACTIONS */}
+          {/* 3. UPDATES & ACTIONS (Original Design) */}
           <Text style={styles.sectionHeader}>Updates & Support</Text>
 
           <View style={styles.actionCard}>
@@ -312,7 +292,7 @@ const AboutScreen: React.FC = () => {
             )}
           </View>
 
-          {/* Support Buttons Row */}
+          {/* Support Buttons Row (Original Design) */}
           <View style={styles.buttonRow}>
             <TouchableOpacity style={styles.halfBtn} onPress={handleShare}>
               <MaterialIcon name="share" size={20} color={theme.primary} />
@@ -375,6 +355,25 @@ const AboutScreen: React.FC = () => {
   );
 };
 
+// --- SUB-COMPONENT FOR THE NEW SYSTEM INFO GRID ---
+const GridItem = ({ item, borderRight }: { item: any; borderRight?: boolean }) => (
+  <TouchableOpacity
+    style={[
+      styles.gridItem,
+      borderRight && { borderRightWidth: 1, borderRightColor: theme.border },
+    ]}
+    onPress={item.onPress}
+    activeOpacity={item.onPress ? 0.6 : 1}
+    disabled={!item.onPress}
+  >
+    <Text style={styles.gridLabel}>{item.label}</Text>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+      <Text style={styles.gridValue}>{item.value}</Text>
+      {item.icon && <MaterialIcon name={item.icon} size={12} color={theme.textSecondary} />}
+    </View>
+  </TouchableOpacity>
+);
+
 export default AboutScreen;
 
 /* --- STYLES --- */
@@ -386,7 +385,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 20,
     paddingTop: 10,
-    flexGrow: 1, // Ensures scrollview takes space even if content is small
+    flexGrow: 1,
   },
   sectionHeader: {
     fontSize: 14,
@@ -398,7 +397,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 
-  /* HERO CARD */
+  /* HERO CARD (Original) */
   heroCard: {
     backgroundColor: theme.heroBg,
     borderRadius: 24,
@@ -423,7 +422,7 @@ const styles = StyleSheet.create({
   },
   heroText: {
     marginLeft: 16,
-    flex: 1, // Allows text to shrink on small devices
+    flex: 1,
     justifyContent: 'center',
   },
   heroTitle: {
@@ -440,7 +439,7 @@ const styles = StyleSheet.create({
   activePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(16, 185, 129, 0.2)', // Green tint on dark
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 20,
@@ -468,7 +467,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    flexWrap: 'wrap', // Wrap on very small screens
+    flexWrap: 'wrap',
     gap: 10,
   },
   heroFooterText: {
@@ -494,48 +493,47 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
 
-  /* GRID */
-  gridContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 24,
-  },
-  gridCard: {
-    // Width is handled inline for responsiveness
+  /* NEW COMPACT GRID STYLES */
+  denseGrid: {
     backgroundColor: theme.surface,
-    padding: 16,
     borderRadius: 20,
+    borderWidth: 1,
+    borderColor: theme.border,
+    overflow: 'hidden',
+    marginBottom: 24,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 8,
     elevation: 2,
-    borderWidth: 1,
-    borderColor: theme.border,
   },
-  iconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
+  gridRow: {
+    flexDirection: 'row',
+  },
+  gridDivider: {
+    height: 1,
+    backgroundColor: theme.border,
+    width: '100%',
+  },
+  gridItem: {
+    flex: 1,
+    padding: 16,
+    alignItems: 'flex-start',
   },
   gridLabel: {
     fontSize: 11,
     color: theme.textSecondary,
     fontWeight: '700',
     textTransform: 'uppercase',
-    marginBottom: 2,
+    marginBottom: 4,
   },
   gridValue: {
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 14,
     color: theme.text,
+    fontWeight: '700',
   },
 
-  /* ACTIONS & UPDATES */
+  /* ACTIONS & UPDATES (Original) */
   actionCard: {
     backgroundColor: theme.surface,
     borderRadius: 20,
@@ -590,7 +588,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 
-  /* SUPPORT BUTTONS */
+  /* SUPPORT BUTTONS (Original) */
   buttonRow: {
     flexDirection: 'row',
     gap: 12,
@@ -633,7 +631,7 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     padding: 24,
     alignItems: 'center',
-    elevation: 24, // High elevation for modal to sit above everything
+    elevation: 24,
   },
   modalIcon: {
     width: 64,
