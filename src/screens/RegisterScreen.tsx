@@ -17,19 +17,23 @@ import {
   UIManager,
 } from 'react-native';
 import { Button, Text } from '@rneui/themed';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 
 // Types & Services
 import { AuthStackParamList } from '../types/navigation';
-import { registerOnline, warmNeonConnection } from '../services/auth';
 import { useToast } from '../context/ToastContext';
 import { useInternetStatus } from '../hooks/useInternetStatus';
+import {
+  registerWithEmail,
+  useGoogleAuth,
+  useGithubAuth,
+} from '../services/firebaseAuth';
 
 // Components & Utils
-import { colors, spacing, shadows } from '../utils/design';
+import { colors } from '../utils/design';
 import FullScreenSpinner from '../components/FullScreenSpinner';
 import AuthField from '../components/AuthField';
 
@@ -55,7 +59,7 @@ const RegisterScreen = () => {
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [warming, setWarming] = useState(false);
+  const [socialLoading, setSocialLoading] = useState(false);
 
   // Validation State
   const [emailError, setEmailError] = useState<string | null>(null);
@@ -94,28 +98,8 @@ const RegisterScreen = () => {
   };
   const passStrength = getPasswordStrength(password);
 
-  const warmRemote = useCallback(
-    async (force = false) => {
-      if (!isOnline) return false;
-      // Animate the appearance of the warming banner
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      setWarming(true);
-      try {
-        const ok = await warmNeonConnection({ force });
-        return ok;
-      } finally {
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-        setWarming(false);
-      }
-    },
-    [isOnline]
-  );
-
-  useFocusEffect(
-    useCallback(() => {
-      warmRemote(false).catch(() => {});
-    }, [warmRemote])
-  );
+  const { googleAvailable, signIn: startGoogleSignIn } = useGoogleAuth();
+  const { githubAvailable, signIn: startGithubSignIn } = useGithubAuth();
 
   // Optimized Handlers
   const handleEmailChange = useCallback(
@@ -140,7 +124,7 @@ const RegisterScreen = () => {
   );
 
   const handleRegister = useCallback(async () => {
-    if (loading || warming) return;
+    if (loading || socialLoading) return;
     if (!isOnline)
       return Alert.alert('Offline', 'Internet connection required to create an account.');
 
@@ -165,8 +149,7 @@ const RegisterScreen = () => {
 
     setLoading(true);
     try {
-      await warmRemote(true);
-      await registerOnline(name, email, password);
+      await registerWithEmail(name.trim(), email.trim(), password);
       showToast('Account created!');
       (navigation.getParent() as any)?.replace('Main');
     } catch (err: any) {
@@ -179,10 +162,37 @@ const RegisterScreen = () => {
     } finally {
       setLoading(false);
     }
-  }, [loading, warming, isOnline, name, email, password, warmRemote, navigation, showToast]);
+  }, [loading, socialLoading, isOnline, name, email, password, navigation, showToast]);
 
   const handleOpenTerms = useCallback(() => navigation.navigate('Terms'), [navigation]);
   const handleOpenPrivacy = useCallback(() => navigation.navigate('PrivacyPolicy'), [navigation]);
+
+  const handleGoogleSignup = async () => {
+    if (!googleAvailable) return;
+    setSocialLoading(true);
+    try {
+      await startGoogleSignIn();
+    } finally {
+      setSocialLoading(false);
+    }
+  };
+
+  const handleGithubSignup = async () => {
+    if (!githubAvailable) return;
+    setSocialLoading(true);
+    try {
+      await startGithubSignIn();
+    } finally {
+      setSocialLoading(false);
+    }
+  };
+
+  const spinnerVisible = loading || socialLoading;
+  const spinnerMessage = loading
+    ? 'Creating your vault...'
+    : socialLoading
+      ? 'Contacting provider...'
+      : 'Creating your vault...';
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -316,19 +326,11 @@ const RegisterScreen = () => {
                 </View>
               )}
 
-              {/* WARMING UP BANNER */}
-              {warming && (
-                <View style={styles.warmingBanner}>
-                  <MaterialIcon name="bolt" size={16} color={colors.accentOrange || '#FF9800'} />
-                  <Text style={styles.warmingText}>Secure server is waking up...</Text>
-                </View>
-              )}
-
               <Button
                 title={loading ? 'Creating...' : 'Create Account'}
                 onPress={handleRegister}
                 loading={loading}
-                disabled={loading || warming || !isOnline}
+                disabled={loading || socialLoading || !isOnline}
                 buttonStyle={styles.primaryButton}
                 containerStyle={styles.buttonContainer}
                 titleStyle={styles.buttonText}
@@ -343,6 +345,57 @@ const RegisterScreen = () => {
                   ) : undefined
                 }
               />
+
+              {(googleAvailable || githubAvailable) && (
+                <View style={styles.socialWrapper}>
+                  <View style={styles.socialDivider}>
+                    <View style={styles.socialLine} />
+                    <Text style={styles.socialText}>or sign up with</Text>
+                    <View style={styles.socialLine} />
+                  </View>
+
+                  <View style={styles.socialButtonsRow}>
+                    {googleAvailable && (
+                      <Button
+                        type="outline"
+                        icon={
+                          <MaterialIcon
+                            name="google"
+                            size={18}
+                            color={colors.primary}
+                            style={{ marginRight: 8 }}
+                          />
+                        }
+                        title="Google"
+                        onPress={handleGoogleSignup}
+                        disabled={socialLoading}
+                        buttonStyle={styles.socialButton}
+                        titleStyle={styles.socialButtonText}
+                        containerStyle={styles.socialButtonContainer}
+                      />
+                    )}
+                    {githubAvailable && (
+                      <Button
+                        type="outline"
+                        icon={
+                          <MaterialIcon
+                            name="code"
+                            size={18}
+                            color={colors.primary}
+                            style={{ marginRight: 8 }}
+                          />
+                        }
+                        title="GitHub"
+                        onPress={handleGithubSignup}
+                        disabled={socialLoading}
+                        buttonStyle={styles.socialButton}
+                        titleStyle={styles.socialButtonText}
+                        containerStyle={styles.socialButtonContainer}
+                      />
+                    )}
+                  </View>
+                </View>
+              )}
 
               {/* TERMS TEXT */}
               <View style={styles.termsContainer}>
@@ -377,7 +430,7 @@ const RegisterScreen = () => {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      <FullScreenSpinner visible={loading} message="Creating your vault..." />
+      <FullScreenSpinner visible={spinnerVisible} message={spinnerMessage} />
     </SafeAreaView>
   );
 };
@@ -523,24 +576,44 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
 
-  /* WARMING BANNER */
-  warmingBanner: {
+  /* SOCIAL BUTTONS */
+  socialWrapper: {
+    marginTop: 20,
+  },
+  socialDivider: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    backgroundColor: '#FFF3E0', // Light Orange bg
-    borderRadius: 8,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#FFE0B2',
+    marginBottom: 12,
   },
-  warmingText: {
+  socialLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E0E0E0',
+  },
+  socialText: {
+    marginHorizontal: 12,
     fontSize: 12,
-    color: '#E65100', // Darker Orange text
-    fontWeight: '600',
+    color: colors.muted || '#777',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  socialButtonsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    flexWrap: 'wrap',
+  },
+  socialButton: {
+    borderRadius: 10,
+    borderColor: colors.border || '#DDD',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  socialButtonText: {
+    color: colors.primary,
+    fontWeight: '700',
+  },
+  socialButtonContainer: {
+    flex: 1,
   },
 
   /* BUTTONS */

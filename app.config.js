@@ -39,11 +39,63 @@ module.exports = (ctx) => {
     }
   }
 
+  const firebaseExtra = {
+    apiKey:
+      process.env.EXPO_PUBLIC_FIREBASE_API_KEY ||
+      (baseConfig.extra && baseConfig.extra.firebase && baseConfig.extra.firebase.apiKey) ||
+      null,
+    authDomain:
+      process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN ||
+      (baseConfig.extra && baseConfig.extra.firebase && baseConfig.extra.firebase.authDomain) ||
+      null,
+    projectId:
+      process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID ||
+      (baseConfig.extra && baseConfig.extra.firebase && baseConfig.extra.firebase.projectId) ||
+      null,
+    storageBucket:
+      process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET ||
+      (baseConfig.extra && baseConfig.extra.firebase && baseConfig.extra.firebase.storageBucket) ||
+      null,
+    messagingSenderId:
+      process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ||
+      (baseConfig.extra && baseConfig.extra.firebase && baseConfig.extra.firebase.messagingSenderId) ||
+      null,
+    appId:
+      process.env.EXPO_PUBLIC_FIREBASE_APP_ID ||
+      (baseConfig.extra && baseConfig.extra.firebase && baseConfig.extra.firebase.appId) ||
+      null,
+    measurementId:
+      process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID ||
+      (baseConfig.extra && baseConfig.extra.firebase && baseConfig.extra.firebase.measurementId) ||
+      null,
+    webClientId:
+      process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
+      (baseConfig.extra && baseConfig.extra.firebase && baseConfig.extra.firebase.webClientId) ||
+      null,
+  };
+
+  const oauthExtra = {
+    googleClientId:
+      process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
+      (baseConfig.extra && baseConfig.extra.oauth && baseConfig.extra.oauth.googleClientId) ||
+      firebaseExtra.webClientId ||
+      null,
+    githubClientId:
+      process.env.EXPO_PUBLIC_GITHUB_CLIENT_ID ||
+      (baseConfig.extra && baseConfig.extra.oauth && baseConfig.extra.oauth.githubClientId) ||
+      null,
+    githubClientSecret:
+      process.env.EXPO_PUBLIC_GITHUB_CLIENT_SECRET ||
+      (baseConfig.extra && baseConfig.extra.oauth && baseConfig.extra.oauth.githubClientSecret) ||
+      null,
+  };
+
   return {
     ...baseConfig,
     extra: {
       ...(baseConfig.extra || {}),
-      NEON_URL: process.env.NEON_URL || (baseConfig.extra && baseConfig.extra.NEON_URL) || null,
+      firebase: firebaseExtra,
+      oauth: oauthExtra,
     },
   };
 };

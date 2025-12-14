@@ -22,13 +22,17 @@ import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 
 // Types & Services
 import { AuthStackParamList } from '../types/navigation';
-import { loginOnline } from '../services/auth';
-import { syncBothWays } from '../services/syncManager';
 import { useToast } from '../context/ToastContext';
 import { useInternetStatus } from '../hooks/useInternetStatus';
+import {
+  loginWithEmail,
+  sendPasswordReset,
+  useGoogleAuth,
+  useGithubAuth,
+} from '../services/firebaseAuth';
 
 // Components & Utils
-import { colors, spacing, shadows } from '../utils/design';
+import { colors } from '../utils/design';
 import FullScreenSpinner from '../components/FullScreenSpinner';
 import AuthField from '../components/AuthField';
 
@@ -48,6 +52,11 @@ const LoginScreen = () => {
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [resettingPassword, setResettingPassword] = useState(false);
+  const [socialLoading, setSocialLoading] = useState(false);
+
+  const { googleAvailable, signIn: startGoogleSignIn } = useGoogleAuth();
+  const { githubAvailable, signIn: startGithubSignIn } = useGithubAuth();
 
   // --- ANIMATION ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -83,8 +92,7 @@ const LoginScreen = () => {
 
     setLoading(true);
     try {
-      await loginOnline(email, password);
-      syncBothWays().catch((e) => console.warn('Post-login sync warning:', e));
+      await loginWithEmail(email, password);
       showToast('Welcome back!');
       (navigation.getParent() as any)?.replace('Main');
     } catch (err: any) {
@@ -102,9 +110,48 @@ const LoginScreen = () => {
     }
   };
 
-  const handleForgotPassword = () => {
-    Alert.alert('Reset Password', 'Please contact support to reset your credentials.');
+  const handleForgotPassword = async () => {
+    if (!email) {
+      return Alert.alert('Enter Email', 'Add your account email above so we can send reset steps.');
+    }
+    setResettingPassword(true);
+    try {
+      await sendPasswordReset(email);
+      Alert.alert('Email Sent', 'Check your inbox for reset instructions.');
+    } catch (err: any) {
+      const msg = err?.message || 'Unable to send reset email right now.';
+      Alert.alert('Reset Failed', msg);
+    } finally {
+      setResettingPassword(false);
+    }
   };
+
+  const handleGoogleLogin = async () => {
+    if (!googleAvailable) return;
+    setSocialLoading(true);
+    try {
+      await startGoogleSignIn();
+    } finally {
+      setSocialLoading(false);
+    }
+  };
+
+  const handleGithubLogin = async () => {
+    if (!githubAvailable) return;
+    setSocialLoading(true);
+    try {
+      await startGithubSignIn();
+    } finally {
+      setSocialLoading(false);
+    }
+  };
+
+  const spinnerVisible = loading || socialLoading;
+  const spinnerMessage = loading
+    ? 'Authenticating...'
+    : socialLoading
+      ? 'Contacting provider...'
+      : 'Authenticating...';
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -192,8 +239,11 @@ const LoginScreen = () => {
                 style={styles.forgotPassContainer}
                 onPress={handleForgotPassword}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                disabled={resettingPassword}
               >
-                {/* <Text style={styles.forgotPassText}>Forgot Password?</Text> */}
+                <Text style={styles.forgotPassText}>
+                  {resettingPassword ? 'Sending reset...' : 'Forgot Password?'}
+                </Text>
               </TouchableOpacity>
 
               <Button
@@ -210,6 +260,57 @@ const LoginScreen = () => {
                   ) : undefined
                 }
               />
+
+              {(googleAvailable || githubAvailable) && (
+                <View style={styles.socialWrapper}>
+                  <View style={styles.socialDivider}>
+                    <View style={styles.socialLine} />
+                    <Text style={styles.socialText}>or continue with</Text>
+                    <View style={styles.socialLine} />
+                  </View>
+
+                  <View style={styles.socialButtonsRow}>
+                    {googleAvailable && (
+                      <Button
+                        type="outline"
+                        icon={
+                          <MaterialIcon
+                            name="google"
+                            size={18}
+                            color={colors.primary}
+                            style={{ marginRight: 8 }}
+                          />
+                        }
+                        title="Google"
+                        onPress={handleGoogleLogin}
+                        disabled={socialLoading}
+                        buttonStyle={styles.socialButton}
+                        titleStyle={styles.socialButtonText}
+                        containerStyle={styles.socialButtonContainer}
+                      />
+                    )}
+                    {githubAvailable && (
+                      <Button
+                        type="outline"
+                        icon={
+                          <MaterialIcon
+                            name="code"
+                            size={18}
+                            color={colors.primary}
+                            style={{ marginRight: 8 }}
+                          />
+                        }
+                        title="GitHub"
+                        onPress={handleGithubLogin}
+                        disabled={socialLoading}
+                        buttonStyle={styles.socialButton}
+                        titleStyle={styles.socialButtonText}
+                        containerStyle={styles.socialButtonContainer}
+                      />
+                    )}
+                  </View>
+                </View>
+              )}
             </View>
 
             {/* --- FOOTER INSIDE CARD --- */}
@@ -229,7 +330,7 @@ const LoginScreen = () => {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      <FullScreenSpinner visible={loading} message="Authenticating..." />
+      <FullScreenSpinner visible={spinnerVisible} message={spinnerMessage} />
     </SafeAreaView>
   );
 };
@@ -360,6 +461,45 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontSize: 13,
     fontWeight: '600',
+  },
+
+  socialWrapper: {
+    marginTop: 24,
+  },
+  socialDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  socialLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E0E0E0',
+  },
+  socialText: {
+    marginHorizontal: 12,
+    fontSize: 12,
+    color: colors.muted || '#777',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  socialButtonsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    flexWrap: 'wrap',
+  },
+  socialButton: {
+    borderRadius: 10,
+    borderColor: colors.border || '#DDD',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  socialButtonText: {
+    color: colors.primary,
+    fontWeight: '700',
+  },
+  socialButtonContainer: {
+    flex: 1,
   },
 
   /* BUTTONS */
