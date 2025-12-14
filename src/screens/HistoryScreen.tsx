@@ -10,7 +10,6 @@ import {
   TouchableWithoutFeedback,
   LayoutAnimation,
   Platform,
-  UIManager,
   StatusBar,
   KeyboardAvoidingView,
   Keyboard,
@@ -34,11 +33,6 @@ import { DEFAULT_CATEGORY, ensureCategory } from '../constants/categories';
 import ScreenHeader from '../components/ScreenHeader';
 import dayjs from 'dayjs';
 import { Swipeable } from 'react-native-gesture-handler';
-
-// Enable LayoutAnimation for Android
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 // --- SWIPEABLE LIST ITEM ---
 const SwipeableHistoryItem = React.memo(({ item, onEdit, onDelete }: any) => {

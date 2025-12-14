@@ -13,7 +13,6 @@ import {
   StatusBar,
   TextInput,
   LayoutAnimation,
-  UIManager,
   Keyboard,
   TouchableWithoutFeedback,
 } from 'react-native';
@@ -32,11 +31,6 @@ import { colors, spacing, shadows } from '../utils/design';
 import { ALLOWED_CATEGORIES, DEFAULT_CATEGORY, ensureCategory } from '../constants/categories';
 import ScreenHeader from '../components/ScreenHeader';
 import dayjs from 'dayjs';
-
-// Enable LayoutAnimation for Android
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 

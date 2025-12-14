@@ -8,9 +8,7 @@ import {
   Animated,
   Easing,
   StatusBar,
-  Platform,
   LayoutAnimation,
-  UIManager,
   Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -35,11 +33,6 @@ import {
 } from '../utils/entryFilters';
 import { colors } from '../utils/design';
 import dayjs from 'dayjs';
-
-// Enable LayoutAnimation
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 // --- CONSTANTS ---
 const TIME_FILTERS = [

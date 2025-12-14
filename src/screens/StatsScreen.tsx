@@ -6,10 +6,8 @@ import {
   ActivityIndicator,
   Animated,
   LayoutAnimation,
-  Platform,
   Pressable,
   StatusBar,
-  UIManager,
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -24,11 +22,6 @@ import { ensureCategory } from '../constants/categories';
 import ScreenHeader from '../components/ScreenHeader';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import DailyTrendChart from '../components/charts/DailyTrendChart';
-
-// --- ANIMATION CONFIG ---
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 // --- COLOR UTILS ---
 const hexToRgb = (hex: string) => {

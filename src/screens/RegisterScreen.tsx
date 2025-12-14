@@ -14,7 +14,6 @@ import {
   useWindowDimensions,
   Keyboard,
   LayoutAnimation,
-  UIManager,
 } from 'react-native';
 import { Button, Text } from '@rneui/themed';
 import { useNavigation } from '@react-navigation/native';
@@ -32,11 +31,6 @@ import { registerWithEmail, useGoogleAuth, useGithubAuth } from '../services/fir
 import { colors } from '../utils/design';
 import FullScreenSpinner from '../components/FullScreenSpinner';
 import AuthField from '../components/AuthField';
-
-// Enable LayoutAnimation on Android
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 type RegisterScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList>;
 

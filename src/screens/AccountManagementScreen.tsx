@@ -12,7 +12,6 @@ import {
   KeyboardAvoidingView,
   StatusBar,
   Keyboard,
-  UIManager,
   LayoutAnimation,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -27,11 +26,6 @@ import { useToast } from '../context/ToastContext';
 import { useNavigation } from '@react-navigation/native';
 import { colors, spacing } from '../utils/design';
 import ScreenHeader from '../components/ScreenHeader';
-
-// Enable LayoutAnimation for Android
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 // --- SUB-COMPONENT: CUSTOM INPUT ---
 // Defined outside to prevent focus loss on re-render

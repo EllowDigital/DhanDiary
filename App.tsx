@@ -16,6 +16,9 @@ import DrawerNavigator from './src/navigation/DrawerNavigator';
 import { ToastProvider } from './src/context/ToastContext';
 import { RootStackParamList, AuthStackParamList } from './src/types/navigation';
 import vexoService from './src/services/vexo';
+import { enableLegacyLayoutAnimations } from './src/utils/layoutAnimation';
+
+enableLegacyLayoutAnimations();
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
