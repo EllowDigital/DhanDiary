@@ -154,7 +154,7 @@ const CompactTransactionRow = ({ item, onPress }: { item: any; onPress: () => vo
 const HomeScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { user } = useAuth();
-  const { entries = [], isLoading = false } = useEntries(user?.id);
+  const { entries = [], isLoading = false } = useEntries(user?.uid);
   const showLoading = useDelayedLoading(Boolean(isLoading), 200);
 
   // --- RESPONSIVE LOGIC ---

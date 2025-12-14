@@ -1,51 +1,26 @@
 import React from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  getEntries,
-  addLocalEntry,
-  LocalEntry,
-  updateLocalEntry,
-  markEntryDeleted,
-} from '../db/entries';
-import { subscribeEntries } from '../utils/dbEvents';
-import { getSession, saveSession } from '../db/session';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ensureCategory, DEFAULT_CATEGORY } from '../constants/categories';
-import { syncBothWays } from '../services/syncManager';
+import {
+  createEntry,
+  fetchEntries,
+  patchEntry,
+  removeEntry,
+  subscribeEntries,
+} from '../services/firestoreEntries';
+import { EntryUpdate, LocalEntry } from '../types/entries';
 
 /* ----------------------------------------------------------
    Helpers
 ---------------------------------------------------------- */
 
-// Resolve an effective user ID (explicit → session → guest)
-const resolveUserId = async (passedId?: string | null): Promise<string> => {
-  if (passedId) return passedId;
-
-  const s = await getSession();
-  if (s?.id) return s.id;
-
-  // Create guest session
-  const guestId = `guest_${Date.now()}`;
-  try {
-    await saveSession(guestId, 'Guest', '');
-  } catch {}
-  return guestId;
-};
-
-// Normalize any date input
-const normalizeDate = (raw: any, fallback: string) => {
-  if (!raw) return fallback;
-  if (raw instanceof Date) return raw.toISOString();
-  return String(raw);
-};
-
 // Build optimistic entry
-const makeOptimisticEntry = (entry: any, sid: string) => {
+const makeOptimisticEntry = (entry: any, userId: string) => {
   const now = new Date().toISOString();
-  const effectiveDate = normalizeDate(entry.date, now);
+  const effectiveDate = entry?.date ? String(entry.date) : now;
   return {
     local_id: entry.local_id || `tmp_${Date.now()}`,
-    remote_id: entry.remote_id || null,
-    user_id: sid,
+    user_id: userId,
     type: entry.type || 'out',
     amount: entry.amount || 0,
     category: ensureCategory(entry.category || DEFAULT_CATEGORY),
@@ -62,26 +37,7 @@ const makeOptimisticEntry = (entry: any, sid: string) => {
 ---------------------------------------------------------- */
 export const useEntries = (userId?: string | null) => {
   const queryClient = useQueryClient();
-
-  const syncKickRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const requestSync = React.useCallback(() => {
-    try {
-      if (syncKickRef.current) clearTimeout(syncKickRef.current);
-      syncKickRef.current = setTimeout(() => {
-        syncKickRef.current = null;
-        syncBothWays().catch((err) => {
-          console.warn('Background sync after mutation failed', err);
-        });
-      }, 400);
-    } catch (e) {}
-  }, [syncBothWays]);
-
-  React.useEffect(() => {
-    return () => {
-      if (syncKickRef.current) clearTimeout(syncKickRef.current);
-    };
-  }, []);
+  const queryKey = React.useMemo(() => ['entries', userId ?? 'none'], [userId]);
 
   /* ---------------------- Fetch entries ---------------------- */
   const {
@@ -89,10 +45,10 @@ export const useEntries = (userId?: string | null) => {
     isLoading,
     refetch,
   } = useQuery<LocalEntry[], Error>({
-    queryKey: ['entries', userId],
+    queryKey,
     queryFn: async () => {
       if (!userId) return [] as LocalEntry[];
-      return await getEntries(userId);
+      return await fetchEntries(userId);
     },
     enabled: !!userId,
     staleTime: 30_000,
@@ -104,63 +60,43 @@ export const useEntries = (userId?: string | null) => {
 
   // Keep query data fresh when DB is mutated by background syncs or other processes.
   React.useEffect(() => {
-    const unsub = subscribeEntries(() => {
-      try {
-        refetch();
-      } catch (e) {}
+    if (!userId) return;
+    const unsubscribe = subscribeEntries(userId, (payload) => {
+      queryClient.setQueryData(queryKey, payload);
     });
-    return () => unsub();
-  }, [refetch]);
+    return () => unsubscribe();
+  }, [userId, queryClient, queryKey]);
 
   /* ----------------------------------------------------------
      ADD ENTRY
   ---------------------------------------------------------- */
   const addEntryMutation = useMutation({
     mutationFn: async (
-      entry: Omit<LocalEntry, 'is_synced' | 'user_id' | 'created_at' | 'updated_at'>
+      entry: Omit<LocalEntry, 'user_id' | 'created_at' | 'updated_at'>
     ) => {
-      const sid = await resolveUserId(userId);
-      const now = new Date().toISOString();
-
-      const created = normalizeDate((entry as any).date || (entry as any).created_at, now);
-
-      const newEntry = {
-        ...entry,
-        category: ensureCategory(entry.category),
-        user_id: sid,
-        date: created,
-        created_at: created,
-        updated_at: now,
-      };
-
-      return await addLocalEntry(newEntry);
+      if (!userId) throw new Error('User must be logged in to add entries');
+      return await createEntry(userId, entry as any);
     },
 
     onMutate: async (entry) => {
-      const sid = await resolveUserId(userId);
-      const key = ['entries', sid];
+      if (!userId) return;
+      await queryClient.cancelQueries({ queryKey });
 
-      await queryClient.cancelQueries({ queryKey: key });
-
-      const previous = queryClient.getQueryData<any[]>(key) || [];
-      const optimistic = makeOptimisticEntry(entry, sid);
-
-      queryClient.setQueryData(key, [optimistic, ...previous]);
-
-      return { key, previous };
+      const previous = queryClient.getQueryData<any[]>(queryKey) || [];
+      const optimistic = makeOptimisticEntry(entry, userId);
+      queryClient.setQueryData(queryKey, [optimistic, ...previous]);
+      return { previous };
     },
 
     onError: (_err, _vars, ctx) => {
       const c = ctx as any;
-      if (c?.key) {
-        queryClient.setQueryData(c.key, c.previous);
+      if (c?.previous) {
+        queryClient.setQueryData(queryKey, c.previous);
       }
     },
 
     onSettled: async () => {
-      const sid = await resolveUserId(userId);
-      queryClient.invalidateQueries({ queryKey: ['entries', sid] });
-      requestSync();
+      queryClient.invalidateQueries({ queryKey });
     },
   });
 
@@ -173,26 +109,17 @@ export const useEntries = (userId?: string | null) => {
       updates,
     }: {
       local_id: string;
-      updates: Partial<LocalEntry & { date?: string | Date | null }>;
+      updates: EntryUpdate;
     }) => {
+      if (!userId) throw new Error('User must be logged in to update entries');
       if (!local_id) throw new Error('local_id required');
-
-      const dateVal =
-        updates.date !== undefined ? normalizeDate(updates.date, null as any) : undefined;
-
-      await updateLocalEntry(local_id, {
-        ...updates,
-        category: updates.category !== undefined ? ensureCategory(updates.category) : undefined,
-        date: dateVal,
-      } as any);
+      await patchEntry(userId, local_id, updates);
     },
 
     onMutate: async ({ local_id, updates }) => {
-      const sid = await resolveUserId(userId);
-      const key = ['entries', sid];
-
-      await queryClient.cancelQueries({ queryKey: key });
-      const previous = queryClient.getQueryData<any[]>(key) || [];
+      if (!userId) return;
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<any[]>(queryKey) || [];
 
       const now = new Date().toISOString();
 
@@ -208,21 +135,19 @@ export const useEntries = (userId?: string | null) => {
           : item
       );
 
-      queryClient.setQueryData(key, next);
-      return { key, previous };
+      queryClient.setQueryData(queryKey, next);
+      return { previous };
     },
 
     onError: (_err, _vars, ctx) => {
       const c = ctx as any;
-      if (c?.key) {
-        queryClient.setQueryData(c.key, c.previous);
+      if (c?.previous) {
+        queryClient.setQueryData(queryKey, c.previous);
       }
     },
 
     onSettled: async () => {
-      const sid = await resolveUserId(userId);
-      queryClient.invalidateQueries({ queryKey: ['entries', sid] });
-      requestSync();
+      queryClient.invalidateQueries({ queryKey });
     },
   });
 
@@ -231,34 +156,31 @@ export const useEntries = (userId?: string | null) => {
   ---------------------------------------------------------- */
   const deleteEntryMutation = useMutation({
     mutationFn: async (local_id: string) => {
+      if (!userId) throw new Error('User must be logged in to delete entries');
       if (!local_id) throw new Error('local_id required');
-      await markEntryDeleted(local_id);
+      await removeEntry(userId, local_id);
     },
 
     onMutate: async (local_id: string) => {
-      const sid = await resolveUserId(userId);
-      const key = ['entries', sid];
-
-      await queryClient.cancelQueries({ queryKey: key });
-      const previous = queryClient.getQueryData<any[]>(key) || [];
+      if (!userId) return;
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<any[]>(queryKey) || [];
 
       const next = previous.filter((it) => it.local_id !== local_id);
-      queryClient.setQueryData(key, next);
+      queryClient.setQueryData(queryKey, next);
 
-      return { key, previous };
+      return { previous };
     },
 
     onError: (_err, _vars, ctx) => {
       const c = ctx as any;
-      if (c?.key) {
-        queryClient.setQueryData(c.key, c.previous);
+      if (c?.previous) {
+        queryClient.setQueryData(queryKey, c.previous);
       }
     },
 
     onSettled: async () => {
-      const sid = await resolveUserId(userId);
-      queryClient.invalidateQueries({ queryKey: ['entries', sid] });
-      requestSync();
+      queryClient.invalidateQueries({ queryKey });
     },
   });
 

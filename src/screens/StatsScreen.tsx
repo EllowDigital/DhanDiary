@@ -70,7 +70,7 @@ interface TrendDataPoint {
 const StatsScreen = () => {
   const { width, height } = useWindowDimensions();
   const { user, loading: authLoading } = useAuth();
-  const { entries = [], isLoading, refetch } = useEntries(user?.id);
+  const { entries = [], isLoading, refetch } = useEntries(user?.uid);
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;

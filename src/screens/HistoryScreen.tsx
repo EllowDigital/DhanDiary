@@ -136,7 +136,7 @@ const SwipeableHistoryItem = React.memo(({ item, onEdit, onDelete }: any) => {
 const HistoryScreen = () => {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { entries = [], isLoading, updateEntry, deleteEntry } = useEntries(user?.id);
+  const { entries = [], isLoading, updateEntry, deleteEntry } = useEntries(user?.uid);
   const { showToast } = useToast();
   const showLoading = useDelayedLoading(Boolean(isLoading));
   const { width } = useWindowDimensions();

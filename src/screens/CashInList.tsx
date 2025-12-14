@@ -194,7 +194,7 @@ const CashInList = () => {
   const { user } = useAuth();
 
   // Data Fetching
-  const { entries, deleteEntry, isLoading, refetch } = useEntries(user?.id);
+  const { entries, deleteEntry, isLoading, refetch } = useEntries(user?.uid);
   const showLoading = useDelayedLoading(Boolean(isLoading), 200);
 
   // Local State
