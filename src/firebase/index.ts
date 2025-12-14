@@ -3,9 +3,42 @@ import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
 import { initializeAuth, browserLocalPersistence, Auth } from 'firebase/auth';
-// Firebase v12 no longer ships a top-level react-native entry, so use the RN build directly.
-import { getReactNativePersistence } from '@firebase/auth/dist/rn/index';
 import { getFirestore, enableIndexedDbPersistence, Firestore } from 'firebase/firestore';
+
+type PersistenceValue = Record<string, unknown> | string;
+
+const RN_STORAGE_PROBE_KEY = '__sak';
+
+const createReactNativePersistence = (storage: typeof AsyncStorage) => {
+  return {
+    type: 'LOCAL' as const,
+    async _isAvailable() {
+      try {
+        await storage.setItem(RN_STORAGE_PROBE_KEY, '1');
+        await storage.removeItem(RN_STORAGE_PROBE_KEY);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    async _set(key: string, value: PersistenceValue) {
+      await storage.setItem(key, JSON.stringify(value));
+    },
+    async _get<T extends PersistenceValue>(key: string) {
+      const json = await storage.getItem(key);
+      return json ? (JSON.parse(json) as T) : null;
+    },
+    async _remove(key: string) {
+      await storage.removeItem(key);
+    },
+    _addListener() {
+      // React Native storage does not support storage event listeners.
+    },
+    _removeListener() {
+      // React Native storage does not support storage event listeners.
+    },
+  } as any;
+};
 
 const getFirebaseExtra = () => {
   const extra = (Constants?.expoConfig?.extra as any) || {};
@@ -29,6 +62,7 @@ const buildFirebaseConfig = () => {
 let firebaseApp: FirebaseApp | null = null;
 let firebaseAuth: Auth | null = null;
 let firestore: Firestore | null = null;
+const nativePersistence = createReactNativePersistence(AsyncStorage);
 
 const ensureFirebase = () => {
   if (!firebaseApp) {
@@ -41,8 +75,7 @@ const ensureFirebase = () => {
 
   if (!firebaseAuth) {
     firebaseAuth = initializeAuth(firebaseApp, {
-      persistence:
-        Platform.OS === 'web' ? browserLocalPersistence : getReactNativePersistence(AsyncStorage),
+      persistence: Platform.OS === 'web' ? browserLocalPersistence : nativePersistence,
     });
   }
 

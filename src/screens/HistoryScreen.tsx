@@ -34,6 +34,8 @@ import ScreenHeader from '../components/ScreenHeader';
 import dayjs from 'dayjs';
 import { Swipeable } from 'react-native-gesture-handler';
 
+const resolveEntryMoment = (entry: any) => dayjs(entry?.date || entry?.created_at);
+
 // --- SWIPEABLE LIST ITEM ---
 const SwipeableHistoryItem = React.memo(({ item, onEdit, onDelete }: any) => {
   const isIncome = item.type === 'in';
@@ -162,28 +164,36 @@ const HistoryScreen = () => {
   // --- FILTER LOGIC ---
   const filtered = useMemo(() => {
     let list = entries || [];
-
-    // Quick Filters (Pre-computation)
     const now = dayjs();
-    if (quickFilter === 'WEEK') {
-      list = list.filter((e) => dayjs(e.created_at).isAfter(now.subtract(7, 'day')));
-    } else if (quickFilter === 'MONTH') {
-      list = list.filter((e) => dayjs(e.created_at).isSame(now, 'month'));
+    const quickStart = quickFilter === 'WEEK' ? now.subtract(6, 'day').startOf('day') : null;
+    const quickMonth = quickFilter === 'MONTH' ? now.startOf('month') : null;
+    const rangeStart = startDate ? dayjs(startDate).startOf('day') : null;
+    const rangeEnd = endDate ? dayjs(endDate).endOf('day') : null;
+
+    if (quickFilter === 'WEEK' && quickStart) {
+      list = list.filter((entry) => !resolveEntryMoment(entry).isBefore(quickStart));
+    } else if (quickFilter === 'MONTH' && quickMonth) {
+      list = list.filter((entry) => resolveEntryMoment(entry).isSame(quickMonth, 'month'));
     }
 
-    // Advanced Filters
     if (typeIndex === 1) list = list.filter((e) => e.type === 'in');
     if (typeIndex === 2) list = list.filter((e) => e.type === 'out');
 
-    if (startDate) list = list.filter((e) => new Date(e.created_at) >= startDate);
-    if (endDate) list = list.filter((e) => new Date(e.created_at) <= endDate);
+    if (rangeStart) {
+      list = list.filter((entry) => !resolveEntryMoment(entry).isBefore(rangeStart));
+    }
+    if (rangeEnd) {
+      list = list.filter((entry) => !resolveEntryMoment(entry).isAfter(rangeEnd));
+    }
 
     if (categoryFilter) {
       const q = categoryFilter.toLowerCase();
-      list = list.filter((e) => (e.category || '').toLowerCase().includes(q));
+      list = list.filter((entry) => (entry.category || '').toLowerCase().includes(q));
     }
 
-    return list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    return [...list].sort(
+      (a, b) => resolveEntryMoment(b).valueOf() - resolveEntryMoment(a).valueOf()
+    );
   }, [entries, typeIndex, startDate, endDate, categoryFilter, quickFilter]);
 
   // --- SUMMARY STATS ---
