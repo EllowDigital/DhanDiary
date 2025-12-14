@@ -28,7 +28,6 @@ const SLIDES = [
     description: 'Capture every rupee with structured categories, notes, and instant summaries.',
     icon: 'timeline',
     accent: '#2563EB',
-    gradient: ['#EEF2FF', '#FFFFFF'],
   },
   {
     key: 'sync',
@@ -36,7 +35,6 @@ const SLIDES = [
     description: 'Log expenses without internet. Automatically sync when you are back online.',
     icon: 'cloud-done',
     accent: '#0891B2',
-    gradient: ['#ECFEFF', '#FFFFFF'],
   },
   {
     key: 'devices',
@@ -44,7 +42,6 @@ const SLIDES = [
     description: 'Your ledger travels with you. Seamless experience on phones and tablets.',
     icon: 'devices',
     accent: '#7C3AED',
-    gradient: ['#F5F3FF', '#FFFFFF'],
   },
   {
     key: 'privacy',
@@ -53,7 +50,6 @@ const SLIDES = [
       'Bank-grade encryption, granular controls, and Firebase Auth keep your data protected.',
     icon: 'verified-user',
     accent: '#059669',
-    gradient: ['#ECFDF5', '#FFFFFF'],
   },
 ];
 

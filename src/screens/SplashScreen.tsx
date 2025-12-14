@@ -19,6 +19,7 @@ import { colors, shadows } from '../utils/design';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { hasCompletedOnboarding } from '../utils/onboarding';
 
 type SplashNavProp = NativeStackNavigationProp<RootStackParamList, 'Splash'>;
 
@@ -108,8 +109,9 @@ const SplashScreen = () => {
     const startedAt = Date.now();
     let hasNavigated = false;
     const timeoutIds: Array<ReturnType<typeof setTimeout>> = [];
+    let mounted = true;
 
-    const runNavigation = (route: 'Auth' | 'Main') => {
+    const runNavigation = (route: 'Auth' | 'Main' | 'Onboarding') => {
       if (!hasNavigated) {
         hasNavigated = true;
 
@@ -123,7 +125,7 @@ const SplashScreen = () => {
       }
     };
 
-    const checkSessionAndNavigate = () => {
+    const checkSessionAndNavigate = (hasSeenOnboarding: boolean) => {
       const auth = getFirebaseAuth();
       let resolved = false;
       let unsubscribe: (() => void) | null = null;
@@ -145,20 +147,37 @@ const SplashScreen = () => {
 
       unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
         stopListening();
-        decide(firebaseUser ? 'Main' : 'Auth');
+        if (firebaseUser) {
+          decide('Main');
+        } else {
+          runNavigation(hasSeenOnboarding ? 'Auth' : 'Onboarding');
+        }
       });
 
       timeoutIds.push(
         setTimeout(() => {
           stopListening();
-          decide(auth.currentUser ? 'Main' : 'Auth');
+          if (auth.currentUser) {
+            decide('Main');
+          } else {
+            runNavigation(hasSeenOnboarding ? 'Auth' : 'Onboarding');
+          }
         }, MAX_SPLASH_WAIT_MS)
       );
     };
 
-    checkSessionAndNavigate();
+    const bootstrap = async () => {
+      const hasSeen = await hasCompletedOnboarding();
+      if (!mounted) return;
+      checkSessionAndNavigate(hasSeen);
+    };
 
-    return () => timeoutIds.forEach(clearTimeout);
+    bootstrap();
+
+    return () => {
+      mounted = false;
+      timeoutIds.forEach(clearTimeout);
+    };
   }, []);
 
   const progressWidth = progressAnim.interpolate({
