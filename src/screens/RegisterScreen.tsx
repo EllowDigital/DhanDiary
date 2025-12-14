@@ -26,11 +26,7 @@ import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { AuthStackParamList } from '../types/navigation';
 import { useToast } from '../context/ToastContext';
 import { useInternetStatus } from '../hooks/useInternetStatus';
-import {
-  registerWithEmail,
-  useGoogleAuth,
-  useGithubAuth,
-} from '../services/firebaseAuth';
+import { registerWithEmail, useGoogleAuth, useGithubAuth } from '../services/firebaseAuth';
 
 // Components & Utils
 import { colors } from '../utils/design';

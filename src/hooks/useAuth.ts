@@ -68,7 +68,6 @@ export const useAuth = () => {
           setLoading(false);
         }
       );
-
     });
 
     return () => {

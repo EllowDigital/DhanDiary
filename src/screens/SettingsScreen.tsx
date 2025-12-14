@@ -95,23 +95,19 @@ const SettingsScreen = () => {
     ]);
   };
   const handleResetApp = () => {
-    Alert.alert(
-      'Reset App?',
-      'This signs you out and clears all cached data on this device.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reset',
-          style: 'destructive',
-          onPress: async () => {
-            await logoutUser();
-            query.clear();
-            showToast('App reset complete');
-            navigation.getParent()?.replace('Auth');
-          },
+    Alert.alert('Reset App?', 'This signs you out and clears all cached data on this device.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Reset',
+        style: 'destructive',
+        onPress: async () => {
+          await logoutUser();
+          query.clear();
+          showToast('App reset complete');
+          navigation.getParent()?.replace('Auth');
         },
-      ]
-    );
+      },
+    ]);
   };
 
   const userInitial = user?.name?.trim().charAt(0).toUpperCase() || 'U';

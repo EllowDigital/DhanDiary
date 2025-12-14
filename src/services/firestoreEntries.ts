@@ -34,15 +34,14 @@ export const fetchEntries = async (userId: string): Promise<LocalEntry[]> => {
   return snap.docs.map((docSnap) => mapToLocalEntry(docSnap.id, userId, docSnap.data()));
 };
 
-export const subscribeEntries = (
-  userId: string,
-  onChange: (entries: LocalEntry[]) => void
-) => {
+export const subscribeEntries = (userId: string, onChange: (entries: LocalEntry[]) => void) => {
   if (!userId) return () => undefined;
   const colRef = buildCollectionRef(userId);
   const q = query(colRef, orderBy('date', 'desc'), orderBy('createdAt', 'desc'));
   return onSnapshot(q, (snapshot) => {
-    const entries = snapshot.docs.map((docSnap) => mapToLocalEntry(docSnap.id, userId, docSnap.data()));
+    const entries = snapshot.docs.map((docSnap) =>
+      mapToLocalEntry(docSnap.id, userId, docSnap.data())
+    );
     onChange(entries);
   });
 };

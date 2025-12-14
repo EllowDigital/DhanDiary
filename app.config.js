@@ -58,7 +58,9 @@ module.exports = (ctx) => {
       null,
     messagingSenderId:
       process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ||
-      (baseConfig.extra && baseConfig.extra.firebase && baseConfig.extra.firebase.messagingSenderId) ||
+      (baseConfig.extra &&
+        baseConfig.extra.firebase &&
+        baseConfig.extra.firebase.messagingSenderId) ||
       null,
     appId:
       process.env.EXPO_PUBLIC_FIREBASE_APP_ID ||

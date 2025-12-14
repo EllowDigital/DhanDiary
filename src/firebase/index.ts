@@ -45,9 +45,7 @@ const ensureFirebase = () => {
   if (!firebaseAuth) {
     firebaseAuth = initializeAuth(firebaseApp, {
       persistence:
-        Platform.OS === 'web'
-          ? browserLocalPersistence
-          : getReactNativePersistence(AsyncStorage),
+        Platform.OS === 'web' ? browserLocalPersistence : getReactNativePersistence(AsyncStorage),
     });
   }
 

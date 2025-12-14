@@ -71,9 +71,7 @@ export const useEntries = (userId?: string | null) => {
      ADD ENTRY
   ---------------------------------------------------------- */
   const addEntryMutation = useMutation({
-    mutationFn: async (
-      entry: Omit<LocalEntry, 'user_id' | 'created_at' | 'updated_at'>
-    ) => {
+    mutationFn: async (entry: Omit<LocalEntry, 'user_id' | 'created_at' | 'updated_at'>) => {
       if (!userId) throw new Error('User must be logged in to add entries');
       return await createEntry(userId, entry as any);
     },
@@ -104,13 +102,7 @@ export const useEntries = (userId?: string | null) => {
      UPDATE ENTRY
   ---------------------------------------------------------- */
   const updateEntryMutation = useMutation({
-    mutationFn: async ({
-      local_id,
-      updates,
-    }: {
-      local_id: string;
-      updates: EntryUpdate;
-    }) => {
+    mutationFn: async ({ local_id, updates }: { local_id: string; updates: EntryUpdate }) => {
       if (!userId) throw new Error('User must be logged in to update entries');
       if (!local_id) throw new Error('local_id required');
       await patchEntry(userId, local_id, updates);

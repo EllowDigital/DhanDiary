@@ -15,7 +15,6 @@ jest.mock('@react-native-community/netinfo', () => ({
   useNetInfo: () => ({ isConnected: true, isInternetReachable: true }),
 }));
 
-
 // Provide a lightweight global stub for any other native modules the tests might import
 global.__TEST__ = true;
 
@@ -35,4 +34,3 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   multiSet: jest.fn(),
   multiRemove: jest.fn(),
 }));
-

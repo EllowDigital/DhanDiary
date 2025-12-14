@@ -3,7 +3,6 @@
 // the console error and prints a full JS stack so you can locate the source.
 
 if (__DEV__) {
-
   const original = console.error;
   console.error = (...args: any[]) => {
     try {

@@ -27,7 +27,10 @@ WebBrowser.maybeCompleteAuthSession();
 
 const getExtra = () => (Constants?.expoConfig?.extra || {}) as any;
 
-const upsertProfile = async (uid: string, data: { name?: string; email?: string; providerId?: string }) => {
+const upsertProfile = async (
+  uid: string,
+  data: { name?: string; email?: string; providerId?: string }
+) => {
   const db = getFirestoreDb();
   const ref = doc(db, 'users', uid);
   await setDoc(
