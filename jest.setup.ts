@@ -16,9 +16,4 @@ jest.mock('@react-native-community/netinfo', () => ({
   useNetInfo: () => ({ isConnected: true, isInternetReachable: true }),
 }));
 
-// Mock neon client to avoid network calls during tests
-jest.mock('src/api/neonClient', () => ({
-  query: jest.fn().mockResolvedValue([]),
-}));
-
 export {};

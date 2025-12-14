@@ -2,19 +2,7 @@
 // When React warns about missing keys in lists, this helper captures
 // the console error and prints a full JS stack so you can locate the source.
 
-import { LogBox } from 'react-native';
-
 if (__DEV__) {
-  // Hide known noisy Neon errors from the redbox/LogBox UI but keep them in console
-  try {
-    LogBox.ignoreLogs([
-      'Neon Query Error (permanent):',
-      'Neon Query failed after retries:',
-      // keep duplicate-key warnings visible as warnings only
-    ]);
-  } catch (e) {
-    // ignore if LogBox isn't available in this environment
-  }
 
   const original = console.error;
   console.error = (...args: any[]) => {

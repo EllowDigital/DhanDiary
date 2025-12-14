@@ -13,7 +13,8 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
-import { getSession } from '../db/session';
+import { onAuthStateChanged } from 'firebase/auth';
+import { getFirebaseAuth } from '../firebase';
 import { colors, shadows } from '../utils/design';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
@@ -122,24 +123,40 @@ const SplashScreen = () => {
       }
     };
 
-    const checkSessionAndNavigate = async () => {
-      try {
-        const session = await getSession();
+    const checkSessionAndNavigate = () => {
+      const auth = getFirebaseAuth();
+      let resolved = false;
+      let unsubscribe: (() => void) | null = null;
+
+      const stopListening = () => {
+        if (unsubscribe) {
+          unsubscribe();
+          unsubscribe = null;
+        }
+      };
+
+      const decide = (route: 'Auth' | 'Main') => {
+        if (resolved) return;
+        resolved = true;
         const elapsed = Date.now() - startedAt;
         const delay = Math.max(0, MIN_SPLASH_TIME_MS - elapsed);
+        timeoutIds.push(setTimeout(() => runNavigation(route), delay));
+      };
 
-        timeoutIds.push(
-          setTimeout(() => {
-            runNavigation(session ? 'Main' : 'Auth');
-          }, delay)
-        );
-      } catch (e) {
-        runNavigation('Auth');
-      }
+      unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+        stopListening();
+        decide(firebaseUser ? 'Main' : 'Auth');
+      });
+
+      timeoutIds.push(
+        setTimeout(() => {
+          stopListening();
+          decide(auth.currentUser ? 'Main' : 'Auth');
+        }, MAX_SPLASH_WAIT_MS)
+      );
     };
 
     checkSessionAndNavigate();
-    timeoutIds.push(setTimeout(() => runNavigation('Auth'), MAX_SPLASH_WAIT_MS));
 
     return () => timeoutIds.forEach(clearTimeout);
   }, []);

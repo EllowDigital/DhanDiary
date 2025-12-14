@@ -1,5 +1,5 @@
 import { buildEntryDisplay, summarizeEntries } from '../src/utils/entryFilters';
-import { LocalEntry } from '../src/db/entries';
+import { LocalEntry } from '../src/types/entries';
 import { DEFAULT_CATEGORY } from '../src/constants/categories';
 
 const makeEntry = (overrides: Partial<LocalEntry> & { local_id: string }): LocalEntry => ({
@@ -10,13 +10,8 @@ const makeEntry = (overrides: Partial<LocalEntry> & { local_id: string }): Local
   category: overrides.category || DEFAULT_CATEGORY,
   note: overrides.note ?? null,
   currency: overrides.currency || 'INR',
-  remote_id: overrides.remote_id ?? null,
-  server_version: overrides.server_version,
   created_at: overrides.created_at || '2025-01-01T00:00:00.000Z',
   updated_at: overrides.updated_at || overrides.created_at || '2025-01-01T00:00:00.000Z',
-  is_synced: overrides.is_synced,
-  is_deleted: overrides.is_deleted,
-  need_sync: overrides.need_sync,
   date: overrides.date ?? overrides.created_at ?? '2025-01-01T00:00:00.000Z',
 });
 

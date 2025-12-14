@@ -16,7 +16,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
 import { useEntries } from '../hooks/useEntries';
 import { useAuth } from '../hooks/useAuth';
-import { subscribeEntries } from '../utils/dbEvents';
 import dayjs from 'dayjs';
 import { getStartDateForFilter, getDaysCountForFilter } from '../utils/stats';
 import { PieChart } from 'react-native-chart-kit';
@@ -70,7 +69,7 @@ interface TrendDataPoint {
 const StatsScreen = () => {
   const { width, height } = useWindowDimensions();
   const { user, loading: authLoading } = useAuth();
-  const { entries = [], isLoading, refetch } = useEntries(user?.uid);
+  const { entries = [], isLoading } = useEntries(user?.uid);
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -80,17 +79,11 @@ const StatsScreen = () => {
 
   // --- DATA LOADING ---
   useEffect(() => {
-    const unsub = subscribeEntries(() => {
-      try {
-        refetch();
-      } catch (e) {}
-    });
     Animated.parallel([
       Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
       Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, damping: 20 }),
     ]).start();
-    return () => unsub();
-  }, [refetch]);
+  }, []);
 
   // --- RESPONSIVE LAYOUT CALCS ---
   const isTablet = width > 700;
