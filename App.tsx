@@ -70,7 +70,6 @@ export default function App() {
       // non-fatal; log for diagnostics
       // Google sign-in configuration may fail in environments without native libs
       // This is expected in Expo Go; it's safe to continue.
-      // eslint-disable-next-line no-console
       console.warn('configureGoogleSignIn failed', err);
     }
   }, []);
