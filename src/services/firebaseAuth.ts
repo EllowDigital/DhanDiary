@@ -19,7 +19,7 @@ import {
   updatePassword,
   updateProfile,
 } from 'firebase/auth';
-import { deleteDoc, doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { deleteDoc, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { useEffect } from 'react';
 import { getFirebaseAuth, getFirestoreDb } from '../firebase';
 
@@ -29,14 +29,22 @@ const getExtra = () => (Constants?.expoConfig?.extra || {}) as any;
 
 const upsertProfile = async (
   uid: string,
-  data: { name?: string; email?: string; providerId?: string }
+  data: { name?: string; email?: string; provider?: string }
 ) => {
   const db = getFirestoreDb();
-  const ref = doc(db, 'users', uid);
+  const ref = doc(db, 'user', uid);
+  const existing = await getDoc(ref);
+  const existingData = existing.exists() ? existing.data() || {} : {};
+  const resolvedProvider = data.provider || existingData.provider || 'password';
+  const resolvedCreatedAt = existingData.createdAt || serverTimestamp();
+
   await setDoc(
     ref,
     {
-      ...data,
+      name: data.name ?? existingData.name ?? '',
+      email: data.email ?? existingData.email ?? '',
+      provider: resolvedProvider,
+      createdAt: resolvedCreatedAt,
       updatedAt: serverTimestamp(),
     },
     { merge: true }
@@ -47,7 +55,7 @@ export const registerWithEmail = async (name: string, email: string, password: s
   const auth = getFirebaseAuth();
   const creds = await createUserWithEmailAndPassword(auth, email, password);
   await updateProfile(creds.user, { displayName: name });
-  await upsertProfile(creds.user.uid, { name, email, providerId: 'password' });
+  await upsertProfile(creds.user.uid, { name, email, provider: 'password' });
   return creds.user;
 };
 
@@ -69,11 +77,11 @@ export const logoutUser = () => {
 export const signInWithFirebaseCredential = async (credential: AuthCredential) => {
   const auth = getFirebaseAuth();
   const result = await signInWithCredential(auth, credential);
-  const providerId = result.user.providerData[0]?.providerId;
+  const provider = result.user.providerData[0]?.providerId || 'password';
   await upsertProfile(result.user.uid, {
     name: result.user.displayName || '',
     email: result.user.email || '',
-    providerId,
+    provider,
   });
   return result.user;
 };
@@ -119,7 +127,7 @@ export const deleteAccount = async (currentPassword?: string) => {
     await reauthenticateWithCredential(user, credential);
   }
   const db = getFirestoreDb();
-  await deleteDoc(doc(db, 'users', user.uid));
+  await deleteDoc(doc(db, 'user', user.uid));
   await deleteUser(user);
 };
 

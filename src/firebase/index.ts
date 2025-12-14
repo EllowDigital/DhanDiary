@@ -51,7 +51,7 @@ const ensureFirebase = () => {
 
   if (!firestore) {
     firestore = getFirestore(firebaseApp);
-    if (Platform.OS !== 'web') {
+    if (Platform.OS === 'web') {
       enableIndexedDbPersistence(firestore).catch(() => {
         // ignore persistence errors (already enabled, private browsing, etc.)
       });

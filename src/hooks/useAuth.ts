@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
-import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc, onSnapshot, setDoc } from 'firebase/firestore';
 import { getFirebaseAuth, getFirestoreDb } from '../firebase';
 
 export type AuthUser = {
   uid: string;
   name: string;
   email: string;
-  providerId: string;
+  provider: string;
 };
 
 export const useAuth = () => {
@@ -19,58 +19,91 @@ export const useAuth = () => {
     const db = getFirestoreDb();
 
     let stopProfile: (() => void) | null = null;
+    let isMounted = true;
 
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       if (stopProfile) {
         stopProfile();
         stopProfile = null;
       }
+
       if (!firebaseUser) {
-        setUser(null);
-        setLoading(false);
+        if (isMounted) {
+          setUser(null);
+          setLoading(false);
+        }
         return;
       }
 
-      // Ensure profile doc exists and subscribe to updates
-      const userRef = doc(db, 'users', firebaseUser.uid);
-      stopProfile = onSnapshot(
-        userRef,
-        async (snapshot) => {
+      const baseProfile = {
+        name: firebaseUser.displayName || '',
+        email: firebaseUser.email || '',
+        provider: firebaseUser.providerData[0]?.providerId || 'password',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      const attachProfile = async () => {
+        const userRef = doc(db, 'user', firebaseUser.uid);
+        try {
+          const snapshot = await getDoc(userRef);
           if (!snapshot.exists()) {
-            await setDoc(
-              userRef,
-              {
-                name: firebaseUser.displayName || '',
-                email: firebaseUser.email || '',
-                providerId: firebaseUser.providerData[0]?.providerId || 'password',
-                updatedAt: new Date().toISOString(),
-              },
-              { merge: true }
-            );
+            await setDoc(userRef, baseProfile, { merge: true });
           }
-          const data = snapshot.data() || {};
+
+          if (!isMounted || auth.currentUser?.uid !== firebaseUser.uid) {
+            return;
+          }
+
+          const initialData = snapshot.exists() ? snapshot.data() || {} : baseProfile;
           setUser({
             uid: firebaseUser.uid,
-            name: data.name || firebaseUser.displayName || '',
-            email: data.email || firebaseUser.email || '',
-            providerId: data.providerId || firebaseUser.providerData[0]?.providerId || 'password',
+            name: initialData.name || baseProfile.name,
+            email: initialData.email || baseProfile.email,
+            provider: initialData.provider || baseProfile.provider,
           });
           setLoading(false);
-        },
-        (error) => {
-          console.error('Failed to load profile', error);
+
+          stopProfile = onSnapshot(
+            userRef,
+            (profileSnap) => {
+              const data = profileSnap.data() || {};
+              setUser({
+                uid: firebaseUser.uid,
+                name: data.name || baseProfile.name,
+                email: data.email || baseProfile.email,
+                provider: data.provider || baseProfile.provider,
+              });
+            },
+            (error) => {
+              console.warn('Profile listener stopped', error);
+              stopProfile = null;
+            }
+          );
+        } catch (error: any) {
+          if (!isMounted) return;
+          if (error?.code === 'permission-denied') {
+            console.warn(
+              'Firestore rules denied access to user/{uid}. Falling back to auth profile only.'
+            );
+          } else {
+            console.error('Failed to load profile', error);
+          }
           setUser({
             uid: firebaseUser.uid,
-            name: firebaseUser.displayName || '',
-            email: firebaseUser.email || '',
-            providerId: firebaseUser.providerData[0]?.providerId || 'password',
+            name: baseProfile.name,
+            email: baseProfile.email,
+            provider: baseProfile.provider,
           });
           setLoading(false);
         }
-      );
+      };
+
+      attachProfile();
     });
 
     return () => {
+      isMounted = false;
       if (stopProfile) stopProfile();
       unsubscribe();
     };

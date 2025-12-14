@@ -23,7 +23,7 @@ import { ensureCategory, DEFAULT_CATEGORY } from '../constants/categories';
 
 const buildCollectionRef = (userId: string) => {
   const db = getFirestoreDb();
-  return collection(db, 'users', userId, 'entries');
+  return collection(db, 'user', userId, 'cash_entries');
 };
 
 export const fetchEntries = async (userId: string): Promise<LocalEntry[]> => {
@@ -80,7 +80,7 @@ export const patchEntry = async (
 ): Promise<void> => {
   if (!userId) throw new Error('userId is required to update an entry');
   if (!localId) throw new Error('localId is required to update an entry');
-  const docRef = doc(getFirestoreDb(), 'users', userId, 'entries', localId);
+  const docRef = doc(getFirestoreDb(), 'user', userId, 'cash_entries', localId);
   const next: Record<string, any> = { updatedAt: serverTimestamp() };
 
   if (updates.amount !== undefined) next.amount = Number(updates.amount) || 0;
@@ -96,6 +96,6 @@ export const patchEntry = async (
 export const removeEntry = async (userId: string, localId: string): Promise<void> => {
   if (!userId) throw new Error('userId is required to delete an entry');
   if (!localId) throw new Error('localId is required to delete an entry');
-  const docRef = doc(getFirestoreDb(), 'users', userId, 'entries', localId);
+  const docRef = doc(getFirestoreDb(), 'user', userId, 'cash_entries', localId);
   await deleteDoc(docRef);
 };
