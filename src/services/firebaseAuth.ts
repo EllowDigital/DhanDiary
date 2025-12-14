@@ -1,15 +1,13 @@
 import { Alert, Linking, Platform } from 'react-native';
 import Constants from 'expo-constants';
-import * as WebBrowser from 'expo-web-browser';
-import * as Google from 'expo-auth-session/providers/google';
-import { makeRedirectUri } from 'expo-auth-session';
+// Removed expo-auth-session imports
 import {
   AuthCredential,
   EmailAuthProvider,
   GithubAuthProvider,
-  GoogleAuthProvider,
   createUserWithEmailAndPassword,
   deleteUser,
+  fetchSignInMethodsForEmail,
   linkWithCredential,
   reauthenticateWithCredential,
   signInWithCredential,
@@ -24,11 +22,41 @@ import { deleteDoc, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firest
 import { useEffect, useRef } from 'react';
 import { getFirebaseAuth, getFirestoreDb } from '../firebase';
 
-WebBrowser.maybeCompleteAuthSession();
+// Removed maybeCompleteAuthSession for AuthSession
 
 const getExtra = () => (Constants?.expoConfig?.extra || {}) as any;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// In-memory store for pending social credentials that need linking after primary sign-in
+const pendingLinkCredentials = new Map<string, AuthCredential>();
+
+export const storePendingCredential = (email: string, credential: AuthCredential) => {
+  if (!email || !credential) return;
+  pendingLinkCredentials.set(email.toLowerCase(), credential);
+};
+
+export const clearPendingCredential = (email: string) => {
+  if (!email) return;
+  pendingLinkCredentials.delete(email.toLowerCase());
+};
+
+export const consumePendingCredentialForCurrentUser = async () => {
+  const auth = getFirebaseAuth();
+  const user = auth.currentUser;
+  if (!user || !user.email) return;
+  const key = user.email.toLowerCase();
+  const cred = pendingLinkCredentials.get(key);
+  if (!cred) return;
+  try {
+    await linkCurrentUserWithCredential(cred);
+    pendingLinkCredentials.delete(key);
+  } catch (err) {
+    // If linking fails, leave the pending credential in place for retry
+    console.warn('Failed to link pending credential for', key, err);
+    throw err;
+  }
+};
 
 const upsertProfile = async (
   uid: string,
@@ -68,12 +96,27 @@ export const registerWithEmail = async (name: string, email: string, password: s
   const creds = await createUserWithEmailAndPassword(auth, email, password);
   await updateProfile(creds.user, { displayName: name });
   await upsertProfile(creds.user.uid, { name, email, provider: 'password' });
+  // After a fresh registration, consume any pending credential for this email
+  try {
+    await consumePendingCredentialForCurrentUser();
+  } catch (err) {
+    // Non-fatal: log and continue
+    console.warn('Failed to consume pending credential after registration', err);
+  }
   return creds.user;
 };
 
 export const loginWithEmail = (email: string, password: string) => {
   const auth = getFirebaseAuth();
-  return signInWithEmailAndPassword(auth, email, password);
+  return signInWithEmailAndPassword(auth, email, password).then(async (creds) => {
+    // After successful email login, attempt to link any pending social credential for this user
+    try {
+      await consumePendingCredentialForCurrentUser();
+    } catch (err) {
+      console.warn('Failed to consume pending credential after email login', err);
+    }
+    return creds;
+  });
 };
 
 export const sendPasswordReset = async (email: string) => {
@@ -117,14 +160,45 @@ export const logoutUser = () => {
 
 export const signInWithFirebaseCredential = async (credential: AuthCredential) => {
   const auth = getFirebaseAuth();
-  const result = await signInWithCredential(auth, credential);
-  const provider = summarizeProviderIds(result.user.providerData || []);
-  await upsertProfile(result.user.uid, {
-    name: result.user.displayName || '',
-    email: result.user.email || '',
-    provider,
-  });
-  return result.user;
+  try {
+    const result = await signInWithCredential(auth, credential);
+    const provider = summarizeProviderIds(result.user.providerData || []);
+    await upsertProfile(result.user.uid, {
+      name: result.user.displayName || '',
+      email: result.user.email || '',
+      provider,
+    });
+    // After social sign-in, consume any pending credential (unlikely but safe)
+    try {
+      await consumePendingCredentialForCurrentUser();
+    } catch (err) {
+      console.warn('Failed to consume pending credential after social sign-in', err);
+    }
+    return result.user;
+  } catch (error: any) {
+    // Handle account exists with different credential
+    if (
+      error?.code === 'auth/account-exists-with-different-credential' ||
+      error?.message?.includes('account-exists-with-different-credential')
+    ) {
+      const email = error?.customData?.email || (credential as any)?.email || null;
+      if (email) {
+        const methods = await fetchSignInMethodsForEmail(getFirebaseAuth(), email);
+        // store pending credential so it can be linked after the user signs in with existing provider
+        try {
+          storePendingCredential(email, credential);
+        } catch (err) {
+          console.warn('Failed to store pending credential', err);
+        }
+        const friendly: any = new Error('auth/account-exists-with-different-credential');
+        friendly.code = 'auth/account-exists-with-different-credential';
+        friendly.email = email;
+        friendly.methods = methods || [];
+        throw friendly;
+      }
+    }
+    throw error;
+  }
 };
 
 export const linkCurrentUserWithCredential = async (credential: AuthCredential) => {
@@ -187,82 +261,7 @@ export const deleteAccount = async (currentPassword?: string) => {
   await deleteUser(user);
 };
 
-/* ---------------------------------------------
- * Google AuthSession Hook
- * ------------------------------------------- */
-export const useGoogleAuth = () => {
-  const extra = getExtra();
-  const clientId =
-    extra?.oauth?.googleClientId ||
-    extra?.firebase?.webClientId ||
-    process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
-  const fallbackClientId = clientId || 'placeholder.apps.googleusercontent.com';
-  const redirectUri =
-    extra?.oauth?.googleRedirectUri ||
-    makeRedirectUri({
-      scheme:
-        extra?.appScheme ||
-        Constants?.expoConfig?.scheme ||
-        (Constants?.expoGoConfig as any)?.scheme ||
-        'dhandiary',
-    });
-  const googleConfig: Google.GoogleAuthRequestConfig = {
-    clientId: fallbackClientId,
-    iosClientId: fallbackClientId,
-    androidClientId: fallbackClientId,
-    webClientId: fallbackClientId,
-    redirectUri,
-  };
-  const [, response, promptAsync] = Google.useIdTokenAuthRequest(googleConfig);
-  const googleAvailable = !!clientId;
-  const isExpoGo = Constants?.appOwnership === 'expo';
-  const intentRef = useRef<'signIn' | 'link' | null>(null);
-
-  useEffect(() => {
-    if (!googleAvailable) return;
-    if (response?.type === 'success' && response.params.id_token) {
-      const credential = GoogleAuthProvider.credential(response.params.id_token);
-      const action =
-        intentRef.current === 'link' ? linkCurrentUserWithCredential : signInWithFirebaseCredential;
-      intentRef.current = null;
-      action(credential).catch((err) => {
-        console.warn('Google auth failed', err);
-      });
-    } else if (response?.type === 'error') {
-      intentRef.current = null;
-      console.warn('Google auth session error', response.error);
-    } else if (response?.type === 'dismiss') {
-      intentRef.current = null;
-    }
-  }, [response, googleAvailable]);
-
-  const ensureSupportedEnvironment = () => {
-    if (isExpoGo) {
-      throw new Error('Google sign-in requires an EAS dev client or production build.');
-    }
-  };
-
-  const runPrompt = async (intent: 'signIn' | 'link') => {
-    if (!googleAvailable) {
-      throw new Error('Google sign-in is not configured for this build.');
-    }
-    ensureSupportedEnvironment();
-    intentRef.current = intent;
-    const result = await promptAsync();
-    if (result.type !== 'success') {
-      intentRef.current = null;
-      throw new Error(
-        intent === 'link' ? 'Google linking cancelled.' : 'Google sign-in cancelled.'
-      );
-    }
-  };
-
-  return {
-    googleAvailable,
-    signIn: () => runPrompt('signIn'),
-    linkAccount: () => runPrompt('link'),
-  };
-};
+// Google AuthSession code removed. Use only Firebase-native Google login elsewhere.
 
 const GITHUB_DEVICE_CODE_URL = 'https://github.com/login/device/code';
 const GITHUB_TOKEN_URL = 'https://github.com/login/oauth/access_token';

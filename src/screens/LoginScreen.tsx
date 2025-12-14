@@ -15,7 +15,7 @@ import {
   Keyboard,
 } from 'react-native';
 import { Button, Text } from '@rneui/themed';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
@@ -25,12 +25,7 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { AuthStackParamList } from '../types/navigation';
 import { useToast } from '../context/ToastContext';
 import { useInternetStatus } from '../hooks/useInternetStatus';
-import {
-  loginWithEmail,
-  sendPasswordReset,
-  useGoogleAuth,
-  useGithubAuth,
-} from '../services/firebaseAuth';
+import { loginWithEmail, sendPasswordReset, useGithubAuth } from '../services/firebaseAuth';
 
 // Components & Utils
 import { colors } from '../utils/design';
@@ -54,6 +49,7 @@ const getProviderErrorMessage = (error: unknown, fallback: string) => {
 
 const LoginScreen = () => {
   const navigation = useNavigation<LoginScreenNavigationProp>();
+  const route: any = useRoute();
   const { showToast } = useToast();
   const isOnline = useInternetStatus();
 
@@ -69,7 +65,6 @@ const LoginScreen = () => {
   const [resettingPassword, setResettingPassword] = useState(false);
   const [socialLoading, setSocialLoading] = useState(false);
 
-  const { googleAvailable, signIn: startGoogleSignIn } = useGoogleAuth();
   const { githubAvailable, signIn: startGithubSignIn } = useGithubAuth();
 
   // --- ANIMATION ---
@@ -77,6 +72,13 @@ const LoginScreen = () => {
   const scaleAnim = useRef(new Animated.Value(0.95)).current;
 
   useEffect(() => {
+    // Prefill email if navigated here after social conflict
+    try {
+      const pre = route?.params?.prefillEmail;
+      if (pre && typeof pre === 'string') setEmail(pre);
+    } catch (err) {
+      // ignore
+    }
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -140,20 +142,7 @@ const LoginScreen = () => {
     }
   };
 
-  const handleGoogleLogin = async () => {
-    if (!googleAvailable) return;
-    setSocialLoading(true);
-    try {
-      await startGoogleSignIn();
-    } catch (err) {
-      Alert.alert(
-        'Google Login Failed',
-        getProviderErrorMessage(err, 'Unable to connect to Google right now.')
-      );
-    } finally {
-      setSocialLoading(false);
-    }
-  };
+  // Google login removed. Use only Firebase-native Google login elsewhere.
 
   const handleGithubLogin = async () => {
     if (!githubAvailable) return;
@@ -161,10 +150,18 @@ const LoginScreen = () => {
     try {
       await startGithubSignIn();
     } catch (err) {
-      Alert.alert(
-        'GitHub Login Failed',
-        getProviderErrorMessage(err, 'Unable to connect to GitHub right now.')
-      );
+      const e: any = err || {};
+      if (e.code === 'auth/account-exists-with-different-credential') {
+        Alert.alert(
+          'Account already exists',
+          'You previously signed up using a different method.\n\nPlease sign in using your original method to securely link your accounts.\n\nIf the app was closed, just retry the social sign-in.'
+        );
+      } else {
+        Alert.alert(
+          'GitHub Login Failed',
+          getProviderErrorMessage(err, 'Unable to connect to GitHub right now.')
+        );
+      }
     } finally {
       setSocialLoading(false);
     }
@@ -285,7 +282,7 @@ const LoginScreen = () => {
                 }
               />
 
-              {(googleAvailable || githubAvailable) && (
+              {githubAvailable && (
                 <View style={styles.socialWrapper}>
                   <View style={styles.socialDivider}>
                     <View style={styles.socialLine} />
@@ -294,25 +291,7 @@ const LoginScreen = () => {
                   </View>
 
                   <View style={styles.socialButtonsRow}>
-                    {googleAvailable && (
-                      <Button
-                        type="outline"
-                        icon={
-                          <FontAwesome
-                            name="google"
-                            size={18}
-                            color={colors.primary}
-                            style={{ marginRight: 8 }}
-                          />
-                        }
-                        title="Google"
-                        onPress={handleGoogleLogin}
-                        disabled={socialLoading}
-                        buttonStyle={styles.socialButton}
-                        titleStyle={styles.socialButtonText}
-                        containerStyle={styles.socialButtonContainer}
-                      />
-                    )}
+                    {/* Google login removed */}
                     {githubAvailable && (
                       <Button
                         type="outline"
