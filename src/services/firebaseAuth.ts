@@ -9,6 +9,7 @@ import {
   GoogleAuthProvider,
   createUserWithEmailAndPassword,
   deleteUser,
+  linkWithCredential,
   reauthenticateWithCredential,
   signInWithCredential,
   signInWithEmailAndPassword,
@@ -25,6 +26,8 @@ import { getFirebaseAuth, getFirestoreDb } from '../firebase';
 WebBrowser.maybeCompleteAuthSession();
 
 const getExtra = () => (Constants?.expoConfig?.extra || {}) as any;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const upsertProfile = async (
   uid: string,

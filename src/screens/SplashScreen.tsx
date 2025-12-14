@@ -137,7 +137,7 @@ const SplashScreen = () => {
         }
       };
 
-      const decide = (route: 'Auth' | 'Main') => {
+      const decide = (route: 'Auth' | 'Main' | 'Onboarding') => {
         if (resolved) return;
         resolved = true;
         const elapsed = Date.now() - startedAt;
@@ -147,21 +147,13 @@ const SplashScreen = () => {
 
       unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
         stopListening();
-        if (firebaseUser) {
-          decide('Main');
-        } else {
-          runNavigation(hasSeenOnboarding ? 'Auth' : 'Onboarding');
-        }
+        decide(firebaseUser ? 'Main' : hasSeenOnboarding ? 'Auth' : 'Onboarding');
       });
 
       timeoutIds.push(
         setTimeout(() => {
           stopListening();
-          if (auth.currentUser) {
-            decide('Main');
-          } else {
-            runNavigation(hasSeenOnboarding ? 'Auth' : 'Onboarding');
-          }
+          decide(auth.currentUser ? 'Main' : hasSeenOnboarding ? 'Auth' : 'Onboarding');
         }, MAX_SPLASH_WAIT_MS)
       );
     };
