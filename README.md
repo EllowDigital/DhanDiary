@@ -46,6 +46,17 @@ EXPO_PUBLIC_GITHUB_CLIENT_ID=Iv1.xxxxxxxxxxxxx
 
 Restart Expo after editing environment files so the new values load.
 
+### Firestore security + indexes
+
+- Update `firestore.rules` + `firestore.indexes.json` alongside any schema change.
+- Deploy them before releasing: `firebase deploy --only firestore:rules,firestore:indexes`.
+- Rules enforce strict ownership on `user/{uid}` and `cash_entries` with validated payloads.
+
+### OAuth configuration
+
+- **Google**: The button is hidden in Expo Go; use an EAS/dev-client build. Provide the verified Web Client ID via `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`.
+- **GitHub**: Only the OAuth App client ID is required. The app uses GitHub's Device Authorization flow, so no secrets live in the bundle. Enable Device Flow for your OAuth app and ensure users can reach `https://github.com/login/device`.
+
 ---
 
 ## 🔒 Privacy
