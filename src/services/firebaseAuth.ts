@@ -28,6 +28,36 @@ const getExtra = () => (Constants?.expoConfig?.extra || {}) as any;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// In-memory store for pending social credentials that need linking after primary sign-in
+const pendingLinkCredentials = new Map<string, AuthCredential>();
+
+export const storePendingCredential = (email: string, credential: AuthCredential) => {
+  if (!email || !credential) return;
+  pendingLinkCredentials.set(email.toLowerCase(), credential);
+};
+
+export const clearPendingCredential = (email: string) => {
+  if (!email) return;
+  pendingLinkCredentials.delete(email.toLowerCase());
+};
+
+export const consumePendingCredentialForCurrentUser = async () => {
+  const auth = getFirebaseAuth();
+  const user = auth.currentUser;
+  if (!user || !user.email) return;
+  const key = user.email.toLowerCase();
+  const cred = pendingLinkCredentials.get(key);
+  if (!cred) return;
+  try {
+    await linkCurrentUserWithCredential(cred);
+    pendingLinkCredentials.delete(key);
+  } catch (err) {
+    // If linking fails, leave the pending credential in place for retry
+    console.warn('Failed to link pending credential for', key, err);
+    throw err;
+  }
+};
+
 const upsertProfile = async (
   uid: string,
   data: { name?: string; email?: string; provider?: string }
