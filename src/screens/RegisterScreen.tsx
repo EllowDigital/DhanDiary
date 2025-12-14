@@ -192,7 +192,7 @@ const RegisterScreen = () => {
               ? [
                   {
                     text: 'Sign in with Email',
-                    onPress: () => navigation.navigate('Login', { prefillEmail: email }),
+                    onPress: () => navigation.navigate('Login' as any, { prefillEmail: email }),
                   },
                 ]
               : []),
