@@ -94,7 +94,8 @@ export const sendPasswordReset = async (email: string) => {
       minimumVersion: String(expoConfig?.android?.versionCode || '1'),
     },
     iOS: {
-      bundleId: expoConfig?.ios?.bundleIdentifier || extra?.iosBundleId || 'com.ellowdigital.dhandiary',
+      bundleId:
+        expoConfig?.ios?.bundleIdentifier || extra?.iosBundleId || 'com.ellowdigital.dhandiary',
     },
   };
 
@@ -221,7 +222,8 @@ export const useGoogleAuth = () => {
     if (!googleAvailable) return;
     if (response?.type === 'success' && response.params.id_token) {
       const credential = GoogleAuthProvider.credential(response.params.id_token);
-      const action = intentRef.current === 'link' ? linkCurrentUserWithCredential : signInWithFirebaseCredential;
+      const action =
+        intentRef.current === 'link' ? linkCurrentUserWithCredential : signInWithFirebaseCredential;
       intentRef.current = null;
       action(credential).catch((err) => {
         console.warn('Google auth failed', err);
@@ -249,7 +251,9 @@ export const useGoogleAuth = () => {
     const result = await promptAsync();
     if (result.type !== 'success') {
       intentRef.current = null;
-      throw new Error(intent === 'link' ? 'Google linking cancelled.' : 'Google sign-in cancelled.');
+      throw new Error(
+        intent === 'link' ? 'Google linking cancelled.' : 'Google sign-in cancelled.'
+      );
     }
   };
 

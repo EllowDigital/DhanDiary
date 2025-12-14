@@ -25,7 +25,8 @@ const SLIDES = [
   {
     key: 'track',
     title: 'Track Every Rupee',
-    description: 'Capture daily income & expenses with structured categories. Know exactly where your money goes.',
+    description:
+      'Capture daily income & expenses with structured categories. Know exactly where your money goes.',
     icon: 'account-balance-wallet',
     accent: '#2563EB', // Blue
   },
@@ -39,30 +40,41 @@ const SLIDES = [
   {
     key: 'sync',
     title: 'Offline & Cloud Sync',
-    description: 'No internet? No problem. Log now, sync later. Your data is safe across all your Android devices.',
+    description:
+      'No internet? No problem. Log now, sync later. Your data is safe across all your Android devices.',
     icon: 'cloud-sync',
     accent: '#0891B2', // Cyan
   },
   {
     key: 'export',
     title: 'Export Reports',
-    description: 'Generate PDF or Excel reports of your ledger for tax filing or personal archiving.',
+    description:
+      'Generate PDF or Excel reports of your ledger for tax filing or personal archiving.',
     icon: 'picture-as-pdf',
     accent: '#E11D48', // Rose
   },
   {
     key: 'privacy',
     title: 'Secure by Design',
-    description: 'Your financial data is encrypted and private. Secured by Firebase Auth and granular privacy controls.',
+    description:
+      'Your financial data is encrypted and private. Secured by Firebase Auth and granular privacy controls.',
     icon: 'lock',
     accent: '#059669', // Emerald
   },
 ];
 
 // --- COMPONENT: ONBOARDING ITEM (Individual Slide) ---
-const OnboardingItem = ({ item, index, scrollX }: { item: typeof SLIDES[0], index: number, scrollX: Animated.Value }) => {
+const OnboardingItem = ({
+  item,
+  index,
+  scrollX,
+}: {
+  item: (typeof SLIDES)[0];
+  index: number;
+  scrollX: Animated.Value;
+}) => {
   const { width } = useWindowDimensions();
-  
+
   // ANIMATION: Input Range based on current scroll position
   const inputRange = [(index - 1) * width, index * width, (index + 1) * width];
 
@@ -91,14 +103,14 @@ const OnboardingItem = ({ item, index, scrollX }: { item: typeof SLIDES[0], inde
     <View style={[styles.slideContainer, { width }]}>
       {/* Animated Image Section */}
       <View style={styles.imageContainer}>
-        <Animated.View 
+        <Animated.View
           style={[
-            styles.circleBackground, 
-            { 
+            styles.circleBackground,
+            {
               backgroundColor: `${item.accent}15`, // Very light opacity
               borderColor: `${item.accent}30`,
-              transform: [{ scale: imageScale }] 
-            }
+              transform: [{ scale: imageScale }],
+            },
           ]}
         >
           <View style={[styles.iconBubble, { backgroundColor: item.accent }]}>
@@ -109,24 +121,24 @@ const OnboardingItem = ({ item, index, scrollX }: { item: typeof SLIDES[0], inde
 
       {/* Animated Text Section */}
       <View style={styles.textContainer}>
-        <Animated.Text 
+        <Animated.Text
           style={[
-            styles.title, 
-            { 
+            styles.title,
+            {
               opacity: textOpacity,
-              transform: [{ translateX: textTranslate }]
-            }
+              transform: [{ translateX: textTranslate }],
+            },
           ]}
         >
           {item.title}
         </Animated.Text>
-        <Animated.Text 
+        <Animated.Text
           style={[
-            styles.description, 
-            { 
+            styles.description,
+            {
               opacity: textOpacity,
-              transform: [{ translateX: textTranslate }]
-            }
+              transform: [{ translateX: textTranslate }],
+            },
           ]}
         >
           {item.description}
@@ -137,14 +149,14 @@ const OnboardingItem = ({ item, index, scrollX }: { item: typeof SLIDES[0], inde
 };
 
 // --- COMPONENT: PAGINATOR (Dots) ---
-const Paginator = ({ data, scrollX }: { data: typeof SLIDES, scrollX: Animated.Value }) => {
+const Paginator = ({ data, scrollX }: { data: typeof SLIDES; scrollX: Animated.Value }) => {
   const { width } = useWindowDimensions();
 
   return (
     <View style={styles.dotsContainer}>
       {data.map((_, i) => {
         const inputRange = [(i - 1) * width, i * width, (i + 1) * width];
-        
+
         const dotWidth = scrollX.interpolate({
           inputRange,
           outputRange: [8, 24, 8], // Expands width when active
@@ -158,10 +170,7 @@ const Paginator = ({ data, scrollX }: { data: typeof SLIDES, scrollX: Animated.V
         });
 
         return (
-          <Animated.View
-            key={i.toString()}
-            style={[styles.dot, { width: dotWidth, opacity }]}
-          />
+          <Animated.View key={i.toString()} style={[styles.dot, { width: dotWidth, opacity }]} />
         );
       })}
     </View>
@@ -204,12 +213,12 @@ const OnboardingScreen = () => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-      
+
       {/* Header: Skip Button */}
       <View style={styles.header}>
-        <TouchableOpacity 
-            onPress={completeOnboarding} 
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        <TouchableOpacity
+          onPress={completeOnboarding}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
           <Text style={styles.skipText}>Skip</Text>
         </TouchableOpacity>
@@ -220,16 +229,17 @@ const OnboardingScreen = () => {
         <FlatList
           ref={listRef}
           data={SLIDES}
-          renderItem={({ item, index }) => <OnboardingItem item={item} index={index} scrollX={scrollX} />}
+          renderItem={({ item, index }) => (
+            <OnboardingItem item={item} index={index} scrollX={scrollX} />
+          )}
           keyExtractor={(item) => item.key}
           horizontal
           pagingEnabled
           showsHorizontalScrollIndicator={false}
           bounces={false}
-          onScroll={Animated.event(
-            [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-            { useNativeDriver: false }
-          )}
+          onScroll={Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], {
+            useNativeDriver: false,
+          })}
           scrollEventThrottle={32}
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewConfig}
@@ -240,8 +250,8 @@ const OnboardingScreen = () => {
       <View style={styles.footer}>
         <Paginator data={SLIDES} scrollX={scrollX} />
 
-        <TouchableOpacity 
-          style={styles.button} 
+        <TouchableOpacity
+          style={styles.button}
           onPress={handleNext}
           activeOpacity={0.8}
           disabled={completing}
@@ -250,7 +260,7 @@ const OnboardingScreen = () => {
             {currentIndex === SLIDES.length - 1 ? 'Get Started' : 'Next'}
           </Text>
           {currentIndex !== SLIDES.length - 1 && (
-             <MaterialIcon name="arrow-forward" size={20} color="#fff" style={{ marginLeft: 8 }} />
+            <MaterialIcon name="arrow-forward" size={20} color="#fff" style={{ marginLeft: 8 }} />
           )}
         </TouchableOpacity>
       </View>
@@ -306,7 +316,7 @@ const styles = StyleSheet.create({
     borderRadius: 50,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: "#000",
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.2,
     shadowRadius: 20,
