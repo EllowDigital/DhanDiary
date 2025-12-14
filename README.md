@@ -32,6 +32,20 @@ Manage your daily finances effortlessly with a beautiful dashboard, history trac
 - **Local Storage:** Async Storage
 - **Language:** TypeScript / JavaScript
 
+## 🧪 Development
+
+Set up `.env` and/or `.env.local` files before running the app:
+
+```
+# Agar Google Login use kar rahe ho
+EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=xxxxxxxx.apps.googleusercontent.com
+
+# Agar GitHub Login use kar rahe ho
+EXPO_PUBLIC_GITHUB_CLIENT_ID=Iv1.xxxxxxxxxxxxx
+```
+
+Restart Expo after editing environment files so the new values load.
+
 ---
 
 ## 🔒 Privacy
