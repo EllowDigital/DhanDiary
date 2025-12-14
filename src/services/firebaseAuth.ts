@@ -192,7 +192,10 @@ export const useGithubAuth = () => {
     githubConfig.clientSecret = clientSecret;
   }
 
-  const [request, response, promptAsync] = AuthSession.useAuthRequest(githubConfig, githubDiscovery);
+  const [request, response, promptAsync] = AuthSession.useAuthRequest(
+    githubConfig,
+    githubDiscovery
+  );
 
   useEffect(() => {
     if (!hasGithubConfig) return;
