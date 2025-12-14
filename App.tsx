@@ -17,6 +17,7 @@ import DrawerNavigator from './src/navigation/DrawerNavigator';
 import { ToastProvider } from './src/context/ToastContext';
 import { RootStackParamList, AuthStackParamList } from './src/types/navigation';
 import vexoService from './src/services/vexo';
+import { configureGoogleSignIn } from './src/services/googleAuth';
 import { enableLegacyLayoutAnimations } from './src/utils/layoutAnimation';
 
 enableLegacyLayoutAnimations();
@@ -62,6 +63,15 @@ export default function App() {
     const key = getVexoKey();
     if (key) {
       vexoService.initVexo(key);
+    }
+    try {
+      configureGoogleSignIn();
+    } catch (err) {
+      // non-fatal; log for diagnostics
+      // Google sign-in configuration may fail in environments without native libs
+      // This is expected in Expo Go; it's safe to continue.
+      // eslint-disable-next-line no-console
+      console.warn('configureGoogleSignIn failed', err);
     }
   }, []);
 
