@@ -116,7 +116,7 @@ const StatsScreen = () => {
 
   const monthsByYear = useMemo(() => {
     const map = new Map<number, { key: string; label: string; date: dayjs.Dayjs }[]>();
-    availableMonths.forEach((month) => 
+    availableMonths.forEach((month) =>
       map.set(month.date.year(), [...(map.get(month.date.year()) || []), month])
     );
     map.forEach((list, year) => {
