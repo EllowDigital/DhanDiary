@@ -16,7 +16,6 @@ import { Text } from '@rneui/themed';
 import { useEntries } from '../hooks/useEntries';
 import { useAuth } from '../hooks/useAuth';
 import dayjs from 'dayjs';
-import { getStartDateForFilter, getDaysCountForFilter } from '../utils/stats';
 import { PieChart } from 'react-native-chart-kit';
 import { colors } from '../utils/design';
 import { ensureCategory } from '../constants/categories';
@@ -74,6 +73,8 @@ const StatsScreen = () => {
 
   const [filter, setFilter] = useState('7D');
   const [exporting, setExporting] = useState<'pdf' | 'excel' | null>(null);
+  const [activeMonthKey, setActiveMonthKey] = useState<string | null>(null);
+  const [activeYear, setActiveYear] = useState<number | null>(null);
 
   // --- DATA LOADING ---
   useEffect(() => {
@@ -91,20 +92,108 @@ const StatsScreen = () => {
   const donutSize = isTablet ? 280 : Math.min(width * 0.55, 220);
   const innerSize = Math.round(donutSize * 0.6);
 
-  // --- STATS LOGIC ---
-  const filteredEntries = useMemo<LocalEntry[]>(() => {
-    const startDate = getStartDateForFilter(filter);
-    return entries.filter((entry) => {
-      const d = dayjs(entry.date || entry.created_at);
-      return !d.isBefore(startDate);
+  const availableMonths = useMemo(() => {
+    const uniques = new Map<string, dayjs.Dayjs>();
+    entries.forEach((entry) => {
+      const date = dayjs(entry.date || entry.created_at);
+      if (!date.isValid()) return;
+      const monthStart = date.startOf('month');
+      const key = monthStart.format('YYYY-MM');
+      if (!uniques.has(key)) {
+        uniques.set(key, monthStart);
+      }
     });
-  }, [entries, filter]);
+    return Array.from(uniques.entries())
+      .sort((a, b) => b[1].valueOf() - a[1].valueOf())
+      .map(([key, date]) => ({ key, label: date.format('MMM YYYY'), date }));
+  }, [entries]);
+
+  const availableYears = useMemo(() => {
+    const uniqueYears = new Set<number>();
+    availableMonths.forEach((month) => uniqueYears.add(month.date.year()));
+    return Array.from(uniqueYears).sort((a, b) => b - a);
+  }, [availableMonths]);
+
+  const monthsByYear = useMemo(() => {
+    const map = new Map<number, { key: string; label: string; date: dayjs.Dayjs }[]>();
+    availableMonths.forEach((month) => 
+      map.set(month.date.year(), [...(map.get(month.date.year()) || []), month])
+    );
+    map.forEach((list, year) => {
+      map.set(
+        year,
+        [...list].sort((a, b) => b.date.valueOf() - a.date.valueOf())
+      );
+    });
+    return map;
+  }, [availableMonths]);
+
+  useEffect(() => {
+    if (!availableMonths.length) {
+      setActiveMonthKey(null);
+      return;
+    }
+    if (!activeMonthKey || !availableMonths.some((m) => m.key === activeMonthKey)) {
+      setActiveMonthKey(availableMonths[0].key);
+    }
+  }, [availableMonths, activeMonthKey]);
+
+  useEffect(() => {
+    if (!availableYears.length) {
+      if (activeYear === null) {
+        setActiveYear(dayjs().year());
+      }
+      return;
+    }
+    if (activeYear === null || !availableYears.includes(activeYear)) {
+      setActiveYear(availableYears[0]);
+    }
+  }, [availableYears, activeYear]);
+
+  const monthsForActiveYear = useMemo(() => {
+    if (activeYear === null) return [] as { key: string; label: string; date: dayjs.Dayjs }[];
+    return monthsByYear.get(activeYear) || [];
+  }, [monthsByYear, activeYear]);
+
+  // --- STATS LOGIC ---
+  const { rangeStart, rangeEnd } = useMemo(() => {
+    const current = dayjs();
+    let start = current.subtract(6, 'day').startOf('day');
+    let end = current.endOf('day');
+
+    if (filter === '7D') {
+      start = current.subtract(6, 'day').startOf('day');
+      end = current.endOf('day');
+    } else if (filter === '30D') {
+      start = current.subtract(29, 'day').startOf('day');
+      end = current.endOf('day');
+    } else if (filter === 'This Month') {
+      const key = activeMonthKey || current.format('YYYY-MM');
+      const base = dayjs(`${key}-01`);
+      if (base.isValid()) {
+        start = base.startOf('month');
+        end = base.endOf('month');
+      }
+    } else if (filter === 'This Year') {
+      const year = activeYear ?? current.year();
+      const yearStart = dayjs().year(year).startOf('year');
+      start = yearStart;
+      end = yearStart.endOf('year');
+    }
+
+    return { rangeStart: start, rangeEnd: end };
+  }, [filter, activeMonthKey, activeYear]);
 
   const rangeDescription = useMemo(() => {
-    const startDate = getStartDateForFilter(filter);
-    const endDate = dayjs();
-    return `${startDate.format('DD MMM')} - ${endDate.format('DD MMM YYYY')}`;
-  }, [filter]);
+    return `${rangeStart.format('DD MMM')} - ${rangeEnd.format('DD MMM YYYY')}`;
+  }, [rangeStart, rangeEnd]);
+
+  const filteredEntries = useMemo<LocalEntry[]>(() => {
+    return entries.filter((entry) => {
+      const d = dayjs(entry.date || entry.created_at);
+      return !d.isBefore(rangeStart) && !d.isAfter(rangeEnd);
+    });
+  }, [entries, rangeStart, rangeEnd]);
 
   const currencySymbol = useMemo(() => {
     const symbolMap: Record<string, string> = {
@@ -149,18 +238,20 @@ const StatsScreen = () => {
   }, [filteredEntries]);
 
   // Chart Data
+  const totalRangeDays = useMemo(() => {
+    const diff = rangeEnd.diff(rangeStart, 'day');
+    return Math.max(1, diff + 1);
+  }, [rangeStart, rangeEnd]);
+
   const dailyTrend = useMemo(() => {
     const labels: string[] = [];
-    const values: number[] = []; // Explicitly typed as number[]
+    const values: number[] = [];
     const indexByKey = new Map<string, number>();
-    const now = dayjs();
-    const startDate = getStartDateForFilter(filter, now);
-    const days = getDaysCountForFilter(filter, now);
 
-    for (let i = 0; i < days; i++) {
-      const d = startDate.add(i, 'day');
+    for (let i = 0; i < totalRangeDays; i++) {
+      const d = rangeStart.add(i, 'day');
       const key = d.format('YYYY-MM-DD');
-      labels.push(d.format(days > 15 ? 'DD' : 'ddd'));
+      labels.push(d.format(totalRangeDays > 15 ? 'DD' : 'ddd'));
       values.push(0);
       indexByKey.set(key, i);
     }
@@ -173,8 +264,8 @@ const StatsScreen = () => {
       }
     });
 
-    return labels.map((l, i) => ({ label: l, value: values[i] }));
-  }, [filteredEntries, filter]);
+    return labels.map((label, i) => ({ label, value: values[i] }));
+  }, [filteredEntries, rangeStart, totalRangeDays]);
 
   // Donut Data
   const pieData = useMemo<PieDataPoint[]>(() => {
@@ -214,6 +305,23 @@ const StatsScreen = () => {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setFilter(f);
     }
+  };
+
+  const handleMonthSelect = (key: string, jumpToMonthView = false) => {
+    if (activeMonthKey !== key) {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setActiveMonthKey(key);
+    }
+    if (jumpToMonthView && filter !== 'This Month') {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setFilter('This Month');
+    }
+  };
+
+  const handleYearSelect = (year: number) => {
+    if (year === activeYear) return;
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setActiveYear(year);
   };
 
   const handleExport = async (format: 'pdf' | 'excel') => {
@@ -305,6 +413,75 @@ const StatsScreen = () => {
               );
             })}
           </View>
+
+          {filter === 'This Month' && availableMonths.length > 0 && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.timeSlider}
+            >
+              {availableMonths.map((month) => {
+                const isActive = month.key === activeMonthKey;
+                return (
+                  <Pressable
+                    key={month.key}
+                    style={[styles.timeChip, isActive && styles.timeChipActive]}
+                    onPress={() => handleMonthSelect(month.key)}
+                  >
+                    <Text style={[styles.timeChipText, isActive && styles.timeChipTextActive]}>
+                      {month.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          )}
+
+          {filter === 'This Year' && (
+            <View style={styles.yearSelectorContainer}>
+              {availableYears.length > 0 && (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.timeSlider}
+                >
+                  {availableYears.map((year) => {
+                    const isActive = year === activeYear;
+                    return (
+                      <Pressable
+                        key={year}
+                        style={[styles.timeChip, isActive && styles.timeChipActive]}
+                        onPress={() => handleYearSelect(year)}
+                      >
+                        <Text style={[styles.timeChipText, isActive && styles.timeChipTextActive]}>
+                          {year}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              )}
+
+              {monthsForActiveYear.length > 0 && (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={[styles.timeSlider, { marginTop: 6 }]}
+                >
+                  {monthsForActiveYear.map((month) => (
+                    <Pressable
+                      key={`${month.key}-shortcut`}
+                      style={styles.monthShortcutChip}
+                      onPress={() => handleMonthSelect(month.key, true)}
+                    >
+                      <MaterialIcon name="chevron-right" size={14} color={colors.primary} />
+                      <Text style={styles.monthShortcutText}>{month.date.format('MMM')}</Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              )}
+            </View>
+          )}
 
           {/* 2. REPORT EXPORTS */}
           <View style={styles.card}>
@@ -634,6 +811,32 @@ const styles = StyleSheet.create({
   reportButtonTextPrimary: { color: '#fff' },
   reportButtonTextSecondary: { color: colors.primary },
   reportButtonDisabled: { opacity: 0.5 },
+  timeSlider: { flexDirection: 'row', paddingVertical: 8 },
+  timeChip: {
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: 18,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    marginRight: 10,
+    backgroundColor: '#fff',
+  },
+  timeChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  timeChipText: { fontSize: 13, fontWeight: '600', color: '#546E7A' },
+  timeChipTextActive: { color: '#fff' },
+  yearSelectorContainer: { marginBottom: 12 },
+  monthShortcutChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: 16,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginRight: 10,
+    backgroundColor: 'rgba(98, 0, 238, 0.08)',
+  },
+  monthShortcutText: { color: colors.primary, fontWeight: '600', marginLeft: 4, fontSize: 13 },
 
   // --- SMART GRID ---
   gridContainer: {
