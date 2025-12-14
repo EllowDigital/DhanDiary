@@ -1,77 +1,190 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  Dimensions,
   StatusBar,
   TouchableOpacity,
   Animated,
   FlatList,
+  useWindowDimensions,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
-import { Button } from '@rneui/themed';
 
+// Types and Utils (Mocked based on your context)
 import { RootStackParamList } from '../types/navigation';
 import { colors } from '../utils/design';
 import { markOnboardingComplete } from '../utils/onboarding';
 
-const { width } = Dimensions.get('window');
-
+// --- CONFIGURATION ---
 const SLIDES = [
   {
     key: 'track',
-    title: 'Track income & expenses',
-    description: 'Capture every rupee with structured categories, notes, and instant summaries.',
-    icon: 'timeline',
-    accent: '#2563EB',
+    title: 'Track Every Rupee',
+    description: 'Capture daily income & expenses with structured categories. Know exactly where your money goes.',
+    icon: 'account-balance-wallet',
+    accent: '#2563EB', // Blue
+  },
+  {
+    key: 'analytics',
+    title: 'Smart Analytics',
+    description: 'Visual graphs and monthly summaries help you spot spending habits and save more.',
+    icon: 'bar-chart',
+    accent: '#F59E0B', // Amber
   },
   {
     key: 'sync',
-    title: 'Offline first, cloud ready',
-    description: 'Log expenses without internet. Automatically sync when you are back online.',
-    icon: 'cloud-done',
-    accent: '#0891B2',
+    title: 'Offline & Cloud Sync',
+    description: 'No internet? No problem. Log now, sync later. Your data is safe across all your Android devices.',
+    icon: 'cloud-sync',
+    accent: '#0891B2', // Cyan
   },
   {
-    key: 'devices',
-    title: 'Use it on every device',
-    description: 'Your ledger travels with you. Seamless experience on phones and tablets.',
-    icon: 'devices',
-    accent: '#7C3AED',
+    key: 'export',
+    title: 'Export Reports',
+    description: 'Generate PDF or Excel reports of your ledger for tax filing or personal archiving.',
+    icon: 'picture-as-pdf',
+    accent: '#E11D48', // Rose
   },
   {
     key: 'privacy',
-    title: 'Secure & private by design',
-    description:
-      'Bank-grade encryption, granular controls, and Firebase Auth keep your data protected.',
-    icon: 'verified-user',
-    accent: '#059669',
+    title: 'Secure by Design',
+    description: 'Your financial data is encrypted and private. Secured by Firebase Auth and granular privacy controls.',
+    icon: 'lock',
+    accent: '#059669', // Emerald
   },
 ];
 
-const DOT_SIZE = 8;
+// --- COMPONENT: ONBOARDING ITEM (Individual Slide) ---
+const OnboardingItem = ({ item, index, scrollX }: { item: typeof SLIDES[0], index: number, scrollX: Animated.Value }) => {
+  const { width } = useWindowDimensions();
+  
+  // ANIMATION: Input Range based on current scroll position
+  const inputRange = [(index - 1) * width, index * width, (index + 1) * width];
 
+  // 1. Image Scale Animation (Bounces slightly)
+  const imageScale = scrollX.interpolate({
+    inputRange,
+    outputRange: [0.3, 1, 0.3],
+    extrapolate: 'clamp',
+  });
+
+  // 2. Text Opacity (Fades out when scrolling)
+  const textOpacity = scrollX.interpolate({
+    inputRange,
+    outputRange: [0, 1, 0],
+    extrapolate: 'clamp',
+  });
+
+  // 3. Text Translate (Moves slightly to the side for parallax effect)
+  const textTranslate = scrollX.interpolate({
+    inputRange,
+    outputRange: [50, 0, -50],
+    extrapolate: 'clamp',
+  });
+
+  return (
+    <View style={[styles.slideContainer, { width }]}>
+      {/* Animated Image Section */}
+      <View style={styles.imageContainer}>
+        <Animated.View 
+          style={[
+            styles.circleBackground, 
+            { 
+              backgroundColor: `${item.accent}15`, // Very light opacity
+              borderColor: `${item.accent}30`,
+              transform: [{ scale: imageScale }] 
+            }
+          ]}
+        >
+          <View style={[styles.iconBubble, { backgroundColor: item.accent }]}>
+            <MaterialIcon name={item.icon as any} size={56} color="#fff" />
+          </View>
+        </Animated.View>
+      </View>
+
+      {/* Animated Text Section */}
+      <View style={styles.textContainer}>
+        <Animated.Text 
+          style={[
+            styles.title, 
+            { 
+              opacity: textOpacity,
+              transform: [{ translateX: textTranslate }]
+            }
+          ]}
+        >
+          {item.title}
+        </Animated.Text>
+        <Animated.Text 
+          style={[
+            styles.description, 
+            { 
+              opacity: textOpacity,
+              transform: [{ translateX: textTranslate }]
+            }
+          ]}
+        >
+          {item.description}
+        </Animated.Text>
+      </View>
+    </View>
+  );
+};
+
+// --- COMPONENT: PAGINATOR (Dots) ---
+const Paginator = ({ data, scrollX }: { data: typeof SLIDES, scrollX: Animated.Value }) => {
+  const { width } = useWindowDimensions();
+
+  return (
+    <View style={styles.dotsContainer}>
+      {data.map((_, i) => {
+        const inputRange = [(i - 1) * width, i * width, (i + 1) * width];
+        
+        const dotWidth = scrollX.interpolate({
+          inputRange,
+          outputRange: [8, 24, 8], // Expands width when active
+          extrapolate: 'clamp',
+        });
+
+        const opacity = scrollX.interpolate({
+          inputRange,
+          outputRange: [0.3, 1, 0.3],
+          extrapolate: 'clamp',
+        });
+
+        return (
+          <Animated.View
+            key={i.toString()}
+            style={[styles.dot, { width: dotWidth, opacity }]}
+          />
+        );
+      })}
+    </View>
+  );
+};
+
+// --- MAIN SCREEN ---
 const OnboardingScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'Onboarding'>>();
+  const { width } = useWindowDimensions();
   const [currentIndex, setCurrentIndex] = useState(0);
   const scrollX = useRef(new Animated.Value(0)).current;
-  const listRef = useRef<FlatList<any>>(null);
+  const listRef = useRef<FlatList>(null);
   const [completing, setCompleting] = useState(false);
 
+  // Optimizing FlatList updates
   const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
-    if (viewableItems?.length) {
-      setCurrentIndex(viewableItems[0].index || 0);
+    if (viewableItems && viewableItems.length > 0) {
+      setCurrentIndex(viewableItems[0].index);
     }
   }).current;
 
-  const viewabilityConfig = useMemo(
-    () => ({ viewAreaCoveragePercentThreshold: 60 }),
-    []
-  );
+  const viewConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current;
 
   const completeOnboarding = async () => {
     if (completing) return;
@@ -81,165 +194,180 @@ const OnboardingScreen = () => {
   };
 
   const handleNext = () => {
-    if (currentIndex === SLIDES.length - 1) {
+    if (currentIndex < SLIDES.length - 1) {
+      listRef.current?.scrollToIndex({ index: currentIndex + 1, animated: true });
+    } else {
       completeOnboarding();
-      return;
     }
-    listRef.current?.scrollToIndex({ index: currentIndex + 1, animated: true });
   };
 
-  const renderSlide = ({ item }: { item: (typeof SLIDES)[number] }) => (
-    <View style={[styles.slide, { width }]}
-    >
-      <View style={[styles.illustration, { backgroundColor: `${item.accent}12`, borderColor: `${item.accent}30` }]}> 
-        <View style={[styles.iconBubble, { backgroundColor: item.accent }]}
-        >
-          <MaterialIcon name={item.icon as any} size={44} color="#fff" />
-        </View>
-      </View>
-      <Text style={styles.slideTitle}>{item.title}</Text>
-      <Text style={styles.slideDescription}>{item.description}</Text>
-    </View>
-  );
-
-  const renderDots = () => (
-    <View style={styles.dotsRow}>
-      {SLIDES.map((_, index) => {
-        const inputRange = [(index - 1) * width, index * width, (index + 1) * width];
-        const dotWidth = scrollX.interpolate({
-          inputRange,
-          outputRange: [DOT_SIZE, DOT_SIZE * 2, DOT_SIZE],
-          extrapolate: 'clamp',
-        });
-        const opacity = scrollX.interpolate({
-          inputRange,
-          outputRange: [0.4, 1, 0.4],
-          extrapolate: 'clamp',
-        });
-        return (
-          <Animated.View
-            key={`dot-${index}`}
-            style={[styles.dot, { width: dotWidth, opacity }]}
-          />
-        );
-      })}
-    </View>
-  );
-
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-      <View style={styles.headerRow}>
-        <TouchableOpacity onPress={completeOnboarding}>
+      
+      {/* Header: Skip Button */}
+      <View style={styles.header}>
+        <TouchableOpacity 
+            onPress={completeOnboarding} 
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
           <Text style={styles.skipText}>Skip</Text>
         </TouchableOpacity>
       </View>
 
-      <Animated.FlatList
-        ref={listRef}
-        data={SLIDES}
-        keyExtractor={(item) => item.key}
-        renderItem={renderSlide}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        onScroll={Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], {
-          useNativeDriver: false,
-        })}
-        scrollEventThrottle={16}
-        onViewableItemsChanged={onViewableItemsChanged}
-        viewabilityConfig={viewabilityConfig}
-      />
-
-      {renderDots()}
-
-      <View style={styles.ctaContainer}>
-        <Button
-          title={currentIndex === SLIDES.length - 1 ? 'Get Started' : 'Next'}
-          onPress={handleNext}
-          loading={completing}
-          buttonStyle={styles.primaryBtn}
-          titleStyle={styles.primaryText}
+      {/* Main Slides */}
+      <View style={{ flex: 3 }}>
+        <FlatList
+          ref={listRef}
+          data={SLIDES}
+          renderItem={({ item, index }) => <OnboardingItem item={item} index={index} scrollX={scrollX} />}
+          keyExtractor={(item) => item.key}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          bounces={false}
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+            { useNativeDriver: false }
+          )}
+          scrollEventThrottle={32}
+          onViewableItemsChanged={onViewableItemsChanged}
+          viewabilityConfig={viewConfig}
         />
+      </View>
+
+      {/* Footer: Dots & Button */}
+      <View style={styles.footer}>
+        <Paginator data={SLIDES} scrollX={scrollX} />
+
+        <TouchableOpacity 
+          style={styles.button} 
+          onPress={handleNext}
+          activeOpacity={0.8}
+          disabled={completing}
+        >
+          <Text style={styles.buttonText}>
+            {currentIndex === SLIDES.length - 1 ? 'Get Started' : 'Next'}
+          </Text>
+          {currentIndex !== SLIDES.length - 1 && (
+             <MaterialIcon name="arrow-forward" size={20} color="#fff" style={{ marginLeft: 8 }} />
+          )}
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
 };
 
+// --- STYLES ---
 const styles = StyleSheet.create({
-  safeArea: {
+  container: {
     flex: 1,
-    backgroundColor: colors.background,
-  },
-  headerRow: {
-    alignItems: 'flex-end',
-    paddingHorizontal: 20,
-    paddingTop: 12,
-  },
-  skipText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.muted,
-  },
-  slide: {
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingTop: 32,
-  },
-  illustration: {
-    width: width * 0.7,
-    height: width * 0.7,
-    borderRadius: 32,
+    backgroundColor: colors.background, // Ensure this exists in your utils/design
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 32,
+  },
+  header: {
+    width: '100%',
+    paddingHorizontal: 24,
+    paddingTop: 10,
+    height: 50,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+  },
+  skipText: {
+    color: colors.muted,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  // Slide Styles
+  slideContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageContainer: {
+    flex: 0.6,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '100%',
+  },
+  circleBackground: {
+    width: 280, // Responsive sizing handled by parent flex/justify
+    height: 280,
+    borderRadius: 140,
+    justifyContent: 'center',
+    alignItems: 'center',
     borderWidth: 1,
   },
   iconBubble: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    alignItems: 'center',
+    width: 100,
+    height: 100,
+    borderRadius: 50,
     justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    elevation: 10, // Android Shadow
   },
-  slideTitle: {
-    fontSize: 24,
-    fontWeight: '700',
+  textContainer: {
+    flex: 0.4,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 26,
+    fontWeight: '800',
     color: colors.text,
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: 16,
+    includeFontPadding: false,
   },
-  slideDescription: {
-    fontSize: 15,
-    lineHeight: 22,
+  description: {
+    fontSize: 16,
     color: colors.muted,
     textAlign: 'center',
-    paddingHorizontal: 12,
+    lineHeight: 24,
+    paddingHorizontal: 10,
   },
-  dotsRow: {
+  // Footer Styles
+  footer: {
+    flex: 1, // Takes up remaining space
+    width: '100%',
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    paddingBottom: Platform.OS === 'android' ? 40 : 20, // Extra padding for Android nav bars
+  },
+  dotsContainer: {
     flexDirection: 'row',
+    height: 40,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 8,
-    marginTop: 24,
   },
   dot: {
-    height: DOT_SIZE,
-    borderRadius: DOT_SIZE,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: colors.primary,
     marginHorizontal: 4,
   },
-  ctaContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 32,
-    paddingTop: 24,
-  },
-  primaryBtn: {
+  button: {
     backgroundColor: colors.primary,
+    flexDirection: 'row',
+    height: 56,
     borderRadius: 16,
-    paddingVertical: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
+    marginBottom: 10,
   },
-  primaryText: {
+  buttonText: {
+    color: '#fff',
     fontSize: 16,
     fontWeight: '700',
   },
