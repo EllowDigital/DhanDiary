@@ -86,10 +86,6 @@ module.exports = (ctx) => {
       process.env.EXPO_PUBLIC_GITHUB_CLIENT_ID ||
       (baseConfig.extra && baseConfig.extra.oauth && baseConfig.extra.oauth.githubClientId) ||
       null,
-    githubClientSecret:
-      process.env.EXPO_PUBLIC_GITHUB_CLIENT_SECRET ||
-      (baseConfig.extra && baseConfig.extra.oauth && baseConfig.extra.oauth.githubClientSecret) ||
-      null,
   };
 
   return {

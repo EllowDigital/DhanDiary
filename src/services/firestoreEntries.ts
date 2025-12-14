@@ -1,4 +1,5 @@
 import {
+  FirestoreError,
   addDoc,
   collection,
   deleteDoc,
@@ -34,16 +35,27 @@ export const fetchEntries = async (userId: string): Promise<LocalEntry[]> => {
   return snap.docs.map((docSnap) => mapToLocalEntry(docSnap.id, userId, docSnap.data()));
 };
 
-export const subscribeEntries = (userId: string, onChange: (entries: LocalEntry[]) => void) => {
+export const subscribeEntries = (
+  userId: string,
+  onChange: (entries: LocalEntry[]) => void,
+  onError?: (error: FirestoreError) => void
+) => {
   if (!userId) return () => undefined;
   const colRef = buildCollectionRef(userId);
   const q = query(colRef, orderBy('date', 'desc'), orderBy('createdAt', 'desc'));
-  return onSnapshot(q, (snapshot) => {
-    const entries = snapshot.docs.map((docSnap) =>
-      mapToLocalEntry(docSnap.id, userId, docSnap.data())
-    );
-    onChange(entries);
-  });
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const entries = snapshot.docs.map((docSnap) =>
+        mapToLocalEntry(docSnap.id, userId, docSnap.data())
+      );
+      onChange(entries);
+    },
+    (error) => {
+      console.warn('Entries listener error', error);
+      onError?.(error);
+    }
+  );
 };
 
 const sanitizeInput = (input: EntryInput) => {

@@ -39,6 +39,19 @@ import AuthField from '../components/AuthField';
 
 type LoginScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList>;
 
+const getProviderErrorMessage = (error: unknown, fallback: string) => {
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = (error as any).message;
+    if (typeof message === 'string' && message.trim().length) {
+      return message;
+    }
+  }
+  if (typeof error === 'string' && error.trim().length) {
+    return error;
+  }
+  return fallback;
+};
+
 const LoginScreen = () => {
   const navigation = useNavigation<LoginScreenNavigationProp>();
   const { showToast } = useToast();
@@ -132,6 +145,11 @@ const LoginScreen = () => {
     setSocialLoading(true);
     try {
       await startGoogleSignIn();
+    } catch (err) {
+      Alert.alert(
+        'Google Login Failed',
+        getProviderErrorMessage(err, 'Unable to connect to Google right now.')
+      );
     } finally {
       setSocialLoading(false);
     }
@@ -142,6 +160,11 @@ const LoginScreen = () => {
     setSocialLoading(true);
     try {
       await startGithubSignIn();
+    } catch (err) {
+      Alert.alert(
+        'GitHub Login Failed',
+        getProviderErrorMessage(err, 'Unable to connect to GitHub right now.')
+      );
     } finally {
       setSocialLoading(false);
     }

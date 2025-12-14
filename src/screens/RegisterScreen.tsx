@@ -35,6 +35,19 @@ import AuthField from '../components/AuthField';
 
 type RegisterScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList>;
 
+const readProviderError = (error: unknown, fallback: string) => {
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = (error as any).message;
+    if (typeof message === 'string' && message.trim().length) {
+      return message;
+    }
+  }
+  if (typeof error === 'string' && error.trim().length) {
+    return error;
+  }
+  return fallback;
+};
+
 const RegisterScreen = () => {
   const navigation = useNavigation<RegisterScreenNavigationProp>();
   const { showToast } = useToast();
@@ -163,6 +176,11 @@ const RegisterScreen = () => {
     setSocialLoading(true);
     try {
       await startGoogleSignIn();
+    } catch (err) {
+      Alert.alert(
+        'Google Sign-up Failed',
+        readProviderError(err, 'Unable to reach Google right now.')
+      );
     } finally {
       setSocialLoading(false);
     }
@@ -173,6 +191,11 @@ const RegisterScreen = () => {
     setSocialLoading(true);
     try {
       await startGithubSignIn();
+    } catch (err) {
+      Alert.alert(
+        'GitHub Sign-up Failed',
+        readProviderError(err, 'Unable to reach GitHub right now.')
+      );
     } finally {
       setSocialLoading(false);
     }

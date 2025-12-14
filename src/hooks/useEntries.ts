@@ -1,4 +1,5 @@
 import React from 'react';
+import type { FirestoreError } from 'firebase/firestore';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ensureCategory, DEFAULT_CATEGORY } from '../constants/categories';
 import {
@@ -38,6 +39,7 @@ const makeOptimisticEntry = (entry: any, userId: string) => {
 export const useEntries = (userId?: string | null) => {
   const queryClient = useQueryClient();
   const queryKey = React.useMemo(() => ['entries', userId ?? 'none'], [userId]);
+  const [listenerError, setListenerError] = React.useState<FirestoreError | null>(null);
 
   /* ---------------------- Fetch entries ---------------------- */
   const {
@@ -62,7 +64,11 @@ export const useEntries = (userId?: string | null) => {
   React.useEffect(() => {
     if (!userId) return;
     const unsubscribe = subscribeEntries(userId, (payload) => {
+      setListenerError(null);
       queryClient.setQueryData(queryKey, payload);
+    }, (error) => {
+      setListenerError(error);
+      queryClient.invalidateQueries({ queryKey });
     });
     return () => unsubscribe();
   }, [userId, queryClient, queryKey]);
@@ -183,6 +189,7 @@ export const useEntries = (userId?: string | null) => {
     updateEntry: updateEntryMutation.mutateAsync,
     deleteEntry: deleteEntryMutation.mutateAsync,
     refetch,
+    listenerError,
   };
 };
 
