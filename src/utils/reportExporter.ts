@@ -1,6 +1,6 @@
 import dayjs from 'dayjs';
 import * as Print from 'expo-print';
-import * as FileSystem from 'expo-file-system';
+import { cacheDirectory, writeAsStringAsync, EncodingType } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { LocalEntry } from '../types/entries';
 
@@ -172,9 +172,9 @@ export const exportEntriesAsCsv = async (entries: LocalEntry[], metadata?: Repor
   await ensureSharingAvailable();
   const csv = buildCsv(entries, metadata);
   const fileName = `dhandiary_report_${dayjs().format('YYYYMMDD_HHmmss')}.csv`;
-  const fileUri = `${FileSystem.cacheDirectory || ''}${fileName}`;
-  await FileSystem.writeAsStringAsync(fileUri, csv, {
-    encoding: FileSystem.EncodingType.UTF8,
+  const fileUri = `${cacheDirectory || ''}${fileName}`;
+  await writeAsStringAsync(fileUri, csv, {
+    encoding: EncodingType.UTF8,
   });
   await Sharing.shareAsync(fileUri, {
     mimeType: 'text/csv',

@@ -2,6 +2,7 @@ import { Alert, Linking, Platform } from 'react-native';
 import Constants from 'expo-constants';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
+import { makeRedirectUri } from 'expo-auth-session';
 import {
   AuthCredential,
   EmailAuthProvider,
@@ -195,11 +196,21 @@ export const useGoogleAuth = () => {
     extra?.firebase?.webClientId ||
     process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
   const fallbackClientId = clientId || 'placeholder.apps.googleusercontent.com';
+  const redirectUri =
+    extra?.oauth?.googleRedirectUri ||
+    makeRedirectUri({
+      scheme:
+        extra?.appScheme ||
+        Constants?.expoConfig?.scheme ||
+        (Constants?.expoGoConfig as any)?.scheme ||
+        'dhandiary',
+    });
   const googleConfig: Google.GoogleAuthRequestConfig = {
     clientId: fallbackClientId,
     iosClientId: fallbackClientId,
     androidClientId: fallbackClientId,
     webClientId: fallbackClientId,
+    redirectUri,
   };
   const [, response, promptAsync] = Google.useIdTokenAuthRequest(googleConfig);
   const googleAvailable = !!clientId;
@@ -235,7 +246,7 @@ export const useGoogleAuth = () => {
     }
     ensureSupportedEnvironment();
     intentRef.current = intent;
-    const result = await promptAsync({ useProxy: false, showInRecents: true });
+    const result = await promptAsync();
     if (result.type !== 'success') {
       intentRef.current = null;
       throw new Error(intent === 'link' ? 'Google linking cancelled.' : 'Google sign-in cancelled.');
