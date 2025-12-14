@@ -34,7 +34,7 @@ const hexToRgb = (hex: string) => {
     : '0, 0, 0';
 };
 
-const FILTERS = ['7D', '30D', 'Month', 'Year'];
+const FILTERS = ['7D', '30D', 'This Month', 'This Year'];
 
 // Chart Colors
 const PIE_COLORS = ['#FF6B6B', '#4ECDC4', '#FFD93D', '#6C5CE7', '#A8E6CF', '#FD79A8'];
