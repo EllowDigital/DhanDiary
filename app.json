@@ -59,6 +59,14 @@
     "extra": {
       "eas": {
         "projectId": "77c33e0a-8d3a-4f5b-afcf-72967c9af0bf"
+      },
+      "firebase": {
+        "apiKey": "AIzaSyBdxz2WiBRGaXCS-j3gKnTR-5tkHiozsE8",
+        "authDomain": "dhandiary-91f7e.firebaseapp.com",
+        "projectId": "dhandiary-91f7e",
+        "storageBucket": "dhandiary-91f7e.firebasestorage.app",
+        "messagingSenderId": "315200510366",
+        "appId": "1:315200510366:android:ca86b794964c4188521e8f"
       }
     }
   }
