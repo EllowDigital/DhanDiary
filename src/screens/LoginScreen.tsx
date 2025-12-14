@@ -15,7 +15,7 @@ import {
   Keyboard,
 } from 'react-native';
 import { Button, Text } from '@rneui/themed';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
@@ -49,6 +49,7 @@ const getProviderErrorMessage = (error: unknown, fallback: string) => {
 
 const LoginScreen = () => {
   const navigation = useNavigation<LoginScreenNavigationProp>();
+  const route: any = useRoute();
   const { showToast } = useToast();
   const isOnline = useInternetStatus();
 
@@ -71,6 +72,13 @@ const LoginScreen = () => {
   const scaleAnim = useRef(new Animated.Value(0.95)).current;
 
   useEffect(() => {
+    // Prefill email if navigated here after social conflict
+    try {
+      const pre = route?.params?.prefillEmail;
+      if (pre && typeof pre === 'string') setEmail(pre);
+    } catch (err) {
+      // ignore
+    }
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -142,10 +150,34 @@ const LoginScreen = () => {
     try {
       await startGithubSignIn();
     } catch (err) {
-      Alert.alert(
-        'GitHub Login Failed',
-        getProviderErrorMessage(err, 'Unable to connect to GitHub right now.')
-      );
+      const e: any = err || {};
+      if (e.code === 'auth/account-exists-with-different-credential') {
+        const methods = e.methods || [];
+        const email = e.email || '';
+        const providerText = methods.join(', ') || 'another provider';
+        Alert.alert(
+          'Account Exists',
+          `An account already exists for ${email} using ${providerText}. Sign in with that provider to link GitHub to your account.`,
+          [
+            {
+              text: 'OK',
+            },
+            ...(methods.includes('password')
+              ? [
+                  {
+                    text: 'Sign in with Email',
+                    onPress: () => navigation.navigate('Login' as any, { prefillEmail: email }),
+                  },
+                ]
+              : []),
+          ]
+        );
+      } else {
+        Alert.alert(
+          'GitHub Login Failed',
+          getProviderErrorMessage(err, 'Unable to connect to GitHub right now.')
+        );
+      }
     } finally {
       setSocialLoading(false);
     }

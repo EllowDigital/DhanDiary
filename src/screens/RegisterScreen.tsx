@@ -178,10 +178,32 @@ const RegisterScreen = () => {
     try {
       await startGithubSignIn();
     } catch (err) {
-      Alert.alert(
-        'GitHub Sign-up Failed',
-        readProviderError(err, 'Unable to reach GitHub right now.')
-      );
+      const e: any = err || {};
+      if (e.code === 'auth/account-exists-with-different-credential') {
+        const methods = e.methods || [];
+        const email = e.email || '';
+        const providerText = methods.join(', ') || 'another provider';
+        Alert.alert(
+          'Account Exists',
+          `An account already exists for ${email} using ${providerText}. Sign in with that provider to link GitHub to your account.`,
+          [
+            { text: 'OK' },
+            ...(methods.includes('password')
+              ? [
+                  {
+                    text: 'Sign in with Email',
+                    onPress: () => navigation.navigate('Login', { prefillEmail: email }),
+                  },
+                ]
+              : []),
+          ]
+        );
+      } else {
+        Alert.alert(
+          'GitHub Sign-up Failed',
+          readProviderError(err, 'Unable to reach GitHub right now.')
+        );
+      }
     } finally {
       setSocialLoading(false);
     }
