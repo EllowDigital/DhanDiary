@@ -28,7 +28,6 @@ import { useInternetStatus } from '../hooks/useInternetStatus';
 import {
   loginWithEmail,
   sendPasswordReset,
-  useGoogleAuth,
   useGithubAuth,
 } from '../services/firebaseAuth';
 
@@ -69,7 +68,6 @@ const LoginScreen = () => {
   const [resettingPassword, setResettingPassword] = useState(false);
   const [socialLoading, setSocialLoading] = useState(false);
 
-  const { googleAvailable, signIn: startGoogleSignIn } = useGoogleAuth();
   const { githubAvailable, signIn: startGithubSignIn } = useGithubAuth();
 
   // --- ANIMATION ---
@@ -140,20 +138,7 @@ const LoginScreen = () => {
     }
   };
 
-  const handleGoogleLogin = async () => {
-    if (!googleAvailable) return;
-    setSocialLoading(true);
-    try {
-      await startGoogleSignIn();
-    } catch (err) {
-      Alert.alert(
-        'Google Login Failed',
-        getProviderErrorMessage(err, 'Unable to connect to Google right now.')
-      );
-    } finally {
-      setSocialLoading(false);
-    }
-  };
+  // Google login removed. Use only Firebase-native Google login elsewhere.
 
   const handleGithubLogin = async () => {
     if (!githubAvailable) return;
@@ -285,7 +270,7 @@ const LoginScreen = () => {
                 }
               />
 
-              {(googleAvailable || githubAvailable) && (
+              {githubAvailable && (
                 <View style={styles.socialWrapper}>
                   <View style={styles.socialDivider}>
                     <View style={styles.socialLine} />
@@ -294,25 +279,7 @@ const LoginScreen = () => {
                   </View>
 
                   <View style={styles.socialButtonsRow}>
-                    {googleAvailable && (
-                      <Button
-                        type="outline"
-                        icon={
-                          <FontAwesome
-                            name="google"
-                            size={18}
-                            color={colors.primary}
-                            style={{ marginRight: 8 }}
-                          />
-                        }
-                        title="Google"
-                        onPress={handleGoogleLogin}
-                        disabled={socialLoading}
-                        buttonStyle={styles.socialButton}
-                        titleStyle={styles.socialButtonText}
-                        containerStyle={styles.socialButtonContainer}
-                      />
-                    )}
+                    {/* Google login removed */}
                     {githubAvailable && (
                       <Button
                         type="outline"

@@ -26,7 +26,7 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { AuthStackParamList } from '../types/navigation';
 import { useToast } from '../context/ToastContext';
 import { useInternetStatus } from '../hooks/useInternetStatus';
-import { registerWithEmail, useGoogleAuth, useGithubAuth } from '../services/firebaseAuth';
+import { registerWithEmail, useGithubAuth } from '../services/firebaseAuth';
 
 // Components & Utils
 import { colors } from '../utils/design';
@@ -102,7 +102,6 @@ const RegisterScreen = () => {
   };
   const passStrength = getPasswordStrength(password);
 
-  const { googleAvailable, signIn: startGoogleSignIn } = useGoogleAuth();
   const { githubAvailable, signIn: startGithubSignIn } = useGithubAuth();
 
   // Optimized Handlers
@@ -171,20 +170,7 @@ const RegisterScreen = () => {
   const handleOpenTerms = useCallback(() => navigation.navigate('Terms'), [navigation]);
   const handleOpenPrivacy = useCallback(() => navigation.navigate('PrivacyPolicy'), [navigation]);
 
-  const handleGoogleSignup = async () => {
-    if (!googleAvailable) return;
-    setSocialLoading(true);
-    try {
-      await startGoogleSignIn();
-    } catch (err) {
-      Alert.alert(
-        'Google Sign-up Failed',
-        readProviderError(err, 'Unable to reach Google right now.')
-      );
-    } finally {
-      setSocialLoading(false);
-    }
-  };
+  // Google signup removed. Use only Firebase-native Google login elsewhere.
 
   const handleGithubSignup = async () => {
     if (!githubAvailable) return;
@@ -360,7 +346,7 @@ const RegisterScreen = () => {
                 }
               />
 
-              {(googleAvailable || githubAvailable) && (
+              {githubAvailable && (
                 <View style={styles.socialWrapper}>
                   <View style={styles.socialDivider}>
                     <View style={styles.socialLine} />
@@ -369,25 +355,7 @@ const RegisterScreen = () => {
                   </View>
 
                   <View style={styles.socialButtonsRow}>
-                    {googleAvailable && (
-                      <Button
-                        type="outline"
-                        icon={
-                          <FontAwesome
-                            name="google"
-                            size={18}
-                            color={colors.primary}
-                            style={{ marginRight: 8 }}
-                          />
-                        }
-                        title="Google"
-                        onPress={handleGoogleSignup}
-                        disabled={socialLoading}
-                        buttonStyle={styles.socialButton}
-                        titleStyle={styles.socialButtonText}
-                        containerStyle={styles.socialButtonContainer}
-                      />
-                    )}
+                    {/* Google signup removed */}
                     {githubAvailable && (
                       <Button
                         type="outline"
