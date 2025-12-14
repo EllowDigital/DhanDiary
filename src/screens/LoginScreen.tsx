@@ -19,6 +19,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
+import FontAwesome from '@expo/vector-icons/FontAwesome';
 
 // Types & Services
 import { AuthStackParamList } from '../types/navigation';
@@ -274,7 +275,7 @@ const LoginScreen = () => {
                       <Button
                         type="outline"
                         icon={
-                          <MaterialIcon
+                          <FontAwesome
                             name="google"
                             size={18}
                             color={colors.primary}
@@ -293,8 +294,8 @@ const LoginScreen = () => {
                       <Button
                         type="outline"
                         icon={
-                          <MaterialIcon
-                            name="code"
+                          <FontAwesome
+                            name="github"
                             size={18}
                             color={colors.primary}
                             style={{ marginRight: 8 }}

@@ -3,6 +3,7 @@ import Constants from 'expo-constants';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 import * as AuthSession from 'expo-auth-session';
+import type { AuthRequestConfig } from 'expo-auth-session';
 import {
   AuthCredential,
   EmailAuthProvider,
@@ -137,13 +138,14 @@ export const deleteAccount = async (currentPassword?: string) => {
 export const useGoogleAuth = () => {
   const extra = getExtra();
   const clientId = extra?.oauth?.googleClientId || extra?.firebase?.webClientId;
-  const googleConfig = clientId
-    ? {
-        clientId,
-        iosClientId: clientId,
-        androidClientId: clientId,
-      }
-    : null;
+  const hasGoogleConfig = !!clientId;
+  const fallbackClientId = clientId || 'placeholder.apps.googleusercontent.com';
+  const googleConfig: Partial<Google.GoogleAuthRequestConfig> = {
+    clientId: fallbackClientId,
+    iosClientId: fallbackClientId,
+    androidClientId: fallbackClientId,
+    webClientId: fallbackClientId,
+  };
   const [request, response, promptAsync] = Google.useIdTokenAuthRequest(googleConfig);
 
   useEffect(() => {
@@ -156,9 +158,12 @@ export const useGoogleAuth = () => {
   }, [response]);
 
   return {
-    googleAvailable: !!clientId,
+    googleAvailable: hasGoogleConfig,
     request,
-    signIn: () => promptAsync({ useProxy: Platform.OS !== 'web' }),
+    signIn: () =>
+      hasGoogleConfig
+        ? promptAsync()
+        : Promise.reject(new Error('Google sign-in is not configured.')),
   };
 };
 
@@ -174,25 +179,23 @@ export const useGithubAuth = () => {
   const extra = getExtra();
   const clientId = extra?.oauth?.githubClientId;
   const clientSecret = extra?.oauth?.githubClientSecret;
-  const redirectUri = AuthSession.makeRedirectUri({ useProxy: Platform.OS !== 'web' });
+  const redirectUri = AuthSession.makeRedirectUri();
+  const hasGithubConfig = !!clientId && !!clientSecret;
+  const fallbackClientId = clientId || 'placeholder-github-client';
 
-  const githubConfig =
-    clientId && clientSecret
-      ? {
-          clientId,
-          clientSecret,
-          scopes: ['user:email'],
-          redirectUri,
-        }
-      : null;
+  const githubConfig: AuthRequestConfig = {
+    clientId: fallbackClientId,
+    redirectUri,
+    scopes: ['user:email'],
+  };
+  if (clientSecret) {
+    githubConfig.clientSecret = clientSecret;
+  }
 
-  const [request, response, promptAsync] = AuthSession.useAuthRequest(
-    githubConfig,
-    githubConfig ? githubDiscovery : undefined
-  );
+  const [request, response, promptAsync] = AuthSession.useAuthRequest(githubConfig, githubDiscovery);
 
   useEffect(() => {
-    if (!clientId || !clientSecret) return;
+    if (!hasGithubConfig) return;
     const exchangeCode = async () => {
       if (!response || response.type !== 'success') return;
       if (!response.params.code) return;
@@ -214,8 +217,11 @@ export const useGithubAuth = () => {
   }, [response, clientId, clientSecret, redirectUri]);
 
   return {
-    githubAvailable: !!clientId && !!clientSecret,
+    githubAvailable: hasGithubConfig,
     request,
-    signIn: () => promptAsync({ useProxy: Platform.OS !== 'web' }),
+    signIn: () =>
+      hasGithubConfig
+        ? promptAsync()
+        : Promise.reject(new Error('GitHub sign-in is not configured.')),
   };
 };

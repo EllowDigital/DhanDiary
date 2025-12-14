@@ -2,12 +2,8 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
-import {
-  initializeAuth,
-  getReactNativePersistence,
-  browserLocalPersistence,
-  Auth,
-} from 'firebase/auth';
+import { initializeAuth, browserLocalPersistence, Auth } from 'firebase/auth';
+import { getReactNativePersistence } from 'firebase/auth/react-native';
 import { getFirestore, enableIndexedDbPersistence, Firestore } from 'firebase/firestore';
 
 const getFirebaseExtra = () => {
