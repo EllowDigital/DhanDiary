@@ -3,7 +3,8 @@ import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
 import { initializeAuth, browserLocalPersistence, Auth } from 'firebase/auth';
-import { getReactNativePersistence } from 'firebase/auth/react-native';
+// Firebase v12 no longer ships a top-level react-native entry, so use the RN build directly.
+import { getReactNativePersistence } from '@firebase/auth/dist/rn/index';
 import { getFirestore, enableIndexedDbPersistence, Firestore } from 'firebase/firestore';
 
 const getFirebaseExtra = () => {
