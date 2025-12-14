@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -9,7 +9,6 @@ import {
   Easing,
   useWindowDimensions,
   StatusBar,
-  ActivityIndicator,
 } from 'react-native';
 import type { ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,10 +16,8 @@ import { Text } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 
 // --- LOGIC IMPORTS ---
-import { logout } from '../services/auth';
+import { logoutUser } from '../services/firebaseAuth';
 import { useAuth } from '../hooks/useAuth';
-import { syncBothWays, getLastSyncTime, getLastSyncCount } from '../services/syncManager';
-import { wipeLocalDatabase } from '../db/localDb';
 import { useNavigation } from '@react-navigation/native';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '../context/ToastContext';
@@ -64,9 +61,6 @@ const SettingsScreen = () => {
   // Entrance Stagger
   const animValues = useRef([...Array(6)].map(() => new Animated.Value(0))).current;
 
-  // Sync Spin Animation
-  const spinValue = useRef(new Animated.Value(0)).current;
-
   useEffect(() => {
     const animations = animValues.map((anim) =>
       Animated.timing(anim, {
@@ -94,40 +88,6 @@ const SettingsScreen = () => {
     };
   };
 
-  // --- STATE ---
-  const [syncing, setSyncing] = useState(false);
-  const [lastSynced, setLastSynced] = useState<string | null>(null);
-  const [lastSyncedCount, setLastSyncedCount] = useState<number | null>(0);
-
-  useEffect(() => {
-    (async () => {
-      setLastSynced(await getLastSyncTime());
-      setLastSyncedCount(await getLastSyncCount());
-    })();
-  }, []);
-
-  // Sync Animation Logic
-  useEffect(() => {
-    if (syncing) {
-      Animated.loop(
-        Animated.timing(spinValue, {
-          toValue: 1,
-          duration: 1000,
-          easing: Easing.linear,
-          useNativeDriver: true,
-        })
-      ).start();
-    } else {
-      spinValue.stopAnimation();
-      spinValue.setValue(0);
-    }
-  }, [syncing]);
-
-  const spin = spinValue.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
-
   // --- HANDLERS ---
   const handleLogout = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
@@ -136,7 +96,7 @@ const SettingsScreen = () => {
         text: 'Sign Out',
         style: 'destructive',
         onPress: async () => {
-          await logout();
+          await logoutUser();
           query.clear();
           showToast('Signed out');
           navigation.getParent()?.replace('Auth');
@@ -144,35 +104,17 @@ const SettingsScreen = () => {
       },
     ]);
   };
-
-  const handleSync = async () => {
-    if (syncing) return;
-    setSyncing(true);
-    try {
-      const stats = await syncBothWays();
-      const now = new Date().toISOString();
-      setLastSynced(now);
-      setLastSyncedCount(stats?.total ?? 0);
-      showToast(`Synced ${stats?.total ?? 0} items`);
-    } catch (e: any) {
-      showToast('Sync failed');
-      Alert.alert('Sync Error', e?.message || String(e));
-    } finally {
-      setSyncing(false);
-    }
-  };
-
-  const handleClearData = () => {
+  const handleResetApp = () => {
     Alert.alert(
       'Reset App?',
-      '⚠️ This will DELETE all local data, cache, and sign you out. This action cannot be undone.',
+      'This signs you out and clears all cached data on this device.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Yes, Delete Everything',
+          text: 'Reset',
           style: 'destructive',
           onPress: async () => {
-            await wipeLocalDatabase();
+            await logoutUser();
             query.clear();
             showToast('App reset complete');
             navigation.getParent()?.replace('Auth');
@@ -223,53 +165,32 @@ const SettingsScreen = () => {
               </View>
             </Animated.View>
 
-            {/* 2. SYNC CARD */}
+            {/* 2. CLOUD INFO CARD */}
             <Animated.View style={getAnimStyle(1)}>
               <Text style={styles.sectionLabel}>Data & Cloud</Text>
               <View style={styles.card}>
                 <View style={styles.syncHeader}>
                   <View style={[styles.iconBox, { backgroundColor: colors.primarySoft }]}>
-                    <Animated.View style={{ transform: [{ rotate: spin }] }}>
-                      <MaterialIcon name="sync" size={24} color={colors.primary} />
-                    </Animated.View>
+                    <MaterialIcon name="cloud-done" size={24} color={colors.primary} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.cardTitle}>Cloud Sync</Text>
+                    <Text style={styles.cardTitle}>Realtime Backup</Text>
                     <Text style={styles.cardSub}>
-                      {syncing ? 'Synchronizing records...' : 'Keep your records backed up'}
+                      Entries sync instantly to Firebase Cloud Firestore.
                     </Text>
                   </View>
                 </View>
 
                 <View style={styles.statGrid}>
                   <View style={styles.statItem}>
-                    <Text style={styles.statLabel}>LAST SYNC</Text>
-                    <Text style={styles.statValue}>{formatSyncDate(lastSynced)}</Text>
+                    <Text style={styles.statLabel}>STATUS</Text>
+                    <Text style={styles.statValue}>{user ? 'Connected' : 'Offline'}</Text>
                   </View>
                   <View style={styles.statItem}>
-                    <Text style={styles.statLabel}>ITEMS</Text>
-                    <Text style={styles.statValue}>{lastSyncedCount} Records</Text>
+                    <Text style={styles.statLabel}>ACCOUNT</Text>
+                    <Text style={styles.statValue}>{user?.email || 'Not signed in'}</Text>
                   </View>
                 </View>
-
-                <TouchableOpacity
-                  style={[styles.syncButton, syncing && styles.syncButtonDisabled]}
-                  onPress={handleSync}
-                  disabled={syncing}
-                  activeOpacity={0.8}
-                >
-                  {syncing ? (
-                    <ActivityIndicator color="#fff" size="small" style={{ marginRight: 8 }} />
-                  ) : (
-                    <MaterialIcon
-                      name="cloud-upload"
-                      size={18}
-                      color="#fff"
-                      style={{ marginRight: 8 }}
-                    />
-                  )}
-                  <Text style={styles.syncButtonText}>{syncing ? 'Syncing...' : 'Sync Now'}</Text>
-                </TouchableOpacity>
               </View>
             </Animated.View>
 
@@ -301,27 +222,26 @@ const SettingsScreen = () => {
               </View>
             </Animated.View>
 
-            {/* 4. DANGER ZONE */}
+            {/* 4. RESET CARD */}
             <Animated.View style={getAnimStyle(3)}>
               <View style={styles.dangerHeaderRow}>
                 <MaterialIcon name="error-outline" size={18} color={colors.accentRed} />
-                <Text style={styles.dangerLabel}>Danger Zone</Text>
+                <Text style={styles.dangerLabel}>Reset</Text>
               </View>
 
               <View style={styles.dangerCard}>
                 <View style={styles.dangerContent}>
                   <Text style={styles.dangerTitle}>Reset Application</Text>
                   <Text style={styles.dangerDesc}>
-                    Clears all local databases, cached images, and session data. Use this if the app
-                    is behaving unexpectedly.
+                    Signs you out, clears cached data, and restarts the onboarding flow.
                   </Text>
                   <TouchableOpacity
                     style={styles.dangerBtn}
-                    onPress={handleClearData}
+                    onPress={handleResetApp}
                     activeOpacity={0.7}
                   >
-                    <MaterialIcon name="delete-forever" size={20} color={colors.white} />
-                    <Text style={styles.dangerBtnText}>Clear Data & Reset</Text>
+                    <MaterialIcon name="refresh" size={20} color={colors.white} />
+                    <Text style={styles.dangerBtnText}>Reset & Sign Out</Text>
                   </TouchableOpacity>
                 </View>
               </View>
