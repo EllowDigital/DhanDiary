@@ -173,9 +173,7 @@ export const useGoogleAuth = () => {
     signIn: () =>
       googleAvailable
         ? promptAsync({ useProxy: false, showInRecents: true })
-        : Promise.reject(
-            new Error('Google sign-in is disabled in Expo Go or not configured.')
-          ),
+        : Promise.reject(new Error('Google sign-in is disabled in Expo Go or not configured.')),
   };
 };
 

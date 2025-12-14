@@ -63,13 +63,17 @@ export const useEntries = (userId?: string | null) => {
   // Keep query data fresh when DB is mutated by background syncs or other processes.
   React.useEffect(() => {
     if (!userId) return;
-    const unsubscribe = subscribeEntries(userId, (payload) => {
-      setListenerError(null);
-      queryClient.setQueryData(queryKey, payload);
-    }, (error) => {
-      setListenerError(error);
-      queryClient.invalidateQueries({ queryKey });
-    });
+    const unsubscribe = subscribeEntries(
+      userId,
+      (payload) => {
+        setListenerError(null);
+        queryClient.setQueryData(queryKey, payload);
+      },
+      (error) => {
+        setListenerError(error);
+        queryClient.invalidateQueries({ queryKey });
+      }
+    );
     return () => unsubscribe();
   }, [userId, queryClient, queryKey]);
 
