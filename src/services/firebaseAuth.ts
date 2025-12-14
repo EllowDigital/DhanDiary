@@ -53,6 +53,15 @@ const upsertProfile = async (
   );
 };
 
+const summarizeProviderIds = (providerData: Array<{ providerId?: string | null }>) => {
+  const ids = providerData
+    .map((p) => p.providerId)
+    .filter((id): id is string => Boolean(id))
+    .map((id) => id!.toLowerCase());
+  if (!ids.length) return 'password';
+  return Array.from(new Set(ids)).sort().join('|');
+};
+
 export const registerWithEmail = async (name: string, email: string, password: string) => {
   const auth = getFirebaseAuth();
   const creds = await createUserWithEmailAndPassword(auth, email, password);
@@ -66,9 +75,37 @@ export const loginWithEmail = (email: string, password: string) => {
   return signInWithEmailAndPassword(auth, email, password);
 };
 
-export const sendPasswordReset = (email: string) => {
+export const sendPasswordReset = async (email: string) => {
   const auth = getFirebaseAuth();
-  return sendPasswordResetEmail(auth, email);
+  const extra = getExtra();
+  const expoConfig: any = Constants?.expoConfig || {};
+  const actionCodeSettings = {
+    url:
+      extra?.passwordResetRedirectUrl ||
+      process.env.EXPO_PUBLIC_PASSWORD_RESET_URL ||
+      'https://dhandiary.app/reset',
+    handleCodeInApp: false,
+    dynamicLinkDomain: extra?.passwordResetDynamicLinkDomain || undefined,
+    android: {
+      packageName:
+        expoConfig?.android?.package || extra?.androidPackageName || 'com.ellowdigital.dhandiary',
+      installApp: true,
+      minimumVersion: String(expoConfig?.android?.versionCode || '1'),
+    },
+    iOS: {
+      bundleId: expoConfig?.ios?.bundleIdentifier || extra?.iosBundleId || 'com.ellowdigital.dhandiary',
+    },
+  };
+
+  try {
+    await sendPasswordResetEmail(auth, email.trim(), actionCodeSettings);
+  } catch (error: any) {
+    if (error?.code === 'auth/user-not-found') {
+      await sleep(350);
+      return;
+    }
+    throw error;
+  }
 };
 
 export const logoutUser = () => {
@@ -79,7 +116,22 @@ export const logoutUser = () => {
 export const signInWithFirebaseCredential = async (credential: AuthCredential) => {
   const auth = getFirebaseAuth();
   const result = await signInWithCredential(auth, credential);
-  const provider = result.user.providerData[0]?.providerId || 'password';
+  const provider = summarizeProviderIds(result.user.providerData || []);
+  await upsertProfile(result.user.uid, {
+    name: result.user.displayName || '',
+    email: result.user.email || '',
+    provider,
+  });
+  return result.user;
+};
+
+export const linkCurrentUserWithCredential = async (credential: AuthCredential) => {
+  const auth = getFirebaseAuth();
+  const user = auth.currentUser;
+  if (!user) throw new Error('You need to be signed in to link an account.');
+  const result = await linkWithCredential(user, credential);
+  await result.user.reload();
+  const provider = summarizeProviderIds(result.user.providerData || []);
   await upsertProfile(result.user.uid, {
     name: result.user.displayName || '',
     email: result.user.email || '',
