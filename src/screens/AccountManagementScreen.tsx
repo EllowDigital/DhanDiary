@@ -20,8 +20,7 @@ import { Input, Button } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 
 // Logic Imports
-import { updateProfile, changePassword, deleteAccount } from '../services/auth';
-import { saveSession } from '../db/session';
+import { updateProfileDetails, changePassword, deleteAccount } from '../services/firebaseAuth';
 import { retry } from '../utils/retry';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../context/ToastContext';
@@ -162,7 +161,7 @@ const AccountManagementScreen = () => {
     if (!username.trim()) return Alert.alert('Validation', 'Name cannot be empty');
     setSavingUsername(true);
     try {
-      await retry(() => updateProfile({ name: username }), 3, 250);
+      await retry(() => updateProfileDetails({ name: username }), 3, 250);
       showToast('Name updated successfully');
       toggleCard(''); // Close card
     } catch (err: any) {
@@ -175,11 +174,7 @@ const AccountManagementScreen = () => {
   const handleSaveEmail = useCallback(async () => {
     setSavingEmail(true);
     try {
-      // Sync session logic if needed
-      if (user && (user as any).id) {
-        await saveSession((user as any).id, user?.name || '', email || '');
-      }
-      await retry(() => updateProfile({ email }), 3, 250);
+      await retry(() => updateProfileDetails({ email }), 3, 250);
       showToast('Email updated successfully');
       toggleCard('');
     } catch (err: any) {

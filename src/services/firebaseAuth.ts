@@ -5,16 +5,21 @@ import * as Google from 'expo-auth-session/providers/google';
 import * as AuthSession from 'expo-auth-session';
 import {
   AuthCredential,
+  EmailAuthProvider,
   GithubAuthProvider,
   GoogleAuthProvider,
   createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
+  deleteUser,
+  reauthenticateWithCredential,
   signInWithCredential,
+  signInWithEmailAndPassword,
   sendPasswordResetEmail,
   signOut,
+  updateEmail,
+  updatePassword,
   updateProfile,
 } from 'firebase/auth';
-import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { deleteDoc, doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { useEffect } from 'react';
 import { getFirebaseAuth, getFirestoreDb } from '../firebase';
 
@@ -68,6 +73,51 @@ export const signInWithFirebaseCredential = async (credential: AuthCredential) =
     providerId,
   });
   return result.user;
+};
+
+export const updateProfileDetails = async (payload: { name?: string; email?: string }) => {
+  const auth = getFirebaseAuth();
+  const current = auth.currentUser;
+  if (!current) throw new Error('No authenticated user');
+  const updates: { name?: string; email?: string } = {};
+
+  if (payload.name && payload.name !== current.displayName) {
+    await updateProfile(current, { displayName: payload.name });
+    updates.name = payload.name;
+  }
+  if (payload.email && payload.email !== current.email) {
+    await updateEmail(current, payload.email);
+    updates.email = payload.email;
+  }
+
+  if (Object.keys(updates).length) {
+    await upsertProfile(current.uid, {
+      name: updates.name ?? current.displayName ?? '',
+      email: updates.email ?? current.email ?? '',
+    });
+  }
+};
+
+export const changePassword = async (currentPassword: string, newPassword: string) => {
+  const auth = getFirebaseAuth();
+  const user = auth.currentUser;
+  if (!user || !user.email) throw new Error('No authenticated email user');
+  const credential = EmailAuthProvider.credential(user.email, currentPassword);
+  await reauthenticateWithCredential(user, credential);
+  await updatePassword(user, newPassword);
+};
+
+export const deleteAccount = async (currentPassword?: string) => {
+  const auth = getFirebaseAuth();
+  const user = auth.currentUser;
+  if (!user) return;
+  if (currentPassword && user.email) {
+    const credential = EmailAuthProvider.credential(user.email, currentPassword);
+    await reauthenticateWithCredential(user, credential);
+  }
+  const db = getFirestoreDb();
+  await deleteDoc(doc(db, 'users', user.uid));
+  await deleteUser(user);
 };
 
 /* ---------------------------------------------

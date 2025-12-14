@@ -23,6 +23,7 @@ import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useEntries } from '../hooks/useEntries';
+import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../context/ToastContext';
 import runInBackground from '../utils/background';
 import CategoryPickerModal from '../components/CategoryPickerModal';
@@ -64,7 +65,8 @@ const AddEntryScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
 
-  const { addEntry, entries, updateEntry } = useEntries();
+  const { user } = useAuth();
+  const { addEntry, entries, updateEntry } = useEntries(user?.uid);
   const { showToast } = useToast();
   const editingParamId = route?.params?.local_id;
 
@@ -147,6 +149,11 @@ const AddEntryScreen: React.FC = () => {
 
   // --- HANDLERS ---
   const handleSave = () => {
+    if (!user?.uid) {
+      showToast('Please sign in to save entries.');
+      return;
+    }
+
     // Basic Validation
     const parsed = parseFloat(amount.replace(/,/g, ''));
     if (!amount.trim() || isNaN(parsed) || parsed <= 0) {
