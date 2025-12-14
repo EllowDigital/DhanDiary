@@ -130,14 +130,43 @@ export const logoutUser = () => {
 
 export const signInWithFirebaseCredential = async (credential: AuthCredential) => {
   const auth = getFirebaseAuth();
-  const result = await signInWithCredential(auth, credential);
-  const provider = summarizeProviderIds(result.user.providerData || []);
-  await upsertProfile(result.user.uid, {
-    name: result.user.displayName || '',
-    email: result.user.email || '',
-    provider,
-  });
-  return result.user;
+  try {
+    const result = await signInWithCredential(auth, credential);
+    const provider = summarizeProviderIds(result.user.providerData || []);
+    await upsertProfile(result.user.uid, {
+      name: result.user.displayName || '',
+      email: result.user.email || '',
+      provider,
+    });
+    // After social sign-in, consume any pending credential (unlikely but safe)
+    try {
+      await consumePendingCredentialForCurrentUser();
+    } catch (err) {
+      console.warn('Failed to consume pending credential after social sign-in', err);
+    }
+    return result.user;
+  } catch (error: any) {
+    // Handle account exists with different credential
+    if (error?.code === 'auth/account-exists-with-different-credential' ||
+        error?.message?.includes('account-exists-with-different-credential')) {
+      const email = error?.customData?.email || (credential as any)?.email || null;
+      if (email) {
+        const methods = await fetchSignInMethodsForEmail(getFirebaseAuth(), email);
+        // store pending credential so it can be linked after the user signs in with existing provider
+        try {
+          storePendingCredential(email, credential);
+        } catch (err) {
+          console.warn('Failed to store pending credential', err);
+        }
+        const friendly: any = new Error('auth/account-exists-with-different-credential');
+        friendly.code = 'auth/account-exists-with-different-credential';
+        friendly.email = email;
+        friendly.methods = methods || [];
+        throw friendly;
+      }
+    }
+    throw error;
+  }
 };
 
 export const linkCurrentUserWithCredential = async (credential: AuthCredential) => {
