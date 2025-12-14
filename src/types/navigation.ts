@@ -6,7 +6,7 @@ export type RootStackParamList = {
 };
 
 export type AuthStackParamList = {
-  Login: undefined;
+  Login: { prefillEmail?: string } | undefined;
   Register: undefined;
   Terms: undefined;
   PrivacyPolicy: undefined;

@@ -196,7 +196,10 @@ const LoginScreen = () => {
           ]
         );
       } else {
-        Alert.alert('Google Login Failed', getProviderErrorMessage(err, 'Unable to sign in with Google.'));
+        Alert.alert(
+          'Google Login Failed',
+          getProviderErrorMessage(err, 'Unable to sign in with Google.')
+        );
       }
     } finally {
       setSocialLoading(false);

@@ -7,7 +7,8 @@ import { signInWithFirebaseCredential } from './firebaseAuth';
 export const configureGoogleSignIn = () => {
   const extra = (Constants?.expoConfig?.extra || {}) as any;
   const webClientId =
-    extra?.oauth?.googleClientId || process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
+    extra?.oauth?.googleClientId ||
+    process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
     '315200510366-8ek2cvlnsidt7e6bgi16tn0kinvtasgb.apps.googleusercontent.com';
 
   GoogleSignin.configure({
