@@ -194,41 +194,58 @@ export const useGoogleAuth = () => {
     extra?.oauth?.googleClientId ||
     extra?.firebase?.webClientId ||
     process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
-  const googleConfig = clientId
-    ? {
-        clientId,
-        iosClientId: clientId,
-        androidClientId: clientId,
-        webClientId: clientId,
-      }
-    : null;
+  const fallbackClientId = clientId || 'placeholder.apps.googleusercontent.com';
+  const googleConfig: Google.GoogleAuthRequestConfig = {
+    clientId: fallbackClientId,
+    iosClientId: fallbackClientId,
+    androidClientId: fallbackClientId,
+    webClientId: fallbackClientId,
+  };
+  const [, response, promptAsync] = Google.useIdTokenAuthRequest(googleConfig);
+  const googleAvailable = !!clientId;
   const isExpoGo = Constants?.appOwnership === 'expo';
-  const googleAvailable = !!googleConfig && !isExpoGo;
-
-  const [request, response, promptAsync] = Google.useIdTokenAuthRequest(
-    (googleConfig || {}) as Google.GoogleAuthRequestConfig
-  );
+  const intentRef = useRef<'signIn' | 'link' | null>(null);
 
   useEffect(() => {
     if (!googleAvailable) return;
     if (response?.type === 'success' && response.params.id_token) {
       const credential = GoogleAuthProvider.credential(response.params.id_token);
-      signInWithFirebaseCredential(credential).catch((err) => {
-        console.warn('Google sign-in failed', err);
+      const action = intentRef.current === 'link' ? linkCurrentUserWithCredential : signInWithFirebaseCredential;
+      intentRef.current = null;
+      action(credential).catch((err) => {
+        console.warn('Google auth failed', err);
       });
-    }
-    if (response?.type === 'error') {
+    } else if (response?.type === 'error') {
+      intentRef.current = null;
       console.warn('Google auth session error', response.error);
+    } else if (response?.type === 'dismiss') {
+      intentRef.current = null;
     }
   }, [response, googleAvailable]);
 
+  const ensureSupportedEnvironment = () => {
+    if (isExpoGo) {
+      throw new Error('Google sign-in requires an EAS dev client or production build.');
+    }
+  };
+
+  const runPrompt = async (intent: 'signIn' | 'link') => {
+    if (!googleAvailable) {
+      throw new Error('Google sign-in is not configured for this build.');
+    }
+    ensureSupportedEnvironment();
+    intentRef.current = intent;
+    const result = await promptAsync({ useProxy: false, showInRecents: true });
+    if (result.type !== 'success') {
+      intentRef.current = null;
+      throw new Error(intent === 'link' ? 'Google linking cancelled.' : 'Google sign-in cancelled.');
+    }
+  };
+
   return {
     googleAvailable,
-    request,
-    signIn: () =>
-      googleAvailable
-        ? promptAsync({ useProxy: false, showInRecents: true })
-        : Promise.reject(new Error('Google sign-in is disabled in Expo Go or not configured.')),
+    signIn: () => runPrompt('signIn'),
+    linkAccount: () => runPrompt('link'),
   };
 };
 
@@ -253,8 +270,6 @@ type GithubTokenPayload = {
   error_description?: string;
 };
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 const requestGithubDeviceCode = async (clientId: string): Promise<GithubDeviceCodePayload> => {
   const response = await fetch(GITHUB_DEVICE_CODE_URL, {
     method: 'POST',
@@ -277,12 +292,13 @@ const requestGithubDeviceCode = async (clientId: string): Promise<GithubDeviceCo
 const promptGithubVerification = (
   userCode: string,
   verificationUri: string,
-  verificationUriComplete?: string
+  verificationUriComplete: string | undefined,
+  intent: 'signIn' | 'link'
 ) =>
   new Promise<void>((resolve, reject) => {
     Alert.alert(
       'GitHub Verification',
-      `Tap Continue to open GitHub and enter code ${userCode}.`,
+      `Tap Continue to open GitHub and ${intent === 'link' ? 'approve the link' : 'sign in'} with code ${userCode}.`,
       [
         {
           text: 'Cancel',
@@ -371,45 +387,65 @@ const pollGithubAccessToken = async (
 export const useGithubAuth = () => {
   const extra = getExtra();
   const clientId = extra?.oauth?.githubClientId;
+  const githubAvailable = !!clientId;
   const isExpoGo = Constants?.appOwnership === 'expo';
-  const hasGithubConfig = !!clientId && !isExpoGo;
   const abortRef = useRef(false);
+  const intentRef = useRef<'signIn' | 'link' | null>(null);
 
   useEffect(() => {
     abortRef.current = false;
     return () => {
       abortRef.current = true;
+      intentRef.current = null;
     };
   }, []);
 
-  const signIn = async () => {
-    if (!hasGithubConfig || !clientId) {
+  const ensureSupportedEnvironment = () => {
+    if (isExpoGo) {
+      throw new Error('GitHub sign-in requires an EAS dev client or production build.');
+    }
+  };
+
+  const runFlow = async (intent: 'signIn' | 'link') => {
+    if (!githubAvailable || !clientId) {
       throw new Error('GitHub sign-in is not configured for this build.');
     }
+    ensureSupportedEnvironment();
 
     abortRef.current = false;
+    intentRef.current = intent;
 
-    const devicePayload = await requestGithubDeviceCode(clientId);
-    await promptGithubVerification(
-      devicePayload.user_code,
-      devicePayload.verification_uri,
-      devicePayload.verification_uri_complete
-    );
+    try {
+      const devicePayload = await requestGithubDeviceCode(clientId);
+      await promptGithubVerification(
+        devicePayload.user_code,
+        devicePayload.verification_uri,
+        devicePayload.verification_uri_complete,
+        intent
+      );
 
-    const accessToken = await pollGithubAccessToken(
-      clientId,
-      devicePayload.device_code,
-      devicePayload.expires_in,
-      devicePayload.interval,
-      () => abortRef.current
-    );
+      const accessToken = await pollGithubAccessToken(
+        clientId,
+        devicePayload.device_code,
+        devicePayload.expires_in,
+        devicePayload.interval,
+        () => abortRef.current
+      );
 
-    const credential = GithubAuthProvider.credential(accessToken);
-    await signInWithFirebaseCredential(credential);
+      const credential = GithubAuthProvider.credential(accessToken);
+      if (intent === 'link') {
+        await linkCurrentUserWithCredential(credential);
+      } else {
+        await signInWithFirebaseCredential(credential);
+      }
+    } finally {
+      intentRef.current = null;
+    }
   };
 
   return {
-    githubAvailable: hasGithubConfig,
-    signIn,
+    githubAvailable,
+    signIn: () => runFlow('signIn'),
+    linkAccount: () => runFlow('link'),
   };
 };
