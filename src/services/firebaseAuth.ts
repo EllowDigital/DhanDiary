@@ -177,8 +177,10 @@ export const signInWithFirebaseCredential = async (credential: AuthCredential) =
     return result.user;
   } catch (error: any) {
     // Handle account exists with different credential
-    if (error?.code === 'auth/account-exists-with-different-credential' ||
-        error?.message?.includes('account-exists-with-different-credential')) {
+    if (
+      error?.code === 'auth/account-exists-with-different-credential' ||
+      error?.message?.includes('account-exists-with-different-credential')
+    ) {
       const email = error?.customData?.email || (credential as any)?.email || null;
       if (email) {
         const methods = await fetchSignInMethodsForEmail(getFirebaseAuth(), email);
