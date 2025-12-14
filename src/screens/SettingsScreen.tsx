@@ -26,16 +26,6 @@ import ScreenHeader from '../components/ScreenHeader';
 import appConfig from '../../app.json';
 const pkg = require('../../package.json');
 
-// Helper: Format Date
-const formatSyncDate = (isoString: string | null) => {
-  if (!isoString) return 'Never synced';
-  const date = new Date(isoString);
-  const now = new Date();
-  const isToday = date.toDateString() === now.toDateString();
-  const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  return isToday ? `Today at ${timeStr}` : `${date.toLocaleDateString()} at ${timeStr}`;
-};
-
 const SettingsScreen = () => {
   const navigation = useNavigation<any>();
   const query = useQueryClient();
