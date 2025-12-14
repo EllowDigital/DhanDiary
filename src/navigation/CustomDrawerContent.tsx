@@ -17,7 +17,7 @@ import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Logic & Utils
-import { logout } from '../services/auth';
+import { logoutUser } from '../services/firebaseAuth';
 import { colors, spacing, shadows } from '../utils/design';
 import appConfig from '../../app.json';
 const pkg = require('../../package.json');
@@ -91,7 +91,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
         style: 'destructive',
         onPress: async () => {
           try {
-            await logout();
+            await logoutUser();
             props.navigation.closeDrawer();
             props.navigation.reset({
               index: 0,
