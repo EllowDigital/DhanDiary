@@ -152,25 +152,9 @@ const LoginScreen = () => {
     } catch (err) {
       const e: any = err || {};
       if (e.code === 'auth/account-exists-with-different-credential') {
-        const methods = e.methods || [];
-        const email = e.email || '';
-        const providerText = methods.join(', ') || 'another provider';
         Alert.alert(
-          'Account Exists',
-          `An account already exists for ${email} using ${providerText}. Sign in with that provider to link GitHub to your account.`,
-          [
-            {
-              text: 'OK',
-            },
-            ...(methods.includes('password')
-              ? [
-                  {
-                    text: 'Sign in with Email',
-                    onPress: () => navigation.navigate('Login' as any, { prefillEmail: email }),
-                  },
-                ]
-              : []),
-          ]
+          'Account already exists',
+          'You previously signed up using a different method.\n\nPlease sign in using your original method to securely link your accounts.\n\nIf the app was closed, just retry the social sign-in.'
         );
       } else {
         Alert.alert(
