@@ -96,9 +96,6 @@ module.exports = (ctx) => {
       oauth: oauthExtra,
     },
     // Ensure the native Google Sign-In plugin is applied for EAS/dev-client builds
-    plugins: [
-      ...(baseConfig.plugins || []),
-      '@react-native-google-signin/google-signin',
-    ],
+    plugins: [...(baseConfig.plugins || []), '@react-native-google-signin/google-signin'],
   };
 };

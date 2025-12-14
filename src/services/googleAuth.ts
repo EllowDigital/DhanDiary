@@ -4,8 +4,7 @@ import { getFirebaseAuth } from '../firebase';
 
 export const configureGoogleSignIn = () => {
   GoogleSignin.configure({
-    webClientId:
-      '315200510366-8ek2cvlnsidt7e6bgi16tn0kinvtasgb.apps.googleusercontent.com',
+    webClientId: '315200510366-8ek2cvlnsidt7e6bgi16tn0kinvtasgb.apps.googleusercontent.com',
     offlineAccess: false,
   });
 };
