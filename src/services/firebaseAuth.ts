@@ -7,6 +7,7 @@ import {
   GithubAuthProvider,
   createUserWithEmailAndPassword,
   deleteUser,
+  fetchSignInMethodsForEmail,
   linkWithCredential,
   reauthenticateWithCredential,
   signInWithCredential,
@@ -65,12 +66,27 @@ export const registerWithEmail = async (name: string, email: string, password: s
   const creds = await createUserWithEmailAndPassword(auth, email, password);
   await updateProfile(creds.user, { displayName: name });
   await upsertProfile(creds.user.uid, { name, email, provider: 'password' });
+  // After a fresh registration, consume any pending credential for this email
+  try {
+    await consumePendingCredentialForCurrentUser();
+  } catch (err) {
+    // Non-fatal: log and continue
+    console.warn('Failed to consume pending credential after registration', err);
+  }
   return creds.user;
 };
 
 export const loginWithEmail = (email: string, password: string) => {
   const auth = getFirebaseAuth();
-  return signInWithEmailAndPassword(auth, email, password);
+  return signInWithEmailAndPassword(auth, email, password).then(async (creds) => {
+    // After successful email login, attempt to link any pending social credential for this user
+    try {
+      await consumePendingCredentialForCurrentUser();
+    } catch (err) {
+      console.warn('Failed to consume pending credential after email login', err);
+    }
+    return creds;
+  });
 };
 
 export const sendPasswordReset = async (email: string) => {
