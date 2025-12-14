@@ -469,7 +469,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
   },
   segmentBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 8 },
-  segmentBtnActive: { backgroundColor: '#3D5AFE' },
+  segmentBtnActive: { backgroundColor: colors.primary },
   segmentText: { color: '#90A4AE', fontWeight: '600', fontSize: 13 },
   segmentTextActive: { color: '#fff' },
 
