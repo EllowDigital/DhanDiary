@@ -1,81 +1,14 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function isOwner(uid) {
-      return isSignedIn() && request.auth.uid == uid;
-    }
-
-    function allowedUserKeys() {
-      return ['name', 'email', 'provider', 'createdAt', 'updatedAt'];
-    }
-
-    function isValidUserPayload(data) {
-      return data.name is string &&
-        data.email is string &&
-        data.provider is string &&
-        data.createdAt is timestamp &&
-        data.updatedAt is timestamp;
-    }
-
-    function allowedEntryKeys() {
-      return ['amount', 'category', 'note', 'type', 'currency', 'date', 'createdAt', 'updatedAt'];
-    }
-
-    function isNullableString(value, maxLength) {
-      return value == null || (value is string && value.size() <= maxLength);
-    }
-
-    function hasValidEntryScalars(data) {
-      return data.amount is number &&
-        data.category is string &&
-        data.category.size() > 0 &&
-        data.category.size() <= 64 &&
-        data.type in ['in', 'out'] &&
-        data.createdAt is timestamp &&
-        data.updatedAt is timestamp;
-    }
-
-    function isValidEntryPayload(data) {
-      return hasValidEntryScalars(data) &&
-        (!( 'currency' in data) || isNullableString(data.currency, 8)) &&
-        (!( 'note' in data) || isNullableString(data.note, 1024)) &&
-        (!( 'date' in data) || data.date == null || data.date is string || data.date is timestamp);
-    }
-
-    function isValidEntryUpdate() {
-      return request.resource.data.keys().hasOnly(allowedEntryKeys()) &&
-        isValidEntryPayload(request.resource.data) &&
-        request.resource.data.createdAt == resource.data.createdAt;
-    }
 
     match /user/{uid} {
-      allow read: if isOwner(uid);
-
-      allow create: if isOwner(uid) &&
-        request.resource.data.keys().hasOnly(allowedUserKeys()) &&
-        isValidUserPayload(request.resource.data);
-
-      allow update: if isOwner(uid) &&
-        request.resource.data.keys().hasOnly(allowedUserKeys()) &&
-        isValidUserPayload(request.resource.data) &&
-        request.resource.data.createdAt == resource.data.createdAt;
-
-      allow delete: if isOwner(uid);
+      allow read, write: if request.auth != null
+                         && request.auth.uid == uid;
 
       match /cash_entries/{entryId} {
-        allow read: if isOwner(uid);
-
-        allow create: if isOwner(uid) &&
-          request.resource.data.keys().hasOnly(allowedEntryKeys()) &&
-          isValidEntryPayload(request.resource.data);
-
-        allow update: if isOwner(uid) && isValidEntryUpdate();
-
-        allow delete: if isOwner(uid);
+        allow read, write: if request.auth != null
+                           && request.auth.uid == uid;
       }
     }
   }
