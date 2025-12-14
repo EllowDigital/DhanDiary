@@ -36,6 +36,8 @@
     "@rneui/base": "^4.0.0-rc.8",
     "@rneui/themed": "^4.0.0-rc.8",
 
+    "@tanstack/react-query": "^5.62.7",
+
     "expo-auth-session": "~7.0.10",
     "expo-constants": "~18.0.12",
     "expo-font": "~14.0.10",

@@ -78,7 +78,7 @@
             <ul>
               <li>Show ledgers, charts, insights, and reminders inside the DhanDiary apps.</li>
               <li>Authenticate you securely and keep your account in sync across devices.</li>
-              <li>Provide optional backups and restores via NeonDB infrastructure.</li>
+              <li>Provide optional backups and restores via Firebase Cloud Firestore.</li>
               <li>Research bugs or performance bottlenecks (aggregated metrics only).</li>
             </ul>
             <p class="callout">
@@ -88,7 +88,7 @@
           </section>
 
           <section id="cloud-backup" class="section-card" aria-labelledby="backup-title">
-            <h2 id="backup-title">3. Cloud Backup &amp; NeonDB</h2>
+            <h2 id="backup-title">3. Cloud Backup &amp; Firebase</h2>
             <div class="timeline">
               <div class="timeline-item">
                 <strong>Opt-in</strong>
@@ -99,13 +99,16 @@
               </div>
               <div class="timeline-item">
                 <strong>Transit</strong>
-                <p>When enabled, entries travel over HTTPS (TLS 1.2+) to NeonDB-managed storage.</p>
+                <p>
+                  When enabled, entries travel over HTTPS (TLS 1.2+) to Firebase-managed Cloud
+                  Firestore storage.
+                </p>
               </div>
               <div class="timeline-item">
                 <strong>At rest</strong>
                 <p>
-                  NeonDB encrypts storage at rest per their compliance controls. Only authenticated
-                  sessions tied to your account can retrieve data.
+                  Firebase encrypts storage at rest per Google Cloud compliance controls. Only
+                  authenticated sessions tied to your account can retrieve data.
                 </p>
               </div>
             </div>
@@ -135,7 +138,8 @@
             </p>
             <ul>
               <li>
-                <strong>NeonDB</strong> &mdash; encrypted database hosting for backup and sync.
+                <strong>Firebase (Firestore)</strong> &mdash; encrypted database hosting for backup
+                and sync.
               </li>
               <li>
                 <strong>Authentication providers</strong> (if you choose social login) &mdash;
@@ -159,7 +163,7 @@
               </article>
               <article>
                 <strong>Deletion</strong>
-                <p>Clear local data in settings or email us to remove backups from NeonDB.</p>
+                <p>Clear local data in settings or email us to remove backups from Firebase.</p>
               </article>
               <article>
                 <strong>Preference management</strong>
@@ -176,8 +180,8 @@
             <p>
               Local data lives on your device until you delete the app or clear storage. Cloud
               backups stay active while your account remains in good standing or until a deletion
-              request is completed. NeonDB currently provisions infrastructure in regions compliant
-              with applicable Indian and global privacy regulations.
+              request is completed. Firebase currently provisions infrastructure in Google Cloud
+              regions compliant with applicable Indian and global privacy regulations.
             </p>
           </section>
 

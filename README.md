@@ -18,7 +18,7 @@ Manage your daily finances effortlessly with a beautiful dashboard, history trac
 - 🧾 **Smart Tracking:** Track income & expenses with notes.
 - 📊 **Analytics:** Clean analytics & spending overview.
 - 💾 **Offline-First:** Works offline with auto-sync when online.
-- 🔐 **Secure:** Encrypted cloud backup via NeonDB.
+- 🔐 **Secure:** Firebase Auth sign-in with Firestore-backed encryption and rules.
 - 📚 **History:** Full transaction history log.
 - ⚡ **Performance:** Lightweight, smooth & beginner-friendly UI.
 
@@ -27,8 +27,8 @@ Manage your daily finances effortlessly with a beautiful dashboard, history trac
 ## 🛠️ Tech Stack
 
 - **Framework:** React Native (Expo)
-- **Routing:** Expo Router
-- **Database:** NeonDB (Cloud Backup)
+- **Routing:** React Navigation
+- **Cloud:** Firebase Auth + Cloud Firestore
 - **Local Storage:** Async Storage
 - **Language:** TypeScript / JavaScript
 

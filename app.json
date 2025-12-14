@@ -31,7 +31,6 @@
     },
     "plugins": [
       "expo-updates",
-      "expo-sqlite",
       "expo-font",
       [
         "expo-build-properties",
