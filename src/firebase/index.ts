@@ -10,34 +10,49 @@ type PersistenceValue = Record<string, unknown> | string;
 const RN_STORAGE_PROBE_KEY = '__sak';
 
 const createReactNativePersistence = (storage: typeof AsyncStorage) => {
-  return {
-    type: 'LOCAL' as const,
+  class ReactNativePersistence {
+    type: 'LOCAL';
+
+    constructor() {
+      this.type = 'LOCAL';
+    }
+
     async _isAvailable() {
       try {
+        if (!storage) return false;
         await storage.setItem(RN_STORAGE_PROBE_KEY, '1');
         await storage.removeItem(RN_STORAGE_PROBE_KEY);
         return true;
       } catch {
         return false;
       }
-    },
+    }
+
     async _set(key: string, value: PersistenceValue) {
       await storage.setItem(key, JSON.stringify(value));
-    },
+    }
+
     async _get<T extends PersistenceValue>(key: string) {
       const json = await storage.getItem(key);
       return json ? (JSON.parse(json) as T) : null;
-    },
+    }
+
     async _remove(key: string) {
       await storage.removeItem(key);
-    },
+    }
+
     _addListener() {
       // React Native storage does not support storage event listeners.
-    },
+      return;
+    }
+
     _removeListener() {
-      // React Native storage does not support storage event listeners.
-    },
-  } as any;
+      return;
+    }
+  }
+
+  (ReactNativePersistence as any).type = 'LOCAL';
+  return ReactNativePersistence as any;
 };
 
 const getFirebaseExtra = () => {
