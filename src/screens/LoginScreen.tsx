@@ -25,11 +25,7 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { AuthStackParamList } from '../types/navigation';
 import { useToast } from '../context/ToastContext';
 import { useInternetStatus } from '../hooks/useInternetStatus';
-import {
-  loginWithEmail,
-  sendPasswordReset,
-  useGithubAuth,
-} from '../services/firebaseAuth';
+import { loginWithEmail, sendPasswordReset, useGithubAuth } from '../services/firebaseAuth';
 
 // Components & Utils
 import { colors } from '../utils/design';
