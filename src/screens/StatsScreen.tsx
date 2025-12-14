@@ -9,6 +9,7 @@ import {
   Pressable,
   StatusBar,
   useWindowDimensions,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
@@ -17,11 +18,13 @@ import { useAuth } from '../hooks/useAuth';
 import dayjs from 'dayjs';
 import { getStartDateForFilter, getDaysCountForFilter } from '../utils/stats';
 import { PieChart } from 'react-native-chart-kit';
-import { colors, spacing } from '../utils/design';
+import { colors } from '../utils/design';
 import { ensureCategory } from '../constants/categories';
 import ScreenHeader from '../components/ScreenHeader';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import DailyTrendChart from '../components/charts/DailyTrendChart';
+import { LocalEntry } from '../types/entries';
+import { exportEntriesAsCsv, exportEntriesAsPdf } from '../utils/reportExporter';
 
 // --- COLOR UTILS ---
 const hexToRgb = (hex: string) => {
@@ -62,13 +65,15 @@ interface TrendDataPoint {
 const StatsScreen = () => {
   const { width, height } = useWindowDimensions();
   const { user, loading: authLoading } = useAuth();
-  const { entries = [], isLoading } = useEntries(user?.uid);
+  const { entries: entriesRaw = [], isLoading } = useEntries(user?.uid);
+  const entries = entriesRaw as LocalEntry[];
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
 
   const [filter, setFilter] = useState('7D');
+  const [exporting, setExporting] = useState<'pdf' | 'excel' | null>(null);
 
   // --- DATA LOADING ---
   useEffect(() => {
@@ -87,18 +92,35 @@ const StatsScreen = () => {
   const innerSize = Math.round(donutSize * 0.6);
 
   // --- STATS LOGIC ---
-  const filteredEntries = useMemo(() => {
+  const filteredEntries = useMemo<LocalEntry[]>(() => {
     const startDate = getStartDateForFilter(filter);
-    return entries.filter((e: any) => {
-      const d = dayjs(e.date || e.created_at);
+    return entries.filter((entry) => {
+      const d = dayjs(entry.date || entry.created_at);
       return !d.isBefore(startDate);
     });
   }, [entries, filter]);
 
+  const rangeDescription = useMemo(() => {
+    const startDate = getStartDateForFilter(filter);
+    const endDate = dayjs();
+    return `${startDate.format('DD MMM')} - ${endDate.format('DD MMM YYYY')}`;
+  }, [filter]);
+
+  const currencySymbol = useMemo(() => {
+    const symbolMap: Record<string, string> = {
+      INR: '₹',
+      USD: '$',
+      EUR: '€',
+      GBP: '£',
+    };
+    const currency = filteredEntries[0]?.currency || 'INR';
+    return symbolMap[currency] || symbolMap.INR;
+  }, [filteredEntries]);
+
   // Totals
   const stats = useMemo(() => {
     return filteredEntries.reduce(
-      (acc: { totalIn: number; totalOut: number; net: number }, entry: any) => {
+      (acc: { totalIn: number; totalOut: number; net: number }, entry: LocalEntry) => {
         const amount = Number(entry.amount) || 0;
         if (entry.type === 'in') acc.totalIn += amount;
         else acc.totalOut += amount;
@@ -114,15 +136,15 @@ const StatsScreen = () => {
 
   const maxExpense = useMemo(() => {
     const expenses = filteredEntries
-      .filter((e: any) => e.type === 'out')
-      .map((e: any) => Number(e.amount));
+      .filter((entry) => entry.type === 'out')
+      .map((entry) => Number(entry.amount));
     return expenses.length ? Math.max(...expenses) : 0;
   }, [filteredEntries]);
 
   const maxIncome = useMemo(() => {
     const incomes = filteredEntries
-      .filter((e: any) => e.type === 'in')
-      .map((e: any) => Number(e.amount));
+      .filter((entry) => entry.type === 'in')
+      .map((entry) => Number(entry.amount));
     return incomes.length ? Math.max(...incomes) : 0;
   }, [filteredEntries]);
 
@@ -143,11 +165,11 @@ const StatsScreen = () => {
       indexByKey.set(key, i);
     }
 
-    filteredEntries.forEach((e: any) => {
-      if (e.type === 'out') {
-        const key = dayjs(e.date).format('YYYY-MM-DD');
+    filteredEntries.forEach((entry) => {
+      if (entry.type === 'out') {
+        const key = dayjs(entry.date || entry.created_at).format('YYYY-MM-DD');
         const idx = indexByKey.get(key);
-        if (idx !== undefined) values[idx] += Number(e.amount);
+        if (idx !== undefined) values[idx] += Number(entry.amount);
       }
     });
 
@@ -158,10 +180,10 @@ const StatsScreen = () => {
   const pieData = useMemo<PieDataPoint[]>(() => {
     // Added Record<string, number> to handle the accumulator index type error
     const cats = filteredEntries
-      .filter((e: any) => e.type === 'out')
-      .reduce<Record<string, number>>((acc, e: any) => {
-        const c = ensureCategory(e.category);
-        acc[c] = (acc[c] || 0) + Number(e.amount);
+      .filter((entry) => entry.type === 'out')
+      .reduce<Record<string, number>>((acc, entry) => {
+        const c = ensureCategory(entry.category);
+        acc[c] = (acc[c] || 0) + Number(entry.amount);
         return acc;
       }, {});
 
@@ -191,6 +213,45 @@ const StatsScreen = () => {
     if (f !== filter) {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setFilter(f);
+    }
+  };
+
+  const handleExport = async (format: 'pdf' | 'excel') => {
+    if (!filteredEntries.length) {
+      Alert.alert('No data to export', 'Add at least one entry before exporting a report.');
+      return;
+    }
+
+    const summary = {
+      totalIn: stats.totalIn,
+      totalOut: stats.totalOut,
+      net: stats.net,
+      currencySymbol,
+      filterLabel: filter,
+    };
+    const metadata = {
+      title: 'DhanDiary Analytics',
+      rangeLabel: rangeDescription,
+      generatedAt: dayjs().format('DD MMM YYYY, HH:mm'),
+    };
+
+    try {
+      setExporting(format);
+      if (format === 'pdf') {
+        await exportEntriesAsPdf(filteredEntries, summary, metadata);
+      } else {
+        await exportEntriesAsCsv(filteredEntries, metadata);
+      }
+      Alert.alert(
+        'Report ready',
+        format === 'pdf'
+          ? 'PDF report shared successfully.'
+          : 'Excel-compatible report shared successfully.'
+      );
+    } catch (error: any) {
+      Alert.alert('Export failed', error?.message || 'Unable to share report. Please try again.');
+    } finally {
+      setExporting(null);
     }
   };
 
@@ -245,7 +306,50 @@ const StatsScreen = () => {
             })}
           </View>
 
-          {/* 2. NET BALANCE CARD */}
+          {/* 2. REPORT EXPORTS */}
+          <View style={styles.card}>
+            <View style={styles.rowBetween}>
+              <View>
+                <Text style={styles.cardTitle}>Reports</Text>
+                <Text style={styles.cardSubtitle}>Share your data as PDF or Excel</Text>
+              </View>
+              {exporting ? <ActivityIndicator size="small" color={colors.primary} /> : null}
+            </View>
+
+            <View style={styles.reportActions}>
+              <Pressable
+                style={[
+                  styles.reportButton,
+                  styles.reportButtonPrimary,
+                  exporting && styles.reportButtonDisabled,
+                ]}
+                onPress={() => handleExport('pdf')}
+                disabled={!!exporting}
+              >
+                <MaterialIcon name="picture-as-pdf" size={18} color="#fff" />
+                <Text style={[styles.reportButtonText, styles.reportButtonTextPrimary]}>
+                  PDF Report
+                </Text>
+              </Pressable>
+
+              <Pressable
+                style={[
+                  styles.reportButton,
+                  styles.reportButtonSecondary,
+                  exporting && styles.reportButtonDisabled,
+                ]}
+                onPress={() => handleExport('excel')}
+                disabled={!!exporting}
+              >
+                <MaterialIcon name="table-view" size={18} color={colors.primary} />
+                <Text style={[styles.reportButtonText, styles.reportButtonTextSecondary]}>
+                  Excel Report
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+
+          {/* 3. NET BALANCE CARD */}
           <View style={styles.card}>
             <View style={styles.rowBetween}>
               <Text style={styles.labelMuted}>NET BALANCE</Text>
@@ -285,7 +389,7 @@ const StatsScreen = () => {
             </View>
           </View>
 
-          {/* 3. RESPONSIVE GRID */}
+          {/* 4. RESPONSIVE GRID */}
           <View style={styles.gridContainer}>
             <View style={[styles.gridCard, isSmallPhone && styles.gridCardFull]}>
               <View style={[styles.iconBox, { backgroundColor: '#E3F2FD' }]}>
@@ -328,12 +432,12 @@ const StatsScreen = () => {
             </View>
           </View>
 
-          {/* 4. TREND CHART */}
+          {/* 5. TREND CHART */}
           <View style={styles.card}>
             <View style={styles.rowBetween}>
               <View>
                 <Text style={styles.cardTitle}>Daily Trend</Text>
-                <Text style={styles.cardSubtitle}>7 Dec - 13 Dec 2025</Text>
+                <Text style={styles.cardSubtitle}>{rangeDescription}</Text>
               </View>
               <MaterialIcon name="bar-chart" size={24} color="#90A4AE" />
             </View>
@@ -367,7 +471,7 @@ const StatsScreen = () => {
             </ScrollView>
           </View>
 
-          {/* 5. DONUT */}
+          {/* 6. DONUT */}
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Expense Breakdown</Text>
             {pieData.length > 0 ? (
@@ -507,6 +611,29 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 18, fontWeight: '700', color: '#263238' },
   cardSubtitle: { fontSize: 12, color: '#90A4AE', marginTop: 2 },
   chartStatValue: { fontSize: 16, fontWeight: '700', color: '#263238' },
+  reportActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 16,
+    flexWrap: 'wrap',
+  },
+  reportButton: {
+    flex: 1,
+    minWidth: '45%',
+    borderRadius: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  reportButtonPrimary: { backgroundColor: colors.primary },
+  reportButtonSecondary: { backgroundColor: '#E8F0FF' },
+  reportButtonText: { fontSize: 14, fontWeight: '700' },
+  reportButtonTextPrimary: { color: '#fff' },
+  reportButtonTextSecondary: { color: colors.primary },
+  reportButtonDisabled: { opacity: 0.5 },
 
   // --- SMART GRID ---
   gridContainer: {
