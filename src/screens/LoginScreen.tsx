@@ -26,6 +26,7 @@ import { AuthStackParamList } from '../types/navigation';
 import { useToast } from '../context/ToastContext';
 import { useInternetStatus } from '../hooks/useInternetStatus';
 import { loginWithEmail, sendPasswordReset, useGithubAuth } from '../services/firebaseAuth';
+import { signInWithGoogle } from '../services/googleAuth';
 
 // Components & Utils
 import { colors } from '../utils/design';
@@ -66,6 +67,7 @@ const LoginScreen = () => {
   const [socialLoading, setSocialLoading] = useState(false);
 
   const { githubAvailable, signIn: startGithubSignIn } = useGithubAuth();
+  const googleAvailable = true; // Google config is present if configured at app startup
 
   // --- ANIMATION ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -161,6 +163,40 @@ const LoginScreen = () => {
           'GitHub Login Failed',
           getProviderErrorMessage(err, 'Unable to connect to GitHub right now.')
         );
+      }
+    } finally {
+      setSocialLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setSocialLoading(true);
+    try {
+      await signInWithGoogle();
+    } catch (err) {
+      const e: any = err || {};
+      if (e.code === 'auth/account-exists-with-different-credential') {
+        // Friendly message guiding user to sign in with original provider
+        const prefill = e.email || undefined;
+        Alert.alert(
+          'Account already exists',
+          'An account with this email already exists using a different sign-in method.\n\nPlease sign in using the original method to securely link your accounts.',
+          [
+            {
+              text: 'Go to Sign In',
+              onPress: () => {
+                try {
+                  navigation.navigate('Login', { prefillEmail: prefill });
+                } catch (err) {
+                  // ignore
+                }
+              },
+            },
+            { text: 'Cancel', style: 'cancel' },
+          ]
+        );
+      } else {
+        Alert.alert('Google Login Failed', getProviderErrorMessage(err, 'Unable to sign in with Google.'));
       }
     } finally {
       setSocialLoading(false);
@@ -292,6 +328,25 @@ const LoginScreen = () => {
 
                   <View style={styles.socialButtonsRow}>
                     {/* Google login removed */}
+                    {googleAvailable && (
+                      <Button
+                        type="outline"
+                        icon={
+                          <FontAwesome
+                            name="google"
+                            size={18}
+                            color={colors.primary}
+                            style={{ marginRight: 8 }}
+                          />
+                        }
+                        title="Google"
+                        onPress={handleGoogleLogin}
+                        disabled={socialLoading}
+                        buttonStyle={styles.socialButton}
+                        titleStyle={styles.socialButtonText}
+                        containerStyle={styles.socialButtonContainer}
+                      />
+                    )}
                     {githubAvailable && (
                       <Button
                         type="outline"
