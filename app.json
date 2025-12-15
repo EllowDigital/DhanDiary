@@ -18,10 +18,12 @@
     },
     "ios": {
       "supportsTablet": true,
-      "buildNumber": "184"
+      "buildNumber": "184",
+      "googleServicesFile": "./GoogleService-Info.plist"
     },
     "android": {
       "package": "com.ellowdigital.dhandiary",
+      "googleServicesFile": "./google-services.json",
       "versionCode": 184,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -46,7 +48,8 @@
             "minSdkVersion": 24
           }
         }
-      ]
+      ],
+      "@react-native-google-signin/google-signin"
     ],
     "updates": {
       "enabled": true,
