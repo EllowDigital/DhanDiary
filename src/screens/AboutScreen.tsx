@@ -197,7 +197,14 @@ const AboutScreen: React.FC = () => {
           <View style={styles.heroCard}>
             <View style={styles.heroContent}>
               <Image
-                source={require('../../assets/splash-icon.png')}
+                source={(() => {
+                  try {
+                    const req: any = typeof globalThis !== 'undefined' && typeof (globalThis as any).require === 'function' ? (globalThis as any).require : typeof require === 'function' ? require : null;
+                    return req ? req('../../assets/splash-icon.png') : undefined;
+                  } catch (e) {
+                    return undefined;
+                  }
+                })()}
                 style={styles.heroIcon}
                 resizeMode="contain"
               />

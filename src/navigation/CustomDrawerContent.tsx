@@ -29,7 +29,13 @@ try {
 }
 
 // Assets
-const brandIcon = require('../../assets/splash-icon.png');
+let brandIcon: any = undefined;
+try {
+  const req: any = typeof globalThis !== 'undefined' && typeof (globalThis as any).require === 'function' ? (globalThis as any).require : typeof require === 'function' ? require : null;
+  if (req) brandIcon = req('../../assets/splash-icon.png');
+} catch (e) {
+  brandIcon = undefined;
+}
 
 const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   const insets = useSafeAreaInsets();
