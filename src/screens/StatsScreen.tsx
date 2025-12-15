@@ -16,7 +16,6 @@ import { Text } from '@rneui/themed';
 import { useEntries } from '../hooks/useEntries';
 import { useAuth } from '../hooks/useAuth';
 import dayjs from 'dayjs';
-import { PieChart } from 'react-native-chart-kit';
 import { colors } from '../utils/design';
 import { ensureCategory } from '../constants/categories';
 import ScreenHeader from '../components/ScreenHeader';
@@ -88,6 +87,7 @@ const StatsScreen = () => {
   const slideAnim = useRef(new Animated.Value(20)).current;
 
   const [filter, setFilter] = useState('7D');
+  const [PieChartComp, setPieChartComp] = useState<any>(null);
   const [activeMonthKey, setActiveMonthKey] = useState<string | null>(null);
   const [activeYear, setActiveYear] = useState<number | null>(null);
 
@@ -97,6 +97,21 @@ const StatsScreen = () => {
       Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
       Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, damping: 20 }),
     ]).start();
+
+    // Lazy-load chart-kit only when Stats screen mounts
+    let mounted = true;
+    (async () => {
+      try {
+        const mod = await import('react-native-chart-kit');
+        if (mounted) setPieChartComp(() => mod.PieChart);
+      } catch (e) {
+        // if module not available, keep null — other code has fallbacks
+        console.warn('Failed to load react-native-chart-kit dynamically', e);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   // --- RESPONSIVE LAYOUT CALCS ---
@@ -706,18 +721,21 @@ const StatsScreen = () => {
             {pieData.length > 0 ? (
               <View style={{ alignItems: 'center', marginTop: 20 }}>
                 <View style={{ width: donutSize, height: donutSize }}>
-                  <PieChart
-                    data={pieData}
-                    width={donutSize}
-                    height={donutSize}
-                    chartConfig={chartConfig}
-                    accessor="population"
-                    backgroundColor="transparent"
-                    // FIX: paddingLeft requires string
-                    paddingLeft={String(donutSize / 4)}
-                    hasLegend={false}
-                    absolute={false}
-                  />
+                  {PieChartComp ? (
+                    <PieChartComp
+                      data={pieData}
+                      width={donutSize}
+                      height={donutSize}
+                      chartConfig={chartConfig}
+                      accessor="population"
+                      backgroundColor="transparent"
+                      paddingLeft={String(donutSize / 4)}
+                      hasLegend={false}
+                      absolute={false}
+                    />
+                  ) : (
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  )}
                   <View
                     style={[
                       styles.donutHole,

@@ -1,7 +1,4 @@
-import * as Print from 'expo-print';
 import dayjs from 'dayjs';
-import * as FileSystem from 'expo-file-system/legacy';
-import * as Sharing from 'expo-sharing';
 
 type Entry = any;
 
@@ -132,9 +129,12 @@ export async function buildPdfFile(entries: Entry[], options: { title?: string; 
     </body>
   </html>`;
 
-  const { uri } = await Print.printToFileAsync({ html });
-  const dest = FileSystem.cacheDirectory + `${title.replace(/[^a-z0-9]/gi, '_')}_${Date.now()}.pdf`;
-  await FileSystem.copyAsync({ from: uri, to: dest });
+  // Lazy-import native modules to avoid adding them to the startup bundle
+  const Print = await import('expo-print');
+  const FileSystem = await import('expo-file-system/legacy');
+  const { uri } = await (Print as any).printToFileAsync({ html });
+  const dest = (FileSystem as any).cacheDirectory + `${title.replace(/[^a-z0-9]/gi, '_')}_${Date.now()}.pdf`;
+  await (FileSystem as any).copyAsync({ from: uri, to: dest });
   return dest;
 }
 
@@ -143,14 +143,16 @@ export async function exportToFile(format: 'csv' | 'json' | 'pdf', entries: Entr
   if (format === 'csv') {
     const fields = opts.fields ?? Object.keys(entries[0] || {});
     const csv = buildCSV(entries, fields);
-    const path = FileSystem.cacheDirectory + `${(opts.title || 'export').replace(/[^a-z0-9]/gi, '_')}_${Date.now()}.csv`;
-    await FileSystem.writeAsStringAsync(path, csv, { encoding: FileSystem.EncodingType.UTF8 });
+    const FS = await import('expo-file-system/legacy');
+    const path = (FS as any).cacheDirectory + `${(opts.title || 'export').replace(/[^a-z0-9]/gi, '_')}_${Date.now()}.csv`;
+    await (FS as any).writeAsStringAsync(path, csv, { encoding: (FS as any).EncodingType.UTF8 });
     return path;
   }
   if (format === 'json') {
     const json = buildJSON(entries, !!opts.pretty);
-    const path = FileSystem.cacheDirectory + `${(opts.title || 'export').replace(/[^a-z0-9]/gi, '_')}_${Date.now()}.json`;
-    await FileSystem.writeAsStringAsync(path, json, { encoding: FileSystem.EncodingType.UTF8 });
+    const FS = await import('expo-file-system/legacy');
+    const path = (FS as any).cacheDirectory + `${(opts.title || 'export').replace(/[^a-z0-9]/gi, '_')}_${Date.now()}.json`;
+    await (FS as any).writeAsStringAsync(path, json, { encoding: (FS as any).EncodingType.UTF8 });
     return path;
   }
   if (format === 'pdf') {
@@ -160,7 +162,8 @@ export async function exportToFile(format: 'csv' | 'json' | 'pdf', entries: Entr
 }
 
 export async function shareFile(path: string) {
-  if (!(await Sharing.isAvailableAsync())) throw new Error('Sharing not available');
-  return Sharing.shareAsync(path);
+  const Sharing = await import('expo-sharing');
+  if (!(await (Sharing as any).isAvailableAsync())) throw new Error('Sharing not available');
+  return (Sharing as any).shareAsync(path);
 }
 
