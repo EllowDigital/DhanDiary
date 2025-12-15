@@ -36,6 +36,8 @@ const getBrandIcon = () => {
     return undefined;
   }
 };
+// Resolve brand icon once (guarded) to avoid top-level require errors
+const brandIcon = getBrandIcon();
 
 const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   const insets = useSafeAreaInsets();
