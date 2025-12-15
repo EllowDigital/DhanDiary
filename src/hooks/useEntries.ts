@@ -88,11 +88,10 @@ export const useEntries = (userId?: string | null) => {
             refreshAttemptsRef.current += 1;
             lastRefreshRef.current = now;
             try {
-              const auth = getFirebaseAuth();
-              if (auth.currentUser) {
-                await auth.currentUser.getIdToken(true);
-                return await fetchEntries(userId);
-              }
+              // Use centralized debounced token refresher to avoid parallel refresh storms
+              const { ensureFreshIdToken } = await import('../services/authTokenManager');
+              await ensureFreshIdToken();
+              return await fetchEntries(userId);
             } catch (refreshErr: any) {
               console.warn('Failed to refresh id token after fetchEntries error', refreshErr);
               // If auth quota exceeded, avoid further aggressive retries
@@ -154,15 +153,17 @@ export const useEntries = (userId?: string | null) => {
               if (refreshAttemptsRef.current < 2 && now - (lastRefreshRef.current || 0) > 60_000) {
                 refreshAttemptsRef.current += 1;
                 lastRefreshRef.current = now;
-                const auth = getFirebaseAuth();
-                if (auth.currentUser) {
-                  await auth.currentUser.getIdToken(true);
+                try {
+                  const { ensureFreshIdToken } = await import('../services/authTokenManager');
+                  await ensureFreshIdToken();
                   // restart listener after a short delay to avoid tight error loop
                   try {
                     unsub();
                   } catch {}
                   setTimeout(() => startListener(), 500);
                   return;
+                } catch (refreshErr) {
+                  console.warn('Failed to refresh id token after listener error', refreshErr);
                 }
               }
             } catch (refreshErr: any) {
