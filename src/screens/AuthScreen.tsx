@@ -49,7 +49,12 @@ const AuthScreen: React.FC = () => {
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true, easing: Easing.out(Easing.quad) }),
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.quad),
+      }),
       Animated.spring(scaleAnim, { toValue: 1, friction: 7, useNativeDriver: true }),
     ]).start();
   }, []);
@@ -57,7 +62,8 @@ const AuthScreen: React.FC = () => {
   const handleLogin = async () => {
     if (loading) return;
     Keyboard.dismiss();
-    if (!email || !password) return Alert.alert('Missing Fields', 'Please enter both email and password.');
+    if (!email || !password)
+      return Alert.alert('Missing Fields', 'Please enter both email and password.');
     if (!isOnline) return Alert.alert('Offline', 'An internet connection is required to sign in.');
     setLoading(true);
     try {
@@ -83,8 +89,10 @@ const AuthScreen: React.FC = () => {
     Keyboard.dismiss();
     if (!name.trim()) return Alert.alert('Missing Name', 'Please enter your full name.');
     if (!email.trim()) return Alert.alert('Missing Email', 'Please enter your email.');
-    if (password.length < 8) return Alert.alert('Weak Password', 'Password must be at least 8 characters.');
-    if (!isOnline) return Alert.alert('Offline', 'Internet connection required to create an account.');
+    if (password.length < 8)
+      return Alert.alert('Weak Password', 'Password must be at least 8 characters.');
+    if (!isOnline)
+      return Alert.alert('Offline', 'Internet connection required to create an account.');
     setLoading(true);
     try {
       await registerWithEmail(name.trim(), email.trim(), password);
@@ -102,7 +110,8 @@ const AuthScreen: React.FC = () => {
   };
 
   const handleForgotPassword = async () => {
-    if (!email) return Alert.alert('Enter Email', 'Add your account email so we can send reset steps.');
+    if (!email)
+      return Alert.alert('Enter Email', 'Add your account email so we can send reset steps.');
     setLoading(true);
     try {
       await sendPasswordReset(email);
@@ -144,18 +153,60 @@ const AuthScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }} keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-          <ScreenHeader title="Welcome" subtitle={mode === 'login' ? 'Sign in to continue' : 'Create your account'} />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          <ScreenHeader
+            title="Welcome"
+            subtitle={mode === 'login' ? 'Sign in to continue' : 'Create your account'}
+          />
 
-          <Animated.View style={[styles.card, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
+          <Animated.View
+            style={[styles.card, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}
+          >
             {mode === 'register' && (
-              <AuthField icon="person-outline" placeholder="Full name" value={name} onChangeText={setName} containerStyle={styles.fieldSpacing} />
+              <AuthField
+                icon="person-outline"
+                placeholder="Full name"
+                value={name}
+                onChangeText={setName}
+                containerStyle={styles.fieldSpacing}
+              />
             )}
 
-            <AuthField icon="mail-outline" placeholder="Email Address" keyboardType="email-address" autoCapitalize="none" autoComplete="email" value={email} onChangeText={setEmail} containerStyle={styles.fieldSpacing} />
+            <AuthField
+              icon="mail-outline"
+              placeholder="Email Address"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoComplete="email"
+              value={email}
+              onChangeText={setEmail}
+              containerStyle={styles.fieldSpacing}
+            />
 
-            <AuthField icon="lock-outline" placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry={!showPass} rightAccessory={<TouchableOpacity onPress={() => setShowPass(!showPass)} style={styles.eyeIcon}><MaterialIcon name={showPass ? 'visibility' : 'visibility-off'} color={colors.muted || '#999'} size={22} /></TouchableOpacity>} />
+            <AuthField
+              icon="lock-outline"
+              placeholder="Password"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!showPass}
+              rightAccessory={
+                <TouchableOpacity onPress={() => setShowPass(!showPass)} style={styles.eyeIcon}>
+                  <MaterialIcon
+                    name={showPass ? 'visibility' : 'visibility-off'}
+                    color={colors.muted || '#999'}
+                    size={22}
+                  />
+                </TouchableOpacity>
+              }
+            />
 
             {mode === 'login' && (
               <TouchableOpacity style={styles.forgotPassContainer} onPress={handleForgotPassword}>
@@ -164,33 +215,108 @@ const AuthScreen: React.FC = () => {
             )}
 
             <View style={{ marginTop: 12 }}>
-              <Button title={mode === 'login' ? (loading ? 'Verifying...' : 'Sign In') : (loading ? 'Creating...' : 'Create Account')} onPress={mode === 'login' ? handleLogin : handleRegister} loading={loading} disabled={loading || socialLoading} buttonStyle={styles.primaryButton} containerStyle={styles.buttonContainer} titleStyle={styles.buttonText} icon={!loading ? <MaterialIcon name={mode === 'login' ? 'login' : 'person-add'} size={20} color="white" style={{ marginRight: 8 }} /> : undefined} />
+              <Button
+                title={
+                  mode === 'login'
+                    ? loading
+                      ? 'Verifying...'
+                      : 'Sign In'
+                    : loading
+                      ? 'Creating...'
+                      : 'Create Account'
+                }
+                onPress={mode === 'login' ? handleLogin : handleRegister}
+                loading={loading}
+                disabled={loading || socialLoading}
+                buttonStyle={styles.primaryButton}
+                containerStyle={styles.buttonContainer}
+                titleStyle={styles.buttonText}
+                icon={
+                  !loading ? (
+                    <MaterialIcon
+                      name={mode === 'login' ? 'login' : 'person-add'}
+                      size={20}
+                      color="white"
+                      style={{ marginRight: 8 }}
+                    />
+                  ) : undefined
+                }
+              />
             </View>
 
             {(showGithub || showGoogle) && (
               <View style={styles.socialWrapper}>
-                <View style={styles.socialDivider}><View style={styles.socialLine} /><Text style={styles.socialText}>or continue with</Text><View style={styles.socialLine} /></View>
+                <View style={styles.socialDivider}>
+                  <View style={styles.socialLine} />
+                  <Text style={styles.socialText}>or continue with</Text>
+                  <View style={styles.socialLine} />
+                </View>
                 <View style={styles.socialButtonsRow}>
                   {showGoogle && (
-                    <Button type="outline" icon={<FontAwesome name="google" size={18} color={colors.primary} style={{ marginRight: 8 }} />} title="Google" onPress={handleGoogle} disabled={socialLoading} buttonStyle={styles.socialButton} titleStyle={styles.socialButtonText} containerStyle={styles.socialButtonContainer} />
+                    <Button
+                      type="outline"
+                      icon={
+                        <FontAwesome
+                          name="google"
+                          size={18}
+                          color={colors.primary}
+                          style={{ marginRight: 8 }}
+                        />
+                      }
+                      title="Google"
+                      onPress={handleGoogle}
+                      disabled={socialLoading}
+                      buttonStyle={styles.socialButton}
+                      titleStyle={styles.socialButtonText}
+                      containerStyle={styles.socialButtonContainer}
+                    />
                   )}
                   {showGithub && (
-                    <Button type="outline" icon={<FontAwesome name="github" size={18} color={colors.primary} style={{ marginRight: 8 }} />} title="GitHub" onPress={handleGithub} disabled={socialLoading} buttonStyle={styles.socialButton} titleStyle={styles.socialButtonText} containerStyle={styles.socialButtonContainer} />
+                    <Button
+                      type="outline"
+                      icon={
+                        <FontAwesome
+                          name="github"
+                          size={18}
+                          color={colors.primary}
+                          style={{ marginRight: 8 }}
+                        />
+                      }
+                      title="GitHub"
+                      onPress={handleGithub}
+                      disabled={socialLoading}
+                      buttonStyle={styles.socialButton}
+                      titleStyle={styles.socialButtonText}
+                      containerStyle={styles.socialButtonContainer}
+                    />
                   )}
                 </View>
               </View>
             )}
 
             <View style={styles.footerRow}>
-              <Text style={styles.footerText}>{mode === 'login' ? "New here?" : 'Already have an account?'}</Text>
+              <Text style={styles.footerText}>
+                {mode === 'login' ? 'New here?' : 'Already have an account?'}
+              </Text>
               <TouchableOpacity onPress={() => setMode(mode === 'login' ? 'register' : 'login')}>
-                <Text style={styles.linkText}>{mode === 'login' ? 'Create Account' : 'Sign In'}</Text>
+                <Text style={styles.linkText}>
+                  {mode === 'login' ? 'Create Account' : 'Sign In'}
+                </Text>
               </TouchableOpacity>
             </View>
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
-      <FullScreenSpinner visible={spinnerVisible} message={loading ? (mode === 'login' ? 'Authenticating...' : 'Creating account...') : 'Contacting provider...'} />
+      <FullScreenSpinner
+        visible={spinnerVisible}
+        message={
+          loading
+            ? mode === 'login'
+              ? 'Authenticating...'
+              : 'Creating account...'
+            : 'Contacting provider...'
+        }
+      />
     </SafeAreaView>
   );
 };
@@ -215,7 +341,12 @@ const styles = StyleSheet.create({
   socialButton: { borderColor: '#E2E8F0' },
   socialButtonText: { color: colors.primary },
   socialButtonContainer: { flex: 1 },
-  footerRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 14 },
+  footerRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 14,
+  },
   footerText: { color: '#64748B', marginRight: 8 },
   linkText: { color: colors.primary, fontWeight: '700' },
   eyeIcon: { padding: 6 },

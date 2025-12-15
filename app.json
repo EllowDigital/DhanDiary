@@ -18,8 +18,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "buildNumber": "184",
-      
+      "buildNumber": "184"
     },
     "android": {
       "package": "com.ellowdigital.dhandiary",

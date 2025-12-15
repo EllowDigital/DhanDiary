@@ -22,20 +22,20 @@ import { colors, spacing, shadows } from '../utils/design';
 import appConfig from '../../app.json';
 let pkg: any = {};
 try {
-  const req: any = typeof globalThis !== 'undefined' && typeof (globalThis as any).require === 'function' ? (globalThis as any).require : typeof require === 'function' ? require : null;
-  if (req) pkg = req('../../package.json');
+  if (typeof require === 'function') pkg = require('../../package.json');
 } catch (e) {
   pkg = {};
 }
 
 // Assets
-let brandIcon: any = undefined;
-try {
-  const req: any = typeof globalThis !== 'undefined' && typeof (globalThis as any).require === 'function' ? (globalThis as any).require : typeof require === 'function' ? require : null;
-  if (req) brandIcon = req('../../assets/splash-icon.png');
-} catch (e) {
-  brandIcon = undefined;
-}
+const getBrandIcon = () => {
+  try {
+    if (typeof require !== 'function') return undefined;
+    return require('../../assets/splash-icon.png');
+  } catch (e) {
+    return undefined;
+  }
+};
 
 const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   const insets = useSafeAreaInsets();

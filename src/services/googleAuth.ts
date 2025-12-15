@@ -7,19 +7,7 @@ const getWebClientId = () => {
   return process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
 };
 
-const safeRequire = (name: string) => {
-  try {
-    const req: any = typeof globalThis !== 'undefined' && typeof (globalThis as any).require === 'function'
-      ? (globalThis as any).require
-      : typeof require === 'function'
-        ? require
-        : null;
-    if (!req) return null;
-    return req(name);
-  } catch (e) {
-    return null;
-  }
-};
+// Note: use guarded static `require('module')` calls below so Metro can statically analyze.
 
 export const configureGoogleSignIn = () => {
   const webClientId = getWebClientId();
@@ -30,7 +18,8 @@ export const configureGoogleSignIn = () => {
 
   if (shouldUseNative) {
     try {
-      const mod: any = safeRequire('@react-native-google-signin/google-signin');
+      const mod: any =
+        typeof require === 'function' ? require('@react-native-google-signin/google-signin') : null;
       const GoogleSignin = mod?.GoogleSignin || (mod && mod.default && mod.default.GoogleSignin);
       if (GoogleSignin && typeof GoogleSignin.configure === 'function') {
         GoogleSignin.configure({
@@ -53,7 +42,8 @@ export const signInWithGoogle = async () => {
 
   if (useNative) {
     let GoogleSignin: any;
-    const mod: any = safeRequire('@react-native-google-signin/google-signin');
+    const mod: any =
+      typeof require === 'function' ? require('@react-native-google-signin/google-signin') : null;
     GoogleSignin = mod?.GoogleSignin || (mod && mod.default && mod.default.GoogleSignin);
     if (!GoogleSignin) {
       throw new Error(
@@ -71,11 +61,12 @@ export const signInWithGoogle = async () => {
 
   // Expo Go or web — use expo-auth-session web OAuth flow
   try {
-  const AuthSession: any = safeRequire('expo-auth-session');
-  const { makeRedirectUri, loadAsync } = AuthSession || {};
-  // ResponseType enum is in AuthRequest.types; require its build to access the enum value
-  const ResponseTypeMod: any = safeRequire('expo-auth-session/build/AuthRequest.types');
-  const { ResponseType } = ResponseTypeMod || {};
+    const AuthSession: any = typeof require === 'function' ? require('expo-auth-session') : null;
+    const { makeRedirectUri, loadAsync } = AuthSession || {};
+    // ResponseType enum is in AuthRequest.types; require its build to access the enum value
+    const ResponseTypeMod: any =
+      typeof require === 'function' ? require('expo-auth-session/build/AuthRequest.types') : null;
+    const { ResponseType } = ResponseTypeMod || {};
 
     const webClientId = getWebClientId();
     const redirectUri = makeRedirectUri({ useProxy: true });

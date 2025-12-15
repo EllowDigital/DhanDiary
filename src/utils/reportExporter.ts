@@ -13,10 +13,10 @@ function escapeCsvCell(value: unknown) {
 
 export function buildCSV(entries: Entry[], fields: string[]) {
   const out: string[] = [];
-  out.push(fields.map(h => escapeCsvCell(h)).join(','));
+  out.push(fields.map((h) => escapeCsvCell(h)).join(','));
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i];
-    const row = fields.map(f => escapeCsvCell(e[f] ?? '')).join(',');
+    const row = fields.map((f) => escapeCsvCell(e[f] ?? '')).join(',');
     out.push(row);
   }
   return out.join('\n');
@@ -79,7 +79,10 @@ function formatCurrency(amount: number, currency?: string) {
   }
 }
 
-export async function buildPdfFile(entries: Entry[], options: { title?: string; aiLayout?: boolean } = {}) {
+export async function buildPdfFile(
+  entries: Entry[],
+  options: { title?: string; aiLayout?: boolean } = {}
+) {
   const title = options.title || 'Export';
   const sum = summarize(entries);
   // Choose layout based on aiLayout flag (local heuristics)
@@ -133,25 +136,34 @@ export async function buildPdfFile(entries: Entry[], options: { title?: string; 
   const Print = await import('expo-print');
   const FileSystem = await import('expo-file-system/legacy');
   const { uri } = await (Print as any).printToFileAsync({ html });
-  const dest = (FileSystem as any).cacheDirectory + `${title.replace(/[^a-z0-9]/gi, '_')}_${Date.now()}.pdf`;
+  const dest =
+    (FileSystem as any).cacheDirectory + `${title.replace(/[^a-z0-9]/gi, '_')}_${Date.now()}.pdf`;
   await (FileSystem as any).copyAsync({ from: uri, to: dest });
   return dest;
 }
 
-export async function exportToFile(format: 'csv' | 'json' | 'pdf', entries: Entry[], opts: { fields?: string[]; pretty?: boolean; title?: string; aiLayout?: boolean } = {}) {
+export async function exportToFile(
+  format: 'csv' | 'json' | 'pdf',
+  entries: Entry[],
+  opts: { fields?: string[]; pretty?: boolean; title?: string; aiLayout?: boolean } = {}
+) {
   if (!entries) throw new Error('No entries provided');
   if (format === 'csv') {
     const fields = opts.fields ?? Object.keys(entries[0] || {});
     const csv = buildCSV(entries, fields);
     const FS = await import('expo-file-system/legacy');
-    const path = (FS as any).cacheDirectory + `${(opts.title || 'export').replace(/[^a-z0-9]/gi, '_')}_${Date.now()}.csv`;
+    const path =
+      (FS as any).cacheDirectory +
+      `${(opts.title || 'export').replace(/[^a-z0-9]/gi, '_')}_${Date.now()}.csv`;
     await (FS as any).writeAsStringAsync(path, csv, { encoding: (FS as any).EncodingType.UTF8 });
     return path;
   }
   if (format === 'json') {
     const json = buildJSON(entries, !!opts.pretty);
     const FS = await import('expo-file-system/legacy');
-    const path = (FS as any).cacheDirectory + `${(opts.title || 'export').replace(/[^a-z0-9]/gi, '_')}_${Date.now()}.json`;
+    const path =
+      (FS as any).cacheDirectory +
+      `${(opts.title || 'export').replace(/[^a-z0-9]/gi, '_')}_${Date.now()}.json`;
     await (FS as any).writeAsStringAsync(path, json, { encoding: (FS as any).EncodingType.UTF8 });
     return path;
   }
@@ -191,7 +203,10 @@ export async function exportFromUser(
       } else {
         // drop header line and append only rows
         const withoutHeader = csv.split('\n').slice(1).join('\n');
-        await (FS as any).writeAsStringAsync(path, '\n' + withoutHeader, { encoding: enc, append: true });
+        await (FS as any).writeAsStringAsync(path, '\n' + withoutHeader, {
+          encoding: enc,
+          append: true,
+        });
       }
     }
     return path;
@@ -240,4 +255,3 @@ export async function shareFile(path: string) {
   if (!(await (Sharing as any).isAvailableAsync())) throw new Error('Sharing not available');
   return (Sharing as any).shareAsync(path);
 }
-

@@ -238,8 +238,8 @@ const SplashScreen = () => {
           <Image
             source={(() => {
               try {
-                const req: any = typeof globalThis !== 'undefined' && typeof (globalThis as any).require === 'function' ? (globalThis as any).require : typeof require === 'function' ? require : null;
-                return req ? req('../../assets/splash-icon.png') : undefined;
+                if (typeof require !== 'function') return undefined;
+                return require('../../assets/splash-icon.png');
               } catch (e) {
                 return undefined;
               }

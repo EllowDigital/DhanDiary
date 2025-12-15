@@ -28,8 +28,7 @@ import ScreenHeader from '../components/ScreenHeader';
 import getLatestShareLink from '../utils/shareLink';
 let pkg: any = {};
 try {
-  const req: any = typeof globalThis !== 'undefined' && typeof (globalThis as any).require === 'function' ? (globalThis as any).require : typeof require === 'function' ? require : null;
-  if (req) pkg = req('../../package.json');
+  if (typeof require === 'function') pkg = require('../../package.json');
 } catch (e) {
   pkg = {};
 }
@@ -199,8 +198,8 @@ const AboutScreen: React.FC = () => {
               <Image
                 source={(() => {
                   try {
-                    const req: any = typeof globalThis !== 'undefined' && typeof (globalThis as any).require === 'function' ? (globalThis as any).require : typeof require === 'function' ? require : null;
-                    return req ? req('../../assets/splash-icon.png') : undefined;
+                    if (typeof require !== 'function') return undefined;
+                    return require('../../assets/splash-icon.png');
                   } catch (e) {
                     return undefined;
                   }

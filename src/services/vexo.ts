@@ -13,26 +13,12 @@ type VexoAPI = {
 let vexoFn: VexoAPI | null = null;
 let initialized = false;
 
-const safeRequire = (name: string) => {
-  try {
-    const req: any = typeof globalThis !== 'undefined' && typeof (globalThis as any).require === 'function'
-      ? (globalThis as any).require
-      : typeof require === 'function'
-        ? require
-        : null;
-    if (!req) return null;
-    return req(name);
-  } catch (e) {
-    return null;
-  }
-};
-
 export function initVexo(key?: string | null) {
   if (initialized) return;
   try {
     // dynamic require so missing native module won't crash tests or Expo Go
 
-    const mod: any = safeRequire('vexo-analytics');
+    const mod: any = typeof require === 'function' ? require('vexo-analytics') : null;
     // package may export default or named
     const candidate = (mod && (mod.vexo || mod.default || mod)) as any;
     if (typeof candidate === 'function') {
@@ -61,7 +47,7 @@ export async function identifyDevice(id: string | null) {
     if (!vexoFn) return;
     // try named export
 
-    const mod: any = safeRequire('vexo-analytics');
+    const mod: any = typeof require === 'function' ? require('vexo-analytics') : null;
     const fn = mod && (mod.identifyDevice || mod.default?.identifyDevice);
     if (typeof fn === 'function') return await fn(id);
     if (typeof vexoFn.identifyDevice === 'function') return await vexoFn.identifyDevice(id);
@@ -73,7 +59,7 @@ export async function identifyDevice(id: string | null) {
 export async function enableTracking() {
   try {
     if (!vexoFn) return;
-    const mod: any = safeRequire('vexo-analytics');
+    const mod: any = typeof require === 'function' ? require('vexo-analytics') : null;
     const fn = mod && (mod.enableTracking || mod.default?.enableTracking);
     if (typeof fn === 'function') return await fn();
     if (typeof vexoFn.enableTracking === 'function') return await vexoFn.enableTracking();
@@ -83,7 +69,7 @@ export async function enableTracking() {
 export async function disableTracking() {
   try {
     if (!vexoFn) return;
-    const mod: any = safeRequire('vexo-analytics');
+    const mod: any = typeof require === 'function' ? require('vexo-analytics') : null;
     const fn = mod && (mod.disableTracking || mod.default?.disableTracking);
     if (typeof fn === 'function') return await fn();
     if (typeof vexoFn.disableTracking === 'function') return await vexoFn.disableTracking();
@@ -93,7 +79,7 @@ export async function disableTracking() {
 export function customEvent(name: string, payload?: Record<string, any>) {
   try {
     if (!vexoFn) return;
-    const mod: any = safeRequire('vexo-analytics');
+    const mod: any = typeof require === 'function' ? require('vexo-analytics') : null;
     const fn = mod && (mod.customEvent || mod.default?.customEvent);
     if (typeof fn === 'function') return fn(name, payload);
     if (typeof vexoFn.customEvent === 'function') return vexoFn.customEvent(name, payload);

@@ -120,7 +120,13 @@ export async function* fetchEntriesGenerator(userId: string, pageSize = 500) {
   let lastDoc: any = undefined;
   while (true) {
     const q = lastDoc
-      ? query(colRef, orderBy('date', 'desc'), orderBy('createdAt', 'desc'), startAfter(lastDoc), limit(pageSize))
+      ? query(
+          colRef,
+          orderBy('date', 'desc'),
+          orderBy('createdAt', 'desc'),
+          startAfter(lastDoc),
+          limit(pageSize)
+        )
       : query(colRef, orderBy('date', 'desc'), orderBy('createdAt', 'desc'), limit(pageSize));
     const snap = await getDocs(q);
     if (!snap || !snap.docs || snap.docs.length === 0) break;

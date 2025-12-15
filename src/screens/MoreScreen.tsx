@@ -22,8 +22,10 @@ import ScreenHeader from '../components/ScreenHeader';
 import appConfig from '../../app.json';
 let pkg: any = {};
 try {
-  const req: any = typeof globalThis !== 'undefined' && typeof (globalThis as any).require === 'function' ? (globalThis as any).require : typeof require === 'function' ? require : null;
-  if (req) pkg = req('../../package.json');
+  if (typeof require === 'function') {
+    // static package.json require (safe when bundler provides require)
+    pkg = require('../../package.json');
+  }
 } catch (e) {
   pkg = {};
 }
