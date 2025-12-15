@@ -25,8 +25,7 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { AuthStackParamList } from '../types/navigation';
 import { useToast } from '../context/ToastContext';
 import { useInternetStatus } from '../hooks/useInternetStatus';
-import { loginWithEmail, sendPasswordReset, useGithubAuth } from '../services/firebaseAuth';
-import { signInWithGoogle } from '../services/googleAuth';
+import { loginWithEmail, sendPasswordReset } from '../services/firebaseAuth';
 import { SHOW_GOOGLE_LOGIN, SHOW_GITHUB_LOGIN } from '../config/featureFlags';
 
 // Components & Utils
@@ -67,10 +66,8 @@ const LoginScreen = () => {
   const [resettingPassword, setResettingPassword] = useState(false);
   const [socialLoading, setSocialLoading] = useState(false);
 
-  const { githubAvailable, signIn: startGithubSignIn } = useGithubAuth();
-  const googleAvailable = true; // Google config is present if configured at app startup
-  const showGithub = SHOW_GITHUB_LOGIN && githubAvailable;
-  const showGoogle = SHOW_GOOGLE_LOGIN && googleAvailable;
+  const showGithub = SHOW_GITHUB_LOGIN;
+  const showGoogle = SHOW_GOOGLE_LOGIN;
 
   // --- ANIMATION ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -150,10 +147,11 @@ const LoginScreen = () => {
   // Google login removed. Use only Firebase-native Google login elsewhere.
 
   const handleGithubLogin = async () => {
-    if (!githubAvailable) return;
+    if (!showGithub) return;
     setSocialLoading(true);
     try {
-      await startGithubSignIn();
+      const mod = await import('../services/firebaseAuth');
+      await mod.startGithubSignIn('signIn');
     } catch (err) {
       const e: any = err || {};
       if (e.code === 'auth/account-exists-with-different-credential') {
@@ -175,7 +173,8 @@ const LoginScreen = () => {
   const handleGoogleLogin = async () => {
     setSocialLoading(true);
     try {
-      await signInWithGoogle();
+      const mod = await import('../services/googleAuth');
+      await mod.signInWithGoogle();
     } catch (err) {
       const e: any = err || {};
       if (e.code === 'auth/account-exists-with-different-credential') {

@@ -25,17 +25,14 @@ import FullScreenSpinner from '../components/FullScreenSpinner';
 import ScreenHeader from '../components/ScreenHeader';
 
 import { colors } from '../utils/design';
-import { loginWithEmail, registerWithEmail, sendPasswordReset, useGithubAuth } from '../services/firebaseAuth';
-import { signInWithGoogle } from '../services/googleAuth';
+import { loginWithEmail, registerWithEmail, sendPasswordReset } from '../services/firebaseAuth';
 import { SHOW_GOOGLE_LOGIN, SHOW_GITHUB_LOGIN } from '../config/featureFlags';
 
 const AuthScreen: React.FC = () => {
   const { showToast } = useToast();
   const isOnline = useInternetStatus();
-  const { githubAvailable, signIn: startGithubSignIn } = useGithubAuth();
-  const googleAvailable = true;
-  const showGithub = SHOW_GITHUB_LOGIN && githubAvailable;
-  const showGoogle = SHOW_GOOGLE_LOGIN && googleAvailable;
+  const showGithub = SHOW_GITHUB_LOGIN;
+  const showGoogle = SHOW_GOOGLE_LOGIN;
 
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [name, setName] = useState('');
@@ -103,10 +100,11 @@ const AuthScreen: React.FC = () => {
   };
 
   const handleGithub = async () => {
-    if (!githubAvailable) return;
+    if (!showGithub) return;
     setSocialLoading(true);
     try {
-      await startGithubSignIn();
+      const mod = await import('../services/firebaseAuth');
+      await mod.startGithubSignIn('signIn');
     } catch (err: any) {
       Alert.alert('GitHub Sign-in Failed', err?.message || 'Unable to sign in with GitHub.');
     } finally {
@@ -117,7 +115,8 @@ const AuthScreen: React.FC = () => {
   const handleGoogle = async () => {
     setSocialLoading(true);
     try {
-      await signInWithGoogle();
+      const mod = await import('../services/googleAuth');
+      await mod.signInWithGoogle();
     } catch (err: any) {
       Alert.alert('Google Sign-in Failed', err?.message || 'Unable to sign in with Google.');
     } finally {
