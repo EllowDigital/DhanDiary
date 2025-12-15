@@ -619,54 +619,63 @@ const HomeScreen: React.FC = () => {
 
                 {pieExpenseData.length > 0 || weeklyBar.income.some((v) => v > 0) ? (
                   <View style={styles.chartContainer}>
-                    {chartType === 'pie' && PieChart && (
-                      <View style={styles.rowCentered}>
-                        <PieChart
-                          data={pieExpenseData}
-                          width={isTablet ? containerWidth * 0.5 : containerWidth}
-                          height={180}
-                          chartConfig={{ color: () => colors.primary }}
-                          accessor="population"
-                          backgroundColor="transparent"
-                          paddingLeft={isTablet ? '0' : '80'}
-                          center={[0, 0]}
-                          hasLegend={false}
-                        />
-                        <View style={[styles.customLegend, isTablet && { width: '50%' }]}>
-                          {pieExpenseData.slice(0, 4).map((item: any, i: number) => (
-                            <View key={i} style={styles.legendItem}>
-                              <View style={[styles.legendDot, { backgroundColor: item.color }]} />
-                              <Text style={styles.legendText} numberOfLines={1}>
-                                {item.name}
-                              </Text>
-                              <Text style={styles.legendValue}>
-                                {Math.round((item.population / periodExpense) * 100)}%
-                              </Text>
+                    {((chartType === 'pie' && PieChart) || (chartType === 'bar' && BarChart)) ? (
+                      <>
+                        {chartType === 'pie' && PieChart && (
+                          <View style={styles.rowCentered}>
+                            <PieChart
+                              data={pieExpenseData}
+                              width={isTablet ? containerWidth * 0.5 : containerWidth}
+                              height={180}
+                              chartConfig={{ color: () => colors.primary }}
+                              accessor="population"
+                              backgroundColor="transparent"
+                              paddingLeft={isTablet ? '0' : '80'}
+                              center={[0, 0]}
+                              hasLegend={false}
+                            />
+                            <View style={[styles.customLegend, isTablet && { width: '50%' }]}>
+                              {pieExpenseData.slice(0, 4).map((item: any, i: number) => (
+                                <View key={i} style={styles.legendItem}>
+                                  <View style={[styles.legendDot, { backgroundColor: item.color }]} />
+                                  <Text style={styles.legendText} numberOfLines={1}>
+                                    {item.name}
+                                  </Text>
+                                  <Text style={styles.legendValue}>
+                                    {Math.round((item.population / periodExpense) * 100)}%
+                                  </Text>
+                                </View>
+                              ))}
                             </View>
-                          ))}
-                        </View>
+                          </View>
+                        )}
+                        {chartType === 'bar' && BarChart && (
+                          <BarChart
+                            data={{
+                              labels: weeklyBar.labels,
+                              datasets: [{ data: weeklyBar.income }, { data: weeklyBar.expense }],
+                            }}
+                            width={containerWidth - 32}
+                            height={180}
+                            yAxisLabel="₹"
+                            chartConfig={{
+                              backgroundGradientFrom: colors.card,
+                              backgroundGradientTo: colors.card,
+                              color: (opacity = 1) => `rgba(${60}, 60, 70, ${opacity})`,
+                              barPercentage: 0.6,
+                              decimalPlaces: 0,
+                            }}
+                            showValuesOnTopOfBars={!isSmallPhone}
+                            fromZero
+                            style={{ borderRadius: 16, paddingRight: 30 }}
+                          />
+                        )}
+                      </>
+                    ) : (
+                      <View style={styles.noDataBox}>
+                        <MaterialIcon name="bar-chart" size={40} color={colors.border} />
+                        <Text style={styles.noDataText}>Chart unavailable</Text>
                       </View>
-                    )}
-                    {chartType === 'bar' && BarChart && (
-                      <BarChart
-                        data={{
-                          labels: weeklyBar.labels,
-                          datasets: [{ data: weeklyBar.income }, { data: weeklyBar.expense }],
-                        }}
-                        width={containerWidth - 32}
-                        height={180}
-                        yAxisLabel="₹"
-                        chartConfig={{
-                          backgroundGradientFrom: colors.card,
-                          backgroundGradientTo: colors.card,
-                          color: (opacity = 1) => `rgba(${60}, 60, 70, ${opacity})`,
-                          barPercentage: 0.6,
-                          decimalPlaces: 0,
-                        }}
-                        showValuesOnTopOfBars={!isSmallPhone}
-                        fromZero
-                        style={{ borderRadius: 16, paddingRight: 30 }}
-                      />
                     )}
                   </View>
                 ) : (
