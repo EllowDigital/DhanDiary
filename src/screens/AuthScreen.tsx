@@ -172,7 +172,10 @@ const AuthScreen: React.FC = () => {
           />
 
           <Animated.View
-            style={[styles.card, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}
+            style={[
+              styles.card,
+              { opacity: fadeAnim, transform: [{ scale: scaleAnim }] },
+            ]}
           >
             {mode === 'register' && (
               <AuthField
@@ -183,6 +186,29 @@ const AuthScreen: React.FC = () => {
                 containerStyle={styles.fieldSpacing}
               />
             )}
+
+            <View style={styles.logoRow}>
+              <View style={styles.logoBadge}>
+                <Image
+                  source={(() => {
+                    try {
+                      if (typeof require !== 'function') return undefined;
+                      return require('../../assets/splash-icon.png');
+                    } catch (e) {
+                      return undefined;
+                    }
+                  })()}
+                  style={styles.logoBadgeImage}
+                  resizeMode="contain"
+                />
+              </View>
+              <View style={styles.brandTitleCol}>
+                <Text style={styles.appName}>Welcome</Text>
+                <Text style={styles.appTagline}>{mode === 'login' ? 'Sign in to continue' : 'Create your account'}</Text>
+              </View>
+            </View>
+
+            <View style={styles.spacer} />
 
             <AuthField
               icon="mail-outline"

@@ -114,29 +114,36 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
         )}
 
         {/* Title (optionally with app icon) */}
-        <View style={styles.titleWrap}>
+        <View style={[styles.titleWrap, showAppIcon ? styles.titleWithIcon : undefined]}>
           {showAppIcon && (
             <View style={styles.appIconWrap}>
-              {/* guarded require for static asset */}
               {(() => {
                 try {
                   if (typeof require !== 'function') return null;
                   const src = require('../../assets/splash-icon.png');
-                  return <Animated.Image source={src} style={styles.appIcon} />;
+                  return (
+                    <Animated.Image
+                      source={src}
+                      style={styles.appIcon}
+                      resizeMode="cover"
+                    />
+                  );
                 } catch (e) {
                   return null;
                 }
               })()}
             </View>
           )}
-          <Text style={styles.title} numberOfLines={1}>
-            {title}
-          </Text>
-          {subtitle && (
-            <Text style={styles.subtitle} numberOfLines={1}>
-              {subtitle}
+          <View style={styles.titleTexts}>
+            <Text style={styles.title} numberOfLines={1}>
+              {title}
             </Text>
-          )}
+            {subtitle && (
+              <Text style={styles.subtitle} numberOfLines={1}>
+                {subtitle}
+              </Text>
+            )}
+          </View>
         </View>
 
         {/* Right Slot */}
@@ -190,8 +197,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   iconPlaceholder: { width: 42, height: 42 },
-  appIconWrap: { position: 'absolute', left: -48, top: 6 },
-  appIcon: { width: 36, height: 36, borderRadius: 8 },
+  titleWithIcon: { flexDirection: 'row', alignItems: 'center' },
+  titleTexts: { flex: 1 },
+  appIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: themeColors.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: themeSpacing(1.5),
+    shadowColor: themeColors.shadow,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  appIcon: { width: 34, height: 34, borderRadius: 8 },
   title: {
     fontSize: 20, // Slightly larger
     fontWeight: '800', // Bold modern font
