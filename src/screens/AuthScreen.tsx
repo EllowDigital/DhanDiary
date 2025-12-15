@@ -84,7 +84,7 @@ const AuthScreen: React.FC = () => {
     }
   };
 
-  const handleRegister = async () => {
+  const performRegister = async () => {
     if (loading) return;
     Keyboard.dismiss();
     if (!name.trim()) return Alert.alert('Missing Name', 'Please enter your full name.');
@@ -107,6 +107,20 @@ const AuthScreen: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleRegister = () => {
+    Alert.alert(
+      'Create Account',
+      'Before creating an account, please review our Terms and Privacy Policy.',
+      [
+        { text: 'View Terms', onPress: () => navigation.navigate('Terms') },
+        { text: 'Privacy Policy', onPress: () => navigation.navigate('PrivacyPolicy') },
+        { text: 'Agree & Create', style: 'destructive', onPress: performRegister },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+      { cancelable: true }
+    );
   };
 
   const handleForgotPassword = async () => {

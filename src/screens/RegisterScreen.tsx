@@ -127,7 +127,7 @@ const RegisterScreen = () => {
     [passwordError]
   );
 
-  const handleRegister = useCallback(async () => {
+  const performRegister = useCallback(async () => {
     if (loading || socialLoading) return;
     if (!isOnline)
       return Alert.alert('Offline', 'Internet connection required to create an account.');
@@ -167,6 +167,20 @@ const RegisterScreen = () => {
       setLoading(false);
     }
   }, [loading, socialLoading, isOnline, name, email, password, navigation, showToast]);
+
+  const handleRegister = useCallback(() => {
+    Alert.alert(
+      'Create Account',
+      'Before creating an account, please review our Terms and Privacy Policy.',
+      [
+        { text: 'View Terms', onPress: () => navigation.navigate('Terms') },
+        { text: 'Privacy Policy', onPress: () => navigation.navigate('PrivacyPolicy') },
+        { text: 'Agree & Create', style: 'destructive', onPress: performRegister },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+      { cancelable: true }
+    );
+  }, [navigation, performRegister]);
 
   const handleOpenTerms = useCallback(() => navigation.navigate('Terms'), [navigation]);
   const handleOpenPrivacy = useCallback(() => navigation.navigate('PrivacyPolicy'), [navigation]);
