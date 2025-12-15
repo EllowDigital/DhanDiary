@@ -27,6 +27,7 @@ import { useToast } from '../context/ToastContext';
 import { useInternetStatus } from '../hooks/useInternetStatus';
 import { loginWithEmail, sendPasswordReset, useGithubAuth } from '../services/firebaseAuth';
 import { signInWithGoogle } from '../services/googleAuth';
+import { SHOW_GOOGLE_LOGIN, SHOW_GITHUB_LOGIN } from '../config/featureFlags';
 
 // Components & Utils
 import { colors } from '../utils/design';
@@ -68,6 +69,8 @@ const LoginScreen = () => {
 
   const { githubAvailable, signIn: startGithubSignIn } = useGithubAuth();
   const googleAvailable = true; // Google config is present if configured at app startup
+  const showGithub = SHOW_GITHUB_LOGIN && githubAvailable;
+  const showGoogle = SHOW_GOOGLE_LOGIN && googleAvailable;
 
   // --- ANIMATION ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -321,7 +324,7 @@ const LoginScreen = () => {
                 }
               />
 
-              {githubAvailable && (
+              {showGithub && (
                 <View style={styles.socialWrapper}>
                   <View style={styles.socialDivider}>
                     <View style={styles.socialLine} />
@@ -331,7 +334,7 @@ const LoginScreen = () => {
 
                   <View style={styles.socialButtonsRow}>
                     {/* Google login removed */}
-                    {googleAvailable && (
+                    {showGoogle && (
                       <Button
                         type="outline"
                         icon={
@@ -350,7 +353,7 @@ const LoginScreen = () => {
                         containerStyle={styles.socialButtonContainer}
                       />
                     )}
-                    {githubAvailable && (
+                    {showGithub && (
                       <Button
                         type="outline"
                         icon={

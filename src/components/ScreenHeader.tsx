@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     marginTop: 2,
-    color: themeColors.subtext,
+    color: themeColors.subtleText,
     fontSize: 13,
     fontWeight: '500',
   },
@@ -213,7 +213,7 @@ const styles = StyleSheet.create({
   },
   hintText: {
     fontSize: 11,
-    color: themeColors.subtext,
+    color: themeColors.subtleText,
     fontWeight: '700',
     marginLeft: 6,
     textTransform: 'uppercase',

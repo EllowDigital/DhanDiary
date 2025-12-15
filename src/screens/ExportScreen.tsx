@@ -8,7 +8,7 @@ import { useEntries } from '../hooks/useEntries';
 import { useAuth } from '../hooks/useAuth';
 import { colors } from '../utils/design';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
-import { exportEntriesAsCsv, exportEntriesAsPdf } from '../utils/reportExporter';
+import { exportToFile, shareFile } from '../utils/reportExporter';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { LocalEntry } from '../types/entries';
@@ -106,27 +106,15 @@ const ExportScreen = () => {
 
     try {
       setExporting(fmt as any);
-      if (fmt === 'pdf') {
-        await exportEntriesAsPdf(target, summary as any, metadata as any);
-      } else if (fmt === 'csv') {
-        await exportEntriesAsCsv(target, metadata as any);
-      } else {
-        // JSON export
-        const payload = target.map((e) => (includeNotes ? e : { ...e, note: undefined }));
-        const fileName = `dhandiary_export_${dayjs().format('YYYYMMDD_HHmmss')}.json`;
-        const fileUri = `${FileSystem.cacheDirectory || ''}${fileName}`;
-        await FileSystem.writeAsStringAsync(
-          fileUri,
-          JSON.stringify({ metadata, summary, data: payload }, null, 2),
-          {
-            encoding: FileSystem.EncodingType.UTF8,
-          }
-        );
-        await Sharing.shareAsync(fileUri, {
-          mimeType: 'application/json',
-          dialogTitle: 'Share JSON Export',
-        });
-      }
+      // Prepare payload once and avoid deep cloning unless required
+      const payload = includeNotes ? target : target.map((e) => ({ ...e, notes: undefined }));
+      const filePath = await exportToFile(fmt, payload as any, {
+        fields: undefined,
+        pretty: fmt === 'json',
+        title: metadata.title,
+        aiLayout: true,
+      });
+      await shareFile(filePath);
       Alert.alert('Export ready', 'Report shared successfully.');
     } catch (err: any) {
       Alert.alert('Export failed', err?.message || 'Unable to share report.');

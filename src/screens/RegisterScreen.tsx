@@ -27,6 +27,7 @@ import { AuthStackParamList } from '../types/navigation';
 import { useToast } from '../context/ToastContext';
 import { useInternetStatus } from '../hooks/useInternetStatus';
 import { registerWithEmail, useGithubAuth } from '../services/firebaseAuth';
+import { SHOW_GITHUB_LOGIN } from '../config/featureFlags';
 
 // Components & Utils
 import { colors } from '../utils/design';
@@ -103,6 +104,7 @@ const RegisterScreen = () => {
   const passStrength = getPasswordStrength(password);
 
   const { githubAvailable, signIn: startGithubSignIn } = useGithubAuth();
+  const showGithub = SHOW_GITHUB_LOGIN && githubAvailable;
 
   // Optimized Handlers
   const handleEmailChange = useCallback(
@@ -354,7 +356,7 @@ const RegisterScreen = () => {
                 }
               />
 
-              {githubAvailable && (
+              {showGithub && (
                 <View style={styles.socialWrapper}>
                   <View style={styles.socialDivider}>
                     <View style={styles.socialLine} />
@@ -364,7 +366,7 @@ const RegisterScreen = () => {
 
                   <View style={styles.socialButtonsRow}>
                     {/* Google signup removed */}
-                    {githubAvailable && (
+                    {showGithub && (
                       <Button
                         type="outline"
                         icon={

@@ -1,184 +1,166 @@
-import dayjs from 'dayjs';
 import * as Print from 'expo-print';
+import dayjs from 'dayjs';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import { LocalEntry } from '../types/entries';
 
-export type ReportSummary = {
-  totalIn: number;
-  totalOut: number;
-  net: number;
-  currencySymbol?: string;
-  filterLabel?: string;
-};
+type Entry = any;
 
-export type ReportMetadata = {
-  title?: string;
-  rangeLabel?: string;
-  generatedAt?: string;
-};
+function escapeCsvCell(value: unknown) {
+  if (value === null || value === undefined) return '';
+  const s = String(value);
+  if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
+}
 
-const formatCurrency = (value: number, currencySymbol: string) => {
-  const amount = Number.isFinite(value) ? value : 0;
-  return `${currencySymbol}${amount.toLocaleString()}`;
-};
+export function buildCSV(entries: Entry[], fields: string[]) {
+  const out: string[] = [];
+  out.push(fields.map(h => escapeCsvCell(h)).join(','));
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    const row = fields.map(f => escapeCsvCell(e[f] ?? '')).join(',');
+    out.push(row);
+  }
+  return out.join('\n');
+}
 
-const escapeHtml = (input: string) =>
-  input
+export function buildJSON(entries: Entry[], pretty = false) {
+  return pretty ? JSON.stringify(entries, null, 2) : JSON.stringify(entries);
+}
+
+function summarize(entries: Entry[]) {
+  let totalIn = 0;
+  let totalOut = 0;
+  for (const e of entries) {
+    const amt = Number(e.amount) || 0;
+    if (e.type === 'in') totalIn += amt;
+    else totalOut += amt;
+  }
+  const count = entries.length;
+  const net = totalIn - totalOut;
+  const avg = count ? (totalIn + totalOut) / count : 0;
+  return { totalIn, totalOut, net, count, avg };
+}
+
+function smallStyles() {
+  return `
+    body{font-family: -apple-system, Roboto, 'Helvetica Neue', Arial; color:#111827;}
+    .wrap{max-width:960px;margin:24px auto;padding:20px;background:#fff;border-radius:10px;box-shadow:0 8px 28px rgba(15,23,42,0.06);} 
+    header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+    h1{font-size:22px;margin:0;color:#0f172a}
+    .meta{color:#6b7280;font-size:12px}
+    .summary-cards{display:flex;gap:12px;margin-top:12px}
+    .card{flex:1;padding:12px;border-radius:8px;background:#f8fafc}
+    .card .label{font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.06em}
+    .card .value{font-size:16px;font-weight:800;margin-top:6px}
+    table{width:100%;border-collapse:collapse;margin-top:16px}
+    thead th{padding:10px 8px;border-bottom:2px solid #e6eef8;text-align:left;font-size:12px;color:#475569}
+    tbody td{padding:10px 8px;border-bottom:1px solid #f3f6fa;font-size:13px;color:#0f172a}
+    tr:nth-child(even){background:#fbfcfe}
+    td.note{max-width:360px;white-space:pre-wrap;word-break:break-word;color:#374151}
+    td.amount{font-weight:700}
+    .generated{font-size:11px;color:#94a3b8}
+  `;
+}
+
+function escapeHtml(input: string) {
+  return String(input || '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
 
-const csvEscape = (value: string) => {
-  if (value.includes(',') || value.includes('"') || value.includes('\n')) {
-    return `"${value.replace(/"/g, '""')}"`;
+function formatCurrency(amount: number, currency?: string) {
+  const sym = currency === 'INR' || !currency ? '₹' : currency + ' ';
+  try {
+    return sym + Intl.NumberFormat('en-IN').format(Number(amount) || 0);
+  } catch (e) {
+    return sym + (Number(amount) || 0).toFixed(2);
   }
-  return value;
-};
+}
 
-const ensureSharingAvailable = async () => {
-  const available = await Sharing.isAvailableAsync();
-  if (!available) {
-    throw new Error('Sharing is not available on this device.');
-  }
-};
+export async function buildPdfFile(entries: Entry[], options: { title?: string; aiLayout?: boolean } = {}) {
+  const title = options.title || 'Export';
+  const sum = summarize(entries);
+  // Choose layout based on aiLayout flag (local heuristics)
+  const condensed = options.aiLayout && entries.length > 100;
 
-const buildHtml = (entries: LocalEntry[], summary: ReportSummary, metadata?: ReportMetadata) => {
-  const currency = summary.currencySymbol || '₹';
-  const title = metadata?.title || 'DhanDiary Financial Report';
-  const rangeLabel = metadata?.rangeLabel || 'All activity';
-  const generatedAt = metadata?.generatedAt || dayjs().format('DD MMM YYYY, HH:mm');
-  const sortedEntries = [...entries].sort((a, b) => {
-    const left = dayjs(a.date || a.created_at).valueOf();
-    const right = dayjs(b.date || b.created_at).valueOf();
-    return right - left;
-  });
+  // Only include the approved columns for user-facing PDF exports
+  const headerHtml = `<header><h1>${title}</h1><div class="meta">${sum.count} items · ${sum.totalIn.toFixed(2)} in · ${sum.totalOut.toFixed(2)} out</div></header>`;
 
-  const rows = sortedEntries
-    .map((entry) => {
-      const date = dayjs(entry.date || entry.created_at).format('DD MMM YYYY');
-      const amount = formatCurrency(Number(entry.amount) || 0, currency);
-      const category = escapeHtml(entry.category || 'General');
-      const note = entry.note ? escapeHtml(entry.note) : '—';
-      const typeLabel = entry.type === 'in' ? 'Income' : 'Expense';
-      return `<tr>
-        <td>${date}</td>
-        <td>${typeLabel}</td>
-        <td>${category}</td>
-        <td>${note}</td>
-        <td class="amount ${entry.type}">${amount}</td>
-      </tr>`;
+  const generatedAt = dayjs().format('DD MMM YYYY, HH:mm');
+
+  const tableHead = `<thead><tr><th>Date</th><th>Type</th><th>Category</th><th>Note</th><th style="text-align:right">Amount</th></tr></thead>`;
+  const tableRows = entries
+    .map((e) => {
+      const date = e.date ? escapeHtml(dayjs(e.date).format('DD MMM YYYY')) : '';
+      const typeLabel = e.type === 'in' ? 'Income' : 'Expense';
+      const category = escapeHtml(String(e.category || 'General'));
+      const note = e.note ? escapeHtml(String(e.note)) : '—';
+      const currency = e.currency || 'INR';
+      const amount = Number(e.amount) || 0;
+      const amountStr = formatCurrency(amount, currency);
+      return `<tr><td>${date}</td><td>${typeLabel}</td><td>${category}</td><td class="note">${note}</td><td class="amount" style="text-align:right">${amountStr}</td></tr>`;
     })
     .join('');
 
-  const emptyState =
-    rows ||
-    '<tr><td colspan="5" style="text-align:center;padding:24px;color:#6b7280;">No entries available for this period.</td></tr>';
-
-  return `<!DOCTYPE html>
+  const html = `
   <html>
     <head>
-      <meta charset="utf-8" />
-      <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 24px; color: #111827; }
-        h1 { margin-bottom: 0; font-size: 24px; }
-        .muted { color: #6b7280; margin-top: 4px; }
-        .summary { display: flex; flex-wrap: wrap; gap: 16px; margin: 24px 0; }
-        .summary-card { flex: 1; min-width: 160px; border-radius: 12px; padding: 16px; background: #f3f4f6; }
-        .summary-label { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #6b7280; }
-        .summary-value { font-size: 20px; font-weight: 700; margin-top: 4px; }
-        table { width: 100%; border-collapse: collapse; }
-        th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: #6b7280; padding: 8px 4px; border-bottom: 1px solid #e5e7eb; }
-        td { padding: 12px 4px; border-bottom: 1px solid #f3f4f6; font-size: 13px; }
-        .amount { text-align: right; font-weight: 600; }
-        .amount.expense { color: #b91c1c; }
-        .amount.income { color: #15803d; }
-      </style>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <style>${smallStyles()}</style>
     </head>
     <body>
-      <h1>${escapeHtml(title)}</h1>
-      <p class="muted">${escapeHtml(rangeLabel)} · Generated ${escapeHtml(generatedAt)}</p>
-      <div class="summary">
-        <div class="summary-card">
-          <div class="summary-label">Income</div>
-          <div class="summary-value">${formatCurrency(summary.totalIn, currency)}</div>
+      <div class="wrap">
+        ${headerHtml}
+        <div class="generated">Generated: ${generatedAt}</div>
+        <div class="summary-cards">
+          <div class="card"><div class="label">Income</div><div class="value">${formatCurrency(sum.totalIn)}</div></div>
+          <div class="card"><div class="label">Expense</div><div class="value">${formatCurrency(sum.totalOut)}</div></div>
+          <div class="card"><div class="label">Net</div><div class="value">${formatCurrency(sum.net)}</div></div>
         </div>
-        <div class="summary-card">
-          <div class="summary-label">Expense</div>
-          <div class="summary-value">${formatCurrency(summary.totalOut, currency)}</div>
-        </div>
-        <div class="summary-card">
-          <div class="summary-label">Net</div>
-          <div class="summary-value">${formatCurrency(summary.net, currency)}</div>
-        </div>
+        <table>
+          ${tableHead}
+          <tbody>
+            ${tableRows}
+          </tbody>
+        </table>
       </div>
-      <table>
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Type</th>
-            <th>Category</th>
-            <th>Note</th>
-            <th>Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${emptyState}
-        </tbody>
-      </table>
     </body>
   </html>`;
-};
 
-const buildCsv = (entries: LocalEntry[], metadata?: ReportMetadata) => {
-  const title = metadata?.title || 'DhanDiary Financial Report';
-  const rangeLabel = metadata?.rangeLabel || 'All activity';
-  const generatedAt = metadata?.generatedAt || dayjs().format('DD MMM YYYY, HH:mm');
-  const header = ['Date', 'Type', 'Category', 'Note', 'Amount'];
-  const rows = entries
-    .map((entry) => {
-      const date = dayjs(entry.date || entry.created_at).format('YYYY-MM-DD');
-      const type = entry.type === 'in' ? 'Income' : 'Expense';
-      const category = entry.category || 'General';
-      const note = entry.note || '';
-      const amount = String(Number(entry.amount) || 0);
-      return [date, type, category, note, amount].map((v) => csvEscape(v)).join(',');
-    })
-    .join('\n');
-  const summaryBlock = `"Report Title","${title}"\n"Range","${rangeLabel}"\n"Generated","${generatedAt}"\n\n`;
-  return `${summaryBlock}${header.join(',')}\n${rows}`;
-};
+  const { uri } = await Print.printToFileAsync({ html });
+  const dest = FileSystem.cacheDirectory + `${title.replace(/[^a-z0-9]/gi, '_')}_${Date.now()}.pdf`;
+  await FileSystem.copyAsync({ from: uri, to: dest });
+  return dest;
+}
 
-export const exportEntriesAsPdf = async (
-  entries: LocalEntry[],
-  summary: ReportSummary,
-  metadata?: ReportMetadata
-) => {
-  await ensureSharingAvailable();
-  const html = buildHtml(entries, summary, metadata);
-  const file = await Print.printToFileAsync({
-    html,
-  });
-  await Sharing.shareAsync(file.uri, {
-    mimeType: 'application/pdf',
-    dialogTitle: 'Share PDF Report',
-    UTI: 'com.adobe.pdf',
-  });
-};
+export async function exportToFile(format: 'csv' | 'json' | 'pdf', entries: Entry[], opts: { fields?: string[]; pretty?: boolean; title?: string; aiLayout?: boolean } = {}) {
+  if (!entries) throw new Error('No entries provided');
+  if (format === 'csv') {
+    const fields = opts.fields ?? Object.keys(entries[0] || {});
+    const csv = buildCSV(entries, fields);
+    const path = FileSystem.cacheDirectory + `${(opts.title || 'export').replace(/[^a-z0-9]/gi, '_')}_${Date.now()}.csv`;
+    await FileSystem.writeAsStringAsync(path, csv, { encoding: FileSystem.EncodingType.UTF8 });
+    return path;
+  }
+  if (format === 'json') {
+    const json = buildJSON(entries, !!opts.pretty);
+    const path = FileSystem.cacheDirectory + `${(opts.title || 'export').replace(/[^a-z0-9]/gi, '_')}_${Date.now()}.json`;
+    await FileSystem.writeAsStringAsync(path, json, { encoding: FileSystem.EncodingType.UTF8 });
+    return path;
+  }
+  if (format === 'pdf') {
+    return buildPdfFile(entries, { title: opts.title, aiLayout: !!opts.aiLayout });
+  }
+  throw new Error('Unsupported format');
+}
 
-export const exportEntriesAsCsv = async (entries: LocalEntry[], metadata?: ReportMetadata) => {
-  await ensureSharingAvailable();
-  const csv = buildCsv(entries, metadata);
-  const fileName = `dhandiary_report_${dayjs().format('YYYYMMDD_HHmmss')}.csv`;
-  const fileUri = `${FileSystem.cacheDirectory || ''}${fileName}`;
-  await FileSystem.writeAsStringAsync(fileUri, csv, {
-    encoding: FileSystem.EncodingType.UTF8,
-  });
-  await Sharing.shareAsync(fileUri, {
-    mimeType: 'text/csv',
-    dialogTitle: 'Share Excel Report',
-    UTI: 'public.comma-separated-values-text',
-  });
-};
+export async function shareFile(path: string) {
+  if (!(await Sharing.isAvailableAsync())) throw new Error('Sharing not available');
+  return Sharing.shareAsync(path);
+}
+

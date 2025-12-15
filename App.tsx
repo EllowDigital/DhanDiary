@@ -10,6 +10,7 @@ import SplashScreen from './src/screens/SplashScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
+import AuthScreen from './src/screens/AuthScreen';
 import PrivacyPolicyScreen from './src/screens/PrivacyPolicyScreen';
 import TermsScreen from './src/screens/TermsScreen';
 import EulaScreen from './src/screens/EulaScreen';
@@ -27,8 +28,7 @@ const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 
 const AuthNavigator = () => (
   <AuthStack.Navigator screenOptions={{ headerShown: false }}>
-    <AuthStack.Screen name="Login" component={LoginScreen} />
-    <AuthStack.Screen name="Register" component={RegisterScreen} />
+    <AuthStack.Screen name="Login" component={AuthScreen} />
     <AuthStack.Screen name="Terms" component={TermsScreen} />
     <AuthStack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
     <AuthStack.Screen name="Eula" component={EulaScreen} />
