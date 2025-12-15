@@ -167,6 +167,8 @@ const AuthScreen: React.FC = () => {
           <ScreenHeader
             title="Welcome"
             subtitle={mode === 'login' ? 'Sign in to continue' : 'Create your account'}
+            hideLeftAction={true}
+            showAppIcon={true}
           />
 
           <Animated.View

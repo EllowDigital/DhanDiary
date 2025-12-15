@@ -29,6 +29,8 @@ export type ScreenHeaderProps = {
   onDismissScrollHint?: () => void;
   style?: StyleProp<ViewStyle>;
   useSafeAreaPadding?: boolean;
+  showAppIcon?: boolean;
+  hideLeftAction?: boolean;
 };
 
 const ScreenHeader: React.FC<ScreenHeaderProps> = ({
@@ -50,11 +52,10 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
 
   const handleNav = () => {
     const nav: any = navigation;
-    // Prefer opening the drawer so users can access navigation without needing to back out
+    if (canGoBack) return navigation.goBack();
+    // Prefer opening the drawer so users can access navigation when available
     if (nav.openDrawer) return nav.openDrawer();
     if (nav.toggleDrawer) return nav.toggleDrawer();
-    // Fallback to goBack if no drawer is available
-    if (canGoBack) return navigation.goBack();
   };
 
   const handleDismissHint = () => {
@@ -92,18 +93,40 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
       accessibilityRole="header"
     >
       <View style={styles.row}>
-        {/* Left Action Button (Soft Background, No Border) */}
-        <TouchableOpacity
-          style={styles.iconButton}
-          onPress={handleNav}
-          activeOpacity={0.7}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <MaterialIcons name="menu" size={20} color={themeColors.text} />
-        </TouchableOpacity>
+        {/* Left Action */}
+        {!hideLeftAction ? (
+          <TouchableOpacity
+            style={styles.iconButton}
+            onPress={handleNav}
+            activeOpacity={0.7}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            {canGoBack ? (
+              <MaterialIcons name="arrow-back" size={20} color={themeColors.text} />
+            ) : (
+              <MaterialIcons name="menu" size={20} color={themeColors.text} />
+            )}
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.iconPlaceholder} />
+        )}
 
-        {/* Title */}
+        {/* Title (optionally with app icon) */}
         <View style={styles.titleWrap}>
+          {showAppIcon && (
+            <View style={styles.appIconWrap}>
+              {/* guarded require for static asset */}
+              {(() => {
+                try {
+                  if (typeof require !== 'function') return null;
+                  const src = require('../../assets/splash-icon.png');
+                  return <Animated.Image source={src} style={styles.appIcon} />;
+                } catch (e) {
+                  return null;
+                }
+              })()}
+            </View>
+          )}
           <Text style={styles.title} numberOfLines={1}>
             {title}
           </Text>
@@ -164,6 +187,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: themeSpacing(1.5),
     justifyContent: 'center',
   },
+  iconPlaceholder: { width: 42, height: 42 },
+  appIconWrap: { position: 'absolute', left: -48, top: 6 },
+  appIcon: { width: 36, height: 36, borderRadius: 8 },
   title: {
     fontSize: 20, // Slightly larger
     fontWeight: '800', // Bold modern font

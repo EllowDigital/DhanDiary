@@ -33,6 +33,7 @@ import { SHOW_GITHUB_LOGIN } from '../config/featureFlags';
 import { colors } from '../utils/design';
 import FullScreenSpinner from '../components/FullScreenSpinner';
 import AuthField from '../components/AuthField';
+import ScreenHeader from '../components/ScreenHeader';
 
 type RegisterScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList>;
 
@@ -221,6 +222,7 @@ const RegisterScreen = () => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+      <ScreenHeader title="Join DhanDiary" subtitle="Create your account" hideLeftAction={true} showAppIcon={true} />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
