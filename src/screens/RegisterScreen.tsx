@@ -500,9 +500,22 @@ const styles = StyleSheet.create({
     marginRight: 12, // Adjusted margin for transparent look
     // Removed borderWidth, borderColor, backgroundColor
   },
-  logo: {
-    width: 56, // Full fill
+  logoBadge: {
+    width: 56,
     height: 56,
+    borderRadius: 14,
+    backgroundColor: '#EAF2FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  logo: {
+    width: 36,
+    height: 36,
   },
   brandTexts: {
     flex: 1,
