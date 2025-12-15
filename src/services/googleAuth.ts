@@ -3,14 +3,8 @@ import { GoogleAuthProvider } from 'firebase/auth';
 import Constants from 'expo-constants';
 import { signInWithFirebaseCredential } from './firebaseAuth';
 
-const DEFAULT_WEB_CLIENT_ID =
-  '315200510366-8ek2cvlnsidt7e6bgi16tn0kinvtasgb.apps.googleusercontent.com';
-
 const getWebClientId = () => {
-  const extra = (Constants?.expoConfig?.extra || {}) as any;
-  return (
-    extra?.oauth?.googleClientId || process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || DEFAULT_WEB_CLIENT_ID
-  );
+  return process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
 };
 
 export const configureGoogleSignIn = () => {
@@ -25,7 +19,7 @@ export const configureGoogleSignIn = () => {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const { GoogleSignin } = require('@react-native-google-signin/google-signin');
       GoogleSignin.configure({
-        webClientId,
+        webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
         offlineAccess: false,
       });
       return;

@@ -23,7 +23,6 @@ import ScreenHeader from '../components/ScreenHeader';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import DailyTrendChart from '../components/charts/DailyTrendChart';
 import { LocalEntry } from '../types/entries';
-import { exportEntriesAsCsv, exportEntriesAsPdf } from '../utils/reportExporter';
 
 // --- COLOR UTILS ---
 const hexToRgb = (hex: string) => {
@@ -33,7 +32,20 @@ const hexToRgb = (hex: string) => {
     : '0, 0, 0';
 };
 
-const FILTERS = ['7D', '30D', 'This Month', 'This Year'];
+// Helper: basic statistics (mean, median, stddev, count)
+const calcStats = (entries: LocalEntry[]) => {
+  const amounts = entries.map((e) => Number(e.amount) || 0).filter((a) => Number.isFinite(a));
+  const count = amounts.length;
+  const mean = count ? amounts.reduce((s, v) => s + v, 0) / count : 0;
+  const sorted = [...amounts].sort((a, b) => a - b);
+  const median =
+    count === 0 ? 0 : count % 2 === 1 ? sorted[(count - 1) / 2] : (sorted[count / 2 - 1] + sorted[count / 2]) / 2;
+  const variance = count ? amounts.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / count : 0;
+  const stddev = Math.sqrt(variance);
+  return { count, mean, median, stddev };
+};
+
+const FILTERS = ['Day', 'Week', '7D', '30D', 'This Month', 'This Year', 'All'];
 
 // Chart Colors
 const PIE_COLORS = ['#FF6B6B', '#4ECDC4', '#FFD93D', '#6C5CE7', '#A8E6CF', '#FD79A8'];
@@ -72,7 +84,6 @@ const StatsScreen = () => {
   const slideAnim = useRef(new Animated.Value(20)).current;
 
   const [filter, setFilter] = useState('7D');
-  const [exporting, setExporting] = useState<'pdf' | 'excel' | null>(null);
   const [activeMonthKey, setActiveMonthKey] = useState<string | null>(null);
   const [activeYear, setActiveYear] = useState<number | null>(null);
 
@@ -160,8 +171,13 @@ const StatsScreen = () => {
     const current = dayjs();
     let start = current.subtract(6, 'day').startOf('day');
     let end = current.endOf('day');
-
-    if (filter === '7D') {
+    if (filter === 'Day') {
+      start = current.startOf('day');
+      end = current.endOf('day');
+    } else if (filter === 'Week') {
+      start = current.startOf('week');
+      end = current.endOf('week');
+    } else if (filter === '7D') {
       start = current.subtract(6, 'day').startOf('day');
       end = current.endOf('day');
     } else if (filter === '30D') {
@@ -179,6 +195,9 @@ const StatsScreen = () => {
       const yearStart = dayjs().year(year).startOf('year');
       start = yearStart;
       end = yearStart.endOf('year');
+    } else if (filter === 'All') {
+      start = dayjs(0);
+      end = dayjs();
     }
 
     return { rangeStart: start, rangeEnd: end };
@@ -219,6 +238,30 @@ const StatsScreen = () => {
     );
   }, [filteredEntries]);
   stats.net = stats.totalIn - stats.totalOut;
+
+  // Advanced stats
+  const advancedStats = useMemo(() => {
+    const overall = calcStats(filteredEntries);
+    const expenses = calcStats(filteredEntries.filter((e) => e.type === 'out'));
+    const incomes = calcStats(filteredEntries.filter((e) => e.type === 'in'));
+    const days = Math.max(1, rangeEnd.diff(rangeStart, 'day') + 1);
+    const avgPerDay = Math.round((filteredEntries.reduce((s, e) => s + Number(e.amount || 0), 0) || 0) / days);
+    return { overall, expenses, incomes, avgPerDay };
+  }, [filteredEntries, rangeStart, rangeEnd]);
+
+  const topExpenseCategories = useMemo(() => {
+    const map: Record<string, number> = {};
+    filteredEntries
+      .filter((e) => e.type === 'out')
+      .forEach((e) => {
+        const c = ensureCategory(e.category || 'General');
+        map[c] = (map[c] || 0) + (Number(e.amount) || 0);
+      });
+    return Object.entries(map)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([name, value]) => ({ name, value }));
+  }, [filteredEntries]);
 
   // Ratios
   const savingsRate = stats.totalIn > 0 ? Math.max(0, (stats.net / stats.totalIn) * 100) : 0;
@@ -322,45 +365,6 @@ const StatsScreen = () => {
     if (year === activeYear) return;
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setActiveYear(year);
-  };
-
-  const handleExport = async (format: 'pdf' | 'excel') => {
-    if (!filteredEntries.length) {
-      Alert.alert('No data to export', 'Add at least one entry before exporting a report.');
-      return;
-    }
-
-    const summary = {
-      totalIn: stats.totalIn,
-      totalOut: stats.totalOut,
-      net: stats.net,
-      currencySymbol,
-      filterLabel: filter,
-    };
-    const metadata = {
-      title: 'DhanDiary Analytics',
-      rangeLabel: rangeDescription,
-      generatedAt: dayjs().format('DD MMM YYYY, HH:mm'),
-    };
-
-    try {
-      setExporting(format);
-      if (format === 'pdf') {
-        await exportEntriesAsPdf(filteredEntries, summary, metadata);
-      } else {
-        await exportEntriesAsCsv(filteredEntries, metadata);
-      }
-      Alert.alert(
-        'Report ready',
-        format === 'pdf'
-          ? 'PDF report shared successfully.'
-          : 'Excel-compatible report shared successfully.'
-      );
-    } catch (error: any) {
-      Alert.alert('Export failed', error?.message || 'Unable to share report. Please try again.');
-    } finally {
-      setExporting(null);
-    }
   };
 
   if (isLoading || authLoading)
@@ -483,48 +487,7 @@ const StatsScreen = () => {
             </View>
           )}
 
-          {/* 2. REPORT EXPORTS */}
-          <View style={styles.card}>
-            <View style={styles.rowBetween}>
-              <View>
-                <Text style={styles.cardTitle}>Reports</Text>
-                <Text style={styles.cardSubtitle}>Share your data as PDF or Excel</Text>
-              </View>
-              {exporting ? <ActivityIndicator size="small" color={colors.primary} /> : null}
-            </View>
-
-            <View style={styles.reportActions}>
-              <Pressable
-                style={[
-                  styles.reportButton,
-                  styles.reportButtonPrimary,
-                  exporting && styles.reportButtonDisabled,
-                ]}
-                onPress={() => handleExport('pdf')}
-                disabled={!!exporting}
-              >
-                <MaterialIcon name="picture-as-pdf" size={18} color="#fff" />
-                <Text style={[styles.reportButtonText, styles.reportButtonTextPrimary]}>
-                  PDF Report
-                </Text>
-              </Pressable>
-
-              <Pressable
-                style={[
-                  styles.reportButton,
-                  styles.reportButtonSecondary,
-                  exporting && styles.reportButtonDisabled,
-                ]}
-                onPress={() => handleExport('excel')}
-                disabled={!!exporting}
-              >
-                <MaterialIcon name="table-view" size={18} color={colors.primary} />
-                <Text style={[styles.reportButtonText, styles.reportButtonTextSecondary]}>
-                  Excel Report
-                </Text>
-              </Pressable>
-            </View>
-          </View>
+          {/* Reports moved to Export screen */}
 
           {/* 3. NET BALANCE CARD */}
           <View style={styles.card}>
@@ -562,6 +525,62 @@ const StatsScreen = () => {
               <View style={{ alignItems: 'flex-end' }}>
                 <Text style={styles.labelMutedSmall}>Expense</Text>
                 <Text style={styles.subValueRed}>₹{stats.totalOut.toLocaleString()}</Text>
+              </View>
+            </View>
+          </View>
+          {/* 4. ADVANCED STATS */}
+          <View style={styles.card}>
+            <View style={styles.rowBetween}>
+              <View>
+                <Text style={styles.cardTitle}>Advanced Statistics</Text>
+                <Text style={styles.cardSubtitle}>Count, mean, median, stddev and top categories</Text>
+              </View>
+              <MaterialIcon name="insights" size={22} color="#90A4AE" />
+            </View>
+
+            <View style={{ marginTop: 16 }}>
+              <View style={[styles.rowBetween, { marginBottom: 8 }]}>
+                <View>
+                  <Text style={styles.labelMutedSmall}>Transactions</Text>
+                  <Text style={styles.chartStatValue}>{advancedStats.overall.count}</Text>
+                </View>
+                <View>
+                  <Text style={styles.labelMutedSmall}>Avg / day</Text>
+                  <Text style={styles.chartStatValue}>₹{advancedStats.avgPerDay}</Text>
+                </View>
+                <View>
+                  <Text style={styles.labelMutedSmall}>Net</Text>
+                  <Text style={styles.chartStatValue}>₹{stats.net.toLocaleString()}</Text>
+                </View>
+              </View>
+
+              <View style={[styles.rowBetween, { marginBottom: 8 }]}>
+                <View>
+                  <Text style={styles.labelMutedSmall}>Mean</Text>
+                  <Text style={styles.chartStatValue}>₹{Math.round(advancedStats.overall.mean)}</Text>
+                </View>
+                <View>
+                  <Text style={styles.labelMutedSmall}>Median</Text>
+                  <Text style={styles.chartStatValue}>₹{Math.round(advancedStats.overall.median)}</Text>
+                </View>
+                <View>
+                  <Text style={styles.labelMutedSmall}>Std Dev</Text>
+                  <Text style={styles.chartStatValue}>₹{Math.round(advancedStats.overall.stddev)}</Text>
+                </View>
+              </View>
+
+              <View style={{ marginTop: 8 }}>
+                <Text style={[styles.labelMutedSmall, { marginBottom: 8 }]}>Top expense categories</Text>
+                {topExpenseCategories.length ? (
+                  topExpenseCategories.map((c, i) => (
+                    <View key={c.name} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6 }}>
+                      <Text style={{ fontWeight: '700' }}>{i + 1}. {c.name}</Text>
+                      <Text style={{ color: '#546E7A' }}>₹{Math.round(c.value).toLocaleString()}</Text>
+                    </View>
+                  ))
+                ) : (
+                  <Text style={styles.emptyText}>No expense categories</Text>
+                )}
               </View>
             </View>
           </View>

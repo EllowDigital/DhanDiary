@@ -9,6 +9,7 @@ import {
   removeEntry,
   subscribeEntries,
 } from '../services/firestoreEntries';
+import { getFirebaseAuth } from '../firebase';
 import { EntryUpdate, LocalEntry } from '../types/entries';
 
 /* ----------------------------------------------------------
@@ -40,6 +41,8 @@ export const useEntries = (userId?: string | null) => {
   const queryClient = useQueryClient();
   const queryKey = React.useMemo(() => ['entries', userId ?? 'none'], [userId]);
   const [listenerError, setListenerError] = React.useState<FirestoreError | null>(null);
+  const lastRefreshRef = React.useRef<number>(0);
+  const refreshAttemptsRef = React.useRef<number>(0);
 
   /* ---------------------- Fetch entries ---------------------- */
   const {
@@ -50,7 +53,51 @@ export const useEntries = (userId?: string | null) => {
     queryKey,
     queryFn: async () => {
       if (!userId) return [] as LocalEntry[];
-      return await fetchEntries(userId);
+        try {
+          return await fetchEntries(userId);
+        } catch (err: any) {
+          const msg = String(err?.message || err || '');
+          // If the error is a missing index, surface the console link and fail fast.
+          if (msg.includes('requires an index') || msg.includes('create it here')) {
+            const match = msg.match(/https:\/\/console\.firebase\.google\.com[^)\s]+/);
+            const url = match ? match[0] : undefined;
+            console.warn('Firestore index required for entries query.', url ? `Create it here: ${url}` : msg);
+            const friendly = new Error('Firestore query requires a composite index. See console for link.');
+            (friendly as any).code = 'missing-index';
+            (friendly as any).indexUrl = url;
+            throw friendly;
+          }
+
+          // Permission/auth issues: attempt a single throttled token refresh to recover from stale tokens.
+          const isAuthIssue =
+            (err?.code === 'permission-denied' || err?.code === 'unauthenticated') ||
+            msg.toLowerCase().includes('permission') ||
+            msg.toLowerCase().includes('unauthenticated');
+
+          if (isAuthIssue) {
+            const now = Date.now();
+            // Only attempt refresh at most twice and not more frequently than once per 60s
+            if (refreshAttemptsRef.current < 2 && now - (lastRefreshRef.current || 0) > 60_000) {
+              refreshAttemptsRef.current += 1;
+              lastRefreshRef.current = now;
+              try {
+                const auth = getFirebaseAuth();
+                if (auth.currentUser) {
+                  await auth.currentUser.getIdToken(true);
+                  return await fetchEntries(userId);
+                }
+              } catch (refreshErr: any) {
+                console.warn('Failed to refresh id token after fetchEntries error', refreshErr);
+                // If auth quota exceeded, avoid further aggressive retries
+                if (String(refreshErr?.code || refreshErr?.message || '').toLowerCase().includes('quota')) {
+                  refreshAttemptsRef.current = 99;
+                }
+              }
+            }
+          }
+
+          throw err;
+        }
     },
     enabled: !!userId,
     staleTime: 30_000,
@@ -63,18 +110,68 @@ export const useEntries = (userId?: string | null) => {
   // Keep query data fresh when DB is mutated by background syncs or other processes.
   React.useEffect(() => {
     if (!userId) return;
-    const unsubscribe = subscribeEntries(
-      userId,
-      (payload) => {
-        setListenerError(null);
-        queryClient.setQueryData(queryKey, payload);
-      },
-      (error) => {
-        setListenerError(error);
-        queryClient.invalidateQueries({ queryKey });
+    let unsub = () => undefined;
+    const startListener = () => {
+      try {
+        unsub = subscribeEntries(
+          userId,
+          (payload) => {
+            setListenerError(null);
+            queryClient.setQueryData(queryKey, payload);
+          },
+          async (error) => {
+            setListenerError(error);
+            const msg = String((error as any)?.message || error || '');
+            // If error indicates missing index, surface it and do not attempt token refresh
+            if (msg.includes('requires an index') || msg.includes('create it here')) {
+              const match = msg.match(/https:\/\/console\.firebase\.google\.com[^)\s]+/);
+              const url = match ? match[0] : undefined;
+              console.warn('Entries listener error: missing Firestore index.', url ? `Create it here: ${url}` : msg);
+              queryClient.invalidateQueries({ queryKey });
+              return;
+            }
+
+            console.warn('Entries listener error, attempting token refresh', error);
+
+            try {
+              const now = Date.now();
+              if (refreshAttemptsRef.current < 2 && now - (lastRefreshRef.current || 0) > 60_000) {
+                refreshAttemptsRef.current += 1;
+                lastRefreshRef.current = now;
+                const auth = getFirebaseAuth();
+                if (auth.currentUser) {
+                  await auth.currentUser.getIdToken(true);
+                  // restart listener after a short delay to avoid tight error loop
+                  try {
+                    unsub();
+                  } catch {}
+                  setTimeout(() => startListener(), 500);
+                  return;
+                }
+              }
+            } catch (refreshErr: any) {
+              console.warn('Failed to refresh id token after listener error', refreshErr);
+              if (String(refreshErr?.code || refreshErr?.message || '').toLowerCase().includes('quota')) {
+                // stop further refresh attempts
+                refreshAttemptsRef.current = 99;
+              }
+            }
+
+            queryClient.invalidateQueries({ queryKey });
+          }
+        );
+      } catch (e) {
+        console.warn('Failed to start entries listener', e);
+        setListenerError(e as any);
       }
-    );
-    return () => unsubscribe();
+    };
+
+    startListener();
+    return () => {
+      try {
+        unsub();
+      } catch {}
+    };
   }, [userId, queryClient, queryKey]);
 
   /* ----------------------------------------------------------

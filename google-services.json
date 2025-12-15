@@ -12,7 +12,12 @@
           "package_name": "com.ellowdigital.dhandiary"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "560282913610-42gp71q3eukt7b5i02ahon5ot2ves34h.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyB98yGMNX0C_AuuuAFA_TWQvhkP_736dnU"
@@ -20,7 +25,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "560282913610-42gp71q3eukt7b5i02ahon5ot2ves34h.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
