@@ -70,8 +70,8 @@ const upsertProfile = async (
   const providersArray = Array.isArray(existingData.providers)
     ? existingData.providers
     : existingData.providers
-    ? [existingData.providers]
-    : [];
+      ? [existingData.providers]
+      : [];
   if (data.provider) {
     const p = String(data.provider).toLowerCase();
     if (!providersArray.includes(p)) providersArray.push(p);
