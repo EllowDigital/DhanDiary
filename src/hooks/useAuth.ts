@@ -44,11 +44,19 @@ export const useAuth = () => {
       };
 
       const attachProfile = async () => {
-        const userRef = doc(db, 'user', firebaseUser.uid);
+        const userRef = doc(db, 'users', firebaseUser.uid);
         try {
           const snapshot = await getDoc(userRef);
           if (!snapshot.exists()) {
-            await setDoc(userRef, baseProfile, { merge: true });
+            // write minimal profile following final schema
+            const initial = {
+              displayName: baseProfile.name,
+              email: baseProfile.email,
+              providers: [baseProfile.provider],
+              createdAt: baseProfile.createdAt,
+              updatedAt: baseProfile.updatedAt,
+            };
+            await setDoc(userRef, initial, { merge: true });
           }
 
           if (!isMounted || auth.currentUser?.uid !== firebaseUser.uid) {
@@ -58,9 +66,11 @@ export const useAuth = () => {
           const initialData = snapshot.exists() ? snapshot.data() || {} : baseProfile;
           setUser({
             uid: firebaseUser.uid,
-            name: initialData.name || baseProfile.name,
+            name: initialData.displayName || baseProfile.name,
             email: initialData.email || baseProfile.email,
-            provider: initialData.provider || baseProfile.provider,
+            provider: Array.isArray(initialData.providers)
+              ? initialData.providers[0]
+              : initialData.provider || baseProfile.provider,
           });
           setLoading(false);
 
@@ -70,9 +80,11 @@ export const useAuth = () => {
               const data = profileSnap.data() || {};
               setUser({
                 uid: firebaseUser.uid,
-                name: data.name || baseProfile.name,
+                name: data.displayName || baseProfile.name,
                 email: data.email || baseProfile.email,
-                provider: data.provider || baseProfile.provider,
+                provider: Array.isArray(data.providers)
+                  ? data.providers[0]
+                  : data.provider || baseProfile.provider,
               });
             },
             (error) => {
