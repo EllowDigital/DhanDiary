@@ -17,17 +17,7 @@ import Animated, {
   useAnimatedStyle,
   withTiming,
 } from 'react-native-reanimated';
-
-// --- Design Tokens ---
-const colors = {
-  background: '#f3f4f6',
-  text: '#1F2937', // Darker, sharper text
-  subtext: '#6B7280',
-  card: '#ffffff', // Very light gray for button backgrounds
-  primary: '#6C63FF',
-  shadow: '#000000',
-};
-const spacing = (val: number) => val * 4;
+import { colors as themeColors, spacing as themeSpacing } from '../utils/design';
 
 export type ScreenHeaderProps = {
   title: string;
@@ -88,14 +78,14 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
   const headerAnimatedStyle = useAnimatedStyle(() => {
     const isScrolled = scrollOffset > 10;
     return {
-      backgroundColor: colors.background,
+      backgroundColor: themeColors.background,
       // Instead of a border, we fade in a soft shadow
       shadowOpacity: withTiming(isScrolled ? 0.05 : 0, { duration: 300 }),
       elevation: withTiming(isScrolled ? 4 : 0, { duration: 300 }),
     };
   });
 
-  const topPadding = (useSafeAreaPadding ? insets.top : 0) + spacing(2);
+  const topPadding = (useSafeAreaPadding ? insets.top : 0) + themeSpacing(1);
 
   return (
     <Animated.View
@@ -113,7 +103,7 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
           <MaterialIcons
             name={canGoBack ? 'arrow-back-ios-new' : 'menu'}
             size={20}
-            color={colors.text}
+            color={themeColors.text}
           />
         </TouchableOpacity>
 
@@ -141,7 +131,7 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
           style={styles.hintContainer}
         >
           <TouchableOpacity onPress={handleDismissHint} style={styles.hintPill} activeOpacity={0.8}>
-            <MaterialIcons name="keyboard-arrow-down" size={16} color={colors.primary} />
+            <MaterialIcons name="keyboard-arrow-down" size={16} color={themeColors.primary} />
             <Text style={styles.hintText}>Scroll for more</Text>
           </TouchableOpacity>
         </Animated.View>
@@ -152,11 +142,11 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
 
 const styles = StyleSheet.create({
   wrapper: {
-    paddingHorizontal: spacing(4),
-    paddingBottom: spacing(3),
+    paddingHorizontal: themeSpacing(2),
+    paddingBottom: themeSpacing(1.5),
     zIndex: 10,
     // Default Shadow Config (hidden by opacity in animation)
-    shadowColor: colors.shadow,
+    shadowColor: themeColors.shadow,
     shadowOffset: { width: 0, height: 4 },
     shadowRadius: 12,
   },
@@ -169,25 +159,25 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 14, // Slightly rounder squircle
-    backgroundColor: colors.card, // Soft light gray background
+    backgroundColor: themeColors.card, // Soft light gray background
     justifyContent: 'center',
     alignItems: 'center',
     // No border here
   },
   titleWrap: {
     flex: 1,
-    paddingHorizontal: spacing(3),
+    paddingHorizontal: themeSpacing(1.5),
     justifyContent: 'center',
   },
   title: {
     fontSize: 20, // Slightly larger
     fontWeight: '800', // Bold modern font
-    color: colors.text,
+    color: themeColors.text,
     letterSpacing: -0.5,
   },
   subtitle: {
     marginTop: 2,
-    color: colors.subtext,
+    color: themeColors.subtext,
     fontSize: 13,
     fontWeight: '500',
   },
@@ -209,13 +199,13 @@ const styles = StyleSheet.create({
   hintPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.background,
+    backgroundColor: themeColors.background,
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 30, // Full capsule
 
     // Soft Floating Shadow (Instead of border)
-    shadowColor: colors.shadow,
+    shadowColor: themeColors.shadow,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
@@ -223,7 +213,7 @@ const styles = StyleSheet.create({
   },
   hintText: {
     fontSize: 11,
-    color: colors.subtext,
+    color: themeColors.subtext,
     fontWeight: '700',
     marginLeft: 6,
     textTransform: 'uppercase',
