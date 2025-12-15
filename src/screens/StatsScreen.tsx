@@ -407,22 +407,28 @@ const StatsScreen = () => {
           }}
         >
           {/* 1. FILTER TABS */}
-          <View style={styles.segmentControl}>
-            {FILTERS.map((f) => {
-              const isActive = filter === f;
-              return (
-                <Pressable
-                  key={f}
-                  style={[styles.segmentBtn, isActive && styles.segmentBtnActive]}
-                  onPress={() => handleFilterPress(f)}
-                >
-                  <Text style={[styles.segmentText, isActive && styles.segmentTextActive]}>
-                    {f}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.segmentScroll}
+          >
+            <View style={styles.segmentControl}>
+              {FILTERS.map((f) => {
+                const isActive = filter === f;
+                return (
+                  <Pressable
+                    key={f}
+                    style={[styles.segmentBtnCompact, isActive && styles.segmentBtnActiveCompact]}
+                    onPress={() => handleFilterPress(f)}
+                  >
+                    <Text style={[styles.segmentTextCompact, isActive && styles.segmentTextActive]}>
+                      {f}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </ScrollView>
 
           {filter === 'This Month' && availableMonths.length > 0 && (
             <ScrollView

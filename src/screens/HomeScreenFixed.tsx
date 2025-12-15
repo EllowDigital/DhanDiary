@@ -15,6 +15,7 @@ import {
 import type { ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
+import { useToast } from '../context/ToastContext';
 import SimpleButtonGroup from '../components/SimpleButtonGroup';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useNavigation } from '@react-navigation/native';
@@ -154,7 +155,21 @@ const CompactTransactionRow = ({ item, onPress }: { item: any; onPress: () => vo
 const HomeScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { user } = useAuth();
-  const { entries = [], isLoading = false } = useEntries(user?.uid);
+  const { entries = [], isLoading = false, queryError, listenerError } = useEntries(user?.uid);
+  const { showToast } = useToast();
+
+  // Production: avoid showing dev-focused index console links in the UI. Log and show
+  // a single, subtle toast if the index is required or building.
+  const _indexToastShown = React.useRef(false);
+  React.useEffect(() => {
+    const isMissing = (queryError as any)?.code === 'missing-index' ||
+      String((listenerError as any)?.message || '').includes('requires an index');
+    if (isMissing && !_indexToastShown.current) {
+      _indexToastShown.current = true;
+      console.warn('Firestore composite index required or building.');
+      showToast('Loading delayed — syncing data. Please try again shortly.');
+    }
+  }, [queryError, listenerError, showToast]);
   const showLoading = useDelayedLoading(Boolean(isLoading), 200);
 
   // --- RESPONSIVE LOGIC ---
@@ -409,6 +424,7 @@ const HomeScreen: React.FC = () => {
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
         <FullScreenSpinner visible={showLoading || applyingUpdate} />
+        {/* Production: index-building banner removed to avoid exposing console URLs. */}
 
         <FlatList
           data={recent}
