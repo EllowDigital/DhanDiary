@@ -2,7 +2,7 @@
   "name": "dhandiary",
   "version": "1.8.4",
   "private": true,
-  "main": "index.ts",
+  "main": "bootstrap.js",
   "scripts": {
     "start": "npx expo start",
     "android": "npx expo run:android",

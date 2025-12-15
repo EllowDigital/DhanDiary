@@ -8,14 +8,18 @@ import { Platform } from 'react-native';
 declare const global: any;
 try {
 	if (typeof global !== 'undefined' && typeof (global as any).require === 'undefined') {
-		Object.defineProperty(global, 'require', {
-			configurable: true,
-			enumerable: false,
-			get() {
-				// prefer the local require function if available
-				return typeof require === 'function' ? require : undefined;
-			},
-		});
+		try {
+			// Prefer direct assignment when possible — some runtimes may not invoke getters
+			(global as any).require = typeof require === 'function' ? require : undefined;
+		} catch (e) {
+			// Fallback to defineProperty if assignment is restricted
+			Object.defineProperty(global, 'require', {
+				configurable: true,
+				enumerable: false,
+				value: typeof require === 'function' ? require : undefined,
+				writable: true,
+			});
+		}
 	}
 } catch (e) {
 	// ignore — defensive guard
