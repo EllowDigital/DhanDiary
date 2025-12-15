@@ -492,3 +492,41 @@ export const useGithubAuth = () => {
     linkAccount: () => runFlow('link'),
   };
 };
+
+// Non-hook programmatic GitHub sign-in helper (same device flow as the hook, usable from event handlers)
+export async function startGithubSignIn(intent: 'signIn' | 'link' = 'signIn') {
+  const extra = getExtra();
+  const clientId = extra?.oauth?.githubClientId;
+  const githubAvailable = !!clientId;
+  const isExpoGo = Constants?.appOwnership === 'expo';
+
+  if (!githubAvailable || !clientId) {
+    throw new Error('GitHub sign-in is not configured for this build.');
+  }
+  if (isExpoGo) {
+    throw new Error('GitHub sign-in requires an EAS dev client or production build.');
+  }
+
+  const devicePayload = await requestGithubDeviceCode(clientId);
+  await promptGithubVerification(
+    devicePayload.user_code,
+    devicePayload.verification_uri,
+    devicePayload.verification_uri_complete,
+    intent
+  );
+
+  const accessToken = await pollGithubAccessToken(
+    clientId,
+    devicePayload.device_code,
+    devicePayload.expires_in,
+    devicePayload.interval,
+    () => false
+  );
+
+  const credential = GithubAuthProvider.credential(accessToken);
+  if (intent === 'link') {
+    await linkCurrentUserWithCredential(credential);
+  } else {
+    await signInWithFirebaseCredential(credential);
+  }
+}
