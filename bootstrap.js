@@ -1,4 +1,3 @@
-/* global global */
 /* eslint no-useless-catch: "off" */
 // Small bootstrap file that ensures `global.require` exists BEFORE any modules
 // are loaded. Some third-party modules access `global.require` during their

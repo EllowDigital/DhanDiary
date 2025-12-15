@@ -1,4 +1,3 @@
-/* global global */
 // Compatibility bootstrap for Expo Go and Metro entry variants.
 // Some runtimes (Expo Go) don't use `package.json`/`app.json` entry overrides,
 // so ensure `global.require` exists before any other module evaluates.
@@ -35,13 +34,8 @@
   }
 
   // Now delegate to the actual app entry (TSX). Metro will resolve the file.
-  try {
-    const app = require('./App');
-    // If module exports default, re-export it as default for compatibility
-    if (app && app.default) module.exports = app.default;
-    else module.exports = app;
-  } catch (err) {
-    // let Metro surface the error
-    throw err;
-  }
+  const app = require('./App');
+  // If module exports default, re-export it as default for compatibility
+  if (app && app.default) module.exports = app.default;
+  else module.exports = app;
 })();
