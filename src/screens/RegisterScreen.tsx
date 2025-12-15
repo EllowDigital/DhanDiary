@@ -244,18 +244,20 @@ const RegisterScreen = () => {
             {/* --- HEADER ROW (Logo Left | Text Right) --- */}
             <View style={styles.brandHeader}>
               <View style={styles.logoContainer}>
-                <Image
-                  source={(() => {
-                    try {
-                      if (typeof require !== 'function') return undefined;
-                      return require('../../assets/splash-icon.png');
-                    } catch (e) {
-                      return undefined;
-                    }
-                  })()}
-                  style={styles.logo}
-                  resizeMode="contain"
-                />
+                <View style={styles.logoBadge}>
+                  <Image
+                    source={(() => {
+                      try {
+                        if (typeof require !== 'function') return undefined;
+                        return require('../../assets/splash-icon.png');
+                      } catch (e) {
+                        return undefined;
+                      }
+                    })()}
+                    style={styles.logo}
+                    resizeMode="contain"
+                  />
+                </View>
               </View>
               <View style={styles.brandTexts}>
                 <Text style={styles.appName}>Join DhanDiary</Text>

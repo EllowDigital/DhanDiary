@@ -17,6 +17,7 @@ import { Button, Text } from '@rneui/themed';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { Image } from 'react-native';
 
 import { useToast } from '../context/ToastContext';
 import { useNavigation } from '@react-navigation/native';
@@ -371,8 +372,40 @@ export default AuthScreen;
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F0F2F5' },
-  scrollContent: { flexGrow: 1, padding: 20, justifyContent: 'center' },
-  card: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 18 },
+  scrollContent: { flexGrow: 1, padding: 20, justifyContent: 'center', alignItems: 'center' },
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 22,
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
+    // soft shadow
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.06,
+    shadowRadius: 20,
+    elevation: 6,
+  },
+  logoRow: { flexDirection: 'row', alignItems: 'center' },
+  logoBadge: {
+    width: 56,
+    height: 56,
+    borderRadius: 14,
+    backgroundColor: '#EAF2FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  logoBadgeImage: { width: 36, height: 36 },
+  brandTitleCol: { marginLeft: 12 },
+  appName: { fontSize: 18, fontWeight: '800', color: colors.text },
+  appTagline: { fontSize: 13, color: colors.muted, marginTop: 2 },
+  spacer: { height: 12 },
   fieldSpacing: { marginBottom: 12 },
   forgotPassContainer: { marginTop: 8 },
   forgotPassText: { color: '#64748B' },
