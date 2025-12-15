@@ -156,10 +156,32 @@ export const sendPasswordReset = async (email: string) => {
   try {
     await sendPasswordResetEmail(auth, email.trim(), actionCodeSettings);
   } catch (error: any) {
+    // If user doesn't exist, swallow error to avoid leaking existence
     if (error?.code === 'auth/user-not-found') {
       await sleep(350);
       return;
     }
+
+    // If the continue/redirect domain isn't allowlisted, retry without a custom URL
+    if (
+      error?.code === 'auth/unauthorized-continue-uri' ||
+      (error?.message && String(error.message).includes('unauthorized-continue-uri'))
+    ) {
+      console.warn('Password reset continue URL not allowlisted:', actionCodeSettings.url);
+      try {
+        // Try the default flow (no custom continue URL) so the user can still receive a reset email
+        await sendPasswordResetEmail(auth, email.trim());
+        Alert.alert(
+          'Reset Sent',
+          'Password reset email sent using the default flow. To use a custom continue URL, add its domain to Firebase Console → Authentication → Authorized domains.'
+        );
+        return;
+      } catch (e2: any) {
+        // Bubble up the secondary error if it fails
+        throw e2;
+      }
+    }
+
     throw error;
   }
 };
