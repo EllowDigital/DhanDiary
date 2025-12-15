@@ -26,7 +26,7 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { AuthStackParamList } from '../types/navigation';
 import { useToast } from '../context/ToastContext';
 import { useInternetStatus } from '../hooks/useInternetStatus';
-import { registerWithEmail, useGithubAuth } from '../services/firebaseAuth';
+import { registerWithEmail } from '../services/firebaseAuth';
 import { SHOW_GITHUB_LOGIN } from '../config/featureFlags';
 
 // Components & Utils
@@ -103,8 +103,7 @@ const RegisterScreen = () => {
   };
   const passStrength = getPasswordStrength(password);
 
-  const { githubAvailable, signIn: startGithubSignIn } = useGithubAuth();
-  const showGithub = SHOW_GITHUB_LOGIN && githubAvailable;
+  const showGithub = SHOW_GITHUB_LOGIN;
 
   // Optimized Handlers
   const handleEmailChange = useCallback(
@@ -175,10 +174,11 @@ const RegisterScreen = () => {
   // Google signup removed. Use only Firebase-native Google login elsewhere.
 
   const handleGithubSignup = async () => {
-    if (!githubAvailable) return;
+    if (!showGithub) return;
     setSocialLoading(true);
     try {
-      await startGithubSignIn();
+      const mod = await import('../services/firebaseAuth');
+      await mod.startGithubSignIn('signIn');
     } catch (err) {
       const e: any = err || {};
       if (e.code === 'auth/account-exists-with-different-credential') {
