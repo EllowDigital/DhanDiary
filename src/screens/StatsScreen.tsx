@@ -39,7 +39,11 @@ const calcStats = (entries: LocalEntry[]) => {
   const mean = count ? amounts.reduce((s, v) => s + v, 0) / count : 0;
   const sorted = [...amounts].sort((a, b) => a - b);
   const median =
-    count === 0 ? 0 : count % 2 === 1 ? sorted[(count - 1) / 2] : (sorted[count / 2 - 1] + sorted[count / 2]) / 2;
+    count === 0
+      ? 0
+      : count % 2 === 1
+        ? sorted[(count - 1) / 2]
+        : (sorted[count / 2 - 1] + sorted[count / 2]) / 2;
   const variance = count ? amounts.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / count : 0;
   const stddev = Math.sqrt(variance);
   return { count, mean, median, stddev };
@@ -245,7 +249,9 @@ const StatsScreen = () => {
     const expenses = calcStats(filteredEntries.filter((e) => e.type === 'out'));
     const incomes = calcStats(filteredEntries.filter((e) => e.type === 'in'));
     const days = Math.max(1, rangeEnd.diff(rangeStart, 'day') + 1);
-    const avgPerDay = Math.round((filteredEntries.reduce((s, e) => s + Number(e.amount || 0), 0) || 0) / days);
+    const avgPerDay = Math.round(
+      (filteredEntries.reduce((s, e) => s + Number(e.amount || 0), 0) || 0) / days
+    );
     return { overall, expenses, incomes, avgPerDay };
   }, [filteredEntries, rangeStart, rangeEnd]);
 
@@ -533,7 +539,9 @@ const StatsScreen = () => {
             <View style={styles.rowBetween}>
               <View>
                 <Text style={styles.cardTitle}>Advanced Statistics</Text>
-                <Text style={styles.cardSubtitle}>Count, mean, median, stddev and top categories</Text>
+                <Text style={styles.cardSubtitle}>
+                  Count, mean, median, stddev and top categories
+                </Text>
               </View>
               <MaterialIcon name="insights" size={22} color="#90A4AE" />
             </View>
@@ -557,25 +565,44 @@ const StatsScreen = () => {
               <View style={[styles.rowBetween, { marginBottom: 8 }]}>
                 <View>
                   <Text style={styles.labelMutedSmall}>Mean</Text>
-                  <Text style={styles.chartStatValue}>₹{Math.round(advancedStats.overall.mean)}</Text>
+                  <Text style={styles.chartStatValue}>
+                    ₹{Math.round(advancedStats.overall.mean)}
+                  </Text>
                 </View>
                 <View>
                   <Text style={styles.labelMutedSmall}>Median</Text>
-                  <Text style={styles.chartStatValue}>₹{Math.round(advancedStats.overall.median)}</Text>
+                  <Text style={styles.chartStatValue}>
+                    ₹{Math.round(advancedStats.overall.median)}
+                  </Text>
                 </View>
                 <View>
                   <Text style={styles.labelMutedSmall}>Std Dev</Text>
-                  <Text style={styles.chartStatValue}>₹{Math.round(advancedStats.overall.stddev)}</Text>
+                  <Text style={styles.chartStatValue}>
+                    ₹{Math.round(advancedStats.overall.stddev)}
+                  </Text>
                 </View>
               </View>
 
               <View style={{ marginTop: 8 }}>
-                <Text style={[styles.labelMutedSmall, { marginBottom: 8 }]}>Top expense categories</Text>
+                <Text style={[styles.labelMutedSmall, { marginBottom: 8 }]}>
+                  Top expense categories
+                </Text>
                 {topExpenseCategories.length ? (
                   topExpenseCategories.map((c, i) => (
-                    <View key={c.name} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6 }}>
-                      <Text style={{ fontWeight: '700' }}>{i + 1}. {c.name}</Text>
-                      <Text style={{ color: '#546E7A' }}>₹{Math.round(c.value).toLocaleString()}</Text>
+                    <View
+                      key={c.name}
+                      style={{
+                        flexDirection: 'row',
+                        justifyContent: 'space-between',
+                        paddingVertical: 6,
+                      }}
+                    >
+                      <Text style={{ fontWeight: '700' }}>
+                        {i + 1}. {c.name}
+                      </Text>
+                      <Text style={{ color: '#546E7A' }}>
+                        ₹{Math.round(c.value).toLocaleString()}
+                      </Text>
                     </View>
                   ))
                 ) : (

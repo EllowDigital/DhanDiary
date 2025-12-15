@@ -169,18 +169,13 @@ export const sendPasswordReset = async (email: string) => {
       (error?.message && String(error.message).includes('unauthorized-continue-uri'))
     ) {
       console.warn('Password reset continue URL not allowlisted:', actionCodeSettings.url);
-      try {
-        // Try the default flow (no custom continue URL) so the user can still receive a reset email
-        await sendPasswordResetEmail(auth, email.trim());
-        Alert.alert(
-          'Reset Sent',
-          'Password reset email sent using the default flow. To use a custom continue URL, add its domain to Firebase Console → Authentication → Authorized domains.'
-        );
-        return;
-      } catch (e2: any) {
-        // Bubble up the secondary error if it fails
-        throw e2;
-      }
+      // Try the default flow (no custom continue URL) so the user can still receive a reset email
+      await sendPasswordResetEmail(auth, email.trim());
+      Alert.alert(
+        'Reset Sent',
+        'Password reset email sent using the default flow. To use a custom continue URL, add its domain to Firebase Console → Authentication → Authorized domains.'
+      );
+      return;
     }
 
     throw error;

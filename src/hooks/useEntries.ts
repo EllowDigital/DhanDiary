@@ -48,56 +48,67 @@ export const useEntries = (userId?: string | null) => {
   const {
     data: entries,
     isLoading,
+    error,
     refetch,
   } = useQuery<LocalEntry[], Error>({
     queryKey,
     queryFn: async () => {
       if (!userId) return [] as LocalEntry[];
-        try {
-          return await fetchEntries(userId);
-        } catch (err: any) {
-          const msg = String(err?.message || err || '');
-          // If the error is a missing index, surface the console link and fail fast.
-          if (msg.includes('requires an index') || msg.includes('create it here')) {
-            const match = msg.match(/https:\/\/console\.firebase\.google\.com[^)\s]+/);
-            const url = match ? match[0] : undefined;
-            console.warn('Firestore index required for entries query.', url ? `Create it here: ${url}` : msg);
-            const friendly = new Error('Firestore query requires a composite index. See console for link.');
-            (friendly as any).code = 'missing-index';
-            (friendly as any).indexUrl = url;
-            throw friendly;
-          }
+      try {
+        return await fetchEntries(userId);
+      } catch (err: any) {
+        const msg = String(err?.message || err || '');
+        // If the error is a missing index, surface the console link and fail fast.
+        if (msg.includes('requires an index') || msg.includes('create it here')) {
+          const match = msg.match(/https:\/\/console\.firebase\.google\.com[^)\s]+/);
+          const url = match ? match[0] : undefined;
+          console.warn(
+            'Firestore index required for entries query.',
+            url ? `Create it here: ${url}` : msg
+          );
+          const friendly = new Error(
+            'Firestore query requires a composite index. See console for link.'
+          );
+          (friendly as any).code = 'missing-index';
+          (friendly as any).indexUrl = url;
+          throw friendly;
+        }
 
-          // Permission/auth issues: attempt a single throttled token refresh to recover from stale tokens.
-          const isAuthIssue =
-            (err?.code === 'permission-denied' || err?.code === 'unauthenticated') ||
-            msg.toLowerCase().includes('permission') ||
-            msg.toLowerCase().includes('unauthenticated');
+        // Permission/auth issues: attempt a single throttled token refresh to recover from stale tokens.
+        const isAuthIssue =
+          err?.code === 'permission-denied' ||
+          err?.code === 'unauthenticated' ||
+          msg.toLowerCase().includes('permission') ||
+          msg.toLowerCase().includes('unauthenticated');
 
-          if (isAuthIssue) {
-            const now = Date.now();
-            // Only attempt refresh at most twice and not more frequently than once per 60s
-            if (refreshAttemptsRef.current < 2 && now - (lastRefreshRef.current || 0) > 60_000) {
-              refreshAttemptsRef.current += 1;
-              lastRefreshRef.current = now;
-              try {
-                const auth = getFirebaseAuth();
-                if (auth.currentUser) {
-                  await auth.currentUser.getIdToken(true);
-                  return await fetchEntries(userId);
-                }
-              } catch (refreshErr: any) {
-                console.warn('Failed to refresh id token after fetchEntries error', refreshErr);
-                // If auth quota exceeded, avoid further aggressive retries
-                if (String(refreshErr?.code || refreshErr?.message || '').toLowerCase().includes('quota')) {
-                  refreshAttemptsRef.current = 99;
-                }
+        if (isAuthIssue) {
+          const now = Date.now();
+          // Only attempt refresh at most twice and not more frequently than once per 60s
+          if (refreshAttemptsRef.current < 2 && now - (lastRefreshRef.current || 0) > 60_000) {
+            refreshAttemptsRef.current += 1;
+            lastRefreshRef.current = now;
+            try {
+              const auth = getFirebaseAuth();
+              if (auth.currentUser) {
+                await auth.currentUser.getIdToken(true);
+                return await fetchEntries(userId);
+              }
+            } catch (refreshErr: any) {
+              console.warn('Failed to refresh id token after fetchEntries error', refreshErr);
+              // If auth quota exceeded, avoid further aggressive retries
+              if (
+                String(refreshErr?.code || refreshErr?.message || '')
+                  .toLowerCase()
+                  .includes('quota')
+              ) {
+                refreshAttemptsRef.current = 99;
               }
             }
           }
-
-          throw err;
         }
+
+        throw err;
+      }
     },
     enabled: !!userId,
     staleTime: 30_000,
@@ -126,7 +137,12 @@ export const useEntries = (userId?: string | null) => {
             if (msg.includes('requires an index') || msg.includes('create it here')) {
               const match = msg.match(/https:\/\/console\.firebase\.google\.com[^)\s]+/);
               const url = match ? match[0] : undefined;
-              console.warn('Entries listener error: missing Firestore index.', url ? `Create it here: ${url}` : msg);
+              console.warn(
+                'Entries listener error: missing Firestore index.',
+                url ? `Create it here: ${url}` : msg
+              );
+              // mark as unrecoverable to avoid spinner/retry storms
+              refreshAttemptsRef.current = 99;
               queryClient.invalidateQueries({ queryKey });
               return;
             }
@@ -151,7 +167,11 @@ export const useEntries = (userId?: string | null) => {
               }
             } catch (refreshErr: any) {
               console.warn('Failed to refresh id token after listener error', refreshErr);
-              if (String(refreshErr?.code || refreshErr?.message || '').toLowerCase().includes('quota')) {
+              if (
+                String(refreshErr?.code || refreshErr?.message || '')
+                  .toLowerCase()
+                  .includes('quota')
+              ) {
                 // stop further refresh attempts
                 refreshAttemptsRef.current = 99;
               }
@@ -173,6 +193,27 @@ export const useEntries = (userId?: string | null) => {
       } catch {}
     };
   }, [userId, queryClient, queryKey]);
+
+  // Reset retry counters when user changes (logout/login) so fresh sessions can attempt recovery.
+  React.useEffect(() => {
+    refreshAttemptsRef.current = 0;
+    lastRefreshRef.current = 0;
+  }, [userId]);
+
+  // Combine react-query loading with listener/error state to avoid perpetual global spinners
+  // when there is a permanent backend issue (like missing index) or listener error.
+  const effectiveIsLoading = React.useMemo(() => {
+    // If react-query is loading but query error indicates missing-index, stop loading.
+    const queryError = error as any;
+    const isMissingIndex = queryError && queryError.code === 'missing-index';
+    if (isMissingIndex) return false;
+    // If listener has a fatal error (we flagged via refreshAttemptsRef), stop loading.
+    if (listenerError) {
+      const lm = String((listenerError as any)?.message || '');
+      if (lm.includes('requires an index') || lm.includes('create it here')) return false;
+    }
+    return !!isLoading;
+  }, [isLoading, error, listenerError]);
 
   /* ----------------------------------------------------------
      ADD ENTRY
@@ -285,7 +326,8 @@ export const useEntries = (userId?: string | null) => {
 
   return {
     entries: entries as LocalEntry[] | undefined,
-    isLoading,
+    isLoading: effectiveIsLoading,
+    queryError: error as Error | null,
     addEntry: addEntryMutation.mutateAsync,
     updateEntry: updateEntryMutation.mutateAsync,
     deleteEntry: deleteEntryMutation.mutateAsync,

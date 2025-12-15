@@ -16,7 +16,6 @@ export const configureGoogleSignIn = () => {
 
   if (shouldUseNative) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
       const { GoogleSignin } = require('@react-native-google-signin/google-signin');
       GoogleSignin.configure({
         webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
@@ -24,7 +23,6 @@ export const configureGoogleSignIn = () => {
       });
       return;
     } catch (e) {
-      // eslint-disable-next-line no-console
       console.warn('Google Sign-In native module not available even in native client', e);
     }
   }
@@ -39,7 +37,6 @@ export const signInWithGoogle = async () => {
   if (useNative) {
     let GoogleSignin: any;
     try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
       GoogleSignin = require('@react-native-google-signin/google-signin').GoogleSignin;
     } catch (e) {
       throw new Error(
@@ -57,11 +54,9 @@ export const signInWithGoogle = async () => {
 
   // Expo Go or web — use expo-auth-session web OAuth flow
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const AuthSession = require('expo-auth-session');
     const { makeRedirectUri, loadAsync } = AuthSession;
     // ResponseType enum is in AuthRequest.types; require its build to access the enum value
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { ResponseType } = require('expo-auth-session/build/AuthRequest.types');
 
     const webClientId = getWebClientId();
