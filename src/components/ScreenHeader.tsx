@@ -49,13 +49,12 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
   const [hintVisible, setHintVisible] = useState(showScrollHint);
 
   const handleNav = () => {
-    if (canGoBack) {
-      navigation.goBack();
-    } else {
-      const nav: any = navigation;
-      if (nav.openDrawer) nav.openDrawer();
-      else if (nav.toggleDrawer) nav.toggleDrawer();
-    }
+    const nav: any = navigation;
+    // Prefer opening the drawer so users can access navigation without needing to back out
+    if (nav.openDrawer) return nav.openDrawer();
+    if (nav.toggleDrawer) return nav.toggleDrawer();
+    // Fallback to goBack if no drawer is available
+    if (canGoBack) return navigation.goBack();
   };
 
   const handleDismissHint = () => {
@@ -100,11 +99,7 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
           activeOpacity={0.7}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <MaterialIcons
-            name={canGoBack ? 'arrow-back-ios-new' : 'menu'}
-            size={20}
-            color={themeColors.text}
-          />
+          <MaterialIcons name="menu" size={20} color={themeColors.text} />
         </TouchableOpacity>
 
         {/* Title */}

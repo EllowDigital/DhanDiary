@@ -74,6 +74,7 @@
     "prettier": "^3.7.1",
     "react-refresh": "^0.18.0",
     "typescript": "~5.9.2",
-    "@react-native-community/cli": "latest"
+    "@react-native-community/cli": "latest",
+    "@react-native/metro-config": "0.81.5"
   }
 }
