@@ -23,7 +23,8 @@
     }
     if (typeof globalThis !== 'undefined' && typeof globalThis.require === 'undefined') {
       try {
-        globalThis.require = (global && global.require) || (typeof require === 'function' ? require : undefined);
+        globalThis.require =
+          (global && global.require) || (typeof require === 'function' ? require : undefined);
       } catch (e) {
         // ignore
       }

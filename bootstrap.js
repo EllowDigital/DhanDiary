@@ -5,9 +5,9 @@
 (function () {
   try {
     if (typeof global !== 'undefined') {
-      if (typeof (global).require === 'undefined') {
+      if (typeof global.require === 'undefined') {
         try {
-          (global).require = typeof require === 'function' ? require : undefined;
+          global.require = typeof require === 'function' ? require : undefined;
         } catch (e) {
           try {
             Object.defineProperty(global, 'require', {
