@@ -24,7 +24,6 @@ import { useNavigation } from '@react-navigation/native';
 import { useInternetStatus } from '../hooks/useInternetStatus';
 import AuthField from '../components/AuthField';
 import FullScreenSpinner from '../components/FullScreenSpinner';
-import ScreenHeader from '../components/ScreenHeader';
 
 import { colors } from '../utils/design';
 import { loginWithEmail, registerWithEmail, sendPasswordReset } from '../services/firebaseAuth';
@@ -165,31 +164,14 @@ const AuthScreen: React.FC = () => {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
-          <ScreenHeader
-            title="Welcome"
-            subtitle={mode === 'login' ? 'Sign in to continue' : 'Create your account'}
-            hideLeftAction={true}
-            showAppIcon={true}
-          />
+          {/* Header removed: rendering single centered app icon + title inside the card */}
 
           <Animated.View
-            style={[
-              styles.card,
-              { opacity: fadeAnim, transform: [{ scale: scaleAnim }] },
-            ]}
+            style={[styles.card, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}
           >
-            {mode === 'register' && (
-              <AuthField
-                icon="person-outline"
-                placeholder="Full name"
-                value={name}
-                onChangeText={setName}
-                containerStyle={styles.fieldSpacing}
-              />
-            )}
-
-            <View style={styles.logoRow}>
-              <View style={styles.logoBadge}>
+            {/* Centered card header */}
+            <View style={styles.cardHeaderCenter}>
+              <View style={styles.logoBadgeCentered}>
                 <Image
                   source={(() => {
                     try {
@@ -199,17 +181,15 @@ const AuthScreen: React.FC = () => {
                       return undefined;
                     }
                   })()}
-                  style={styles.logoBadgeImage}
+                  style={styles.logoCentered}
                   resizeMode="contain"
                 />
               </View>
-              <View style={styles.brandTitleCol}>
-                <Text style={styles.appName}>Welcome</Text>
-                <Text style={styles.appTagline}>{mode === 'login' ? 'Sign in to continue' : 'Create your account'}</Text>
-              </View>
+              <Text style={styles.appName}>Welcome</Text>
+              <Text style={styles.appTagline}>
+                {mode === 'login' ? 'Sign in to continue' : 'Create your account'}
+              </Text>
             </View>
-
-            <View style={styles.spacer} />
 
             <AuthField
               icon="mail-outline"
@@ -221,6 +201,16 @@ const AuthScreen: React.FC = () => {
               onChangeText={setEmail}
               containerStyle={styles.fieldSpacing}
             />
+
+            {mode === 'register' && (
+              <AuthField
+                icon="person-outline"
+                placeholder="Full name"
+                value={name}
+                onChangeText={setName}
+                containerStyle={styles.fieldSpacing}
+              />
+            )}
 
             <AuthField
               icon="lock-outline"
@@ -283,7 +273,10 @@ const AuthScreen: React.FC = () => {
                     Terms
                   </Text>{' '}
                   and{' '}
-                  <Text style={styles.termsLink} onPress={() => navigation.navigate('PrivacyPolicy')}>
+                  <Text
+                    style={styles.termsLink}
+                    onPress={() => navigation.navigate('PrivacyPolicy')}
+                  >
                     Privacy Policy
                   </Text>
                   .
@@ -375,8 +368,8 @@ const styles = StyleSheet.create({
   scrollContent: { flexGrow: 1, padding: 20, justifyContent: 'center', alignItems: 'center' },
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 22,
+    borderRadius: 14,
+    padding: 20,
     width: '100%',
     maxWidth: 520,
     alignSelf: 'center',
@@ -387,21 +380,17 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 6,
   },
-  logoRow: { flexDirection: 'row', alignItems: 'center' },
-  logoBadge: {
-    width: 56,
-    height: 56,
-    borderRadius: 14,
-    backgroundColor: '#EAF2FF',
+  cardHeaderCenter: { alignItems: 'center', marginBottom: 12 },
+  logoBadgeCentered: {
+    width: 64,
+    height: 64,
+    borderRadius: 12,
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 3,
+    marginBottom: 8,
   },
-  logoBadgeImage: { width: 36, height: 36 },
+  logoCentered: { width: 40, height: 40 },
   brandTitleCol: { marginLeft: 12 },
   appName: { fontSize: 18, fontWeight: '800', color: colors.text },
   appTagline: { fontSize: 13, color: colors.muted, marginTop: 2 },
@@ -409,7 +398,7 @@ const styles = StyleSheet.create({
   fieldSpacing: { marginBottom: 12 },
   forgotPassContainer: { marginTop: 8 },
   forgotPassText: { color: '#64748B' },
-  primaryButton: { backgroundColor: colors.primary },
+  primaryButton: { backgroundColor: colors.primary, paddingVertical: 12, borderRadius: 10 },
   buttonContainer: { marginTop: 12 },
   buttonText: { fontWeight: '800', color: '#fff' },
   socialWrapper: { marginTop: 14 },

@@ -121,13 +121,7 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
                 try {
                   if (typeof require !== 'function') return null;
                   const src = require('../../assets/splash-icon.png');
-                  return (
-                    <Animated.Image
-                      source={src}
-                      style={styles.appIcon}
-                      resizeMode="cover"
-                    />
-                  );
+                  return <Animated.Image source={src} style={styles.appIcon} resizeMode="cover" />;
                 } catch (e) {
                   return null;
                 }
@@ -203,15 +197,10 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 10,
-    backgroundColor: themeColors.card,
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: themeSpacing(1.5),
-    shadowColor: themeColors.shadow,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 3,
   },
   appIcon: { width: 34, height: 34, borderRadius: 8 },
   title: {

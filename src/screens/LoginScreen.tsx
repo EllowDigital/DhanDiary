@@ -236,9 +236,9 @@ const LoginScreen = () => {
           <Animated.View
             style={[styles.card, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}
           >
-            {/* --- HEADER ROW (Logo Left | Text Right) --- */}
-            <View style={styles.brandHeader}>
-              <View style={styles.logoContainer}>
+            {/* --- CARD HEADER: Centered Logo + Title --- */}
+            <View style={styles.cardHeaderCenter}>
+              <View style={styles.logoBadgeCentered}>
                 <Image
                   source={(() => {
                     try {
@@ -248,31 +248,13 @@ const LoginScreen = () => {
                       return undefined;
                     }
                   })()}
-                  style={styles.logo}
+                  style={styles.logoCentered}
                   resizeMode="contain"
                 />
               </View>
-              <View style={styles.brandTexts}>
-                <Text style={styles.appName}>DhanDiary</Text>
-                <Text style={styles.appTagline}>Sign in to continue</Text>
-              </View>
+              <Text style={styles.appName}>Welcome</Text>
+              <Text style={styles.appTagline}>Sign in to continue</Text>
             </View>
-
-            {/* TRUST BADGES */}
-            <View style={styles.trustRow}>
-              <View style={styles.trustBadge}>
-                <MaterialIcon name="lock" size={14} color={colors.primary} />
-                <Text style={styles.trustText}>Encrypted</Text>
-              </View>
-              <View style={styles.dividerVertical} />
-              <View style={styles.trustBadge}>
-                <MaterialIcon name="cloud-sync" size={14} color={colors.accentGreen || '#4CAF50'} />
-                <Text style={styles.trustText}>Cloud Sync</Text>
-              </View>
-            </View>
-
-            {/* DIVIDER */}
-            <View style={styles.divider} />
 
             {/* --- FORM SECTION --- */}
             <View style={styles.formContainer}>
@@ -392,11 +374,7 @@ const LoginScreen = () => {
             </View>
           </Animated.View>
 
-          {/* SECURITY BADGE (Outside card, at bottom) */}
-          <View style={styles.securityBadge}>
-            <MaterialIcon name="security" size={14} color={colors.muted || '#999'} />
-            <Text style={styles.securityText}>Secured by DhanDiary</Text>
-          </View>
+          {/* (security badge removed) */}
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -424,8 +402,8 @@ const styles = StyleSheet.create({
   /* MAIN CARD STYLE */
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 24,
+    borderRadius: 14,
+    padding: 20,
     width: '100%',
     maxWidth: 450, // Limits width on tablets
     alignSelf: 'center',
@@ -438,38 +416,30 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
 
-  /* HEADER ROW: LOGO + TEXT */
-  brandHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  // --- UPDATED LOGO CONTAINER (No Border, Transparent) ---
-  logoContainer: {
-    width: 56,
-    height: 56,
+  cardHeaderCenter: { alignItems: 'center', marginBottom: 12 },
+  logoBadgeCentered: {
+    width: 64,
+    height: 64,
+    borderRadius: 12,
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
-    // Removed borderWidth, borderColor, and backgroundColor
+    marginBottom: 8,
   },
-  logo: {
-    width: 56, // Full size of container
-    height: 56,
-  },
+  logoCentered: { width: 40, height: 40 },
   brandTexts: {
     flex: 1,
     justifyContent: 'center',
   },
   appName: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '800',
     color: colors.text,
     letterSpacing: 0.5,
     marginBottom: 2,
   },
   appTagline: {
-    fontSize: 14,
+    fontSize: 13,
     color: colors.muted || '#666',
     fontWeight: '500',
   },
