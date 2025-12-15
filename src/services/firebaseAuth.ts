@@ -63,20 +63,31 @@ const upsertProfile = async (
   data: { name?: string; email?: string; provider?: string }
 ) => {
   const db = getFirestoreDb();
-  const ref = doc(db, 'user', uid);
+  const ref = doc(db, 'users', uid);
   const existing = await getDoc(ref);
   const existingData = existing.exists() ? existing.data() || {} : {};
   const resolvedProvider = data.provider || existingData.provider || 'password';
+  const providersArray = Array.isArray(existingData.providers)
+    ? existingData.providers
+    : existingData.providers
+    ? [existingData.providers]
+    : [];
+  if (data.provider) {
+    const p = String(data.provider).toLowerCase();
+    if (!providersArray.includes(p)) providersArray.push(p);
+  }
   const resolvedCreatedAt = existingData.createdAt || serverTimestamp();
 
   await setDoc(
     ref,
     {
-      name: data.name ?? existingData.name ?? '',
+      displayName: data.name ?? existingData.displayName ?? '',
       email: data.email ?? existingData.email ?? '',
-      provider: resolvedProvider,
+      photoURL: data.photoURL ?? existingData.photoURL ?? null,
+      providers: providersArray,
       createdAt: resolvedCreatedAt,
       updatedAt: serverTimestamp(),
+      lastLoginAt: serverTimestamp(),
     },
     { merge: true }
   );
@@ -257,7 +268,7 @@ export const deleteAccount = async (currentPassword?: string) => {
     await reauthenticateWithCredential(user, credential);
   }
   const db = getFirestoreDb();
-  await deleteDoc(doc(db, 'user', user.uid));
+  await deleteDoc(doc(db, 'users', user.uid));
   await deleteUser(user);
 };
 
