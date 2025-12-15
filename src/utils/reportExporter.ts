@@ -161,6 +161,80 @@ export async function exportToFile(format: 'csv' | 'json' | 'pdf', entries: Entr
   throw new Error('Unsupported format');
 }
 
+// Stream-export entries directly from Firestore using paginated reads to avoid OOM.
+export async function exportFromUser(
+  userId: string,
+  format: 'csv' | 'json' | 'pdf',
+  opts: { fields?: string[]; pretty?: boolean; title?: string; aiLayout?: boolean } = {},
+  pageSize = 500
+) {
+  if (!userId) throw new Error('userId required for export');
+
+  const { fetchEntriesGenerator } = await import('../services/firestoreEntries');
+  const gen = fetchEntriesGenerator(userId, pageSize);
+
+  const FS = await import('expo-file-system/legacy');
+  const enc = (FS as any).EncodingType?.UTF8;
+  const baseName = (opts.title || 'export').replace(/[^a-z0-9]/gi, '_');
+
+  if (format === 'csv') {
+    const path = (FS as any).cacheDirectory + `${baseName}_${Date.now()}.csv`;
+    // iterate pages
+    let first = true;
+    for await (const page of gen) {
+      if (!page || page.length === 0) continue;
+      const fields = opts.fields ?? Object.keys(page[0] || {});
+      const csv = buildCSV(page, fields);
+      if (first) {
+        await (FS as any).writeAsStringAsync(path, csv, { encoding: enc });
+        first = false;
+      } else {
+        // drop header line and append only rows
+        const withoutHeader = csv.split('\n').slice(1).join('\n');
+        await (FS as any).writeAsStringAsync(path, '\n' + withoutHeader, { encoding: enc, append: true });
+      }
+    }
+    return path;
+  }
+
+  if (format === 'json') {
+    const path = (FS as any).cacheDirectory + `${baseName}_${Date.now()}.json`;
+    let firstItem = true;
+    await (FS as any).writeAsStringAsync(path, '[', { encoding: enc });
+    for await (const page of gen) {
+      if (!page || page.length === 0) continue;
+      for (const item of page) {
+        const text = JSON.stringify(item);
+        if (firstItem) {
+          await (FS as any).writeAsStringAsync(path, text, { encoding: enc, append: true });
+          firstItem = false;
+        } else {
+          await (FS as any).writeAsStringAsync(path, ',' + text, { encoding: enc, append: true });
+        }
+      }
+    }
+    await (FS as any).writeAsStringAsync(path, ']', { encoding: enc, append: true });
+    return path;
+  }
+
+  if (format === 'pdf') {
+    // PDF generation requires the full dataset in memory to build a single document.
+    // Collect pages up to a reasonable cap to avoid unbounded memory growth.
+    const MAX_ENTRIES = 5000;
+    const coll: Entry[] = [];
+    for await (const page of gen) {
+      if (!page || page.length === 0) continue;
+      coll.push(...page);
+      if (coll.length > MAX_ENTRIES) {
+        throw new Error('Too many entries for PDF export; try CSV/JSON or narrow the date range');
+      }
+    }
+    return buildPdfFile(coll, { title: opts.title, aiLayout: !!opts.aiLayout });
+  }
+
+  throw new Error('Unsupported format');
+}
+
 export async function shareFile(path: string) {
   const Sharing = await import('expo-sharing');
   if (!(await (Sharing as any).isAvailableAsync())) throw new Error('Sharing not available');
