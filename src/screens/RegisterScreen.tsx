@@ -246,7 +246,7 @@ const RegisterScreen = () => {
                   source={(() => {
                     try {
                       if (typeof require !== 'function') return undefined;
-                      return require('../../assets/icon.png');
+                      return require('../../assets/splash-icon.png');
                     } catch (e) {
                       return undefined;
                     }
