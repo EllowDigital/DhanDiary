@@ -1,0 +1,46 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    match /users/{uid} {
+
+      // User profile
+      allow read, write: if isOwner(uid);
+
+      // Cash entries
+      match /cash_entries/{entryId} {
+        allow create: if isOwner(uid)
+          && request.resource.data.createdBy == uid
+          && request.resource.data.amount is number
+          && (request.resource.data.type in ['cash_in', 'cash_out']);
+
+        allow read: if isOwner(uid);
+
+        // Prevent createdAt tampering
+        allow update: if isOwner(uid)
+          && request.resource.data.createdAt == resource.data.createdAt;
+
+        allow delete: if isOwner(uid);
+      }
+
+      // Categories
+      match /categories/{catId} {
+        allow read, write: if isOwner(uid);
+      }
+
+      // Stats
+      match /stats/{docId} {
+        allow read, write: if isOwner(uid);
+      }
+    }
+  }
+}
