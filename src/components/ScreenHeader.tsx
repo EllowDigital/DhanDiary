@@ -43,6 +43,8 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
   onDismissScrollHint,
   style,
   useSafeAreaPadding = true,
+  showAppIcon = false,
+  hideLeftAction = false,
 }) => {
   const navigation = useNavigation<NavigationProp<any>>();
   const insets = useSafeAreaInsets();
