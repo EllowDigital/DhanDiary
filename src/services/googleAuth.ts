@@ -7,6 +7,20 @@ const getWebClientId = () => {
   return process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
 };
 
+const safeRequire = (name: string) => {
+  try {
+    const req: any = typeof globalThis !== 'undefined' && typeof (globalThis as any).require === 'function'
+      ? (globalThis as any).require
+      : typeof require === 'function'
+        ? require
+        : null;
+    if (!req) return null;
+    return req(name);
+  } catch (e) {
+    return null;
+  }
+};
+
 export const configureGoogleSignIn = () => {
   const webClientId = getWebClientId();
 
@@ -16,12 +30,15 @@ export const configureGoogleSignIn = () => {
 
   if (shouldUseNative) {
     try {
-      const { GoogleSignin } = require('@react-native-google-signin/google-signin');
-      GoogleSignin.configure({
-        webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-        offlineAccess: false,
-      });
-      return;
+      const mod: any = safeRequire('@react-native-google-signin/google-signin');
+      const GoogleSignin = mod?.GoogleSignin || (mod && mod.default && mod.default.GoogleSignin);
+      if (GoogleSignin && typeof GoogleSignin.configure === 'function') {
+        GoogleSignin.configure({
+          webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+          offlineAccess: false,
+        });
+        return;
+      }
     } catch (e) {
       console.warn('Google Sign-In native module not available even in native client', e);
     }
@@ -36,9 +53,9 @@ export const signInWithGoogle = async () => {
 
   if (useNative) {
     let GoogleSignin: any;
-    try {
-      GoogleSignin = require('@react-native-google-signin/google-signin').GoogleSignin;
-    } catch (e) {
+    const mod: any = safeRequire('@react-native-google-signin/google-signin');
+    GoogleSignin = mod?.GoogleSignin || (mod && mod.default && mod.default.GoogleSignin);
+    if (!GoogleSignin) {
       throw new Error(
         'Native Google Sign-In module not available. Use Expo custom dev client or EAS build, or switch to web OAuth flow.'
       );
@@ -54,10 +71,11 @@ export const signInWithGoogle = async () => {
 
   // Expo Go or web — use expo-auth-session web OAuth flow
   try {
-    const AuthSession = require('expo-auth-session');
-    const { makeRedirectUri, loadAsync } = AuthSession;
-    // ResponseType enum is in AuthRequest.types; require its build to access the enum value
-    const { ResponseType } = require('expo-auth-session/build/AuthRequest.types');
+  const AuthSession: any = safeRequire('expo-auth-session');
+  const { makeRedirectUri, loadAsync } = AuthSession || {};
+  // ResponseType enum is in AuthRequest.types; require its build to access the enum value
+  const ResponseTypeMod: any = safeRequire('expo-auth-session/build/AuthRequest.types');
+  const { ResponseType } = ResponseTypeMod || {};
 
     const webClientId = getWebClientId();
     const redirectUri = makeRedirectUri({ useProxy: true });
