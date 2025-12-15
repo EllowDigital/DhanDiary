@@ -65,18 +65,27 @@ export const signInWithGoogle = async () => {
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const AuthSession = require('expo-auth-session');
-    const { makeRedirectUri, startAsync } = AuthSession;
+    const { makeRedirectUri, loadAsync } = AuthSession;
+    // ResponseType enum is in AuthRequest.types; require its build to access the enum value
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { ResponseType } = require('expo-auth-session/build/AuthRequest.types');
 
     const webClientId = getWebClientId();
-
     const redirectUri = makeRedirectUri({ useProxy: true });
-    const scopes = encodeURIComponent('openid email profile');
-    const authUrl =
-      `https://accounts.google.com/o/oauth2/v2/auth?client_id=${webClientId}` +
-      `&response_type=token%20id_token&scope=${scopes}&redirect_uri=${encodeURIComponent(redirectUri)}` +
-      `&prompt=select_account&nonce=nonce`;
 
-    const result = await startAsync({ authUrl });
+    // Build and preload the auth request
+    const request = await loadAsync(
+      {
+        clientId: webClientId,
+        redirectUri,
+        scopes: ['openid', 'email', 'profile'],
+        responseType: ResponseType.IdToken,
+      },
+      'https://accounts.google.com'
+    );
+
+    // Prompt the user
+    const result = await request.promptAsync('https://accounts.google.com');
     if (!result || result.type !== 'success' || !result.params) {
       throw new Error('Google Sign-In cancelled or failed');
     }
