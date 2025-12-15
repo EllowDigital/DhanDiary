@@ -132,12 +132,19 @@ const SwipeableHistoryItem = React.memo(({ item, onEdit, onDelete }: any) => {
 const HistoryScreen = () => {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { entries = [], isLoading, updateEntry, deleteEntry, queryError, listenerError } =
-    useEntries(user?.uid);
+  const {
+    entries = [],
+    isLoading,
+    updateEntry,
+    deleteEntry,
+    queryError,
+    listenerError,
+  } = useEntries(user?.uid);
   const { showToast } = useToast();
   const _indexToastShown = useRef(false);
   React.useEffect(() => {
-    const isMissing = (queryError as any)?.code === 'missing-index' ||
+    const isMissing =
+      (queryError as any)?.code === 'missing-index' ||
       String((listenerError as any)?.message || '').includes('requires an index');
     if (isMissing && !_indexToastShown.current) {
       _indexToastShown.current = true;

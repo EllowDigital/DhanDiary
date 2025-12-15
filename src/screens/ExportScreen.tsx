@@ -286,6 +286,8 @@ const styles = StyleSheet.create({
   card: { backgroundColor: '#fff', borderRadius: 16, padding: 16 },
   cardTitle: { fontSize: 16, fontWeight: '800', marginBottom: 6 },
   cardSubtitle: { color: '#90A4AE', marginBottom: 12 },
+  labelMutedSmall: { color: '#90A4AE', marginBottom: 6 },
+  reportActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
     borderWidth: 1,

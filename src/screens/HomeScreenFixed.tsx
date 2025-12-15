@@ -162,7 +162,8 @@ const HomeScreen: React.FC = () => {
   // a single, subtle toast if the index is required or building.
   const _indexToastShown = React.useRef(false);
   React.useEffect(() => {
-    const isMissing = (queryError as any)?.code === 'missing-index' ||
+    const isMissing =
+      (queryError as any)?.code === 'missing-index' ||
       String((listenerError as any)?.message || '').includes('requires an index');
     if (isMissing && !_indexToastShown.current) {
       _indexToastShown.current = true;

@@ -121,7 +121,7 @@ export const useEntries = (userId?: string | null) => {
   // Keep query data fresh when DB is mutated by background syncs or other processes.
   React.useEffect(() => {
     if (!userId) return;
-    let unsub = () => undefined;
+    let unsub: (() => void) = () => {};
     const startListener = () => {
       try {
         unsub = subscribeEntries(

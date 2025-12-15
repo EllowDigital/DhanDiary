@@ -60,7 +60,7 @@ export const consumePendingCredentialForCurrentUser = async () => {
 
 const upsertProfile = async (
   uid: string,
-  data: { name?: string; email?: string; provider?: string }
+  data: { name?: string; email?: string; provider?: string; photoURL?: string | null }
 ) => {
   const db = getFirestoreDb();
   const ref = doc(db, 'users', uid);
