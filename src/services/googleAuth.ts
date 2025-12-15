@@ -80,6 +80,9 @@ export const signInWithGoogle = async () => {
         redirectUri,
         scopes: ['openid', 'email', 'profile'],
         responseType: ResponseType.IdToken,
+        // Google does not accept PKCE parameters for the implicit id_token response.
+        // Disable PKCE so no code_challenge or code_challenge_method are sent.
+        usePKCE: false,
       },
       'https://accounts.google.com'
     );
