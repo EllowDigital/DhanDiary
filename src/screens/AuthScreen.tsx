@@ -368,4 +368,7 @@ const styles = StyleSheet.create({
   footerText: { color: '#64748B', marginRight: 8 },
   linkText: { color: colors.primary, fontWeight: '700' },
   eyeIcon: { padding: 6 },
+  termsContainer: { marginTop: 12, paddingHorizontal: 6 },
+  termsText: { fontSize: 12, color: colors.muted || '#666', textAlign: 'center' },
+  termsLink: { color: colors.primary, fontWeight: '700' },
 });
