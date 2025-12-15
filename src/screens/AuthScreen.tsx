@@ -109,19 +109,7 @@ const AuthScreen: React.FC = () => {
     }
   };
 
-  const handleRegister = () => {
-    Alert.alert(
-      'Create Account',
-      'Before creating an account, please review our Terms and Privacy Policy.',
-      [
-        { text: 'View Terms', onPress: () => navigation.navigate('Terms') },
-        { text: 'Privacy Policy', onPress: () => navigation.navigate('PrivacyPolicy') },
-        { text: 'Agree & Create', style: 'destructive', onPress: performRegister },
-        { text: 'Cancel', style: 'cancel' },
-      ],
-      { cancelable: true }
-    );
-  };
+  // Use `performRegister` directly; show inline consent text below the button.
 
   const handleForgotPassword = async () => {
     if (!email)
@@ -239,7 +227,7 @@ const AuthScreen: React.FC = () => {
                       ? 'Creating...'
                       : 'Create Account'
                 }
-                onPress={mode === 'login' ? handleLogin : handleRegister}
+                onPress={mode === 'login' ? handleLogin : performRegister}
                 loading={loading}
                 disabled={loading || socialLoading}
                 buttonStyle={styles.primaryButton}
@@ -257,6 +245,22 @@ const AuthScreen: React.FC = () => {
                 }
               />
             </View>
+
+            {mode === 'register' && (
+              <View style={styles.termsContainer}>
+                <Text style={styles.termsText}>
+                  By registering you accept our{' '}
+                  <Text style={styles.termsLink} onPress={() => navigation.navigate('Terms')}>
+                    Terms
+                  </Text>{' '}
+                  and{' '}
+                  <Text style={styles.termsLink} onPress={() => navigation.navigate('PrivacyPolicy')}>
+                    Privacy Policy
+                  </Text>
+                  .
+                </Text>
+              </View>
+            )}
 
             {(showGithub || showGoogle) && (
               <View style={styles.socialWrapper}>
