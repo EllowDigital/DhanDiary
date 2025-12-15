@@ -19,6 +19,7 @@ import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 
 import { useToast } from '../context/ToastContext';
+import { useNavigation } from '@react-navigation/native';
 import { useInternetStatus } from '../hooks/useInternetStatus';
 import AuthField from '../components/AuthField';
 import FullScreenSpinner from '../components/FullScreenSpinner';
@@ -30,6 +31,7 @@ import { SHOW_GOOGLE_LOGIN, SHOW_GITHUB_LOGIN } from '../config/featureFlags';
 
 const AuthScreen: React.FC = () => {
   const { showToast } = useToast();
+  const navigation: any = useNavigation();
   const isOnline = useInternetStatus();
   const showGithub = SHOW_GITHUB_LOGIN;
   const showGoogle = SHOW_GOOGLE_LOGIN;
@@ -61,6 +63,14 @@ const AuthScreen: React.FC = () => {
     try {
       await loginWithEmail(email, password);
       showToast('Welcome back!');
+      // Navigate to main app after successful login
+      try {
+        const parent = navigation.getParent?.();
+        if (parent?.replace) parent.replace('Main');
+        else navigation.navigate?.('Main');
+      } catch (navErr) {
+        // ignore navigation errors
+      }
     } catch (err: any) {
       Alert.alert('Login Failed', err?.message || 'Invalid credentials or server error.');
     } finally {
@@ -79,6 +89,11 @@ const AuthScreen: React.FC = () => {
     try {
       await registerWithEmail(name.trim(), email.trim(), password);
       showToast('Account created!');
+      try {
+        const parent = navigation.getParent?.();
+        if (parent?.replace) parent.replace('Main');
+        else navigation.navigate?.('Main');
+      } catch (navErr) {}
     } catch (err: any) {
       Alert.alert('Registration Failed', err?.message || 'Unable to register.');
     } finally {
