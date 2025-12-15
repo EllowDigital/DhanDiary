@@ -12,6 +12,7 @@ import StatsScreen from '../screens/StatsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import AccountManagementScreen from '../screens/AccountManagementScreen';
 import AboutScreen from '../screens/AboutScreen';
+import ExportScreen from '../screens/ExportScreen';
 import PrivacyPolicyScreen from '../screens/PrivacyPolicyScreen';
 import TermsScreen from '../screens/TermsScreen';
 import EulaScreen from '../screens/EulaScreen';
@@ -173,6 +174,17 @@ const DrawerNavigator = () => {
           title: 'About',
           drawerIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="information-outline" color={color} size={size} />
+          ),
+        }}
+      />
+
+      <Drawer.Screen
+        name="Export"
+        component={ExportScreen}
+        options={{
+          title: 'Export',
+          drawerIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="file-export" color={color} size={size} />
           ),
         }}
       />

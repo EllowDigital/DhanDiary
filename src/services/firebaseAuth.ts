@@ -138,7 +138,8 @@ export const sendPasswordReset = async (email: string) => {
     url:
       extra?.passwordResetRedirectUrl ||
       process.env.EXPO_PUBLIC_PASSWORD_RESET_URL ||
-      'https://dhandiary.app/reset',
+      'https://dhandiary-25043.firebaseapp.com',
+    // Must not handle code in app for the React Native flow here — use Firebase-hosted URL
     handleCodeInApp: false,
     dynamicLinkDomain: extra?.passwordResetDynamicLinkDomain || undefined,
     android: {

@@ -201,6 +201,17 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
       <View style={styles.footer}>
         <View style={styles.divider} />
 
+        <TouchableOpacity
+          style={styles.quickExportBtn}
+          onPress={() => props.navigation.navigate('Export')}
+          activeOpacity={0.7}
+        >
+          <View style={[styles.iconBox, styles.exportIconBox]}>
+            <MaterialIcon name="file-upload" size={18} color={colors.primary} />
+          </View>
+          <Text style={styles.exportText}>Export</Text>
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.7}>
           <View style={[styles.iconBox, styles.logoutIconBox]}>
             <MaterialIcon name="logout" size={20} color={colors.accentRed} />
@@ -340,6 +351,23 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border || '#f3f4f6',
     marginBottom: 16,
     marginHorizontal: 4,
+  },
+  quickExportBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  exportIconBox: {
+    width: 32,
+    alignItems: 'center',
+  },
+  exportText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.primary,
   },
   logoutBtn: {
     flexDirection: 'row',
