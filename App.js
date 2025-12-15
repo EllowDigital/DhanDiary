@@ -1,3 +1,4 @@
+/* global global */
 // Compatibility bootstrap for Expo Go and Metro entry variants.
 // Some runtimes (Expo Go) don't use `package.json`/`app.json` entry overrides,
 // so ensure `global.require` exists before any other module evaluates.

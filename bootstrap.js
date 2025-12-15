@@ -1,29 +1,32 @@
+/* global global */
+/* eslint no-useless-catch: "off" */
 // Small bootstrap file that ensures `global.require` exists BEFORE any modules
 // are loaded. Some third-party modules access `global.require` during their
 // top-level initialization in certain runtimes; setting it early avoids a
 // runtime ReferenceError.
 (function () {
-  try {
-    if (typeof global !== 'undefined') {
-      if (typeof global.require === 'undefined') {
+  if (typeof global !== 'undefined') {
+    if (typeof global.require === 'undefined') {
+      // Try a direct assignment first; if that fails, fall back to defineProperty.
+      if (typeof require === 'function') {
         try {
-          global.require = typeof require === 'function' ? require : undefined;
+          global.require = require;
         } catch (e) {
           try {
             Object.defineProperty(global, 'require', {
               configurable: true,
               enumerable: false,
-              value: typeof require === 'function' ? require : undefined,
+              value: require,
               writable: true,
             });
           } catch (err) {
             // best-effort: ignore
           }
         }
+      } else {
+        // no-op when `require` isn't available in this runtime
       }
     }
-  } catch (e) {
-    // ignore
   }
 
   // Now load the actual TypeScript entry which registers the root component.

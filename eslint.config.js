@@ -75,6 +75,8 @@ module.exports = [
   // -------------------------------------------------------
   {
     files: [
+      'App.js',
+      'bootstrap.js',
       'babel.config.js',
       'metro.config.js',
       'jest.config.js',
