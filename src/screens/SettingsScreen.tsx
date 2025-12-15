@@ -24,7 +24,13 @@ import { useToast } from '../context/ToastContext';
 import { colors, spacing } from '../utils/design';
 import ScreenHeader from '../components/ScreenHeader';
 import appConfig from '../../app.json';
-const pkg = require('../../package.json');
+let pkg: any = {};
+try {
+  const req: any = typeof globalThis !== 'undefined' && typeof (globalThis as any).require === 'function' ? (globalThis as any).require : typeof require === 'function' ? require : null;
+  if (req) pkg = req('../../package.json');
+} catch (e) {
+  pkg = {};
+}
 
 const SettingsScreen = () => {
   const navigation = useNavigation<any>();

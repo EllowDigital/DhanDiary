@@ -26,7 +26,13 @@ import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 // --- PLACEHOLDERS (Replace with your actual imports) ---
 import ScreenHeader from '../components/ScreenHeader';
 import getLatestShareLink from '../utils/shareLink';
-const pkg = require('../../package.json');
+let pkg: any = {};
+try {
+  const req: any = typeof globalThis !== 'undefined' && typeof (globalThis as any).require === 'function' ? (globalThis as any).require : typeof require === 'function' ? require : null;
+  if (req) pkg = req('../../package.json');
+} catch (e) {
+  pkg = {};
+}
 
 // --- THEME CONFIGURATION ---
 const theme = {

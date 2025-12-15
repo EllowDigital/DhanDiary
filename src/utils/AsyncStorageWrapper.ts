@@ -6,12 +6,20 @@
 let AsyncStorageImpl: any = null;
 
 try {
-  // Try to require the community AsyncStorage module
-
-  const mod = require('@react-native-async-storage/async-storage');
-  AsyncStorageImpl = mod && mod.default ? mod.default : mod;
-  // If it appears unusable, fall through to fallback
-  if (!AsyncStorageImpl || typeof AsyncStorageImpl.getItem !== 'function') {
+  // Try to require the community AsyncStorage module safely only if `require` exists.
+  const req: any = typeof globalThis !== 'undefined' && typeof (globalThis as any).require === 'function'
+    ? (globalThis as any).require
+    : typeof require === 'function'
+      ? require
+      : null;
+  if (req) {
+    const mod = req('@react-native-async-storage/async-storage');
+    AsyncStorageImpl = mod && mod.default ? mod.default : mod;
+    // If it appears unusable, fall through to fallback
+    if (!AsyncStorageImpl || typeof AsyncStorageImpl.getItem !== 'function') {
+      AsyncStorageImpl = null;
+    }
+  } else {
     AsyncStorageImpl = null;
   }
 } catch (e) {

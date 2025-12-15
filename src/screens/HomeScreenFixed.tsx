@@ -102,9 +102,18 @@ const ensureCategory = (value?: string | null) => {
 let PieChart: any = null;
 let BarChart: any = null;
 try {
-  const ck = require('react-native-chart-kit');
-  PieChart = ck?.PieChart ?? ck.default?.PieChart ?? null;
-  BarChart = ck?.BarChart ?? ck.default?.BarChart ?? null;
+  const req: any = typeof globalThis !== 'undefined' && typeof (globalThis as any).require === 'function'
+    ? (globalThis as any).require
+    : typeof require === 'function'
+      ? require
+      : null;
+  if (req) {
+    const ck = req('react-native-chart-kit');
+    PieChart = ck?.PieChart ?? ck.default?.PieChart ?? null;
+    BarChart = ck?.BarChart ?? ck.default?.BarChart ?? null;
+  } else {
+    console.warn('require not available; skipping react-native-chart-kit load');
+  }
 } catch (e) {
   console.warn('react-native-chart-kit not installed.');
 }
