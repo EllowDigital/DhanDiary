@@ -560,7 +560,7 @@ const HistoryScreen = () => {
 
                   <View style={styles.rowInputs}>
                     <TouchableOpacity
-                      style={styles.pickerBtn}
+                      style={[styles.pickerBtn, { marginRight: 12 }]}
                       onPress={() => setShowCategoryPicker(true)}
                     >
                       <Text style={styles.pickerLabel}>Category</Text>
@@ -913,7 +913,6 @@ const styles = StyleSheet.create({
   },
   quickRow: {
     flexDirection: 'row',
-    gap: 8,
     marginBottom: 20,
   },
   quickChip: {
@@ -923,6 +922,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceMuted,
     borderWidth: 1,
     borderColor: colors.border,
+    marginRight: 8,
   },
   quickChipText: {
     fontSize: 12,
@@ -931,7 +931,6 @@ const styles = StyleSheet.create({
   },
   rowInputs: {
     flexDirection: 'row',
-    gap: 12,
     marginBottom: 16,
   },
   pickerBtn: {
