@@ -102,7 +102,7 @@ const SwipeableExpenseItem = React.memo(({ item, onEdit, onDelete }: any) => {
   const swipeableRef = useRef<Swipeable>(null);
   const dateStr = dayjs(item.date || item.created_at).format('MMM D, h:mm A');
 
-  // Right Action (Edit) - Swipe Left
+  // Render Right Actions (Swipe Left -> Edit)
   const renderRightActions = (progress: any, dragX: any) => {
     const scale = dragX.interpolate({
       inputRange: [-80, 0],
@@ -126,7 +126,7 @@ const SwipeableExpenseItem = React.memo(({ item, onEdit, onDelete }: any) => {
     );
   };
 
-  // Left Action (Delete) - Swipe Right
+  // Render Left Actions (Swipe Right -> Delete)
   const renderLeftActions = (progress: any, dragX: any) => {
     const scale = dragX.interpolate({
       inputRange: [0, 80],
