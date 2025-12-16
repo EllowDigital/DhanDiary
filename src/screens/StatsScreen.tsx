@@ -215,12 +215,20 @@ const StatsScreen = () => {
       start = yearStart;
       end = yearStart.endOf('year');
     } else if (filter === 'All') {
-      start = dayjs(0);
+      // Use the earliest month for which we have data instead of epoch.
+      // Rendering the whole epoch-to-now range can produce extremely
+      // large day counts and crash the app (huge chart widths / arrays).
+      if (availableMonths && availableMonths.length) {
+        const earliestMonth = availableMonths[availableMonths.length - 1].date;
+        start = earliestMonth.startOf('month');
+      } else {
+        start = dayjs(0);
+      }
       end = dayjs();
     }
 
     return { rangeStart: start, rangeEnd: end };
-  }, [filter, activeMonthKey, activeYear]);
+  }, [filter, activeMonthKey, activeYear, availableMonths]);
 
   const rangeDescription = useMemo(() => {
     return `${rangeStart.format('DD MMM')} - ${rangeEnd.format('DD MMM YYYY')}`;
