@@ -161,7 +161,7 @@ const AccountManagementScreen = () => {
     try {
       await retry(() => updateProfileDetails({ name: username }), 3, 250);
       showToast('Name updated successfully');
-      toggleCard(''); 
+      toggleCard('');
     } catch (err: any) {
       Alert.alert('Error', err?.message);
     } finally {
