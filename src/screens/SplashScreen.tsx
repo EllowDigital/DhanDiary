@@ -236,7 +236,14 @@ const SplashScreen = () => {
           ]}
         >
           <Image
-            source={require('../../assets/splash-icon.png')}
+            source={(() => {
+              try {
+                if (typeof require !== 'function') return undefined;
+                return require('../../assets/splash-icon.png');
+              } catch (e) {
+                return undefined;
+              }
+            })()}
             style={[styles.logo, { borderRadius: logoSize * 0.25 }]}
             resizeMode="cover"
           />

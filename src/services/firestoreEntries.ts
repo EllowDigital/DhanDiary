@@ -8,6 +8,7 @@ import {
   limit,
   onSnapshot,
   orderBy,
+  startAfter,
   query,
   serverTimestamp,
   updateDoc,
@@ -111,3 +112,27 @@ export const removeEntry = async (userId: string, localId: string): Promise<void
   const docRef = doc(getFirestoreDb(), 'users', userId, 'cash_entries', localId);
   await deleteDoc(docRef);
 };
+
+// Async generator to page through entries without loading all into memory.
+export async function* fetchEntriesGenerator(userId: string, pageSize = 500) {
+  if (!userId) return;
+  const colRef = buildCollectionRef(userId);
+  let lastDoc: any = undefined;
+  while (true) {
+    const q = lastDoc
+      ? query(
+          colRef,
+          orderBy('date', 'desc'),
+          orderBy('createdAt', 'desc'),
+          startAfter(lastDoc),
+          limit(pageSize)
+        )
+      : query(colRef, orderBy('date', 'desc'), orderBy('createdAt', 'desc'), limit(pageSize));
+    const snap = await getDocs(q);
+    if (!snap || !snap.docs || snap.docs.length === 0) break;
+    const page = snap.docs.map((docSnap) => mapToLocalEntry(docSnap.id, userId, docSnap.data()));
+    yield page;
+    if (snap.docs.length < pageSize) break;
+    lastDoc = snap.docs[snap.docs.length - 1];
+  }
+}

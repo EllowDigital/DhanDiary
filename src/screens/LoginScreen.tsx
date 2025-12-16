@@ -25,8 +25,8 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { AuthStackParamList } from '../types/navigation';
 import { useToast } from '../context/ToastContext';
 import { useInternetStatus } from '../hooks/useInternetStatus';
-import { loginWithEmail, sendPasswordReset, useGithubAuth } from '../services/firebaseAuth';
-import { signInWithGoogle } from '../services/googleAuth';
+import { loginWithEmail, sendPasswordReset } from '../services/firebaseAuth';
+import { SHOW_GOOGLE_LOGIN, SHOW_GITHUB_LOGIN } from '../config/featureFlags';
 
 // Components & Utils
 import { colors } from '../utils/design';
@@ -66,8 +66,8 @@ const LoginScreen = () => {
   const [resettingPassword, setResettingPassword] = useState(false);
   const [socialLoading, setSocialLoading] = useState(false);
 
-  const { githubAvailable, signIn: startGithubSignIn } = useGithubAuth();
-  const googleAvailable = true; // Google config is present if configured at app startup
+  const showGithub = SHOW_GITHUB_LOGIN;
+  const showGoogle = SHOW_GOOGLE_LOGIN;
 
   // --- ANIMATION ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -147,10 +147,11 @@ const LoginScreen = () => {
   // Google login removed. Use only Firebase-native Google login elsewhere.
 
   const handleGithubLogin = async () => {
-    if (!githubAvailable) return;
+    if (!showGithub) return;
     setSocialLoading(true);
     try {
-      await startGithubSignIn();
+      const mod = await import('../services/firebaseAuth');
+      await mod.startGithubSignIn('signIn');
     } catch (err) {
       const e: any = err || {};
       if (e.code === 'auth/account-exists-with-different-credential') {
@@ -172,7 +173,8 @@ const LoginScreen = () => {
   const handleGoogleLogin = async () => {
     setSocialLoading(true);
     try {
-      await signInWithGoogle();
+      const mod = await import('../services/googleAuth');
+      await mod.signInWithGoogle();
     } catch (err) {
       const e: any = err || {};
       if (e.code === 'auth/account-exists-with-different-credential') {
@@ -234,36 +236,25 @@ const LoginScreen = () => {
           <Animated.View
             style={[styles.card, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}
           >
-            {/* --- HEADER ROW (Logo Left | Text Right) --- */}
-            <View style={styles.brandHeader}>
-              <View style={styles.logoContainer}>
+            {/* --- CARD HEADER: Centered Logo + Title --- */}
+            <View style={styles.cardHeaderCenter}>
+              <View style={styles.logoBadgeCentered}>
                 <Image
-                  source={require('../../assets/splash-icon.png')}
-                  style={styles.logo}
+                  source={(() => {
+                    try {
+                      if (typeof require !== 'function') return undefined;
+                      return require('../../assets/splash-icon.png');
+                    } catch (e) {
+                      return undefined;
+                    }
+                  })()}
+                  style={styles.logoCentered}
                   resizeMode="contain"
                 />
               </View>
-              <View style={styles.brandTexts}>
-                <Text style={styles.appName}>DhanDiary</Text>
-                <Text style={styles.appTagline}>Sign in to continue</Text>
-              </View>
+              <Text style={styles.appName}>Welcome</Text>
+              <Text style={styles.appTagline}>Sign in to continue</Text>
             </View>
-
-            {/* TRUST BADGES */}
-            <View style={styles.trustRow}>
-              <View style={styles.trustBadge}>
-                <MaterialIcon name="lock" size={14} color={colors.primary} />
-                <Text style={styles.trustText}>Encrypted</Text>
-              </View>
-              <View style={styles.dividerVertical} />
-              <View style={styles.trustBadge}>
-                <MaterialIcon name="cloud-sync" size={14} color={colors.accentGreen || '#4CAF50'} />
-                <Text style={styles.trustText}>Cloud Sync</Text>
-              </View>
-            </View>
-
-            {/* DIVIDER */}
-            <View style={styles.divider} />
 
             {/* --- FORM SECTION --- */}
             <View style={styles.formContainer}>
@@ -321,7 +312,7 @@ const LoginScreen = () => {
                 }
               />
 
-              {githubAvailable && (
+              {showGithub && (
                 <View style={styles.socialWrapper}>
                   <View style={styles.socialDivider}>
                     <View style={styles.socialLine} />
@@ -331,7 +322,7 @@ const LoginScreen = () => {
 
                   <View style={styles.socialButtonsRow}>
                     {/* Google login removed */}
-                    {googleAvailable && (
+                    {showGoogle && (
                       <Button
                         type="outline"
                         icon={
@@ -350,7 +341,7 @@ const LoginScreen = () => {
                         containerStyle={styles.socialButtonContainer}
                       />
                     )}
-                    {githubAvailable && (
+                    {showGithub && (
                       <Button
                         type="outline"
                         icon={
@@ -383,11 +374,7 @@ const LoginScreen = () => {
             </View>
           </Animated.View>
 
-          {/* SECURITY BADGE (Outside card, at bottom) */}
-          <View style={styles.securityBadge}>
-            <MaterialIcon name="security" size={14} color={colors.muted || '#999'} />
-            <Text style={styles.securityText}>Secured by DhanDiary</Text>
-          </View>
+          {/* (security badge removed) */}
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -415,8 +402,8 @@ const styles = StyleSheet.create({
   /* MAIN CARD STYLE */
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 24,
+    borderRadius: 14,
+    padding: 20,
     width: '100%',
     maxWidth: 450, // Limits width on tablets
     alignSelf: 'center',
@@ -429,38 +416,30 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
 
-  /* HEADER ROW: LOGO + TEXT */
-  brandHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  // --- UPDATED LOGO CONTAINER (No Border, Transparent) ---
-  logoContainer: {
-    width: 56,
-    height: 56,
+  cardHeaderCenter: { alignItems: 'center', marginBottom: 12 },
+  logoBadgeCentered: {
+    width: 64,
+    height: 64,
+    borderRadius: 12,
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
-    // Removed borderWidth, borderColor, and backgroundColor
+    marginBottom: 8,
   },
-  logo: {
-    width: 56, // Full size of container
-    height: 56,
-  },
+  logoCentered: { width: 40, height: 40 },
   brandTexts: {
     flex: 1,
     justifyContent: 'center',
   },
   appName: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '800',
     color: colors.text,
     letterSpacing: 0.5,
     marginBottom: 2,
   },
   appTagline: {
-    fontSize: 14,
+    fontSize: 13,
     color: colors.muted || '#666',
     fontWeight: '500',
   },

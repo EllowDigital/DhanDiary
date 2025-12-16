@@ -20,7 +20,15 @@ import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { colors, spacing } from '../utils/design';
 import ScreenHeader from '../components/ScreenHeader';
 import appConfig from '../../app.json';
-const pkg = require('../../package.json');
+let pkg: any = {};
+try {
+  if (typeof require === 'function') {
+    // static package.json require (safe when bundler provides require)
+    pkg = require('../../package.json');
+  }
+} catch (e) {
+  pkg = {};
+}
 
 type RouteName = 'Settings' | 'About' | 'Account' | 'Stats' | string;
 

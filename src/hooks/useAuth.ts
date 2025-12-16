@@ -63,7 +63,7 @@ export const useAuth = () => {
             return;
           }
 
-          const initialData = snapshot.exists() ? snapshot.data() || {} : baseProfile;
+          const initialData: any = snapshot.exists() ? snapshot.data() || {} : baseProfile;
           setUser({
             uid: firebaseUser.uid,
             name: initialData.displayName || baseProfile.name,
@@ -77,7 +77,7 @@ export const useAuth = () => {
           stopProfile = onSnapshot(
             userRef,
             (profileSnap) => {
-              const data = profileSnap.data() || {};
+              const data: any = profileSnap.data() || {};
               setUser({
                 uid: firebaseUser.uid,
                 name: data.displayName || baseProfile.name,

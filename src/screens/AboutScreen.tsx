@@ -26,7 +26,12 @@ import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 // --- PLACEHOLDERS (Replace with your actual imports) ---
 import ScreenHeader from '../components/ScreenHeader';
 import getLatestShareLink from '../utils/shareLink';
-const pkg = require('../../package.json');
+let pkg: any = {};
+try {
+  if (typeof require === 'function') pkg = require('../../package.json');
+} catch (e) {
+  pkg = {};
+}
 
 // --- THEME CONFIGURATION ---
 const theme = {
@@ -191,7 +196,14 @@ const AboutScreen: React.FC = () => {
           <View style={styles.heroCard}>
             <View style={styles.heroContent}>
               <Image
-                source={require('../../assets/splash-icon.png')}
+                source={(() => {
+                  try {
+                    if (typeof require !== 'function') return undefined;
+                    return require('../../assets/splash-icon.png');
+                  } catch (e) {
+                    return undefined;
+                  }
+                })()}
                 style={styles.heroIcon}
                 resizeMode="contain"
               />

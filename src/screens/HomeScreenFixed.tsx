@@ -15,6 +15,7 @@ import {
 import type { ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
+import { useToast } from '../context/ToastContext';
 import SimpleButtonGroup from '../components/SimpleButtonGroup';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useNavigation } from '@react-navigation/native';
@@ -101,9 +102,13 @@ const ensureCategory = (value?: string | null) => {
 let PieChart: any = null;
 let BarChart: any = null;
 try {
-  const ck = require('react-native-chart-kit');
-  PieChart = ck?.PieChart ?? ck.default?.PieChart ?? null;
-  BarChart = ck?.BarChart ?? ck.default?.BarChart ?? null;
+  if (typeof require === 'function') {
+    const ck = require('react-native-chart-kit');
+    PieChart = ck?.PieChart ?? ck.default?.PieChart ?? null;
+    BarChart = ck?.BarChart ?? ck.default?.BarChart ?? null;
+  } else {
+    console.warn('require not available; skipping react-native-chart-kit load');
+  }
 } catch (e) {
   console.warn('react-native-chart-kit not installed.');
 }
@@ -154,7 +159,22 @@ const CompactTransactionRow = ({ item, onPress }: { item: any; onPress: () => vo
 const HomeScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { user } = useAuth();
-  const { entries = [], isLoading = false } = useEntries(user?.uid);
+  const { entries = [], isLoading = false, queryError, listenerError } = useEntries(user?.uid);
+  const { showToast } = useToast();
+
+  // Production: avoid showing dev-focused index console links in the UI. Log and show
+  // a single, subtle toast if the index is required or building.
+  const _indexToastShown = React.useRef(false);
+  React.useEffect(() => {
+    const isMissing =
+      (queryError as any)?.code === 'missing-index' ||
+      String((listenerError as any)?.message || '').includes('requires an index');
+    if (isMissing && !_indexToastShown.current) {
+      _indexToastShown.current = true;
+      console.warn('Firestore composite index required or building.');
+      showToast('Loading delayed — syncing data. Please try again shortly.');
+    }
+  }, [queryError, listenerError, showToast]);
   const showLoading = useDelayedLoading(Boolean(isLoading), 200);
 
   // --- RESPONSIVE LOGIC ---
@@ -409,6 +429,7 @@ const HomeScreen: React.FC = () => {
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
         <FullScreenSpinner visible={showLoading || applyingUpdate} />
+        {/* Production: index-building banner removed to avoid exposing console URLs. */}
 
         <FlatList
           data={recent}
@@ -598,54 +619,63 @@ const HomeScreen: React.FC = () => {
 
                 {pieExpenseData.length > 0 || weeklyBar.income.some((v) => v > 0) ? (
                   <View style={styles.chartContainer}>
-                    {chartType === 'pie' && PieChart && (
-                      <View style={styles.rowCentered}>
-                        <PieChart
-                          data={pieExpenseData}
-                          width={isTablet ? containerWidth * 0.5 : containerWidth}
-                          height={180}
-                          chartConfig={{ color: () => colors.primary }}
-                          accessor="population"
-                          backgroundColor="transparent"
-                          paddingLeft={isTablet ? '0' : '80'}
-                          center={[0, 0]}
-                          hasLegend={false}
-                        />
-                        <View style={[styles.customLegend, isTablet && { width: '50%' }]}>
-                          {pieExpenseData.slice(0, 4).map((item: any, i: number) => (
-                            <View key={i} style={styles.legendItem}>
-                              <View style={[styles.legendDot, { backgroundColor: item.color }]} />
-                              <Text style={styles.legendText} numberOfLines={1}>
-                                {item.name}
-                              </Text>
-                              <Text style={styles.legendValue}>
-                                {Math.round((item.population / periodExpense) * 100)}%
-                              </Text>
+                    {((chartType === 'pie' && PieChart) || (chartType === 'bar' && BarChart)) ? (
+                      <>
+                        {chartType === 'pie' && PieChart && (
+                          <View style={styles.rowCentered}>
+                            <PieChart
+                              data={pieExpenseData}
+                              width={isTablet ? containerWidth * 0.5 : containerWidth}
+                              height={180}
+                              chartConfig={{ color: () => colors.primary }}
+                              accessor="population"
+                              backgroundColor="transparent"
+                              paddingLeft={isTablet ? '0' : '80'}
+                              center={[0, 0]}
+                              hasLegend={false}
+                            />
+                            <View style={[styles.customLegend, isTablet && { width: '50%' }]}>
+                              {pieExpenseData.slice(0, 4).map((item: any, i: number) => (
+                                <View key={i} style={styles.legendItem}>
+                                  <View style={[styles.legendDot, { backgroundColor: item.color }]} />
+                                  <Text style={styles.legendText} numberOfLines={1}>
+                                    {item.name}
+                                  </Text>
+                                  <Text style={styles.legendValue}>
+                                    {Math.round((item.population / periodExpense) * 100)}%
+                                  </Text>
+                                </View>
+                              ))}
                             </View>
-                          ))}
-                        </View>
+                          </View>
+                        )}
+                        {chartType === 'bar' && BarChart && (
+                          <BarChart
+                            data={{
+                              labels: weeklyBar.labels,
+                              datasets: [{ data: weeklyBar.income }, { data: weeklyBar.expense }],
+                            }}
+                            width={containerWidth - 32}
+                            height={180}
+                            yAxisLabel="₹"
+                            chartConfig={{
+                              backgroundGradientFrom: colors.card,
+                              backgroundGradientTo: colors.card,
+                              color: (opacity = 1) => `rgba(${60}, 60, 70, ${opacity})`,
+                              barPercentage: 0.6,
+                              decimalPlaces: 0,
+                            }}
+                            showValuesOnTopOfBars={!isSmallPhone}
+                            fromZero
+                            style={{ borderRadius: 16, paddingRight: 30 }}
+                          />
+                        )}
+                      </>
+                    ) : (
+                      <View style={styles.noDataBox}>
+                        <MaterialIcon name="bar-chart" size={40} color={colors.border} />
+                        <Text style={styles.noDataText}>Chart unavailable</Text>
                       </View>
-                    )}
-                    {chartType === 'bar' && BarChart && (
-                      <BarChart
-                        data={{
-                          labels: weeklyBar.labels,
-                          datasets: [{ data: weeklyBar.income }, { data: weeklyBar.expense }],
-                        }}
-                        width={containerWidth - 32}
-                        height={180}
-                        yAxisLabel="₹"
-                        chartConfig={{
-                          backgroundGradientFrom: colors.card,
-                          backgroundGradientTo: colors.card,
-                          color: (opacity = 1) => `rgba(${60}, 60, 70, ${opacity})`,
-                          barPercentage: 0.6,
-                          decimalPlaces: 0,
-                        }}
-                        showValuesOnTopOfBars={!isSmallPhone}
-                        fromZero
-                        style={{ borderRadius: 16, paddingRight: 30 }}
-                      />
                     )}
                   </View>
                 ) : (

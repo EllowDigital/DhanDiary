@@ -17,17 +17,7 @@ import Animated, {
   useAnimatedStyle,
   withTiming,
 } from 'react-native-reanimated';
-
-// --- Design Tokens ---
-const colors = {
-  background: '#f3f4f6',
-  text: '#1F2937', // Darker, sharper text
-  subtext: '#6B7280',
-  card: '#ffffff', // Very light gray for button backgrounds
-  primary: '#6C63FF',
-  shadow: '#000000',
-};
-const spacing = (val: number) => val * 4;
+import { colors as themeColors, spacing as themeSpacing } from '../utils/design';
 
 export type ScreenHeaderProps = {
   title: string;
@@ -39,6 +29,8 @@ export type ScreenHeaderProps = {
   onDismissScrollHint?: () => void;
   style?: StyleProp<ViewStyle>;
   useSafeAreaPadding?: boolean;
+  showAppIcon?: boolean;
+  hideLeftAction?: boolean;
 };
 
 const ScreenHeader: React.FC<ScreenHeaderProps> = ({
@@ -51,6 +43,8 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
   onDismissScrollHint,
   style,
   useSafeAreaPadding = true,
+  showAppIcon = false,
+  hideLeftAction = false,
 }) => {
   const navigation = useNavigation<NavigationProp<any>>();
   const insets = useSafeAreaInsets();
@@ -59,13 +53,11 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
   const [hintVisible, setHintVisible] = useState(showScrollHint);
 
   const handleNav = () => {
-    if (canGoBack) {
-      navigation.goBack();
-    } else {
-      const nav: any = navigation;
-      if (nav.openDrawer) nav.openDrawer();
-      else if (nav.toggleDrawer) nav.toggleDrawer();
-    }
+    const nav: any = navigation;
+    if (canGoBack) return navigation.goBack();
+    // Prefer opening the drawer so users can access navigation when available
+    if (nav.openDrawer) return nav.openDrawer();
+    if (nav.toggleDrawer) return nav.toggleDrawer();
   };
 
   const handleDismissHint = () => {
@@ -88,14 +80,14 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
   const headerAnimatedStyle = useAnimatedStyle(() => {
     const isScrolled = scrollOffset > 10;
     return {
-      backgroundColor: colors.background,
+      backgroundColor: themeColors.background,
       // Instead of a border, we fade in a soft shadow
       shadowOpacity: withTiming(isScrolled ? 0.05 : 0, { duration: 300 }),
       elevation: withTiming(isScrolled ? 4 : 0, { duration: 300 }),
     };
   });
 
-  const topPadding = (useSafeAreaPadding ? insets.top : 0) + spacing(2);
+  const topPadding = (useSafeAreaPadding ? insets.top : 0) + themeSpacing(1);
 
   return (
     <Animated.View
@@ -103,30 +95,49 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
       accessibilityRole="header"
     >
       <View style={styles.row}>
-        {/* Left Action Button (Soft Background, No Border) */}
-        <TouchableOpacity
-          style={styles.iconButton}
-          onPress={handleNav}
-          activeOpacity={0.7}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <MaterialIcons
-            name={canGoBack ? 'arrow-back-ios-new' : 'menu'}
-            size={20}
-            color={colors.text}
-          />
-        </TouchableOpacity>
+        {/* Left Action */}
+        {!hideLeftAction ? (
+          <TouchableOpacity
+            style={styles.iconButton}
+            onPress={handleNav}
+            activeOpacity={0.7}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            {canGoBack ? (
+              <MaterialIcons name="arrow-back" size={20} color={themeColors.text} />
+            ) : (
+              <MaterialIcons name="menu" size={20} color={themeColors.text} />
+            )}
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.iconPlaceholder} />
+        )}
 
-        {/* Title */}
-        <View style={styles.titleWrap}>
-          <Text style={styles.title} numberOfLines={1}>
-            {title}
-          </Text>
-          {subtitle && (
-            <Text style={styles.subtitle} numberOfLines={1}>
-              {subtitle}
-            </Text>
+        {/* Title (optionally with app icon) */}
+        <View style={[styles.titleWrap, showAppIcon ? styles.titleWithIcon : undefined]}>
+          {showAppIcon && (
+            <View style={styles.appIconWrap}>
+              {(() => {
+                try {
+                  if (typeof require !== 'function') return null;
+                  const src = require('../../assets/splash-icon.png');
+                  return <Animated.Image source={src} style={styles.appIcon} resizeMode="cover" />;
+                } catch (e) {
+                  return null;
+                }
+              })()}
+            </View>
           )}
+          <View style={styles.titleTexts}>
+            <Text style={styles.title} numberOfLines={1}>
+              {title}
+            </Text>
+            {subtitle && (
+              <Text style={styles.subtitle} numberOfLines={1}>
+                {subtitle}
+              </Text>
+            )}
+          </View>
         </View>
 
         {/* Right Slot */}
@@ -141,7 +152,7 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
           style={styles.hintContainer}
         >
           <TouchableOpacity onPress={handleDismissHint} style={styles.hintPill} activeOpacity={0.8}>
-            <MaterialIcons name="keyboard-arrow-down" size={16} color={colors.primary} />
+            <MaterialIcons name="keyboard-arrow-down" size={16} color={themeColors.primary} />
             <Text style={styles.hintText}>Scroll for more</Text>
           </TouchableOpacity>
         </Animated.View>
@@ -152,11 +163,11 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
 
 const styles = StyleSheet.create({
   wrapper: {
-    paddingHorizontal: spacing(4),
-    paddingBottom: spacing(3),
+    paddingHorizontal: themeSpacing(2),
+    paddingBottom: themeSpacing(1.5),
     zIndex: 10,
     // Default Shadow Config (hidden by opacity in animation)
-    shadowColor: colors.shadow,
+    shadowColor: themeColors.shadow,
     shadowOffset: { width: 0, height: 4 },
     shadowRadius: 12,
   },
@@ -169,25 +180,38 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 14, // Slightly rounder squircle
-    backgroundColor: colors.card, // Soft light gray background
+    backgroundColor: themeColors.card, // Soft light gray background
     justifyContent: 'center',
     alignItems: 'center',
     // No border here
   },
   titleWrap: {
     flex: 1,
-    paddingHorizontal: spacing(3),
+    paddingHorizontal: themeSpacing(1.5),
     justifyContent: 'center',
   },
+  iconPlaceholder: { width: 42, height: 42 },
+  titleWithIcon: { flexDirection: 'row', alignItems: 'center' },
+  titleTexts: { flex: 1 },
+  appIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: themeSpacing(1.5),
+  },
+  appIcon: { width: 34, height: 34, borderRadius: 8 },
   title: {
     fontSize: 20, // Slightly larger
     fontWeight: '800', // Bold modern font
-    color: colors.text,
+    color: themeColors.text,
     letterSpacing: -0.5,
   },
   subtitle: {
     marginTop: 2,
-    color: colors.subtext,
+    color: themeColors.subtleText,
     fontSize: 13,
     fontWeight: '500',
   },
@@ -209,13 +233,13 @@ const styles = StyleSheet.create({
   hintPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.background,
+    backgroundColor: themeColors.background,
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 30, // Full capsule
 
     // Soft Floating Shadow (Instead of border)
-    shadowColor: colors.shadow,
+    shadowColor: themeColors.shadow,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
@@ -223,7 +247,7 @@ const styles = StyleSheet.create({
   },
   hintText: {
     fontSize: 11,
-    color: colors.subtext,
+    color: themeColors.subtleText,
     fontWeight: '700',
     marginLeft: 6,
     textTransform: 'uppercase',

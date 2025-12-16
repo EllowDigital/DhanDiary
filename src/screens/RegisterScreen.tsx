@@ -26,7 +26,8 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { AuthStackParamList } from '../types/navigation';
 import { useToast } from '../context/ToastContext';
 import { useInternetStatus } from '../hooks/useInternetStatus';
-import { registerWithEmail, useGithubAuth } from '../services/firebaseAuth';
+import { registerWithEmail } from '../services/firebaseAuth';
+import { SHOW_GITHUB_LOGIN } from '../config/featureFlags';
 
 // Components & Utils
 import { colors } from '../utils/design';
@@ -102,7 +103,7 @@ const RegisterScreen = () => {
   };
   const passStrength = getPasswordStrength(password);
 
-  const { githubAvailable, signIn: startGithubSignIn } = useGithubAuth();
+  const showGithub = SHOW_GITHUB_LOGIN;
 
   // Optimized Handlers
   const handleEmailChange = useCallback(
@@ -126,7 +127,7 @@ const RegisterScreen = () => {
     [passwordError]
   );
 
-  const handleRegister = useCallback(async () => {
+  const performRegister = useCallback(async () => {
     if (loading || socialLoading) return;
     if (!isOnline)
       return Alert.alert('Offline', 'Internet connection required to create an account.');
@@ -167,16 +168,31 @@ const RegisterScreen = () => {
     }
   }, [loading, socialLoading, isOnline, name, email, password, navigation, showToast]);
 
+  const handleRegister = useCallback(() => {
+    Alert.alert(
+      'Create Account',
+      'Before creating an account, please review our Terms and Privacy Policy.',
+      [
+        { text: 'View Terms', onPress: () => navigation.navigate('Terms') },
+        { text: 'Privacy Policy', onPress: () => navigation.navigate('PrivacyPolicy') },
+        { text: 'Agree & Create', style: 'destructive', onPress: performRegister },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+      { cancelable: true }
+    );
+  }, [navigation, performRegister]);
+
   const handleOpenTerms = useCallback(() => navigation.navigate('Terms'), [navigation]);
   const handleOpenPrivacy = useCallback(() => navigation.navigate('PrivacyPolicy'), [navigation]);
 
   // Google signup removed. Use only Firebase-native Google login elsewhere.
 
   const handleGithubSignup = async () => {
-    if (!githubAvailable) return;
+    if (!showGithub) return;
     setSocialLoading(true);
     try {
-      await startGithubSignIn();
+      const mod = await import('../services/firebaseAuth');
+      await mod.startGithubSignIn('signIn');
     } catch (err) {
       const e: any = err || {};
       if (e.code === 'auth/account-exists-with-different-credential') {
@@ -223,39 +239,24 @@ const RegisterScreen = () => {
           <Animated.View
             style={[styles.card, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
           >
-            {/* --- HEADER ROW (Logo Left | Text Right) --- */}
-            <View style={styles.brandHeader}>
-              <View style={styles.logoContainer}>
+            {/* --- CARD HEADER: Centered Logo + Title --- */}
+            <View style={styles.cardHeaderCenter}>
+              <View style={styles.logoBadgeCentered}>
                 <Image
-                  source={require('../../assets/splash-icon.png')}
-                  style={styles.logo}
+                  source={(() => {
+                    try {
+                      if (typeof require !== 'function') return undefined;
+                      return require('../../assets/splash-icon.png');
+                    } catch (e) {
+                      return undefined;
+                    }
+                  })()}
+                  style={styles.logoCentered}
                   resizeMode="contain"
                 />
               </View>
-              <View style={styles.brandTexts}>
-                <Text style={styles.appName}>Join DhanDiary</Text>
-                <Text style={styles.appTagline}>Start your journey today</Text>
-              </View>
-            </View>
-
-            {/* DIVIDER */}
-            <View style={styles.divider} />
-
-            {/* --- TRUST BADGES (Pill Style) --- */}
-            <View style={styles.trustRow}>
-              <View style={styles.trustBadge}>
-                <MaterialIcon
-                  name="verified-user"
-                  size={12}
-                  color={colors.accentGreen || 'green'}
-                />
-                <Text style={styles.trustText}>Free Forever</Text>
-              </View>
-              <View style={styles.verticalDivider} />
-              <View style={styles.trustBadge}>
-                <MaterialIcon name="lock" size={12} color={colors.primary} />
-                <Text style={styles.trustText}>Encrypted</Text>
-              </View>
+              <Text style={styles.appName}>Create Account</Text>
+              <Text style={styles.appTagline}>Create your account</Text>
             </View>
 
             {/* --- FORM --- */}
@@ -354,7 +355,7 @@ const RegisterScreen = () => {
                 }
               />
 
-              {githubAvailable && (
+              {showGithub && (
                 <View style={styles.socialWrapper}>
                   <View style={styles.socialDivider}>
                     <View style={styles.socialLine} />
@@ -364,7 +365,7 @@ const RegisterScreen = () => {
 
                   <View style={styles.socialButtonsRow}>
                     {/* Google signup removed */}
-                    {githubAvailable && (
+                    {showGithub && (
                       <Button
                         type="outline"
                         icon={
@@ -412,11 +413,7 @@ const RegisterScreen = () => {
             </View>
           </Animated.View>
 
-          {/* SECURITY BADGE */}
-          <View style={styles.securityBadge}>
-            <MaterialIcon name="security" size={14} color={colors.muted || '#999'} />
-            <Text style={styles.securityText}>Secured by DhanDiary</Text>
-          </View>
+          {/* (security badge removed to avoid floating elements) */}
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -444,8 +441,8 @@ const styles = StyleSheet.create({
   /* MAIN CARD */
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 24,
+    borderRadius: 14,
+    padding: 20,
     width: '100%',
     maxWidth: 450,
     alignSelf: 'center',
@@ -458,38 +455,36 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
 
-  /* HEADER */
-  brandHeader: {
-    flexDirection: 'row',
+  /* CARD HEADER (centered) */
+  cardHeaderCenter: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
   },
-  // --- UPDATED LOGO CONTAINER (Clean, No Border) ---
-  logoContainer: {
-    width: 56,
-    height: 56,
+  logoBadgeCentered: {
+    width: 64,
+    height: 64,
+    borderRadius: 12,
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12, // Adjusted margin for transparent look
-    // Removed borderWidth, borderColor, backgroundColor
+    marginBottom: 8,
   },
-  logo: {
-    width: 56, // Full fill
-    height: 56,
+  logoCentered: {
+    width: 40,
+    height: 40,
   },
   brandTexts: {
-    flex: 1,
-    justifyContent: 'center',
+    alignItems: 'center',
   },
   appName: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '800',
     color: colors.text,
     letterSpacing: 0.5,
     marginBottom: 2,
   },
   appTagline: {
-    fontSize: 14,
+    fontSize: 13,
     color: colors.muted || '#666',
     fontWeight: '500',
   },
@@ -609,8 +604,8 @@ const styles = StyleSheet.create({
   /* BUTTONS */
   primaryButton: {
     backgroundColor: colors.primary,
-    paddingVertical: 14,
-    borderRadius: 12,
+    paddingVertical: 12,
+    borderRadius: 10,
   },
   buttonContainer: {
     width: '100%',

@@ -16,7 +16,6 @@ import { Text } from '@rneui/themed';
 import { useEntries } from '../hooks/useEntries';
 import { useAuth } from '../hooks/useAuth';
 import dayjs from 'dayjs';
-import { PieChart } from 'react-native-chart-kit';
 import { colors } from '../utils/design';
 import { ensureCategory } from '../constants/categories';
 import ScreenHeader from '../components/ScreenHeader';
@@ -39,7 +38,11 @@ const calcStats = (entries: LocalEntry[]) => {
   const mean = count ? amounts.reduce((s, v) => s + v, 0) / count : 0;
   const sorted = [...amounts].sort((a, b) => a - b);
   const median =
-    count === 0 ? 0 : count % 2 === 1 ? sorted[(count - 1) / 2] : (sorted[count / 2 - 1] + sorted[count / 2]) / 2;
+    count === 0
+      ? 0
+      : count % 2 === 1
+        ? sorted[(count - 1) / 2]
+        : (sorted[count / 2 - 1] + sorted[count / 2]) / 2;
   const variance = count ? amounts.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / count : 0;
   const stddev = Math.sqrt(variance);
   return { count, mean, median, stddev };
@@ -84,6 +87,7 @@ const StatsScreen = () => {
   const slideAnim = useRef(new Animated.Value(20)).current;
 
   const [filter, setFilter] = useState('7D');
+  const [PieChartComp, setPieChartComp] = useState<any>(null);
   const [activeMonthKey, setActiveMonthKey] = useState<string | null>(null);
   const [activeYear, setActiveYear] = useState<number | null>(null);
 
@@ -93,6 +97,21 @@ const StatsScreen = () => {
       Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
       Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, damping: 20 }),
     ]).start();
+
+    // Lazy-load chart-kit only when Stats screen mounts
+    let mounted = true;
+    (async () => {
+      try {
+        const mod = await import('react-native-chart-kit');
+        if (mounted) setPieChartComp(() => mod.PieChart);
+      } catch (e) {
+        // if module not available, keep null — other code has fallbacks
+        console.warn('Failed to load react-native-chart-kit dynamically', e);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   // --- RESPONSIVE LAYOUT CALCS ---
@@ -245,7 +264,9 @@ const StatsScreen = () => {
     const expenses = calcStats(filteredEntries.filter((e) => e.type === 'out'));
     const incomes = calcStats(filteredEntries.filter((e) => e.type === 'in'));
     const days = Math.max(1, rangeEnd.diff(rangeStart, 'day') + 1);
-    const avgPerDay = Math.round((filteredEntries.reduce((s, e) => s + Number(e.amount || 0), 0) || 0) / days);
+    const avgPerDay = Math.round(
+      (filteredEntries.reduce((s, e) => s + Number(e.amount || 0), 0) || 0) / days
+    );
     return { overall, expenses, incomes, avgPerDay };
   }, [filteredEntries, rangeStart, rangeEnd]);
 
@@ -401,22 +422,28 @@ const StatsScreen = () => {
           }}
         >
           {/* 1. FILTER TABS */}
-          <View style={styles.segmentControl}>
-            {FILTERS.map((f) => {
-              const isActive = filter === f;
-              return (
-                <Pressable
-                  key={f}
-                  style={[styles.segmentBtn, isActive && styles.segmentBtnActive]}
-                  onPress={() => handleFilterPress(f)}
-                >
-                  <Text style={[styles.segmentText, isActive && styles.segmentTextActive]}>
-                    {f}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.segmentScroll}
+          >
+            <View style={styles.segmentControl}>
+              {FILTERS.map((f) => {
+                const isActive = filter === f;
+                return (
+                  <Pressable
+                    key={f}
+                    style={[styles.segmentBtnCompact, isActive && styles.segmentBtnActiveCompact]}
+                    onPress={() => handleFilterPress(f)}
+                  >
+                    <Text style={[styles.segmentTextCompact, isActive && styles.segmentTextActive]}>
+                      {f}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </ScrollView>
 
           {filter === 'This Month' && availableMonths.length > 0 && (
             <ScrollView
@@ -533,7 +560,9 @@ const StatsScreen = () => {
             <View style={styles.rowBetween}>
               <View>
                 <Text style={styles.cardTitle}>Advanced Statistics</Text>
-                <Text style={styles.cardSubtitle}>Count, mean, median, stddev and top categories</Text>
+                <Text style={styles.cardSubtitle}>
+                  Count, mean, median, stddev and top categories
+                </Text>
               </View>
               <MaterialIcon name="insights" size={22} color="#90A4AE" />
             </View>
@@ -557,25 +586,44 @@ const StatsScreen = () => {
               <View style={[styles.rowBetween, { marginBottom: 8 }]}>
                 <View>
                   <Text style={styles.labelMutedSmall}>Mean</Text>
-                  <Text style={styles.chartStatValue}>₹{Math.round(advancedStats.overall.mean)}</Text>
+                  <Text style={styles.chartStatValue}>
+                    ₹{Math.round(advancedStats.overall.mean)}
+                  </Text>
                 </View>
                 <View>
                   <Text style={styles.labelMutedSmall}>Median</Text>
-                  <Text style={styles.chartStatValue}>₹{Math.round(advancedStats.overall.median)}</Text>
+                  <Text style={styles.chartStatValue}>
+                    ₹{Math.round(advancedStats.overall.median)}
+                  </Text>
                 </View>
                 <View>
                   <Text style={styles.labelMutedSmall}>Std Dev</Text>
-                  <Text style={styles.chartStatValue}>₹{Math.round(advancedStats.overall.stddev)}</Text>
+                  <Text style={styles.chartStatValue}>
+                    ₹{Math.round(advancedStats.overall.stddev)}
+                  </Text>
                 </View>
               </View>
 
               <View style={{ marginTop: 8 }}>
-                <Text style={[styles.labelMutedSmall, { marginBottom: 8 }]}>Top expense categories</Text>
+                <Text style={[styles.labelMutedSmall, { marginBottom: 8 }]}>
+                  Top expense categories
+                </Text>
                 {topExpenseCategories.length ? (
                   topExpenseCategories.map((c, i) => (
-                    <View key={c.name} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6 }}>
-                      <Text style={{ fontWeight: '700' }}>{i + 1}. {c.name}</Text>
-                      <Text style={{ color: '#546E7A' }}>₹{Math.round(c.value).toLocaleString()}</Text>
+                    <View
+                      key={c.name}
+                      style={{
+                        flexDirection: 'row',
+                        justifyContent: 'space-between',
+                        paddingVertical: 6,
+                      }}
+                    >
+                      <Text style={{ fontWeight: '700' }}>
+                        {i + 1}. {c.name}
+                      </Text>
+                      <Text style={{ color: '#546E7A' }}>
+                        ₹{Math.round(c.value).toLocaleString()}
+                      </Text>
                     </View>
                   ))
                 ) : (
@@ -673,18 +721,21 @@ const StatsScreen = () => {
             {pieData.length > 0 ? (
               <View style={{ alignItems: 'center', marginTop: 20 }}>
                 <View style={{ width: donutSize, height: donutSize }}>
-                  <PieChart
-                    data={pieData}
-                    width={donutSize}
-                    height={donutSize}
-                    chartConfig={chartConfig}
-                    accessor="population"
-                    backgroundColor="transparent"
-                    // FIX: paddingLeft requires string
-                    paddingLeft={String(donutSize / 4)}
-                    hasLegend={false}
-                    absolute={false}
-                  />
+                  {PieChartComp ? (
+                    <PieChartComp
+                      data={pieData}
+                      width={donutSize}
+                      height={donutSize}
+                      chartConfig={chartConfig}
+                      accessor="population"
+                      backgroundColor="transparent"
+                      paddingLeft={String(donutSize / 4)}
+                      hasLegend={false}
+                      absolute={false}
+                    />
+                  ) : (
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  )}
                   <View
                     style={[
                       styles.donutHole,
@@ -748,15 +799,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: '#fff',
     borderRadius: 12,
-    padding: 4,
+    padding: 6,
     marginBottom: 16,
     elevation: 1,
     shadowOpacity: 0.05,
     shadowOffset: { width: 0, height: 2 },
   },
-  segmentBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 8 },
-  segmentBtnActive: { backgroundColor: colors.primary },
-  segmentText: { color: '#90A4AE', fontWeight: '600', fontSize: 13 },
+  segmentScroll: { paddingHorizontal: 8 },
+  segmentBtnCompact: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    marginHorizontal: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  segmentBtnActiveCompact: { backgroundColor: colors.primary },
+  segmentTextCompact: { color: '#90A4AE', fontWeight: '600', fontSize: 13 },
   segmentTextActive: { color: '#fff' },
 
   // --- CARDS ---

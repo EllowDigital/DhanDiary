@@ -20,10 +20,24 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { logoutUser } from '../services/firebaseAuth';
 import { colors, spacing, shadows } from '../utils/design';
 import appConfig from '../../app.json';
-const pkg = require('../../package.json');
+let pkg: any = {};
+try {
+  if (typeof require === 'function') pkg = require('../../package.json');
+} catch (e) {
+  pkg = {};
+}
 
 // Assets
-const brandIcon = require('../../assets/splash-icon.png');
+const getBrandIcon = () => {
+  try {
+    if (typeof require !== 'function') return undefined;
+    return require('../../assets/splash-icon.png');
+  } catch (e) {
+    return undefined;
+  }
+};
+// Resolve brand icon once (guarded) to avoid top-level require errors
+const brandIcon = getBrandIcon();
 
 const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   const insets = useSafeAreaInsets();
