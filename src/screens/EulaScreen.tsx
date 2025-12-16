@@ -7,6 +7,7 @@ import {
   Linking,
   TouchableOpacity,
   Alert,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
@@ -72,12 +73,13 @@ const sections = [
 const EulaSection = ({ item }: { item: (typeof sections)[0] }) => (
   <View style={styles.card}>
     <View style={styles.cardHeader}>
-      <MaterialCommunityIcons
-        name={item.icon as any}
-        size={22}
-        color={colors.primary || '#007AFF'}
-        style={styles.icon}
-      />
+      <View style={styles.iconContainer}>
+        <MaterialCommunityIcons
+          name={item.icon as any}
+          size={20}
+          color={colors.primary}
+        />
+      </View>
       <Text style={styles.cardTitle}>{item.title}</Text>
     </View>
     <Text style={styles.cardBody}>{item.body}</Text>
@@ -85,8 +87,12 @@ const EulaSection = ({ item }: { item: (typeof sections)[0] }) => (
 );
 
 const EulaScreen = () => {
-  const handleEmailPress = async () => {
-    const url = `mailto:${CONTACT_EMAIL_PRIMARY}`;
+  const { width } = useWindowDimensions();
+  const isTablet = width >= 768;
+  const contentWidth = Math.min(width - (isTablet ? spacing(8) : spacing(4)), 700);
+
+  const handleEmailPress = async (email: string) => {
+    const url = `mailto:${email}`;
     const supported = await Linking.canOpenURL(url);
     if (supported) await Linking.openURL(url);
     else Alert.alert('Error', 'Could not open email client');
@@ -96,44 +102,55 @@ const EulaScreen = () => {
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       <SafeAreaView style={styles.safeArea}>
-        <ScreenHeader
-          title="End User License"
-          subtitle="Terms for installing & using DhanDiary"
-          showScrollHint={false}
-          useSafeAreaPadding={false}
-        />
+        
+        <View style={{ width: contentWidth, alignSelf: 'center' }}>
+          <ScreenHeader
+            title="End User License"
+            subtitle="License Agreement"
+            showScrollHint={false}
+            useSafeAreaPadding={false}
+          />
+        </View>
 
         <ScrollView
           style={styles.scroll}
-          contentContainerStyle={styles.contentContainer}
+          contentContainerStyle={[styles.contentContainer, { paddingBottom: 60 }]}
           showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.leadText}>
-            By downloading or using <Text style={styles.bold}>DhanDiary</Text>, you agree to this
-            End User License Agreement. If you do not agree, you must uninstall the app.
-          </Text>
-
-          {sections.map((section) => (
-            <EulaSection key={section.id} item={section} />
-          ))}
-
-          <View style={[styles.card, styles.contactCard]}>
-            <View style={styles.cardHeader}>
-              <MaterialCommunityIcons name="email-fast-outline" size={22} color={colors.text} />
-              <Text style={styles.cardTitle}>Contact</Text>
-            </View>
-            <Text style={styles.cardBody}>
-              Questions about this license? Reach out and we will reply within a few business days.
+          <View style={{ width: contentWidth, alignSelf: 'center' }}>
+            
+            <Text style={styles.leadText}>
+              By downloading or using <Text style={styles.bold}>DhanDiary</Text>, you agree to this
+              End User License Agreement. If you do not agree, you must uninstall the app.
             </Text>
 
-            <TouchableOpacity onPress={handleEmailPress}>
-              <Text style={styles.linkText}>{CONTACT_EMAIL_PRIMARY}</Text>
-            </TouchableOpacity>
-            <Text style={styles.secondaryEmail}>{CONTACT_EMAIL_SECONDARY}</Text>
-          </View>
+            {sections.map((section) => (
+              <EulaSection key={section.id} item={section} />
+            ))}
 
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>Last updated: {LAST_UPDATED}</Text>
+            <View style={[styles.card, styles.contactCard]}>
+              <View style={styles.cardHeader}>
+                <View style={[styles.iconContainer, { backgroundColor: '#e0f2fe' }]}>
+                  <MaterialCommunityIcons name="email-fast-outline" size={20} color="#0284c7" />
+                </View>
+                <Text style={styles.cardTitle}>Contact</Text>
+              </View>
+              <Text style={styles.cardBody}>
+                Questions about this license? Reach out and we will reply within a few business days.
+              </Text>
+
+              <TouchableOpacity onPress={() => handleEmailPress(CONTACT_EMAIL_PRIMARY)}>
+                <Text style={styles.linkText}>{CONTACT_EMAIL_PRIMARY}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => handleEmailPress(CONTACT_EMAIL_SECONDARY)}>
+                <Text style={styles.secondaryEmail}>{CONTACT_EMAIL_SECONDARY}</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>Last updated: {LAST_UPDATED}</Text>
+            </View>
+
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -155,40 +172,46 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    paddingHorizontal: spacing(2.5),
     paddingTop: spacing(2),
-    paddingBottom: spacing(6),
     gap: spacing(2),
   },
   leadText: {
     fontSize: 15,
-    lineHeight: 22,
-    color: colors.subtleText || '#666',
+    lineHeight: 24,
+    color: colors.text,
+    marginBottom: spacing(2),
+    opacity: 0.8,
   },
   bold: {
     fontWeight: '700',
-    color: colors.text,
+    color: colors.primary,
   },
   card: {
-    backgroundColor: colors.card || '#fff',
+    backgroundColor: '#fff',
     borderRadius: 16,
-    padding: spacing(2),
+    padding: 20,
+    marginBottom: 16,
     borderWidth: 1,
-    borderColor: colors.border || '#e0e0e0',
+    borderColor: 'rgba(0,0,0,0.04)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.03,
-    shadowRadius: 6,
+    shadowRadius: 8,
     elevation: 2,
   },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing(1),
-    gap: spacing(1.5),
+    marginBottom: 12,
+    gap: 12,
   },
-  icon: {
-    opacity: 0.9,
+  iconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#f0fdf4',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   cardTitle: {
     fontSize: 16,
@@ -197,31 +220,34 @@ const styles = StyleSheet.create({
   },
   cardBody: {
     fontSize: 14,
-    lineHeight: 21,
-    color: colors.muted || '#555',
+    lineHeight: 22,
+    color: colors.muted,
   },
   contactCard: {
-    backgroundColor: colors.background === '#000' ? '#222' : '#F9FAFB',
+    backgroundColor: '#f8fafc',
+    borderColor: '#e2e8f0',
   },
   linkText: {
     fontSize: 15,
-    color: colors.primary || '#007AFF',
+    color: colors.primary,
     fontWeight: '600',
-    marginTop: spacing(1.5),
-    textDecorationLine: 'underline',
+    marginTop: 16,
   },
   secondaryEmail: {
     fontSize: 13,
-    color: colors.muted || '#888',
-    marginTop: 4,
+    color: colors.muted,
+    marginTop: 6,
+    textDecorationLine: 'underline',
   },
   footer: {
-    marginTop: spacing(1),
+    marginTop: 20,
     alignItems: 'center',
+    marginBottom: 20,
   },
   footerText: {
     fontSize: 12,
-    color: colors.muted || '#999',
+    color: colors.muted,
     textAlign: 'center',
+    opacity: 0.7,
   },
 });
