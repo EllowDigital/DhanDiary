@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef, useCallback } from 'react';
+import React, { useMemo, useState, useRef, useCallback, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -153,7 +153,20 @@ const HistoryScreen = () => {
     }
   }, [queryError, listenerError, showToast]);
   const showLoading = useDelayedLoading(Boolean(isLoading));
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
+
+  // Keyboard handling for edit modal to ensure inputs remain visible on Android/iOS
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', (e) => {
+      setKeyboardHeight(e.endCoordinates?.height || 250);
+    });
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   // --- FILTERS STATE ---
   const [filtersExpanded, setFiltersExpanded] = useState(false);
@@ -492,13 +505,16 @@ const HistoryScreen = () => {
         onRequestClose={() => setEditingEntry(null)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
         >
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
             <View style={styles.modalOverlay}>
               <View
-                style={[styles.modalContent, { maxWidth: 600, alignSelf: 'center', width: '100%' }]}
+                style={[
+                  styles.modalContent,
+                  { maxWidth: 600, alignSelf: 'center', width: '100%', maxHeight: Math.max(300, Math.floor(height * 0. nine) ), },
+                ]}
               >
                 <View style={styles.sheetHandle} />
                 <View style={styles.modalHeaderRow}>

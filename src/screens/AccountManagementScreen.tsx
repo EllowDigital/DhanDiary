@@ -13,6 +13,7 @@ import {
   StatusBar,
   Keyboard,
   LayoutAnimation,
+  UIManager,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Input, Button } from '@rneui/themed';
@@ -27,8 +28,11 @@ import { useNavigation } from '@react-navigation/native';
 import { colors, spacing } from '../utils/design';
 import ScreenHeader from '../components/ScreenHeader';
 
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
 // --- SUB-COMPONENT: CUSTOM INPUT ---
-// Defined outside to prevent focus loss on re-render
 const CustomInput = ({ containerStyle, ...props }: any) => (
   <Input
     {...props}
@@ -38,6 +42,7 @@ const CustomInput = ({ containerStyle, ...props }: any) => (
     labelStyle={styles.inputLabel}
     placeholderTextColor={colors.muted}
     selectionColor={colors.primary}
+    renderErrorMessage={false}
   />
 );
 
@@ -61,15 +66,14 @@ const ExpandableCard = ({
     Animated.timing(animatedController, {
       toValue: isExpanded ? 1 : 0,
       duration: 300,
-      useNativeDriver: false, // Height/Layout needs false
+      useNativeDriver: false,
       easing: Easing.bezier(0.4, 0.0, 0.2, 1),
     }).start();
   }, [isExpanded]);
 
-  // Interpolate height or use max-height
   const bodyHeight = animatedController.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, 500], // Large enough to fit content
+    outputRange: [0, 600], // Increased max height to accommodate content
   });
 
   const arrowRotation = animatedController.interpolate({
@@ -114,7 +118,7 @@ const AccountManagementScreen = () => {
   const navigation = useNavigation<any>();
   const { showToast } = useToast();
 
-  const [activeCard, setActiveCard] = useState<string | null>('username'); // Default open first card
+  const [activeCard, setActiveCard] = useState<string | null>(null);
 
   // --- FORM STATE ---
   const [username, setUsername] = useState(user?.name || '');
@@ -157,7 +161,7 @@ const AccountManagementScreen = () => {
     try {
       await retry(() => updateProfileDetails({ name: username }), 3, 250);
       showToast('Name updated successfully');
-      toggleCard(''); // Close card
+      toggleCard(''); 
     } catch (err: any) {
       Alert.alert('Error', err?.message);
     } finally {
@@ -210,7 +214,7 @@ const AccountManagementScreen = () => {
           try {
             await retry(() => deleteAccount(), 3, 500);
             showToast('Account deleted');
-            navigation.replace('Auth');
+            navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
           } catch (err: any) {
             Alert.alert('Error', err?.message);
           } finally {
@@ -454,7 +458,6 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     borderWidth: 1,
     borderColor: colors.border,
-    // Soft Shadow
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.03,
@@ -465,7 +468,7 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: colors.primarySoft || '#EEF2FF',
+    backgroundColor: '#EEF2FF',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 16,
@@ -559,7 +562,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   inputField: {
-    backgroundColor: colors.surfaceMuted || '#F3F4F6',
+    backgroundColor: '#F3F4F6',
     borderBottomWidth: 0,
     borderRadius: 12,
     paddingHorizontal: 12,
