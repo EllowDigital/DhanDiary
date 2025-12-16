@@ -1,7 +1,6 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import {
   View,
-  Text,
   StyleSheet,
   StatusBar,
   TouchableOpacity,
@@ -73,7 +72,13 @@ const OnboardingItem = ({
   index: number;
   scrollX: Animated.Value;
 }) => {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
+  
+  // Responsive sizing logic
+  const isSmallScreen = width < 380;
+  const isTablet = width > 700;
+  const circleSize = isTablet ? 360 : isSmallScreen ? 240 : 280;
+  const iconSize = isTablet ? 80 : 56;
 
   // ANIMATION: Input Range based on current scroll position
   const inputRange = [(index - 1) * width, index * width, (index + 1) * width];
@@ -102,19 +107,22 @@ const OnboardingItem = ({
   return (
     <View style={[styles.slideContainer, { width }]}>
       {/* Animated Image Section */}
-      <View style={styles.imageContainer}>
+      <View style={[styles.imageContainer, { flex: isTablet ? 0.5 : 0.6 }]}>
         <Animated.View
           style={[
             styles.circleBackground,
             {
+              width: circleSize,
+              height: circleSize,
+              borderRadius: circleSize / 2,
               backgroundColor: `${item.accent}15`, // Very light opacity
               borderColor: `${item.accent}30`,
               transform: [{ scale: imageScale }],
             },
           ]}
         >
-          <View style={[styles.iconBubble, { backgroundColor: item.accent }]}>
-            <MaterialIcon name={item.icon as any} size={56} color="#fff" />
+          <View style={[styles.iconBubble, { backgroundColor: item.accent, width: circleSize * 0.36, height: circleSize * 0.36, borderRadius: (circleSize * 0.36) / 2 }]}>
+            <MaterialIcon name={item.icon as any} size={iconSize} color="#fff" />
           </View>
         </Animated.View>
       </View>
@@ -125,6 +133,7 @@ const OnboardingItem = ({
           style={[
             styles.title,
             {
+              fontSize: isSmallScreen ? 22 : 26,
               opacity: textOpacity,
               transform: [{ translateX: textTranslate }],
             },
@@ -136,6 +145,7 @@ const OnboardingItem = ({
           style={[
             styles.description,
             {
+              fontSize: isSmallScreen ? 14 : 16,
               opacity: textOpacity,
               transform: [{ translateX: textTranslate }],
             },
@@ -180,11 +190,11 @@ const Paginator = ({ data, scrollX }: { data: typeof SLIDES; scrollX: Animated.V
 // --- MAIN SCREEN ---
 const OnboardingScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'Onboarding'>>();
-  const { width } = useWindowDimensions();
   const [currentIndex, setCurrentIndex] = useState(0);
   const scrollX = useRef(new Animated.Value(0)).current;
   const listRef = useRef<FlatList>(null);
   const [completing, setCompleting] = useState(false);
+  const { width } = useWindowDimensions();
 
   // Optimizing FlatList updates
   const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
@@ -199,7 +209,11 @@ const OnboardingScreen = () => {
     if (completing) return;
     setCompleting(true);
     await markOnboardingComplete();
-    navigation.replace('Auth');
+    // Use reset to prevent going back to onboarding
+    navigation.reset({
+        index: 0,
+        routes: [{ name: 'Auth' }], // Assuming 'Auth' is the login/signup screen
+    });
   };
 
   const handleNext = () => {
@@ -247,7 +261,7 @@ const OnboardingScreen = () => {
       </View>
 
       {/* Footer: Dots & Button */}
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: Platform.OS === 'android' ? 40 : 20 }]}>
         <Paginator data={SLIDES} scrollX={scrollX} />
 
         <TouchableOpacity
@@ -272,7 +286,7 @@ const OnboardingScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background, // Ensure this exists in your utils/design
+    backgroundColor: colors.background || '#F9FAFB', // Fallback color
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -286,7 +300,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   skipText: {
-    color: colors.muted,
+    color: colors.muted || '#6B7280',
     fontSize: 15,
     fontWeight: '600',
   },
@@ -297,23 +311,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   imageContainer: {
-    flex: 0.6,
     justifyContent: 'center',
     alignItems: 'center',
     width: '100%',
   },
   circleBackground: {
-    width: 280, // Responsive sizing handled by parent flex/justify
-    height: 280,
-    borderRadius: 140,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
   },
   iconBubble: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
@@ -326,18 +333,17 @@ const styles = StyleSheet.create({
     flex: 0.4,
     paddingHorizontal: 32,
     alignItems: 'center',
+    justifyContent: 'flex-start', // Align text to top of container
   },
   title: {
-    fontSize: 26,
     fontWeight: '800',
-    color: colors.text,
+    color: colors.text || '#111827',
     textAlign: 'center',
     marginBottom: 16,
     includeFontPadding: false,
   },
   description: {
-    fontSize: 16,
-    color: colors.muted,
+    color: colors.muted || '#6B7280',
     textAlign: 'center',
     lineHeight: 24,
     paddingHorizontal: 10,
@@ -348,7 +354,6 @@ const styles = StyleSheet.create({
     width: '100%',
     justifyContent: 'space-between',
     paddingHorizontal: 24,
-    paddingBottom: Platform.OS === 'android' ? 40 : 20, // Extra padding for Android nav bars
   },
   dotsContainer: {
     flexDirection: 'row',
@@ -359,17 +364,17 @@ const styles = StyleSheet.create({
   dot: {
     height: 8,
     borderRadius: 4,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primary || '#2563EB',
     marginHorizontal: 4,
   },
   button: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primary || '#2563EB',
     flexDirection: 'row',
     height: 56,
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: colors.primary,
+    shadowColor: colors.primary || '#2563EB',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 10,
