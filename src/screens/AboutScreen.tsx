@@ -23,17 +23,19 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Updates from 'expo-updates';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 
-// --- PLACEHOLDERS (Replace with your actual imports) ---
+// --- PLACEHOLDERS ---
 import ScreenHeader from '../components/ScreenHeader';
-import getLatestShareLink from '../utils/shareLink';
+// Mock utility if missing
+const getLatestShareLink = async () => 'https://ellowdigital.netlify.app';
+
 let pkg: any = {};
 try {
-  if (typeof require === 'function') pkg = require('../../package.json');
+  pkg = require('../../package.json');
 } catch (e) {
-  pkg = {};
+  pkg = { version: '1.0.0' };
 }
 
-// --- THEME CONFIGURATION ---
+// --- THEME ---
 const theme = {
   background: '#F8F9FA',
   surface: '#FFFFFF',
@@ -44,7 +46,7 @@ const theme = {
   accentGreen: '#10B981',
   accentRed: '#EF4444',
   heroBg: '#0F172A',
-  border: '#E2E8F0', // Slightly darker border for the grid
+  border: '#E2E8F0',
 };
 
 // --- CONSTANTS ---
@@ -60,7 +62,7 @@ const AboutScreen: React.FC = () => {
 
   // --- ANIMATIONS ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
 
   useEffect(() => {
     Animated.parallel([
@@ -70,12 +72,7 @@ const AboutScreen: React.FC = () => {
         useNativeDriver: true,
         easing: Easing.out(Easing.cubic),
       }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 600,
-        useNativeDriver: true,
-        easing: Easing.out(Easing.cubic),
-      }),
+      Animated.spring(slideAnim, { toValue: 0, friction: 8, tension: 40, useNativeDriver: true }),
     ]).start();
   }, []);
 
@@ -91,9 +88,11 @@ const AboutScreen: React.FC = () => {
     });
   }, []);
 
-  // --- UPDATE LOGIC (Original) ---
+  // --- UPDATE LOGIC ---
   const checkForUpdates = useCallback(async () => {
-    if (isExpoGo) return Alert.alert('Expo Go', 'OTA updates are not supported in Expo Go.');
+    if (isExpoGo) {
+      return Alert.alert('Development Mode', 'Over-the-air updates are disabled in Expo Go.');
+    }
 
     setChecking(true);
     try {
@@ -103,10 +102,10 @@ const AboutScreen: React.FC = () => {
         setShowUpdateModal(true);
       } else {
         setUpdateAvailable(false);
-        Alert.alert('Up to Date', 'You are running the latest version.');
+        Alert.alert('Up to Date', 'You are running the latest version of DhanDiary.');
       }
     } catch (err: any) {
-      Alert.alert('Check Failed', err.message);
+      Alert.alert('Check Failed', err.message || 'Unable to check for updates.');
     } finally {
       setChecking(false);
     }
@@ -132,39 +131,46 @@ const AboutScreen: React.FC = () => {
   const clearRetryState = async () => {
     await AsyncStorage.removeItem('UPDATE_FAIL_COUNT');
     setFailureCount(0);
+    Alert.alert('Reset Complete', 'Update retry count cleared.');
   };
 
-  // --- INFO DATA ---
+  // --- ACTIONS ---
   const updateId = Updates.updateId || 'Embedded';
-  const shortId = updateId === 'Embedded' ? updateId : updateId.substring(0, 6);
+  const shortId = updateId === 'Embedded' ? updateId : updateId.substring(0, 8);
 
   const copyUpdateId = () => {
     Clipboard.setString(updateId);
-    Alert.alert('Copied', 'Update ID copied to clipboard');
+    Alert.alert('Copied', 'Build ID copied to clipboard');
   };
 
   const handleShare = async () => {
-    const link = await getLatestShareLink().catch(() => ELLOW_URL);
-    Share.share({
-      title: 'DhanDiary',
-      message: `Manage your finances smartly with DhanDiary! Download: ${link}`,
-    });
+    try {
+      const link = await getLatestShareLink().catch(() => ELLOW_URL);
+      Share.share({
+        title: 'DhanDiary',
+        message: `Track your expenses smartly with DhanDiary! Download here: ${link}`,
+      });
+    } catch (e) {
+      // ignore share dismissal
+    }
   };
 
   const infoGrid = useMemo(
     () => [
-      { label: 'Version', value: pkg.version, icon: 'tag' },
+      { label: 'Version', value: `v${pkg.version}`, icon: 'tag' },
       { label: 'Channel', value: BUILD_TYPE, icon: 'layers' },
       {
-        label: 'Env',
-        value: process.env.NODE_ENV === 'production' ? 'Prod' : 'Dev',
+        label: 'Environment',
+        value: __DEV__ ? 'Development' : 'Production',
         icon: 'code',
+        isBadge: true,
       },
       {
         label: 'Build ID',
         value: shortId,
         icon: 'fingerprint',
         onPress: copyUpdateId,
+        actionIcon: 'content-copy',
       },
     ],
     [shortId]
@@ -172,9 +178,8 @@ const AboutScreen: React.FC = () => {
 
   return (
     <View style={styles.mainContainer}>
-      <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent={true} />
+      <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
-      {/* HEADER */}
       <View
         style={{ paddingTop: insets.top, paddingHorizontal: 20, backgroundColor: theme.background }}
       >
@@ -188,28 +193,22 @@ const AboutScreen: React.FC = () => {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        overScrollMode="never"
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 80 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 40 }]}
       >
         <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-          {/* 1. HERO CARD (Original Design) */}
+          {/* 1. HERO CARD */}
           <View style={styles.heroCard}>
             <View style={styles.heroContent}>
-              <Image
-                source={(() => {
-                  try {
-                    if (typeof require !== 'function') return undefined;
-                    return require('../../assets/splash-icon.png');
-                  } catch (e) {
-                    return undefined;
-                  }
-                })()}
-                style={styles.heroIcon}
-                resizeMode="contain"
-              />
+              <View style={styles.heroIconContainer}>
+                <Image
+                  source={require('../../assets/splash-icon.png')}
+                  style={styles.heroIcon}
+                  resizeMode="contain"
+                />
+              </View>
               <View style={styles.heroText}>
                 <Text style={styles.heroTitle}>DhanDiary</Text>
-                <Text style={styles.heroSubtitle}>Smart Personal Finance</Text>
+                <Text style={styles.heroSubtitle}>Smart Finance Tracker</Text>
 
                 <View style={styles.activePill}>
                   <View style={styles.activeDot} />
@@ -222,16 +221,16 @@ const AboutScreen: React.FC = () => {
 
             <View style={styles.heroFooter}>
               <Text style={styles.heroFooterText}>
-                Crafted by <Text style={styles.heroBrand}>{BRAND_NAME}</Text>
+                Designed by <Text style={styles.heroBrand}>{BRAND_NAME}</Text>
               </Text>
               <TouchableOpacity style={styles.visitBtn} onPress={() => Linking.openURL(ELLOW_URL)}>
                 <Text style={styles.visitText}>Visit Website</Text>
-                <MaterialIcon name="arrow-forward" size={14} color="rgba(255,255,255,0.9)" />
+                <MaterialIcon name="arrow-forward" size={14} color="#fff" />
               </TouchableOpacity>
             </View>
           </View>
 
-          {/* 2. SYSTEM INFO (NEW COMPACT / MINIMAL DESIGN) */}
+          {/* 2. SYSTEM INFO GRID */}
           <Text style={styles.sectionHeader}>System Information</Text>
           <View style={styles.denseGrid}>
             <View style={styles.gridRow}>
@@ -245,9 +244,8 @@ const AboutScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* 3. UPDATES & ACTIONS (Original Design) */}
-          <Text style={styles.sectionHeader}>Updates & Support</Text>
-
+          {/* 3. UPDATE CENTER */}
+          <Text style={styles.sectionHeader}>Update Center</Text>
           <View style={styles.actionCard}>
             <View style={styles.actionRow}>
               <View
@@ -269,9 +267,7 @@ const AboutScreen: React.FC = () => {
               <View style={{ flex: 1 }}>
                 <Text style={styles.cardTitle}>App Version</Text>
                 <Text style={styles.cardDesc}>
-                  {updateAvailable
-                    ? 'New version available for install.'
-                    : 'You are on the latest version.'}
+                  {updateAvailable ? 'New features available.' : 'You are up to date.'}
                 </Text>
               </View>
             </View>
@@ -304,7 +300,7 @@ const AboutScreen: React.FC = () => {
             )}
           </View>
 
-          {/* Support Buttons Row (Original Design) */}
+          {/* 4. SUPPORT LINKS */}
           <View style={styles.buttonRow}>
             <TouchableOpacity style={styles.halfBtn} onPress={handleShare}>
               <MaterialIcon name="share" size={20} color={theme.primary} />
@@ -313,16 +309,15 @@ const AboutScreen: React.FC = () => {
 
             <TouchableOpacity
               style={styles.halfBtn}
-              onPress={() => Linking.openURL('mailto:support@ellow.digitial')}
+              onPress={() => Linking.openURL('mailto:support@dhandiary.com')}
             >
               <MaterialIcon name="mail-outline" size={20} color={theme.primary} />
               <Text style={styles.halfBtnText}>Contact Us</Text>
             </TouchableOpacity>
           </View>
 
-          {/* FOOTER */}
           <Text style={styles.copyright}>
-            © {new Date().getFullYear()} {BRAND_NAME}
+            © {new Date().getFullYear()} {BRAND_NAME}. All rights reserved.
           </Text>
         </Animated.View>
       </ScrollView>
@@ -339,11 +334,10 @@ const AboutScreen: React.FC = () => {
             <View style={[styles.modalIcon, { backgroundColor: 'rgba(16, 185, 129, 0.15)' }]}>
               <MaterialIcon name="arrow-downward" size={32} color={theme.accentGreen} />
             </View>
-            <Text style={styles.modalTitle}>Update Ready</Text>
+            <Text style={styles.modalTitle}>Update Available</Text>
             <Text style={styles.modalText}>
-              A new version of DhanDiary is ready to install. This will only take a moment.
+              A new version is ready to install. It will only take a moment.
             </Text>
-
             <Button
               title="Install Update"
               onPress={applyUpdate}
@@ -367,7 +361,7 @@ const AboutScreen: React.FC = () => {
   );
 };
 
-// --- SUB-COMPONENT FOR THE NEW SYSTEM INFO GRID ---
+// --- GRID ITEM COMPONENT ---
 const GridItem = ({ item, borderRight }: { item: any; borderRight?: boolean }) => (
   <TouchableOpacity
     style={[
@@ -379,75 +373,71 @@ const GridItem = ({ item, borderRight }: { item: any; borderRight?: boolean }) =
     disabled={!item.onPress}
   >
     <Text style={styles.gridLabel}>{item.label}</Text>
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-      <Text style={styles.gridValue}>{item.value}</Text>
-      {item.icon && <MaterialIcon name={item.icon} size={12} color={theme.textSecondary} />}
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+      {item.isBadge ? (
+        <View
+          style={[
+            styles.badge,
+            {
+              backgroundColor:
+                item.value === 'Production'
+                  ? 'rgba(16, 185, 129, 0.15)'
+                  : 'rgba(37, 99, 235, 0.15)',
+            },
+          ]}
+        >
+          <Text
+            style={[
+              styles.badgeText,
+              { color: item.value === 'Production' ? theme.accentGreen : theme.primary },
+            ]}
+          >
+            {item.value}
+          </Text>
+        </View>
+      ) : (
+        <Text style={styles.gridValue}>{item.value}</Text>
+      )}
+      {item.actionIcon && <MaterialIcon name={item.actionIcon} size={14} color={theme.primary} />}
     </View>
   </TouchableOpacity>
 );
 
 export default AboutScreen;
 
-/* --- STYLES --- */
+// --- STYLES ---
 const styles = StyleSheet.create({
-  mainContainer: {
-    flex: 1,
-    backgroundColor: theme.background,
-  },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    flexGrow: 1,
-  },
+  mainContainer: { flex: 1, backgroundColor: theme.background },
+  scrollContent: { paddingHorizontal: 20, paddingTop: 10, flexGrow: 1 },
   sectionHeader: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     color: theme.textSecondary,
-    marginBottom: 12,
-    marginTop: 8,
+    marginBottom: 10,
+    marginTop: 24,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    marginLeft: 4,
   },
 
-  /* HERO CARD (Original) */
+  /* HERO CARD */
   heroCard: {
     backgroundColor: theme.heroBg,
     borderRadius: 24,
     padding: 24,
-    marginBottom: 24,
+    marginBottom: 12,
     shadowColor: theme.primary,
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.25,
     shadowRadius: 16,
-    elevation: 8,
+    elevation: 10,
   },
-  heroContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  heroIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  heroText: {
-    marginLeft: 16,
-    flex: 1,
-    justifyContent: 'center',
-  },
-  heroTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#fff',
-    letterSpacing: -0.5,
-  },
-  heroSubtitle: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.6)',
-    marginTop: 2,
-  },
+  heroContent: { flexDirection: 'row', alignItems: 'center' },
+  heroIconContainer: { padding: 4, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 20 },
+  heroIcon: { width: 56, height: 56 },
+  heroText: { marginLeft: 16, flex: 1, justifyContent: 'center' },
+  heroTitle: { fontSize: 24, fontWeight: '800', color: '#fff', letterSpacing: -0.5 },
+  heroSubtitle: { fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
   activePill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -455,7 +445,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 20,
-    marginTop: 8,
+    marginTop: 10,
     alignSelf: 'flex-start',
   },
   activeDot: {
@@ -465,31 +455,11 @@ const styles = StyleSheet.create({
     backgroundColor: theme.accentGreen,
     marginRight: 6,
   },
-  activeText: {
-    color: theme.accentGreen,
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  heroDivider: {
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    marginVertical: 16,
-  },
-  heroFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  heroFooterText: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: 12,
-  },
-  heroBrand: {
-    color: '#fff',
-    fontWeight: '700',
-  },
+  activeText: { color: theme.accentGreen, fontSize: 11, fontWeight: '700' },
+  heroDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.1)', marginVertical: 20 },
+  heroFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  heroFooterText: { color: 'rgba(255,255,255,0.5)', fontSize: 12 },
+  heroBrand: { color: '#fff', fontWeight: '700' },
   visitBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -497,60 +467,42 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 100,
+    gap: 4,
   },
-  visitText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-    marginRight: 4,
-  },
+  visitText: { color: '#fff', fontSize: 12, fontWeight: '600' },
 
-  /* NEW COMPACT GRID STYLES */
+  /* GRID */
   denseGrid: {
     backgroundColor: theme.surface,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: theme.border,
     overflow: 'hidden',
-    marginBottom: 24,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 8,
     elevation: 2,
   },
-  gridRow: {
-    flexDirection: 'row',
-  },
-  gridDivider: {
-    height: 1,
-    backgroundColor: theme.border,
-    width: '100%',
-  },
-  gridItem: {
-    flex: 1,
-    padding: 16,
-    alignItems: 'flex-start',
-  },
+  gridRow: { flexDirection: 'row' },
+  gridDivider: { height: 1, backgroundColor: theme.border, width: '100%' },
+  gridItem: { flex: 1, padding: 16, alignItems: 'flex-start' },
   gridLabel: {
     fontSize: 11,
     color: theme.textSecondary,
     fontWeight: '700',
     textTransform: 'uppercase',
-    marginBottom: 4,
+    marginBottom: 6,
   },
-  gridValue: {
-    fontSize: 14,
-    color: theme.text,
-    fontWeight: '700',
-  },
+  gridValue: { fontSize: 14, color: theme.text, fontWeight: '700' },
+  badge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
+  badgeText: { fontSize: 12, fontWeight: '700' },
 
-  /* ACTIONS & UPDATES (Original) */
+  /* ACTIONS */
   actionCard: {
     backgroundColor: theme.surface,
     borderRadius: 20,
     padding: 20,
-    marginBottom: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
@@ -559,11 +511,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.border,
   },
-  actionRow: {
-    flexDirection: 'row',
-    gap: 16,
-    marginBottom: 16,
-  },
+  actionRow: { flexDirection: 'row', gap: 16, marginBottom: 16 },
   iconBoxLarge: {
     width: 48,
     height: 48,
@@ -571,22 +519,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: theme.text,
-    marginBottom: 4,
-  },
-  cardDesc: {
-    fontSize: 13,
-    color: theme.textSecondary,
-    lineHeight: 18,
-  },
-  mainBtn: {
-    backgroundColor: theme.primary,
-    borderRadius: 14,
-    paddingVertical: 12,
-  },
+  cardTitle: { fontSize: 16, fontWeight: '700', color: theme.text, marginBottom: 4 },
+  cardDesc: { fontSize: 13, color: theme.textSecondary, lineHeight: 18 },
+  mainBtn: { backgroundColor: theme.primary, borderRadius: 14, paddingVertical: 12 },
   errorRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -594,18 +529,10 @@ const styles = StyleSheet.create({
     marginTop: 12,
     gap: 6,
   },
-  errorText: {
-    fontSize: 12,
-    color: theme.accentRed,
-    fontWeight: '500',
-  },
+  errorText: { fontSize: 12, color: theme.accentRed, fontWeight: '500' },
 
-  /* SUPPORT BUTTONS (Original) */
-  buttonRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 30,
-  },
+  /* BUTTONS */
+  buttonRow: { flexDirection: 'row', gap: 12, marginTop: 24, marginBottom: 30 },
   halfBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -618,11 +545,7 @@ const styles = StyleSheet.create({
     borderColor: theme.border,
     gap: 8,
   },
-  halfBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: theme.text,
-  },
+  halfBtnText: { fontSize: 14, fontWeight: '600', color: theme.text },
   copyright: {
     textAlign: 'center',
     fontSize: 12,
@@ -653,12 +576,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 16,
   },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: theme.text,
-    marginBottom: 8,
-  },
+  modalTitle: { fontSize: 20, fontWeight: '800', color: theme.text, marginBottom: 8 },
   modalText: {
     textAlign: 'center',
     color: theme.textSecondary,

@@ -38,7 +38,7 @@ const SettingsScreen = () => {
   const query = useQueryClient();
   const { showToast } = useToast();
   const { user } = useAuth();
-  
+
   // Layout
   const { width } = useWindowDimensions();
   const isTablet = width >= 768;
@@ -61,12 +61,14 @@ const SettingsScreen = () => {
 
   const getAnimStyle = (index: number) => ({
     opacity: animValues[index],
-    transform: [{
-      translateY: animValues[index].interpolate({
-        inputRange: [0, 1],
-        outputRange: [30, 0],
-      }),
-    }],
+    transform: [
+      {
+        translateY: animValues[index].interpolate({
+          inputRange: [0, 1],
+          outputRange: [30, 0],
+        }),
+      },
+    ],
   });
 
   // Handlers
@@ -116,9 +118,13 @@ const SettingsScreen = () => {
     <View style={styles.mainContainer}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-        
         <View style={{ width: contentWidth, alignSelf: 'center' }}>
-          <ScreenHeader title="Settings" subtitle="Preferences & Security" showScrollHint={false} useSafeAreaPadding={false} />
+          <ScreenHeader
+            title="Settings"
+            subtitle="Preferences & Security"
+            showScrollHint={false}
+            useSafeAreaPadding={false}
+          />
         </View>
 
         <ScrollView
@@ -126,7 +132,6 @@ const SettingsScreen = () => {
           contentContainerStyle={{ paddingBottom: 100, paddingTop: 10 }}
         >
           <View style={{ width: contentWidth, alignSelf: 'center' }}>
-            
             {/* 1. PROFILE CARD */}
             <Animated.View style={getAnimStyle(0)}>
               <View style={styles.profileCard}>
@@ -135,10 +140,17 @@ const SettingsScreen = () => {
                     <Text style={styles.avatarText}>{userInitial}</Text>
                   </View>
                   <View style={styles.profileInfo}>
-                    <Text style={styles.profileName} numberOfLines={1}>{user?.name || 'User'}</Text>
-                    <Text style={styles.profileEmail} numberOfLines={1}>{user?.email || 'No email linked'}</Text>
+                    <Text style={styles.profileName} numberOfLines={1}>
+                      {user?.name || 'User'}
+                    </Text>
+                    <Text style={styles.profileEmail} numberOfLines={1}>
+                      {user?.email || 'No email linked'}
+                    </Text>
                   </View>
-                  <TouchableOpacity style={styles.editButton} onPress={() => navigation.navigate('Account')}>
+                  <TouchableOpacity
+                    style={styles.editButton}
+                    onPress={() => navigation.navigate('Account')}
+                  >
                     <MaterialIcon name="edit" size={20} color={colors.primary} />
                   </TouchableOpacity>
                 </View>
@@ -155,16 +167,20 @@ const SettingsScreen = () => {
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.cardTitle}>Data is Synchronized</Text>
-                    <Text style={styles.cardSub}>Your entries are safely backed up to the cloud.</Text>
+                    <Text style={styles.cardSub}>
+                      Your entries are safely backed up to the cloud.
+                    </Text>
                   </View>
                 </View>
-                
+
                 <View style={styles.statGrid}>
                   <View style={styles.statItem}>
                     <Text style={styles.statLabel}>Status</Text>
-                    <View style={{flexDirection:'row', alignItems:'center', gap:4}}>
-                       <View style={{width:6, height:6, borderRadius:3, backgroundColor:'#22c55e'}} />
-                       <Text style={styles.statValue}>Online</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <View
+                        style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#22c55e' }}
+                      />
+                      <Text style={styles.statValue}>Online</Text>
                     </View>
                   </View>
                   <View style={styles.statItem}>
@@ -179,10 +195,27 @@ const SettingsScreen = () => {
             <Animated.View style={getAnimStyle(2)}>
               <Text style={styles.sectionLabel}>General</Text>
               <View style={styles.card}>
-                <SettingsRow icon="person-outline" label="Account Details" onPress={() => navigation.navigate('Account')} />
-                <SettingsRow icon="lock-outline" label="Privacy Policy" onPress={() => navigation.navigate('PrivacyPolicy')} />
-                <SettingsRow icon="description" label="Terms of Use" onPress={() => navigation.navigate('Terms')} />
-                <SettingsRow icon="support-agent" label="Contact Support" onPress={handleContactSupport} lastItem />
+                <SettingsRow
+                  icon="person-outline"
+                  label="Account Details"
+                  onPress={() => navigation.navigate('Account')}
+                />
+                <SettingsRow
+                  icon="lock-outline"
+                  label="Privacy Policy"
+                  onPress={() => navigation.navigate('PrivacyPolicy')}
+                />
+                <SettingsRow
+                  icon="description"
+                  label="Terms of Use"
+                  onPress={() => navigation.navigate('Terms')}
+                />
+                <SettingsRow
+                  icon="support-agent"
+                  label="Contact Support"
+                  onPress={handleContactSupport}
+                  lastItem
+                />
               </View>
             </Animated.View>
 
@@ -196,9 +229,14 @@ const SettingsScreen = () => {
               <View style={styles.dangerCard}>
                 <Text style={styles.dangerTitle}>Reset Application</Text>
                 <Text style={styles.dangerDesc}>
-                  Signs you out, clears all local cache, and resets app state. Data on the cloud remains safe.
+                  Signs you out, clears all local cache, and resets app state. Data on the cloud
+                  remains safe.
                 </Text>
-                <TouchableOpacity style={styles.dangerBtn} onPress={handleResetApp} activeOpacity={0.7}>
+                <TouchableOpacity
+                  style={styles.dangerBtn}
+                  onPress={handleResetApp}
+                  activeOpacity={0.7}
+                >
                   <MaterialIcon name="refresh" size={18} color={colors.accentRed} />
                   <Text style={styles.dangerBtnText}>Reset App</Text>
                 </TouchableOpacity>
@@ -216,7 +254,6 @@ const SettingsScreen = () => {
                 v{pkg.version} • Build {appConfig.expo.version || '100'}
               </Text>
             </Animated.View>
-
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -225,8 +262,22 @@ const SettingsScreen = () => {
 };
 
 /* --- REUSABLE ROW --- */
-const SettingsRow = ({ icon, label, onPress, lastItem }: { icon: any, label: string, onPress: () => void, lastItem?: boolean }) => (
-  <TouchableOpacity style={[styles.row, lastItem && { borderBottomWidth: 0 }]} onPress={onPress} activeOpacity={0.6}>
+const SettingsRow = ({
+  icon,
+  label,
+  onPress,
+  lastItem,
+}: {
+  icon: any;
+  label: string;
+  onPress: () => void;
+  lastItem?: boolean;
+}) => (
+  <TouchableOpacity
+    style={[styles.row, lastItem && { borderBottomWidth: 0 }]}
+    onPress={onPress}
+    activeOpacity={0.6}
+  >
     <View style={styles.rowIcon}>
       <MaterialIcon name={icon} size={20} color={colors.text} />
     </View>
@@ -241,7 +292,7 @@ export default SettingsScreen;
 const styles = StyleSheet.create({
   mainContainer: { flex: 1, backgroundColor: colors.background },
   safeArea: { flex: 1 },
-  
+
   sectionLabel: {
     fontSize: 12,
     fontWeight: '700',
@@ -320,7 +371,7 @@ const styles = StyleSheet.create({
   },
   cardTitle: { fontSize: 15, fontWeight: '700', color: colors.text },
   cardSub: { fontSize: 12, color: colors.muted, marginTop: 2, lineHeight: 16 },
-  
+
   statGrid: {
     flexDirection: 'row',
     backgroundColor: '#f8fafc',
@@ -353,8 +404,21 @@ const styles = StyleSheet.create({
   rowLabel: { flex: 1, fontSize: 15, color: colors.text, fontWeight: '500' },
 
   /* DANGER */
-  dangerHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 24, marginBottom: 8, marginLeft: 4 },
-  dangerLabel: { fontSize: 12, fontWeight: '700', color: colors.accentRed, textTransform: 'uppercase', letterSpacing: 0.5 },
+  dangerHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 24,
+    marginBottom: 8,
+    marginLeft: 4,
+  },
+  dangerLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.accentRed,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
   dangerCard: {
     backgroundColor: '#fef2f2',
     borderRadius: 16,
@@ -394,11 +458,17 @@ const styles = StyleSheet.create({
     borderColor: '#e2e8f0',
     gap: 8,
     shadowColor: '#000',
-    shadowOffset: {width:0, height:1},
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.03,
     shadowRadius: 2,
     elevation: 1,
   },
   logoutText: { color: colors.accentRed, fontWeight: '600', fontSize: 15 },
-  versionText: { textAlign: 'center', color: colors.muted, fontSize: 11, marginTop: 16, opacity: 0.6 },
+  versionText: {
+    textAlign: 'center',
+    color: colors.muted,
+    fontSize: 11,
+    marginTop: 16,
+    opacity: 0.6,
+  },
 });
