@@ -252,6 +252,18 @@ const StatsScreen = () => {
     return symbolMap[currency] || symbolMap.INR;
   }, [filteredEntries]);
 
+  // Ensure pie data items always have a stable `key` and numeric `population`.
+  const safePieData = useMemo<PieDataPoint[]>(() => {
+    return pieData.map((it, i) => ({
+      key: (it as any).key ?? `${it.name}-${i}`,
+      name: it.name,
+      population: Number(it.population) || 0,
+      color: it.color,
+      legendFontColor: it.legendFontColor,
+      legendFontSize: it.legendFontSize,
+    }));
+  }, [pieData]);
+
   // Totals
   const stats = useMemo(() => {
     return filteredEntries.reduce(
@@ -735,7 +747,7 @@ const StatsScreen = () => {
                 <View style={{ width: donutSize, height: donutSize }}>
                   {PieChartComp ? (
                     <PieChartComp
-                      data={pieData}
+                      data={safePieData}
                       width={donutSize}
                       height={donutSize}
                       chartConfig={chartConfig}
@@ -769,8 +781,8 @@ const StatsScreen = () => {
                   </View>
                 </View>
 
-                <View style={styles.legendContainer}>
-                  {pieData.slice(0, 4).map((item, i) => (
+                  <View style={styles.legendContainer}>
+                  {safePieData.slice(0, 4).map((item, i) => (
                     <View key={i} style={styles.legendItem}>
                       <View style={[styles.dot, { backgroundColor: item.color }]} />
                       <Text style={styles.legendText}>{item.name}</Text>
