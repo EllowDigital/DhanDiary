@@ -70,8 +70,12 @@ const AuthScreen: React.FC = () => {
     setLoading(true);
     try {
       await loginWithEmail(email, password);
-      // Navigation is handled by auth state listener usually, but explicit here for UX
-      // No manual nav needed if App.tsx handles auth state changes
+      // Ensure we navigate to Main after successful login
+      try {
+        (navigation.getParent() as any)?.reset({ index: 0, routes: [{ name: 'Main' }] });
+      } catch (err) {
+        // ignore navigation errors in unusual setups
+      }
     } catch (err: any) {
       Alert.alert('Login Failed', err?.message || 'Invalid credentials.');
     } finally {
@@ -92,6 +96,11 @@ const AuthScreen: React.FC = () => {
     try {
       await registerWithEmail(name.trim(), email.trim(), password);
       showToast('Account created successfully!');
+      try {
+        (navigation.getParent() as any)?.reset({ index: 0, routes: [{ name: 'Main' }] });
+      } catch (err) {
+        // ignore
+      }
     } catch (err: any) {
       Alert.alert('Registration Failed', err?.message || 'Unable to create account.');
     } finally {
@@ -123,6 +132,11 @@ const AuthScreen: React.FC = () => {
       } else {
         const mod = await import('../services/firebaseAuth');
         await mod.startGithubSignIn('signIn');
+      }
+      try {
+        (navigation.getParent() as any)?.reset({ index: 0, routes: [{ name: 'Main' }] });
+      } catch (err) {
+        // ignore
       }
     } catch (err: any) {
       Alert.alert(`${provider === 'google' ? 'Google' : 'GitHub'} Sign-in Failed`, err?.message);
