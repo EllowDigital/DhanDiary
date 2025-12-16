@@ -552,7 +552,7 @@ const HomeScreen = () => {
             <View style={{ paddingHorizontal }}>
               <CompactTransactionRow
                 item={item}
-                onPress={() => navigation.navigate('EditEntry', { entry: item })}
+                onPress={() => navigation.navigate('AddEntry', { local_id: item.local_id })}
               />
             </View>
           )}
