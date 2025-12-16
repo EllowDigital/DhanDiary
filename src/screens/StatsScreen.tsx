@@ -48,7 +48,7 @@ const calcStats = (entries: LocalEntry[]) => {
   return { count, mean, median, stddev };
 };
 
-const FILTERS = ['Day', 'Week', '7D', '30D', 'This Month', 'This Year', 'All'];
+const FILTERS = ['Day', 'Week', '7 Days', '30 Days', 'This Month', 'This Year', 'All'];
 
 // Chart Colors
 const PIE_COLORS = ['#FF6B6B', '#4ECDC4', '#FFD93D', '#6C5CE7', '#A8E6CF', '#FD79A8'];
@@ -86,7 +86,7 @@ const StatsScreen = () => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
 
-  const [filter, setFilter] = useState('7D');
+  const [filter, setFilter] = useState('7 Days');
   const [PieChartComp, setPieChartComp] = useState<any>(null);
   const [activeMonthKey, setActiveMonthKey] = useState<string | null>(null);
   const [activeYear, setActiveYear] = useState<number | null>(null);
@@ -193,17 +193,17 @@ const StatsScreen = () => {
     if (filter === 'Day') {
       start = current.startOf('day');
       end = current.endOf('day');
-    } else if (filter === 'Week') {
+    } else if (filter === 'Day') {
       start = current.startOf('week');
       end = current.endOf('week');
-    } else if (filter === '7D') {
+    } else if (filter === 'Week') {
       start = current.subtract(6, 'day').startOf('day');
       end = current.endOf('day');
-    } else if (filter === '30D') {
-      start = current.subtract(29, 'day').startOf('day');
+    } else if (filter === '7 Days') {
+      start = current.subtract(6, 'day').startOf('day');
       end = current.endOf('day');
-    } else if (filter === 'This Month') {
-      const key = activeMonthKey || current.format('YYYY-MM');
+    } else if (filter === '30 Days') {
+      start = current.subtract(29, 'day').startOf('day');
       const base = dayjs(`${key}-01`);
       if (base.isValid()) {
         start = base.startOf('month');
@@ -406,11 +406,14 @@ const StatsScreen = () => {
       {/* HEADER */}
       <View style={[styles.headerContainer, { width: containerWidth }]}>
         <ScreenHeader
-          title="Analytics"
-          subtitle="Financial health overview"
+            title="Analytics"
+            subtitle="Income and spending at a glance"
           showScrollHint={false}
           useSafeAreaPadding={false}
         />
+          <Text style={{ color: '#546E7A', marginTop: 6, fontSize: 13 }}>
+            Use the tabs to change timeframe. Tap a month or year to focus that period.
+          </Text>
       </View>
 
       <ScrollView
@@ -527,7 +530,7 @@ const StatsScreen = () => {
           {/* 3. NET BALANCE CARD */}
           <View style={styles.card}>
             <View style={styles.rowBetween}>
-              <Text style={styles.labelMuted}>NET BALANCE</Text>
+              <Text style={[styles.labelMuted, { textTransform: 'none' }]}>Net balance</Text>
               <View
                 style={[styles.badge, { backgroundColor: stats.net >= 0 ? '#E8F5E9' : '#FFEBEE' }]}
               >
@@ -547,7 +550,7 @@ const StatsScreen = () => {
               adjustsFontSizeToFit
               numberOfLines={1}
             >
-              {stats.net >= 0 ? '+' : ''}₹{Math.abs(stats.net).toLocaleString()}
+              {stats.net >= 0 ? '+' : ''}{currencySymbol}{Math.abs(stats.net).toLocaleString()}
             </Text>
 
             <View style={styles.divider} />
@@ -555,11 +558,11 @@ const StatsScreen = () => {
             <View style={styles.rowBetween}>
               <View>
                 <Text style={styles.labelMutedSmall}>Income</Text>
-                <Text style={styles.subValueGreen}>₹{stats.totalIn.toLocaleString()}</Text>
+                <Text style={styles.subValueGreen}>{currencySymbol}{stats.totalIn.toLocaleString()}</Text>
               </View>
               <View style={{ alignItems: 'flex-end' }}>
                 <Text style={styles.labelMutedSmall}>Expense</Text>
-                <Text style={styles.subValueRed}>₹{stats.totalOut.toLocaleString()}</Text>
+                <Text style={styles.subValueRed}>{currencySymbol}{stats.totalOut.toLocaleString()}</Text>
               </View>
             </View>
           </View>
@@ -582,12 +585,12 @@ const StatsScreen = () => {
                   <Text style={styles.chartStatValue}>{advancedStats.overall.count}</Text>
                 </View>
                 <View>
-                  <Text style={styles.labelMutedSmall}>Avg / day</Text>
-                  <Text style={styles.chartStatValue}>₹{advancedStats.avgPerDay}</Text>
+                  <Text style={styles.labelMutedSmall}>Avg per day</Text>
+                  <Text style={styles.chartStatValue}>{currencySymbol}{advancedStats.avgPerDay}</Text>
                 </View>
                 <View>
                   <Text style={styles.labelMutedSmall}>Net</Text>
-                  <Text style={styles.chartStatValue}>₹{stats.net.toLocaleString()}</Text>
+                  <Text style={styles.chartStatValue}>{currencySymbol}{stats.net.toLocaleString()}</Text>
                 </View>
               </View>
 
@@ -595,19 +598,19 @@ const StatsScreen = () => {
                 <View>
                   <Text style={styles.labelMutedSmall}>Mean</Text>
                   <Text style={styles.chartStatValue}>
-                    ₹{Math.round(advancedStats.overall.mean)}
+                    {currencySymbol}{Math.round(advancedStats.overall.mean)}
                   </Text>
                 </View>
                 <View>
                   <Text style={styles.labelMutedSmall}>Median</Text>
                   <Text style={styles.chartStatValue}>
-                    ₹{Math.round(advancedStats.overall.median)}
+                    {currencySymbol}{Math.round(advancedStats.overall.median)}
                   </Text>
                 </View>
                 <View>
                   <Text style={styles.labelMutedSmall}>Std Dev</Text>
                   <Text style={styles.chartStatValue}>
-                    ₹{Math.round(advancedStats.overall.stddev)}
+                    {currencySymbol}{Math.round(advancedStats.overall.stddev)}
                   </Text>
                 </View>
               </View>
@@ -630,7 +633,7 @@ const StatsScreen = () => {
                         {i + 1}. {c.name}
                       </Text>
                       <Text style={{ color: '#546E7A' }}>
-                        ₹{Math.round(c.value).toLocaleString()}
+                        {currencySymbol}{Math.round(c.value).toLocaleString()}
                       </Text>
                     </View>
                   ))
