@@ -27,12 +27,12 @@ const DailyTrendChart: React.FC<Props> = ({ data, width, height = 240 }) => {
       const horizontalPadding = 28;
       const drawableWidth = Math.max(1, width - horizontalPadding * 2);
       const drawableHeight = Math.max(1, height - (topPadding + bottomPadding));
-      const values = data.map((d) => d.value);
+      const values = (data || []).map((d) => d.value);
       const maxValue = Math.max(...values, 0);
       const safeMax = maxValue === 0 ? 1 : maxValue;
-      const normalized = data.length - 1 || 1;
+      const normalized = (data?.length || 0) - 1 || 1;
 
-      const points: ChartPoint[] = data.map((item, index) => {
+      const points: ChartPoint[] = (data || []).map((item, index) => {
         const x = horizontalPadding + (index / normalized) * drawableWidth;
         const ratio = item.value / safeMax;
         const y = topPadding + (1 - ratio) * drawableHeight;
@@ -77,7 +77,7 @@ const DailyTrendChart: React.FC<Props> = ({ data, width, height = 240 }) => {
       };
     }, [data, height, width]);
 
-  if (!data.length) return null;
+  if (!data || !data.length) return null;
 
   return (
     <View style={[styles.wrapper, { width, height }]}>
