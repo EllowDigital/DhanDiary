@@ -352,6 +352,7 @@ const StatsScreen = () => {
 
     return Object.entries(cats)
       .map(([name, val], i) => ({
+        key: `${name}-${i}`,
         name,
         population: val,
         color: PIE_COLORS[i % PIE_COLORS.length],
