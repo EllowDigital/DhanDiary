@@ -81,7 +81,7 @@ function formatCurrency(amount: number, currency?: string) {
 
 export async function buildPdfFile(
   entries: Entry[],
-  options: { title?: string; aiLayout?: boolean } = {}
+  options: { title?: string; aiLayout?: boolean; periodLabel?: string; groupBy?: string } = {}
 ) {
   const title = options.title || 'Export';
   const sum = summarize(entries);
@@ -89,7 +89,14 @@ export async function buildPdfFile(
   const condensed = options.aiLayout && entries.length > 100;
 
   // Only include the approved columns for user-facing PDF exports
-  const headerHtml = `<header><h1>${title}</h1><div class="meta">${sum.count} items · ${sum.totalIn.toFixed(2)} in · ${sum.totalOut.toFixed(2)} out</div></header>`;
+  const headerMetaParts = [
+    `${sum.count} items`,
+    `${sum.totalIn.toFixed(2)} in`,
+    `${sum.totalOut.toFixed(2)} out`,
+  ];
+  if (options.periodLabel) headerMetaParts.push(escapeHtml(options.periodLabel));
+  if (options.groupBy) headerMetaParts.push(`Grouped by ${escapeHtml(options.groupBy)}`);
+  const headerHtml = `<header><h1>${escapeHtml(title)}</h1><div class="meta">${headerMetaParts.join(' · ')}</div></header>`;
 
   const generatedAt = dayjs().format('DD MMM YYYY, HH:mm');
 
@@ -145,7 +152,14 @@ export async function buildPdfFile(
 export async function exportToFile(
   format: 'csv' | 'json' | 'pdf',
   entries: Entry[],
-  opts: { fields?: string[]; pretty?: boolean; title?: string; aiLayout?: boolean } = {}
+  opts: {
+    fields?: string[];
+    pretty?: boolean;
+    title?: string;
+    aiLayout?: boolean;
+    periodLabel?: string;
+    groupBy?: string;
+  } = {}
 ) {
   if (!entries) throw new Error('No entries provided');
   if (format === 'csv') {
@@ -168,7 +182,12 @@ export async function exportToFile(
     return path;
   }
   if (format === 'pdf') {
-    return buildPdfFile(entries, { title: opts.title, aiLayout: !!opts.aiLayout });
+    return buildPdfFile(entries, {
+      title: opts.title,
+      aiLayout: !!opts.aiLayout,
+      periodLabel: opts.periodLabel,
+      groupBy: opts.groupBy,
+    });
   }
   throw new Error('Unsupported format');
 }
@@ -177,7 +196,14 @@ export async function exportToFile(
 export async function exportFromUser(
   userId: string,
   format: 'csv' | 'json' | 'pdf',
-  opts: { fields?: string[]; pretty?: boolean; title?: string; aiLayout?: boolean } = {},
+  opts: {
+    fields?: string[];
+    pretty?: boolean;
+    title?: string;
+    aiLayout?: boolean;
+    periodLabel?: string;
+    groupBy?: string;
+  } = {},
   pageSize = 500
 ) {
   if (!userId) throw new Error('userId required for export');
@@ -244,7 +270,12 @@ export async function exportFromUser(
         throw new Error('Too many entries for PDF export; try CSV/JSON or narrow the date range');
       }
     }
-    return buildPdfFile(coll, { title: opts.title, aiLayout: !!opts.aiLayout });
+    return buildPdfFile(coll, {
+      title: opts.title,
+      aiLayout: !!opts.aiLayout,
+      periodLabel: opts.periodLabel,
+      groupBy: opts.groupBy,
+    });
   }
 
   throw new Error('Unsupported format');

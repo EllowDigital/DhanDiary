@@ -56,7 +56,6 @@ const LoginScreen = () => {
 
   // Dimensions
   const { height } = useWindowDimensions();
-  // If screen is short (like older Androids), we reduce padding
   const isSmallScreen = height < 700;
 
   const [email, setEmail] = useState('');
@@ -71,7 +70,7 @@ const LoginScreen = () => {
 
   // --- ANIMATION ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.95)).current;
+  const slideAnim = useRef(new Animated.Value(50)).current;
 
   useEffect(() => {
     // Prefill email if navigated here after social conflict
@@ -86,11 +85,12 @@ const LoginScreen = () => {
         toValue: 1,
         duration: 600,
         useNativeDriver: true,
-        easing: Easing.out(Easing.quad),
+        easing: Easing.out(Easing.cubic),
       }),
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        friction: 7,
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        friction: 8,
+        tension: 40,
         useNativeDriver: true,
       }),
     ]).start();
@@ -112,6 +112,8 @@ const LoginScreen = () => {
     try {
       await loginWithEmail(email, password);
       showToast('Welcome back!');
+      // Navigation is typically handled by auth state listener in App.tsx
+      // But explicit replace is safe if auth state updates slowly
       (navigation.getParent() as any)?.replace('Main');
     } catch (err: any) {
       const msg = err?.message || String(err);
@@ -144,8 +146,6 @@ const LoginScreen = () => {
     }
   };
 
-  // Google login removed. Use only Firebase-native Google login elsewhere.
-
   const handleGithubLogin = async () => {
     if (!showGithub) return;
     setSocialLoading(true);
@@ -157,7 +157,7 @@ const LoginScreen = () => {
       if (e.code === 'auth/account-exists-with-different-credential') {
         Alert.alert(
           'Account already exists',
-          'You previously signed up using a different method.\n\nPlease sign in using your original method to securely link your accounts.\n\nIf the app was closed, just retry the social sign-in.'
+          'You previously signed up using a different method.\n\nPlease sign in using your original method to securely link your accounts.'
         );
       } else {
         Alert.alert(
@@ -178,7 +178,6 @@ const LoginScreen = () => {
     } catch (err) {
       const e: any = err || {};
       if (e.code === 'auth/account-exists-with-different-credential') {
-        // Friendly message guiding user to sign in with original provider
         const prefill = e.email || undefined;
         Alert.alert(
           'Account already exists',
@@ -188,7 +187,9 @@ const LoginScreen = () => {
               text: 'Go to Sign In',
               onPress: () => {
                 try {
-                  navigation.navigate('Login', { prefillEmail: prefill });
+                  // If we are already on Login screen, just prefill.
+                  // If navigating from register, navigate here.
+                  if (prefill) setEmail(prefill);
                 } catch (err) {
                   // ignore
                 }
@@ -234,26 +235,20 @@ const LoginScreen = () => {
           bounces={false}
         >
           <Animated.View
-            style={[styles.card, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}
+            style={[styles.card, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
           >
             {/* --- CARD HEADER: Centered Logo + Title --- */}
             <View style={styles.cardHeaderCenter}>
               <View style={styles.logoBadgeCentered}>
                 <Image
-                  source={(() => {
-                    try {
-                      if (typeof require !== 'function') return undefined;
-                      return require('../../assets/splash-icon.png');
-                    } catch (e) {
-                      return undefined;
-                    }
-                  })()}
+                  source={require('../../assets/splash-icon.png')}
                   style={styles.logoCentered}
                   resizeMode="contain"
+                  defaultSource={{ uri: 'https://via.placeholder.com/60' }}
                 />
               </View>
-              <Text style={styles.appName}>Welcome</Text>
-              <Text style={styles.appTagline}>Sign in to continue</Text>
+              <Text style={styles.appName}>Welcome Back</Text>
+              <Text style={styles.appTagline}>Sign in to continue to your finance vault</Text>
             </View>
 
             {/* --- FORM SECTION --- */}
@@ -275,12 +270,17 @@ const LoginScreen = () => {
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPass}
+                containerStyle={styles.fieldSpacing}
                 rightAccessory={
-                  <TouchableOpacity onPress={() => setShowPass(!showPass)} style={styles.eyeIcon}>
+                  <TouchableOpacity
+                    onPress={() => setShowPass(!showPass)}
+                    style={styles.eyeIcon}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
                     <MaterialIcon
                       name={showPass ? 'visibility' : 'visibility-off'}
-                      color={colors.muted || '#999'}
-                      size={22}
+                      color={colors.muted || '#9CA3AF'}
+                      size={20}
                     />
                   </TouchableOpacity>
                 }
@@ -293,7 +293,7 @@ const LoginScreen = () => {
                 disabled={resettingPassword}
               >
                 <Text style={styles.forgotPassText}>
-                  {resettingPassword ? 'Sending reset...' : 'Forgot Password?'}
+                  {resettingPassword ? 'Sending reset link...' : 'Forgot Password?'}
                 </Text>
               </TouchableOpacity>
 
@@ -301,7 +301,7 @@ const LoginScreen = () => {
                 title={loading ? 'Verifying...' : 'Sign In'}
                 onPress={handleLogin}
                 loading={loading}
-                disabled={loading || !isOnline}
+                disabled={loading || socialLoading || !isOnline}
                 buttonStyle={styles.primaryButton}
                 containerStyle={styles.buttonContainer}
                 titleStyle={styles.buttonText}
@@ -312,7 +312,7 @@ const LoginScreen = () => {
                 }
               />
 
-              {showGithub && (
+              {(showGithub || showGoogle) && (
                 <View style={styles.socialWrapper}>
                   <View style={styles.socialDivider}>
                     <View style={styles.socialLine} />
@@ -321,7 +321,6 @@ const LoginScreen = () => {
                   </View>
 
                   <View style={styles.socialButtonsRow}>
-                    {/* Google login removed */}
                     {showGoogle && (
                       <Button
                         type="outline"
@@ -367,14 +366,12 @@ const LoginScreen = () => {
 
             {/* --- FOOTER INSIDE CARD --- */}
             <View style={styles.footerRow}>
-              <Text style={styles.footerText}>New here?</Text>
+              <Text style={styles.footerText}>Don't have an account?</Text>
               <TouchableOpacity onPress={() => navigation.navigate('Register')}>
                 <Text style={styles.linkText}>Create Account</Text>
               </TouchableOpacity>
             </View>
           </Animated.View>
-
-          {/* (security badge removed) */}
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -391,95 +388,54 @@ export default LoginScreen;
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#F0F2F5', // Light grey background for the whole screen
+    backgroundColor: '#F0F2F5', // Consistent light grey background
   },
   scrollContent: {
     flexGrow: 1,
     padding: 20,
-    paddingBottom: 50, // Extra space at bottom for scrolling
+    paddingBottom: 50,
   },
 
   /* MAIN CARD STYLE */
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    padding: 20,
+    borderRadius: 20, // Slightly more rounded
+    padding: 24,
     width: '100%',
-    maxWidth: 450, // Limits width on tablets
+    maxWidth: 480, // Limit width for tablets
     alignSelf: 'center',
 
-    // Smooth shadow
+    // Shadows
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
+    shadowOpacity: 0.08, // Softer shadow
+    shadowRadius: 16,
+    elevation: 6,
   },
 
-  cardHeaderCenter: { alignItems: 'center', marginBottom: 12 },
+  cardHeaderCenter: { alignItems: 'center', marginBottom: 24 },
   logoBadgeCentered: {
-    width: 64,
-    height: 64,
-    borderRadius: 12,
-    backgroundColor: 'transparent',
+    width: 72,
+    height: 72,
+    borderRadius: 18,
+    backgroundColor: '#F3F4F6', // Light background for logo container
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: 16,
   },
-  logoCentered: { width: 40, height: 40 },
-  brandTexts: {
-    flex: 1,
-    justifyContent: 'center',
-  },
+  logoCentered: { width: 44, height: 44 },
   appName: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '800',
-    color: colors.text,
+    color: colors.text || '#111827',
     letterSpacing: 0.5,
-    marginBottom: 2,
+    marginBottom: 4,
   },
   appTagline: {
-    fontSize: 13,
-    color: colors.muted || '#666',
+    fontSize: 14,
+    color: colors.muted || '#6B7280',
     fontWeight: '500',
-  },
-
-  /* TRUST BADGES */
-  trustRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 50,
-    alignSelf: 'center',
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#E9ECEF',
-  },
-  trustBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  dividerVertical: {
-    width: 1,
-    height: 12,
-    backgroundColor: '#DDE2E5',
-    marginHorizontal: 12,
-  },
-  trustText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: colors.subtleText || '#555',
-  },
-
-  divider: {
-    height: 1,
-    backgroundColor: '#F0F0F0',
-    width: '100%',
-    marginBottom: 24,
+    textAlign: 'center',
   },
 
   /* FORM */
@@ -495,48 +451,51 @@ const styles = StyleSheet.create({
   forgotPassContainer: {
     alignSelf: 'flex-end',
     marginBottom: 24,
-    marginTop: 4,
+    marginTop: -4, // Pull up slightly
   },
   forgotPassText: {
-    color: colors.primary,
+    color: colors.primary || '#2563EB',
     fontSize: 13,
     fontWeight: '600',
   },
 
+  /* SOCIAL BUTTONS */
   socialWrapper: {
     marginTop: 24,
   },
   socialDivider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 16,
   },
   socialLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#E0E0E0',
+    backgroundColor: '#E5E7EB',
   },
   socialText: {
     marginHorizontal: 12,
     fontSize: 12,
-    color: colors.muted || '#777',
+    color: colors.muted || '#9CA3AF',
     textTransform: 'uppercase',
     letterSpacing: 1,
+    fontWeight: '600',
   },
   socialButtonsRow: {
     flexDirection: 'row',
     gap: 12,
-    flexWrap: 'wrap',
   },
   socialButton: {
-    borderRadius: 10,
-    borderColor: colors.border || '#DDD',
+    borderRadius: 12,
+    borderColor: '#E5E7EB',
+    borderWidth: 1,
     paddingVertical: 12,
     paddingHorizontal: 16,
   },
   socialButtonText: {
-    color: colors.primary,
-    fontWeight: '700',
+    color: colors.text || '#111827',
+    fontWeight: '600',
+    fontSize: 14,
   },
   socialButtonContainer: {
     flex: 1,
@@ -544,9 +503,10 @@ const styles = StyleSheet.create({
 
   /* BUTTONS */
   primaryButton: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primary || '#2563EB',
     paddingVertical: 14,
     borderRadius: 12,
+    elevation: 2,
   },
   buttonContainer: {
     width: '100%',
@@ -563,33 +523,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 24,
-    paddingTop: 16,
+    paddingTop: 20,
     borderTopWidth: 1,
-    borderTopColor: '#F5F5F5',
+    borderTopColor: '#F3F4F6',
   },
   footerText: {
-    color: colors.muted || '#888',
+    color: colors.muted || '#6B7280',
     fontSize: 14,
     marginRight: 6,
   },
   linkText: {
-    color: colors.primary,
+    color: colors.primary || '#2563EB',
     fontWeight: '700',
     fontSize: 14,
-  },
-
-  /* BOTTOM BADGE */
-  securityBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 24,
-    gap: 6,
-    opacity: 0.6,
-  },
-  securityText: {
-    fontSize: 12,
-    color: colors.muted || '#999',
-    fontWeight: '500',
   },
 });

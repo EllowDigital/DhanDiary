@@ -7,7 +7,6 @@ import {
   Animated,
   Easing,
   Image,
-  Platform,
   useWindowDimensions,
 } from 'react-native';
 import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-navigation/drawer';
@@ -18,31 +17,22 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Logic & Utils
 import { logoutUser } from '../services/firebaseAuth';
-import { colors, spacing, shadows } from '../utils/design';
+import { colors, spacing } from '../utils/design';
 import appConfig from '../../app.json';
+
 let pkg: any = {};
 try {
-  if (typeof require === 'function') pkg = require('../../package.json');
+  pkg = require('../../package.json');
 } catch (e) {
   pkg = {};
 }
 
 // Assets
-const getBrandIcon = () => {
-  try {
-    if (typeof require !== 'function') return undefined;
-    return require('../../assets/splash-icon.png');
-  } catch (e) {
-    return undefined;
-  }
-};
-// Resolve brand icon once (guarded) to avoid top-level require errors
-const brandIcon = getBrandIcon();
+const BRAND_ICON = require('../../assets/splash-icon.png');
 
 const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const isTablet = width >= 768;
 
   // --- ANIMATIONS ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -73,15 +63,15 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
         toValue: 1,
         duration: 400,
         useNativeDriver: true,
-        easing: Easing.out(Easing.back(1.5)), // Slight bounce effect
+        easing: Easing.out(Easing.back(1.5)),
       })
     );
-    Animated.stagger(50, staggerAnimations).start();
+    Animated.stagger(40, staggerAnimations).start();
   }, []);
 
   const versionLabel = useMemo(() => {
     const build = appConfig.expo.android?.versionCode ?? appConfig.expo.ios?.buildNumber;
-    return build ? `v${pkg.version} (${build})` : `v${pkg.version}`;
+    return build ? `Version ${pkg.version} (${build})` : `Version ${pkg.version}`;
   }, []);
 
   const handleNavigate = (routeName: string) => {
@@ -120,122 +110,129 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   };
 
   return (
-    <DrawerContentScrollView
-      {...props}
-      contentContainerStyle={[
-        styles.container,
-        {
-          paddingTop: insets.top + spacing(2),
-          paddingBottom: insets.bottom + spacing(4),
-        },
-      ]}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* --- PROFILE HEADER --- */}
-      <Animated.View
-        style={[styles.headerCard, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
+    <View style={styles.mainContainer}>
+      <DrawerContentScrollView
+        {...props}
+        contentContainerStyle={{
+          paddingTop: insets.top + spacing(1),
+          paddingBottom: spacing(4),
+        }}
+        showsVerticalScrollIndicator={false}
       >
-        <View style={styles.brandRow}>
-          <View style={styles.brandIconWrap}>
-            <Image source={brandIcon} style={styles.brandIcon} resizeMode="contain" />
+        {/* --- BRAND HEADER --- */}
+        <Animated.View
+          style={[
+            styles.headerContainer,
+            { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+          ]}
+        >
+          <View style={styles.brandRow}>
+            <View style={styles.logoContainer}>
+              <Image source={BRAND_ICON} style={styles.logoImage} resizeMode="contain" />
+            </View>
+            <View style={styles.brandTextContainer}>
+              <Text style={styles.brandTitle}>DhanDiary</Text>
+              <Text style={styles.brandSubtitle}>Personal Finance</Text>
+            </View>
           </View>
-          <View style={styles.brandTextCol}>
-            <Text style={styles.brandTitle}>DhanDiary</Text>
-            <Text style={styles.brandSubtitle}>Smart Finance</Text>
-          </View>
-        </View>
-      </Animated.View>
+          <View style={styles.headerDivider} />
+        </Animated.View>
 
-      {/* --- NAVIGATION MENU --- */}
-      <View style={styles.menuContainer}>
-        <Text style={styles.sectionLabel}>Menu</Text>
+        {/* --- MENU ITEMS --- */}
+        <View style={styles.menuContainer}>
+          <Text style={styles.sectionLabel}>Navigation</Text>
 
-        {props.state.routes.map((route, index) => {
-          const focused = props.state.index === index;
-          const { options } = props.descriptors[route.key];
+          {props.state.routes.map((route, index) => {
+            const focused = props.state.index === index;
+            const { options } = props.descriptors[route.key];
 
-          // Hide hidden items
-          const flattenedStyle = options.drawerItemStyle
-            ? StyleSheet.flatten(options.drawerItemStyle)
-            : undefined;
-          if (flattenedStyle?.display === 'none') return null;
+            // Hide hidden items
+            const flattenedStyle = options.drawerItemStyle
+              ? StyleSheet.flatten(options.drawerItemStyle)
+              : undefined;
+            if (flattenedStyle?.display === 'none') return null;
 
-          const label =
-            options.drawerLabel !== undefined
-              ? options.drawerLabel
-              : options.title !== undefined
-                ? options.title
-                : route.name;
+            const label =
+              options.drawerLabel !== undefined
+                ? options.drawerLabel
+                : options.title !== undefined
+                  ? options.title
+                  : route.name;
 
-          // Animation values for this item
-          const itemAnim = listAnims[index] || new Animated.Value(1);
-          const itemTranslate = itemAnim.interpolate({
-            inputRange: [0, 1],
-            outputRange: [15, 0],
-          });
+            // Animation values for this item
+            const itemAnim = listAnims[index] || new Animated.Value(1);
+            const itemTranslate = itemAnim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [20, 0],
+            });
 
-          return (
-            <Animated.View
-              key={route.key}
-              style={{ opacity: itemAnim, transform: [{ translateX: itemTranslate }] }}
-            >
-              <TouchableOpacity
-                onPress={() => handleNavigate(route.name)}
-                style={[styles.menuItem, focused && styles.menuItemActive]}
-                activeOpacity={0.7}
+            return (
+              <Animated.View
+                key={route.key}
+                style={{ opacity: itemAnim, transform: [{ translateX: itemTranslate }] }}
               >
-                <View style={[styles.iconBox, focused && styles.iconBoxActive]}>
-                  {options.drawerIcon ? (
-                    options.drawerIcon({
-                      focused,
-                      color: focused ? colors.primary : colors.muted,
-                      size: 22,
-                    })
-                  ) : (
-                    <MaterialIcon
-                      name="circle"
-                      size={8}
-                      color={focused ? colors.primary : colors.muted}
-                    />
-                  )}
-                </View>
+                <TouchableOpacity
+                  onPress={() => handleNavigate(route.name)}
+                  style={[styles.menuItem, focused && styles.menuItemActive]}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.iconBox, focused && styles.iconBoxActive]}>
+                    {options.drawerIcon ? (
+                      options.drawerIcon({
+                        focused,
+                        color: focused ? colors.primary : colors.muted,
+                        size: 22,
+                      })
+                    ) : (
+                      <MaterialIcon
+                        name="circle"
+                        size={8}
+                        color={focused ? colors.primary : colors.muted}
+                      />
+                    )}
+                  </View>
 
-                <Text style={[styles.menuLabel, focused && styles.menuLabelActive]}>
-                  {label as string}
-                </Text>
+                  <Text style={[styles.menuLabel, focused && styles.menuLabelActive]}>
+                    {label as string}
+                  </Text>
 
-                {focused && <View style={styles.activeIndicator} />}
-              </TouchableOpacity>
-            </Animated.View>
-          );
-        })}
-      </View>
+                  {focused && <View style={styles.activeDot} />}
+                </TouchableOpacity>
+              </Animated.View>
+            );
+          })}
+        </View>
+      </DrawerContentScrollView>
 
-      {/* --- FOOTER --- */}
-      <View style={styles.footer}>
-        <View style={styles.divider} />
+      {/* --- FOOTER (Fixed at bottom) --- */}
+      <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}>
+        <View style={styles.footerDivider} />
 
         <TouchableOpacity
-          style={styles.quickExportBtn}
+          style={styles.footerBtn}
           onPress={() => props.navigation.navigate('Export')}
           activeOpacity={0.7}
         >
-          <View style={[styles.iconBox, styles.exportIconBox]}>
-            <MaterialIcon name="file-upload" size={18} color={colors.primary} />
+          <View style={styles.footerIconBox}>
+            <MaterialIcon name="file-upload" size={20} color={colors.text} />
           </View>
-          <Text style={styles.exportText}>Export</Text>
+          <Text style={styles.footerBtnText}>Export Data</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.7}>
-          <View style={[styles.iconBox, styles.logoutIconBox]}>
+        <TouchableOpacity
+          style={[styles.footerBtn, styles.logoutBtn]}
+          onPress={handleLogout}
+          activeOpacity={0.7}
+        >
+          <View style={styles.footerIconBox}>
             <MaterialIcon name="logout" size={20} color={colors.accentRed} />
           </View>
-          <Text style={styles.logoutText}>Sign Out</Text>
+          <Text style={[styles.footerBtnText, { color: colors.accentRed }]}>Sign Out</Text>
         </TouchableOpacity>
 
         <Text style={styles.versionText}>{versionLabel}</Text>
       </View>
-    </DrawerContentScrollView>
+    </View>
   );
 };
 
@@ -243,77 +240,73 @@ export default CustomDrawerContent;
 
 /* --- STYLES --- */
 const styles = StyleSheet.create({
-  container: {
-    flexGrow: 1,
+  mainContainer: {
+    flex: 1,
     backgroundColor: colors.background,
-    paddingHorizontal: spacing(3),
   },
 
   /* HEADER */
-  headerCard: {
-    backgroundColor: colors.card,
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 24,
-    // Modern Shadow
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.02)',
+  headerContainer: {
+    paddingHorizontal: spacing(3),
+    marginBottom: spacing(2),
   },
   brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    marginBottom: 20,
   },
-  brandIconWrap: {
-    width: 52,
-    height: 52,
+  logoContainer: {
+    width: 48,
+    height: 48,
     borderRadius: 14,
     backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 14,
     borderWidth: 1,
-    borderColor: '#f1f5f9',
-    overflow: 'hidden',
+    borderColor: 'rgba(0,0,0,0.05)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  brandIcon: {
-    width: '80%',
-    height: '80%',
+  logoImage: {
+    width: 28,
+    height: 28,
   },
-  brandTextCol: {
+  brandTextContainer: {
     flex: 1,
-    justifyContent: 'center',
   },
   brandTitle: {
-    fontSize: 19,
+    fontSize: 20,
     fontWeight: '800',
     color: colors.text,
     letterSpacing: -0.5,
-    marginBottom: 2,
   },
   brandSubtitle: {
-    fontSize: 12,
+    fontSize: 13,
     color: colors.muted,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    fontWeight: '500',
+  },
+  headerDivider: {
+    height: 1,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    width: '100%',
   },
 
   /* MENU */
   menuContainer: {
-    flex: 1,
+    paddingHorizontal: spacing(2),
   },
   sectionLabel: {
     fontSize: 11,
     fontWeight: '700',
     color: colors.muted,
     textTransform: 'uppercase',
-    marginBottom: 10,
+    marginBottom: 12,
     marginLeft: 12,
+    marginTop: 12,
     letterSpacing: 1,
     opacity: 0.6,
   },
@@ -323,7 +316,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 12,
     borderRadius: 14,
-    marginBottom: 6,
+    marginBottom: 4,
   },
   menuItemActive: {
     backgroundColor: colors.primarySoft || '#EEF2FF',
@@ -335,7 +328,7 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   iconBoxActive: {
-    // Optional: Add specific active icon style
+    // Optional: transform scale if desired
   },
   menuLabel: {
     fontSize: 15,
@@ -347,65 +340,50 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: '700',
   },
-  activeIndicator: {
+  activeDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
     backgroundColor: colors.primary,
-    marginLeft: 8,
+    marginRight: 4,
   },
 
   /* FOOTER */
   footer: {
-    marginTop: 16,
-    paddingBottom: 10,
+    paddingHorizontal: spacing(3),
+    backgroundColor: colors.background,
   },
-  divider: {
+  footerDivider: {
     height: 1,
-    backgroundColor: colors.border || '#f3f4f6',
-    marginBottom: 16,
-    marginHorizontal: 4,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    marginBottom: 20,
   },
-  quickExportBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    marginBottom: 8,
-  },
-  exportIconBox: {
-    width: 32,
-    alignItems: 'center',
-  },
-  exportText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: colors.primary,
-  },
-  logoutBtn: {
+  footerBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    // Optional: Red tint background on hover/press could be added
+    borderRadius: 12,
+    marginBottom: 4,
   },
-  logoutIconBox: {
+  logoutBtn: {
+    marginBottom: 16,
+  },
+  footerIconBox: {
     width: 32,
     alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
   },
-  logoutText: {
+  footerBtnText: {
     fontSize: 15,
-    fontWeight: '700',
-    color: colors.accentRed,
+    fontWeight: '600',
+    color: colors.text,
   },
   versionText: {
-    textAlign: 'center',
     fontSize: 11,
     color: colors.muted,
-    marginTop: 16,
-    opacity: 0.4,
+    textAlign: 'center',
+    opacity: 0.5,
     fontWeight: '500',
   },
 });

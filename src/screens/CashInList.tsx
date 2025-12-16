@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, Button } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
-import { Swipeable } from 'react-native-gesture-handler'; // IMPORT SWIPEABLE
+import { Swipeable } from 'react-native-gesture-handler';
 
 // Custom Hooks & Components
 import { useEntries } from '../hooks/useEntries';

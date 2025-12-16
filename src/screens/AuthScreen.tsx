@@ -10,14 +10,13 @@ import {
   Easing,
   ScrollView,
   StatusBar,
-  useWindowDimensions,
   Keyboard,
+  Image,
 } from 'react-native';
 import { Button, Text } from '@rneui/themed';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { Image } from 'react-native';
 
 import { useToast } from '../context/ToastContext';
 import { useNavigation } from '@react-navigation/native';
@@ -33,9 +32,8 @@ const AuthScreen: React.FC = () => {
   const { showToast } = useToast();
   const navigation: any = useNavigation();
   const isOnline = useInternetStatus();
-  const showGithub = SHOW_GITHUB_LOGIN;
-  const showGoogle = SHOW_GOOGLE_LOGIN;
 
+  // State
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -44,6 +42,7 @@ const AuthScreen: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [socialLoading, setSocialLoading] = useState(false);
 
+  // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.95)).current;
 
@@ -51,110 +50,109 @@ const AuthScreen: React.FC = () => {
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 500,
+        duration: 600,
         useNativeDriver: true,
-        easing: Easing.out(Easing.quad),
+        easing: Easing.out(Easing.cubic),
       }),
-      Animated.spring(scaleAnim, { toValue: 1, friction: 7, useNativeDriver: true }),
+      Animated.spring(scaleAnim, { toValue: 1, friction: 8, tension: 40, useNativeDriver: true }),
     ]).start();
   }, []);
+
+  // --- ACTIONS ---
 
   const handleLogin = async () => {
     if (loading) return;
     Keyboard.dismiss();
+
     if (!email || !password)
       return Alert.alert('Missing Fields', 'Please enter both email and password.');
-    if (!isOnline) return Alert.alert('Offline', 'An internet connection is required to sign in.');
+    if (!isOnline) return Alert.alert('Offline', 'An internet connection is required.');
+
     setLoading(true);
     try {
       await loginWithEmail(email, password);
-      showToast('Welcome back!');
-      // Navigate to main app after successful login
+      // Ensure we navigate to Main after successful login
       try {
-        const parent = navigation.getParent?.();
-        if (parent?.replace) parent.replace('Main');
-        else navigation.navigate?.('Main');
-      } catch (navErr) {
-        // ignore navigation errors
+        (navigation.getParent() as any)?.reset({ index: 0, routes: [{ name: 'Main' }] });
+      } catch (err) {
+        // ignore navigation errors in unusual setups
       }
     } catch (err: any) {
-      Alert.alert('Login Failed', err?.message || 'Invalid credentials or server error.');
+      Alert.alert('Login Failed', err?.message || 'Invalid credentials.');
     } finally {
       setLoading(false);
     }
   };
 
-  const performRegister = async () => {
+  const handleRegister = async () => {
     if (loading) return;
     Keyboard.dismiss();
+
     if (!name.trim()) return Alert.alert('Missing Name', 'Please enter your full name.');
     if (!email.trim()) return Alert.alert('Missing Email', 'Please enter your email.');
     if (password.length < 8)
       return Alert.alert('Weak Password', 'Password must be at least 8 characters.');
-    if (!isOnline)
-      return Alert.alert('Offline', 'Internet connection required to create an account.');
+    if (!isOnline) return Alert.alert('Offline', 'Internet connection required.');
+
     setLoading(true);
     try {
       await registerWithEmail(name.trim(), email.trim(), password);
-      showToast('Account created!');
+      showToast('Account created successfully!');
       try {
-        const parent = navigation.getParent?.();
-        if (parent?.replace) parent.replace('Main');
-        else navigation.navigate?.('Main');
-      } catch (navErr) {}
+        (navigation.getParent() as any)?.reset({ index: 0, routes: [{ name: 'Main' }] });
+      } catch (err) {
+        // ignore
+      }
     } catch (err: any) {
-      Alert.alert('Registration Failed', err?.message || 'Unable to register.');
+      Alert.alert('Registration Failed', err?.message || 'Unable to create account.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Use `performRegister` directly; show inline consent text below the button.
-
   const handleForgotPassword = async () => {
-    if (!email)
-      return Alert.alert('Enter Email', 'Add your account email so we can send reset steps.');
+    if (!email) return Alert.alert('Enter Email', 'Please enter your email to reset password.');
+
     setLoading(true);
     try {
       await sendPasswordReset(email);
-      Alert.alert('Email Sent', 'Check your inbox for reset instructions.');
+      Alert.alert('Email Sent', 'Check your inbox for password reset instructions.');
     } catch (err: any) {
-      Alert.alert('Reset Failed', err?.message || 'Unable to send reset email right now.');
+      Alert.alert('Error', err?.message || 'Failed to send reset email.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleGithub = async () => {
-    if (!showGithub) return;
+  const handleSocialLogin = async (provider: 'google' | 'github') => {
+    if (loading || socialLoading) return;
     setSocialLoading(true);
     try {
-      const mod = await import('../services/firebaseAuth');
-      await mod.startGithubSignIn('signIn');
+      if (provider === 'google') {
+        const mod = await import('../services/googleAuth');
+        await mod.signInWithGoogle();
+      } else {
+        const mod = await import('../services/firebaseAuth');
+        await mod.startGithubSignIn('signIn');
+      }
+      try {
+        (navigation.getParent() as any)?.reset({ index: 0, routes: [{ name: 'Main' }] });
+      } catch (err) {
+        // ignore
+      }
     } catch (err: any) {
-      Alert.alert('GitHub Sign-in Failed', err?.message || 'Unable to sign in with GitHub.');
+      Alert.alert(`${provider === 'google' ? 'Google' : 'GitHub'} Sign-in Failed`, err?.message);
     } finally {
       setSocialLoading(false);
     }
   };
 
-  const handleGoogle = async () => {
-    setSocialLoading(true);
-    try {
-      const mod = await import('../services/googleAuth');
-      await mod.signInWithGoogle();
-    } catch (err: any) {
-      Alert.alert('Google Sign-in Failed', err?.message || 'Unable to sign in with Google.');
-    } finally {
-      setSocialLoading(false);
-    }
-  };
-
-  const spinnerVisible = loading || socialLoading;
+  const isLoading = loading || socialLoading;
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background || '#F0F2F5'} />
+
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
@@ -163,200 +161,191 @@ const AuthScreen: React.FC = () => {
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          {/* Header removed: rendering single centered app icon + title inside the card */}
-
           <Animated.View
             style={[styles.card, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}
           >
-            {/* Centered card header */}
-            <View style={styles.cardHeaderCenter}>
-              <View style={styles.logoBadgeCentered}>
+            {/* LOGO & TITLE */}
+            <View style={styles.headerContainer}>
+              <View style={styles.logoBadge}>
                 <Image
-                  source={(() => {
-                    try {
-                      if (typeof require !== 'function') return undefined;
-                      return require('../../assets/splash-icon.png');
-                    } catch (e) {
-                      return undefined;
-                    }
-                  })()}
-                  style={styles.logoCentered}
+                  source={require('../../assets/splash-icon.png')} // Ensure this path is correct
+                  style={styles.logoImage}
                   resizeMode="contain"
+                  defaultSource={{ uri: 'https://via.placeholder.com/60' }} // Fallback
                 />
               </View>
-              <Text style={styles.appName}>Welcome</Text>
+              <Text style={styles.appName}>Welcome Back</Text>
               <Text style={styles.appTagline}>
-                {mode === 'login' ? 'Sign in to continue' : 'Create your account'}
+                {mode === 'login'
+                  ? 'Sign in to access your finances'
+                  : 'Create an account to get started'}
               </Text>
             </View>
 
-            <AuthField
-              icon="mail-outline"
-              placeholder="Email Address"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoComplete="email"
-              value={email}
-              onChangeText={setEmail}
-              containerStyle={styles.fieldSpacing}
-            />
+            {/* FORM FIELDS */}
+            <View style={styles.formContainer}>
+              {mode === 'register' && (
+                <AuthField
+                  icon="person-outline"
+                  placeholder="Full Name"
+                  value={name}
+                  onChangeText={setName}
+                  containerStyle={styles.fieldSpacing}
+                  autoCapitalize="words"
+                />
+              )}
 
-            {mode === 'register' && (
               <AuthField
-                icon="person-outline"
-                placeholder="Full name"
-                value={name}
-                onChangeText={setName}
+                icon="mail-outline"
+                placeholder="Email Address"
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
                 containerStyle={styles.fieldSpacing}
               />
-            )}
 
-            <AuthField
-              icon="lock-outline"
-              placeholder="Password"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPass}
-              rightAccessory={
-                <TouchableOpacity onPress={() => setShowPass(!showPass)} style={styles.eyeIcon}>
-                  <MaterialIcon
-                    name={showPass ? 'visibility' : 'visibility-off'}
-                    color={colors.muted || '#999'}
-                    size={22}
-                  />
+              <AuthField
+                icon="lock-outline"
+                placeholder="Password"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPass}
+                containerStyle={styles.fieldSpacing}
+                rightAccessory={
+                  <TouchableOpacity
+                    onPress={() => setShowPass(!showPass)}
+                    style={styles.eyeIcon}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <MaterialIcon
+                      name={showPass ? 'visibility' : 'visibility-off'}
+                      color={colors.muted || '#9CA3AF'}
+                      size={20}
+                    />
+                  </TouchableOpacity>
+                }
+              />
+
+              {mode === 'login' && (
+                <TouchableOpacity style={styles.forgotPassContainer} onPress={handleForgotPassword}>
+                  <Text style={styles.forgotPassText}>Forgot Password?</Text>
                 </TouchableOpacity>
+              )}
+            </View>
+
+            {/* ACTION BUTTON */}
+            <Button
+              title={
+                loading
+                  ? mode === 'login'
+                    ? 'Signing In...'
+                    : 'Creating...'
+                  : mode === 'login'
+                    ? 'Sign In'
+                    : 'Create Account'
+              }
+              onPress={mode === 'login' ? handleLogin : handleRegister}
+              disabled={isLoading}
+              loading={loading}
+              buttonStyle={styles.primaryButton}
+              containerStyle={styles.buttonContainer}
+              titleStyle={styles.buttonText}
+              icon={
+                !loading ? (
+                  <MaterialIcon
+                    name={mode === 'login' ? 'login' : 'person-add'}
+                    size={20}
+                    color="white"
+                    style={{ marginRight: 8 }}
+                  />
+                ) : undefined
               }
             />
 
-            {mode === 'login' && (
-              <TouchableOpacity style={styles.forgotPassContainer} onPress={handleForgotPassword}>
-                <Text style={styles.forgotPassText}>Forgot Password?</Text>
-              </TouchableOpacity>
-            )}
-
-            <View style={{ marginTop: 12 }}>
-              <Button
-                title={
-                  mode === 'login'
-                    ? loading
-                      ? 'Verifying...'
-                      : 'Sign In'
-                    : loading
-                      ? 'Creating...'
-                      : 'Create Account'
-                }
-                onPress={mode === 'login' ? handleLogin : performRegister}
-                loading={loading}
-                disabled={loading || socialLoading}
-                buttonStyle={styles.primaryButton}
-                containerStyle={styles.buttonContainer}
-                titleStyle={styles.buttonText}
-                icon={
-                  !loading ? (
-                    <MaterialIcon
-                      name={mode === 'login' ? 'login' : 'person-add'}
-                      size={20}
-                      color="white"
-                      style={{ marginRight: 8 }}
-                    />
-                  ) : undefined
-                }
-              />
-            </View>
-
+            {/* TERMS (Register Only) */}
             {mode === 'register' && (
-              <View style={styles.termsContainer}>
-                <Text style={styles.termsText}>
-                  By registering you accept our{' '}
-                  <Text style={styles.termsLink} onPress={() => navigation.navigate('Terms')}>
-                    Terms
-                  </Text>{' '}
-                  and{' '}
-                  <Text
-                    style={styles.termsLink}
-                    onPress={() => navigation.navigate('PrivacyPolicy')}
-                  >
-                    Privacy Policy
-                  </Text>
-                  .
+              <Text style={styles.termsText}>
+                By joining, you agree to our{' '}
+                <Text style={styles.linkText} onPress={() => navigation.navigate('Terms')}>
+                  Terms
+                </Text>{' '}
+                and{' '}
+                <Text style={styles.linkText} onPress={() => navigation.navigate('PrivacyPolicy')}>
+                  Privacy Policy
                 </Text>
-              </View>
+                .
+              </Text>
             )}
 
-            {(showGithub || showGoogle) && (
-              <View style={styles.socialWrapper}>
-                <View style={styles.socialDivider}>
-                  <View style={styles.socialLine} />
-                  <Text style={styles.socialText}>or continue with</Text>
-                  <View style={styles.socialLine} />
+            {/* SOCIAL LOGIN */}
+            {(SHOW_GOOGLE_LOGIN || SHOW_GITHUB_LOGIN) && (
+              <View style={styles.socialSection}>
+                <View style={styles.dividerRow}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>OR</Text>
+                  <View style={styles.dividerLine} />
                 </View>
-                <View style={styles.socialButtonsRow}>
-                  {showGoogle && (
+
+                <View style={styles.socialRow}>
+                  {SHOW_GOOGLE_LOGIN && (
                     <Button
                       type="outline"
+                      title="Google"
                       icon={
                         <FontAwesome
                           name="google"
-                          size={18}
-                          color={colors.primary}
+                          size={16}
+                          color={colors.text}
                           style={{ marginRight: 8 }}
                         />
                       }
-                      title="Google"
-                      onPress={handleGoogle}
-                      disabled={socialLoading}
                       buttonStyle={styles.socialButton}
                       titleStyle={styles.socialButtonText}
-                      containerStyle={styles.socialButtonContainer}
+                      containerStyle={{ flex: 1 }}
+                      onPress={() => handleSocialLogin('google')}
+                      disabled={isLoading}
                     />
                   )}
-                  {showGithub && (
+                  {SHOW_GITHUB_LOGIN && (
                     <Button
                       type="outline"
+                      title="GitHub"
                       icon={
                         <FontAwesome
                           name="github"
-                          size={18}
-                          color={colors.primary}
+                          size={16}
+                          color={colors.text}
                           style={{ marginRight: 8 }}
                         />
                       }
-                      title="GitHub"
-                      onPress={handleGithub}
-                      disabled={socialLoading}
                       buttonStyle={styles.socialButton}
                       titleStyle={styles.socialButtonText}
-                      containerStyle={styles.socialButtonContainer}
+                      containerStyle={{ flex: 1 }}
+                      onPress={() => handleSocialLogin('github')}
+                      disabled={isLoading}
                     />
                   )}
                 </View>
               </View>
             )}
 
+            {/* SWITCH MODE */}
             <View style={styles.footerRow}>
               <Text style={styles.footerText}>
-                {mode === 'login' ? 'New here?' : 'Already have an account?'}
+                {mode === 'login' ? "Don't have an account?" : 'Already have an account?'}
               </Text>
               <TouchableOpacity onPress={() => setMode(mode === 'login' ? 'register' : 'login')}>
-                <Text style={styles.linkText}>
-                  {mode === 'login' ? 'Create Account' : 'Sign In'}
-                </Text>
+                <Text style={styles.switchModeText}>{mode === 'login' ? 'Sign Up' : 'Log In'}</Text>
               </TouchableOpacity>
             </View>
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
-      <FullScreenSpinner
-        visible={spinnerVisible}
-        message={
-          loading
-            ? mode === 'login'
-              ? 'Authenticating...'
-              : 'Creating account...'
-            : 'Contacting provider...'
-        }
-      />
+
+      <FullScreenSpinner visible={isLoading} />
     </SafeAreaView>
   );
 };
@@ -365,60 +354,85 @@ export default AuthScreen;
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F0F2F5' },
-  scrollContent: { flexGrow: 1, padding: 20, justifyContent: 'center', alignItems: 'center' },
+  scrollContent: { flexGrow: 1, justifyContent: 'center', padding: 20 },
+
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    padding: 20,
+    borderRadius: 20,
+    padding: 24,
     width: '100%',
-    maxWidth: 520,
+    maxWidth: 480,
     alignSelf: 'center',
-    // soft shadow
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.06,
-    shadowRadius: 20,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 5,
   },
-  cardHeaderCenter: { alignItems: 'center', marginBottom: 12 },
-  logoBadgeCentered: {
+
+  /* HEADER */
+  headerContainer: { alignItems: 'center', marginBottom: 24 },
+  logoBadge: {
     width: 64,
     height: 64,
-    borderRadius: 12,
-    backgroundColor: 'transparent',
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: 16,
   },
-  logoCentered: { width: 40, height: 40 },
-  brandTitleCol: { marginLeft: 12 },
-  appName: { fontSize: 18, fontWeight: '800', color: colors.text },
-  appTagline: { fontSize: 13, color: colors.muted, marginTop: 2 },
-  spacer: { height: 12 },
-  fieldSpacing: { marginBottom: 12 },
-  forgotPassContainer: { marginTop: 8 },
-  forgotPassText: { color: '#64748B' },
-  primaryButton: { backgroundColor: colors.primary, paddingVertical: 12, borderRadius: 10 },
-  buttonContainer: { marginTop: 12 },
-  buttonText: { fontWeight: '800', color: '#fff' },
-  socialWrapper: { marginTop: 14 },
-  socialDivider: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-  socialLine: { flex: 1, height: 1, backgroundColor: '#E6EEF8' },
-  socialText: { marginHorizontal: 8, color: '#6B7280' },
-  socialButtonsRow: { flexDirection: 'row', gap: 8 },
-  socialButton: { borderColor: '#E2E8F0' },
-  socialButtonText: { color: colors.primary },
-  socialButtonContainer: { flex: 1 },
+  logoImage: { width: 40, height: 40 },
+  appName: { fontSize: 22, fontWeight: '800', color: colors.text || '#111827' },
+  appTagline: { fontSize: 14, color: colors.muted || '#6B7280', marginTop: 4, textAlign: 'center' },
+
+  /* FORM */
+  formContainer: { marginBottom: 20 },
+  fieldSpacing: { marginBottom: 16 },
+  eyeIcon: { padding: 8 },
+  forgotPassContainer: { alignSelf: 'flex-end', marginTop: -8, marginBottom: 8 },
+  forgotPassText: { color: colors.primary || '#2563EB', fontSize: 13, fontWeight: '600' },
+
+  /* BUTTONS */
+  buttonContainer: { marginTop: 8 },
+  primaryButton: {
+    backgroundColor: colors.primary || '#2563EB',
+    paddingVertical: 14,
+    borderRadius: 12,
+    elevation: 2,
+  },
+  buttonText: { fontSize: 16, fontWeight: '700' },
+
+  /* TERMS */
+  termsText: {
+    fontSize: 12,
+    color: colors.muted || '#6B7280',
+    textAlign: 'center',
+    marginTop: 16,
+    lineHeight: 18,
+  },
+  linkText: { color: colors.primary || '#2563EB', fontWeight: '700' },
+
+  /* SOCIAL */
+  socialSection: { marginTop: 24 },
+  dividerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: '#E5E7EB' },
+  dividerText: { marginHorizontal: 12, fontSize: 12, color: '#9CA3AF', fontWeight: '600' },
+  socialRow: { flexDirection: 'row', gap: 12 },
+  socialButton: { borderColor: '#E5E7EB', borderRadius: 10, paddingVertical: 10, borderWidth: 1 },
+  socialButtonText: { color: colors.text || '#111827', fontSize: 14, fontWeight: '600' },
+
+  /* FOOTER */
   footerRow: {
     flexDirection: 'row',
     justifyContent: 'center',
+    marginTop: 24,
     alignItems: 'center',
-    marginTop: 14,
   },
-  footerText: { color: '#64748B', marginRight: 8 },
-  linkText: { color: colors.primary, fontWeight: '700' },
-  eyeIcon: { padding: 6 },
-  termsContainer: { marginTop: 12, paddingHorizontal: 6 },
-  termsText: { fontSize: 12, color: colors.muted || '#666', textAlign: 'center' },
-  termsLink: { color: colors.primary, fontWeight: '700' },
+  footerText: { color: '#6B7280', fontSize: 14 },
+  switchModeText: {
+    color: colors.primary || '#2563EB',
+    fontWeight: '700',
+    marginLeft: 6,
+    fontSize: 14,
+  },
 });

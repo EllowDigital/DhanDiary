@@ -7,6 +7,7 @@ import {
   Linking,
   TouchableOpacity,
   Alert,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
@@ -15,7 +16,7 @@ import ScreenHeader from '../components/ScreenHeader';
 import { colors, spacing } from '../utils/design';
 
 // --- Configuration ---
-const LAST_UPDATED = 'December 10, 2025';
+const LAST_UPDATED = 'December 14, 2025';
 const CONTACT_EMAIL_PRIMARY = 'ellowdigitalindia@gmail.com';
 const CONTACT_EMAIL_SECONDARY = 'sarwanyadav6174@gmail.com';
 
@@ -63,12 +64,9 @@ const sections = [
 const TermSection = ({ item }: { item: (typeof sections)[0] }) => (
   <View style={styles.card}>
     <View style={styles.cardHeader}>
-      <MaterialCommunityIcons
-        name={item.icon as any}
-        size={22}
-        color={colors.primary || '#007AFF'}
-        style={styles.icon}
-      />
+      <View style={styles.iconContainer}>
+        <MaterialCommunityIcons name={item.icon as any} size={20} color={colors.primary} />
+      </View>
       <Text style={styles.cardTitle}>{item.title}</Text>
     </View>
     <Text style={styles.cardBody}>{item.body}</Text>
@@ -76,8 +74,12 @@ const TermSection = ({ item }: { item: (typeof sections)[0] }) => (
 );
 
 const TermsScreen = () => {
-  const handleEmailPress = async () => {
-    const url = `mailto:${CONTACT_EMAIL_PRIMARY}`;
+  const { width } = useWindowDimensions();
+  const isTablet = width >= 768;
+  const contentWidth = Math.min(width - (isTablet ? spacing(8) : spacing(4)), 700);
+
+  const handleEmailPress = async (email: string) => {
+    const url = `mailto:${email}`;
     const supported = await Linking.canOpenURL(url);
     if (supported) await Linking.openURL(url);
     else Alert.alert('Error', 'Could not open email client');
@@ -87,49 +89,58 @@ const TermsScreen = () => {
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       <SafeAreaView style={styles.safeArea}>
-        <ScreenHeader
-          title="Terms of Use"
-          subtitle="Understand your rights & responsibilities"
-          showScrollHint={false}
-          useSafeAreaPadding={false}
-        />
+        <View style={{ width: contentWidth, alignSelf: 'center' }}>
+          <ScreenHeader
+            title="Terms of Use"
+            subtitle="Rights & Responsibilities"
+            showScrollHint={false}
+            useSafeAreaPadding={false}
+          />
+        </View>
 
         <ScrollView
           style={styles.scroll}
-          contentContainerStyle={styles.contentContainer}
+          contentContainerStyle={[styles.contentContainer, { paddingBottom: 60 }]}
           showsVerticalScrollIndicator={false}
         >
-          {/* Intro Text */}
-          <Text style={styles.leadText}>
-            Please read these Terms carefully before using{' '}
-            <Text style={styles.bold}>DhanDiary</Text>. By creating an account or continuing to use
-            the app, you agree to the rules below.
-          </Text>
-
-          {/* Mapped Sections */}
-          {sections.map((section) => (
-            <TermSection key={section.id} item={section} />
-          ))}
-
-          {/* Contact Section (Distinct Style) */}
-          <View style={[styles.card, styles.contactCard]}>
-            <View style={styles.cardHeader}>
-              <MaterialCommunityIcons name="email-fast-outline" size={22} color={colors.text} />
-              <Text style={styles.cardTitle}>Contact Us</Text>
-            </View>
-            <Text style={styles.cardBody}>
-              Have questions? We'll get back to you within a few business days.
+          <View style={{ width: contentWidth, alignSelf: 'center' }}>
+            {/* Intro Text */}
+            <Text style={styles.leadText}>
+              Please read these Terms carefully before using{' '}
+              <Text style={styles.bold}>DhanDiary</Text>. By creating an account or continuing to
+              use the app, you agree to the rules below.
             </Text>
 
-            <TouchableOpacity onPress={handleEmailPress}>
-              <Text style={styles.linkText}>{CONTACT_EMAIL_PRIMARY}</Text>
-            </TouchableOpacity>
-            <Text style={styles.secondaryEmail}>{CONTACT_EMAIL_SECONDARY}</Text>
-          </View>
+            {/* Mapped Sections */}
+            {sections.map((section) => (
+              <TermSection key={section.id} item={section} />
+            ))}
 
-          {/* Footer */}
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>Last updated: {LAST_UPDATED}</Text>
+            {/* Contact Section */}
+            <View style={[styles.card, styles.contactCard]}>
+              <View style={styles.cardHeader}>
+                <View style={[styles.iconContainer, { backgroundColor: '#e0f2fe' }]}>
+                  <MaterialCommunityIcons name="email-fast-outline" size={20} color="#0284c7" />
+                </View>
+                <Text style={styles.cardTitle}>Contact Us</Text>
+              </View>
+              <Text style={styles.cardBody}>
+                Have questions? We'll get back to you within a few business days.
+              </Text>
+
+              <TouchableOpacity onPress={() => handleEmailPress(CONTACT_EMAIL_PRIMARY)}>
+                <Text style={styles.linkText}>{CONTACT_EMAIL_PRIMARY}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity onPress={() => handleEmailPress(CONTACT_EMAIL_SECONDARY)}>
+                <Text style={styles.secondaryEmail}>{CONTACT_EMAIL_SECONDARY}</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Footer */}
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>Last updated: {LAST_UPDATED}</Text>
+            </View>
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -151,43 +162,48 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    paddingHorizontal: spacing(2.5),
     paddingTop: spacing(2),
-    paddingBottom: spacing(6),
     gap: spacing(2),
   },
   leadText: {
     fontSize: 15,
-    lineHeight: 22,
-    color: colors.subtleText || '#666',
-    marginBottom: spacing(1),
+    lineHeight: 24,
+    color: colors.text,
+    marginBottom: spacing(2),
+    opacity: 0.8,
   },
   bold: {
     fontWeight: '700',
-    color: colors.text,
+    color: colors.primary,
   },
   // Card Styling
   card: {
-    backgroundColor: colors.card || '#fff',
+    backgroundColor: '#fff',
     borderRadius: 16,
-    padding: spacing(2),
+    padding: 20,
+    marginBottom: 16,
     borderWidth: 1,
-    borderColor: colors.border || '#e0e0e0',
+    borderColor: 'rgba(0,0,0,0.04)',
     // Shadow for depth
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.03,
-    shadowRadius: 6,
+    shadowRadius: 8,
     elevation: 2,
   },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing(1),
-    gap: spacing(1.5),
+    marginBottom: 12,
+    gap: 12,
   },
-  icon: {
-    opacity: 0.9,
+  iconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#f0fdf4', // Light green default, overridden for contact
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   cardTitle: {
     fontSize: 16,
@@ -196,33 +212,36 @@ const styles = StyleSheet.create({
   },
   cardBody: {
     fontSize: 14,
-    lineHeight: 21,
-    color: colors.muted || '#555',
+    lineHeight: 22,
+    color: colors.muted,
   },
   // Contact Specifics
   contactCard: {
-    backgroundColor: colors.background === '#000' ? '#222' : '#F9FAFB',
+    backgroundColor: '#f8fafc',
+    borderColor: '#e2e8f0',
   },
   linkText: {
     fontSize: 15,
-    color: colors.primary || '#007AFF',
+    color: colors.primary,
     fontWeight: '600',
-    marginTop: spacing(1.5),
-    textDecorationLine: 'underline',
+    marginTop: 16,
   },
   secondaryEmail: {
     fontSize: 13,
-    color: colors.muted || '#888',
-    marginTop: 4,
+    color: colors.muted,
+    marginTop: 6,
+    textDecorationLine: 'underline',
   },
   // Footer
   footer: {
-    marginTop: spacing(1),
+    marginTop: 20,
     alignItems: 'center',
+    marginBottom: 20,
   },
   footerText: {
     fontSize: 12,
-    color: colors.muted || '#999',
+    color: colors.muted,
     textAlign: 'center',
+    opacity: 0.7,
   },
 });
