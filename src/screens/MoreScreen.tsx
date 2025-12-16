@@ -137,6 +137,27 @@ const MoreScreen: React.FC = () => {
         action: handleEmail,
         color: colors.accentRed,
       },
+      {
+        icon: 'gavel',
+        label: 'Terms of Use',
+        description: 'App terms and conditions',
+        action: () => navigateParent('Terms'),
+        color: colors.muted,
+      },
+      {
+        icon: 'policy',
+        label: 'Privacy Policy',
+        description: 'How we handle your data',
+        action: () => navigateParent('PrivacyPolicy'),
+        color: colors.muted,
+      },
+      {
+        icon: 'description',
+        label: 'End User License',
+        description: 'License & legal terms',
+        action: () => navigateParent('Eula'),
+        color: colors.muted,
+      },
     ],
     [handleRoadmap, handleEmail, navigateParent]
   );
