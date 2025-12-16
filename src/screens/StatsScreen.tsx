@@ -32,8 +32,8 @@ const hexToRgb = (hex: string) => {
 };
 
 // Helper: basic statistics (mean, median, stddev, count)
-const calcStats = (entries: LocalEntry[]) => {
-  const amounts = entries.map((e) => Number(e.amount) || 0).filter((a) => Number.isFinite(a));
+const calcStats = (entries: LocalEntry[] = []) => {
+  const amounts = (entries || []).map((e) => Number(e.amount) || 0).filter((a) => Number.isFinite(a));
   const count = amounts.length;
   const mean = count ? amounts.reduce((s, v) => s + v, 0) / count : 0;
   const sorted = [...amounts].sort((a, b) => a - b);
@@ -193,17 +193,17 @@ const StatsScreen = () => {
     if (filter === 'Day') {
       start = current.startOf('day');
       end = current.endOf('day');
-    } else if (filter === 'Day') {
+    } else if (filter === 'Week') {
       start = current.startOf('week');
       end = current.endOf('week');
-    } else if (filter === 'Week') {
-      start = current.subtract(6, 'day').startOf('day');
-      end = current.endOf('day');
     } else if (filter === '7 Days') {
       start = current.subtract(6, 'day').startOf('day');
       end = current.endOf('day');
     } else if (filter === '30 Days') {
       start = current.subtract(29, 'day').startOf('day');
+      end = current.endOf('day');
+    } else if (filter === 'This Month') {
+      const key = activeMonthKey || current.format('YYYY-MM');
       const base = dayjs(`${key}-01`);
       if (base.isValid()) {
         start = base.startOf('month');
