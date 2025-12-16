@@ -1,267 +1,231 @@
 import React, { useMemo, useState } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, Alert, TextInput } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable, Alert, Platform, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Text } from '@rneui/themed';
+import { Text, Button } from '@rneui/themed';
 import dayjs from 'dayjs';
 import ScreenHeader from '../components/ScreenHeader';
 import { useEntries } from '../hooks/useEntries';
 import { useAuth } from '../hooks/useAuth';
-import { colors } from '../utils/design';
+import { colors, spacing } from '../utils/design';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { exportToFile, shareFile } from '../utils/reportExporter';
-import * as FileSystem from 'expo-file-system/legacy';
-import * as Sharing from 'expo-sharing';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { LocalEntry } from '../types/entries';
+import FullScreenSpinner from '../components/FullScreenSpinner';
 
 const ExportScreen = () => {
   const { user } = useAuth();
   const { entries = [] } = useEntries(user?.uid);
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [exporting, setExporting] = useState<'pdf' | 'excel' | 'json' | null>(null);
-  const [mode, setMode] = useState<'Day' | 'Week' | 'Month' | 'Year' | 'Custom' | 'All'>('Day');
-  const [includeNotes, setIncludeNotes] = useState(true);
-  const [groupBy, setGroupBy] = useState<'none' | 'category' | 'date'>('none');
-  const [customStart, setCustomStart] = useState<string>('');
-  const [customEnd, setCustomEnd] = useState<string>('');
+  
+  // State
+  const [exporting, setExporting] = useState(false);
+  const [mode, setMode] = useState<'Day' | 'Week' | 'Month' | 'Custom' | 'All'>('Month');
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  
+  // Custom Range State
+  const [customStart, setCustomStart] = useState(new Date());
+  const [customEnd, setCustomEnd] = useState(new Date());
+  const [showStartPicker, setShowStartPicker] = useState(false);
+  const [showEndPicker, setShowEndPicker] = useState(false);
+
+  // Options
   const [format, setFormat] = useState<'pdf' | 'csv' | 'json'>('pdf');
+  const [includeNotes, setIncludeNotes] = useState(true);
+  const [groupBy, setGroupBy] = useState<'none' | 'category' | 'date'>('date');
 
-  const availableDates = useMemo(() => {
-    const set = new Set<string>();
-    (entries as LocalEntry[]).forEach((e) => {
-      const d = dayjs(e.date || e.created_at).format('YYYY-MM-DD');
-      if (d) set.add(d);
-    });
-    return Array.from(set).sort().reverse();
-  }, [entries]);
+  // --- FILTER LOGIC ---
+  const targetEntries = useMemo(() => {
+    if (!entries || entries.length === 0) return [];
+    
+    let filtered = [...entries];
+    const targetDate = dayjs(selectedDate);
 
-  const filteredForDate = (date: string | null) => {
-    if (!date) return entries as LocalEntry[];
-    return (entries as LocalEntry[]).filter(
-      (e) => dayjs(e.date || e.created_at).format('YYYY-MM-DD') === date
-    );
-  };
-
-  const getTargetEntries = () => {
-    if (mode === 'All') return entries as LocalEntry[];
-    if (mode === 'Day') return filteredForDate(selectedDate);
-    if (mode === 'Week' && selectedDate) {
-      const start = dayjs(selectedDate).startOf('week');
-      const end = dayjs(selectedDate).endOf('week');
-      return (entries as LocalEntry[]).filter((e) => {
-        const d = dayjs(e.date || e.created_at);
-        return !d.isBefore(start) && !d.isAfter(end);
+    if (mode === 'Day') {
+      filtered = filtered.filter(e => dayjs(e.date).isSame(targetDate, 'day'));
+    } else if (mode === 'Week') {
+      const start = targetDate.startOf('week');
+      const end = targetDate.endOf('week');
+      filtered = filtered.filter(e => {
+        const d = dayjs(e.date);
+        return d.isAfter(start.subtract(1, 'ms')) && d.isBefore(end.add(1, 'ms'));
       });
-    }
-    if (mode === 'Month' && selectedDate) {
-      const m = dayjs(selectedDate).startOf('month');
-      const end = m.endOf('month');
-      return (entries as LocalEntry[]).filter((e) => {
-        const d = dayjs(e.date || e.created_at);
-        return !d.isBefore(m) && !d.isAfter(end);
+    } else if (mode === 'Month') {
+      const start = targetDate.startOf('month');
+      const end = targetDate.endOf('month');
+      filtered = filtered.filter(e => {
+        const d = dayjs(e.date);
+        return d.isAfter(start.subtract(1, 'ms')) && d.isBefore(end.add(1, 'ms'));
       });
-    }
-    if (mode === 'Year' && selectedDate) {
-      const y = dayjs(selectedDate).startOf('year');
-      const end = y.endOf('year');
-      return (entries as LocalEntry[]).filter((e) => {
-        const d = dayjs(e.date || e.created_at);
-        return !d.isBefore(y) && !d.isAfter(end);
-      });
-    }
-    if (mode === 'Custom' && customStart && customEnd) {
+    } else if (mode === 'Custom') {
       const s = dayjs(customStart).startOf('day');
       const e = dayjs(customEnd).endOf('day');
-      if (!s.isValid() || !e.isValid()) return [] as LocalEntry[];
-      return (entries as LocalEntry[]).filter((ent) => {
-        const d = dayjs(ent.date || ent.created_at);
-        return !d.isBefore(s) && !d.isAfter(e);
+      filtered = filtered.filter(ent => {
+        const d = dayjs(ent.date);
+        return d.isAfter(s.subtract(1, 'ms')) && d.isBefore(e.add(1, 'ms'));
       });
     }
-    return [] as LocalEntry[];
-  };
+    
+    // Sort by date descending
+    return filtered.sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf());
+  }, [entries, mode, selectedDate, customStart, customEnd]);
 
-  const handleExport = async (fmt: 'pdf' | 'csv' | 'json') => {
-    const target = getTargetEntries();
-    if (!target.length) {
-      Alert.alert('No entries', 'There are no entries for the selected range.');
-      return;
+  // --- EXPORT HANDLER ---
+  const handleExport = async () => {
+    if (targetEntries.length === 0) {
+      return Alert.alert('No Data', 'There are no transactions to export for the selected range.');
     }
 
-    const summary = {
-      totalIn: target.reduce((s, e) => s + (e.type === 'in' ? Number(e.amount || 0) : 0), 0),
-      totalOut: target.reduce((s, e) => s + (e.type === 'out' ? Number(e.amount || 0) : 0), 0),
-      net:
-        target.reduce((s, e) => s + (e.type === 'in' ? Number(e.amount || 0) : 0), 0) -
-        target.reduce((s, e) => s + (e.type === 'out' ? Number(e.amount || 0) : 0), 0),
-      currencySymbol: '₹',
-      filterLabel:
-        mode === 'All' ? 'All entries' : mode === 'Custom' ? `${customStart} → ${customEnd}` : mode,
-    };
-
-    const metadata = {
-      title: `DhanDiary Export (${groupBy !== 'none' ? `group:${groupBy}` : 'entries'})`,
-      rangeLabel: summary.filterLabel,
-      generatedAt: dayjs().format('DD MMM YYYY, HH:mm'),
-    };
-
+    setExporting(true);
     try {
-      setExporting(fmt as any);
-      // Prepare payload once and avoid deep cloning unless required
-      const payload = includeNotes ? target : target.map((e) => ({ ...e, notes: undefined }));
-      const filePath = await exportToFile(fmt, payload as any, {
-        fields: undefined,
-        pretty: fmt === 'json',
-        title: metadata.title,
-        aiLayout: true,
+      const title = `DhanDiary_Report_${dayjs().format('YYYYMMDD_HHmm')}`;
+      
+      // Prepare data
+      const dataToExport = includeNotes 
+        ? targetEntries 
+        : targetEntries.map(({ note, ...rest }) => rest);
+
+      // Generate File
+      const filePath = await exportToFile(format, dataToExport, {
+        title,
+        periodLabel: mode === 'Custom' 
+          ? `${dayjs(customStart).format('DD MMM')} - ${dayjs(customEnd).format('DD MMM')}`
+          : mode === 'All' ? 'All Time' : dayjs(selectedDate).format('MMMM YYYY'),
+        groupBy
       });
-      await shareFile(filePath);
-      Alert.alert('Export ready', 'Report shared successfully.');
-    } catch (err: any) {
-      Alert.alert('Export failed', err?.message || 'Unable to share report.');
+
+      // Share
+      if (filePath) {
+        await shareFile(filePath);
+      } else {
+        throw new Error('File generation failed');
+      }
+    } catch (error: any) {
+      Alert.alert('Export Failed', error.message || 'Unknown error occurred');
     } finally {
-      setExporting(null);
+      setExporting(false);
     }
   };
+
+  // --- RENDER HELPERS ---
+  const renderOption = (label: string, isSelected: boolean, onPress: () => void) => (
+    <Pressable
+      style={[styles.chip, isSelected && styles.chipActive]}
+      onPress={onPress}
+    >
+      <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>{label}</Text>
+    </Pressable>
+  );
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <ScreenHeader title="Export" subtitle="Generate professional reports" />
-
-      <ScrollView contentContainerStyle={styles.container}>
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Export Options</Text>
-          <Text style={styles.cardSubtitle}>Choose range, format and options</Text>
-
-          <View style={{ marginTop: 12, marginBottom: 8 }}>
-            <Text style={styles.labelMutedSmall}>Mode</Text>
-            <View style={styles.chipsRow}>
-              {['Day', 'Week', 'Month', 'Year', 'Custom', 'All'].map((m) => (
-                <Pressable
-                  key={m}
-                  style={[styles.chip, mode === m && styles.chipActive]}
-                  onPress={() => setMode(m as any)}
-                >
-                  <Text style={[styles.chipText, mode === m && styles.chipTextActive]}>{m}</Text>
-                </Pressable>
-              ))}
-            </View>
-
-            {mode !== 'All' && mode !== 'Custom' && (
-              <View style={{ marginTop: 10 }}>
-                <Text style={styles.labelMutedSmall}>Select reference date</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ paddingVertical: 8 }}
-                >
-                  {availableDates.slice(0, 30).map((d) => (
-                    <Pressable
-                      key={d}
-                      style={[styles.chip, selectedDate === d && styles.chipActive]}
-                      onPress={() => setSelectedDate(d)}
-                    >
-                      <Text style={[styles.chipText, selectedDate === d && styles.chipTextActive]}>
-                        {dayjs(d).format('DD MMM')}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </ScrollView>
+      <ScreenHeader title="Export Data" subtitle="Download reports & backup" />
+      
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+        
+        {/* SECTION 1: RANGE */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>1. Select Range</Text>
+          <View style={styles.chipRow}>
+            {['Week', 'Month', 'Custom', 'All'].map(m => (
+              <View key={m} style={styles.chipWrapper}>
+                {renderOption(m, mode === m, () => setMode(m as any))}
               </View>
-            )}
+            ))}
+          </View>
 
-            {mode === 'Custom' && (
-              <View style={{ marginTop: 10 }}>
-                <Text style={styles.labelMutedSmall}>Custom range (YYYY-MM-DD)</Text>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  <TextInput
-                    placeholder="Start"
-                    value={customStart}
-                    onChangeText={setCustomStart}
-                    style={[styles.chip, { flex: 1 }]}
-                  />
-                  <TextInput
-                    placeholder="End"
-                    value={customEnd}
-                    onChangeText={setCustomEnd}
-                    style={[styles.chip, { flex: 1 }]}
-                  />
-                </View>
-              </View>
-            )}
+          {/* Date Pickers based on Mode */}
+          {mode === 'Month' && (
+             <View style={styles.dateControl}>
+                <TouchableOpacity onPress={() => setSelectedDate(dayjs(selectedDate).subtract(1, 'month').toDate())} style={styles.arrowBtn}>
+                   <MaterialIcon name="chevron-left" size={24} color={colors.text} />
+                </TouchableOpacity>
+                <Text style={styles.dateLabel}>{dayjs(selectedDate).format('MMMM YYYY')}</Text>
+                <TouchableOpacity onPress={() => setSelectedDate(dayjs(selectedDate).add(1, 'month').toDate())} style={styles.arrowBtn}>
+                   <MaterialIcon name="chevron-right" size={24} color={colors.text} />
+                </TouchableOpacity>
+             </View>
+          )}
 
-            <View style={{ marginTop: 12 }}>
-              <Text style={styles.labelMutedSmall}>Format</Text>
-              <View style={styles.reportActions}>
-                <Pressable
-                  style={[styles.chip, format === 'pdf' && styles.chipActive]}
-                  onPress={() => setFormat('pdf')}
-                >
-                  <Text style={[styles.chipText, format === 'pdf' && styles.chipTextActive]}>
-                    PDF
-                  </Text>
-                </Pressable>
-                <Pressable
-                  style={[styles.chip, format === 'csv' && styles.chipActive]}
-                  onPress={() => setFormat('csv')}
-                >
-                  <Text style={[styles.chipText, format === 'csv' && styles.chipTextActive]}>
-                    CSV
-                  </Text>
-                </Pressable>
-                <Pressable
-                  style={[styles.chip, format === 'json' && styles.chipActive]}
-                  onPress={() => setFormat('json')}
-                >
-                  <Text style={[styles.chipText, format === 'json' && styles.chipTextActive]}>
-                    JSON
-                  </Text>
-                </Pressable>
-              </View>
+          {mode === 'Custom' && (
+            <View style={styles.customRangeRow}>
+               <TouchableOpacity style={styles.datePickerBtn} onPress={() => setShowStartPicker(true)}>
+                  <Text style={styles.datePickerLabel}>Start</Text>
+                  <Text style={styles.datePickerValue}>{dayjs(customStart).format('DD MMM YYYY')}</Text>
+               </TouchableOpacity>
+               <MaterialIcon name="arrow-forward" size={20} color={colors.muted} />
+               <TouchableOpacity style={styles.datePickerBtn} onPress={() => setShowEndPicker(true)}>
+                  <Text style={styles.datePickerLabel}>End</Text>
+                  <Text style={styles.datePickerValue}>{dayjs(customEnd).format('DD MMM YYYY')}</Text>
+               </TouchableOpacity>
             </View>
+          )}
+          
+          <Text style={styles.summaryText}>
+             Found <Text style={{fontWeight:'700', color: colors.primary}}>{targetEntries.length}</Text> records
+          </Text>
+        </View>
 
-            <View style={{ marginTop: 12 }}>
-              <Text style={styles.labelMutedSmall}>Options</Text>
-              <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
-                <Pressable
-                  style={[styles.chip, includeNotes && styles.chipActive]}
-                  onPress={() => setIncludeNotes((v) => !v)}
-                >
-                  <Text style={[styles.chipText, includeNotes && styles.chipTextActive]}>
-                    {includeNotes ? 'Include notes' : 'Exclude notes'}
-                  </Text>
-                </Pressable>
-                <Pressable
-                  style={[styles.chip, groupBy === 'none' && styles.chipActive]}
-                  onPress={() => setGroupBy('none')}
-                >
-                  <Text style={[styles.chipText, groupBy === 'none' && styles.chipTextActive]}>
-                    No Group
-                  </Text>
-                </Pressable>
-                <Pressable
-                  style={[styles.chip, groupBy === 'category' && styles.chipActive]}
-                  onPress={() => setGroupBy('category')}
-                >
-                  <Text style={[styles.chipText, groupBy === 'category' && styles.chipTextActive]}>
-                    Group by Category
-                  </Text>
-                </Pressable>
-              </View>
-            </View>
+        {/* SECTION 2: FORMAT */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>2. Format & Options</Text>
+           <View style={styles.chipRow}>
+             <View style={styles.chipWrapper}>{renderOption('PDF Report', format === 'pdf', () => setFormat('pdf'))}</View>
+             <View style={styles.chipWrapper}>{renderOption('Excel (CSV)', format === 'csv', () => setFormat('csv'))}</View>
+             <View style={styles.chipWrapper}>{renderOption('JSON', format === 'json', () => setFormat('json'))}</View>
+           </View>
 
-            <View style={styles.actionsRow}>
-              <Pressable
-                style={[styles.actionBtn, styles.primaryBtn]}
-                onPress={() => handleExport(format)}
-                disabled={!!exporting}
-              >
-                <MaterialIcon name="file-upload" size={18} color="#fff" />
-                <Text style={styles.actionText}>Export</Text>
-              </Pressable>
-            </View>
+          <View style={styles.optionsRow}>
+             <Pressable style={styles.checkboxRow} onPress={() => setIncludeNotes(!includeNotes)}>
+                <MaterialIcon name={includeNotes ? "check-box" : "check-box-outline-blank"} size={24} color={colors.primary} />
+                <Text style={styles.checkboxLabel}>Include Notes</Text>
+             </Pressable>
+             
+             {format === 'pdf' && (
+               <Pressable style={styles.checkboxRow} onPress={() => setGroupBy(groupBy === 'category' ? 'date' : 'category')}>
+                  <MaterialIcon name={groupBy === 'category' ? "check-box" : "check-box-outline-blank"} size={24} color={colors.primary} />
+                  <Text style={styles.checkboxLabel}>Group by Category</Text>
+               </Pressable>
+             )}
           </View>
         </View>
+
+        {/* ACTION */}
+        <Button
+          title={exporting ? "Generating..." : `Export ${format.toUpperCase()}`}
+          onPress={handleExport}
+          disabled={exporting || targetEntries.length === 0}
+          loading={exporting}
+          buttonStyle={styles.exportBtn}
+          containerStyle={{ marginTop: 20 }}
+          icon={<MaterialIcon name="file-download" size={20} color="white" style={{marginRight:8}} />}
+        />
+
+        {/* Pickers */}
+        {showStartPicker && (
+          <DateTimePicker
+            value={customStart}
+            mode="date"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={(event, date) => {
+              setShowStartPicker(false);
+              if (date) setCustomStart(date);
+            }}
+          />
+        )}
+        {showEndPicker && (
+          <DateTimePicker
+            value={customEnd}
+            mode="date"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={(event, date) => {
+              setShowEndPicker(false);
+              if (date) setCustomEnd(date);
+            }}
+          />
+        )}
+
       </ScrollView>
+      <FullScreenSpinner visible={exporting} message="Generating Report..." />
     </SafeAreaView>
   );
 };
@@ -269,38 +233,134 @@ const ExportScreen = () => {
 export default ExportScreen;
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#F7F9FC' },
+  safeArea: { flex: 1, backgroundColor: '#F8FAFC' },
   container: { padding: 16 },
-  card: { backgroundColor: '#fff', borderRadius: 16, padding: 16 },
-  cardTitle: { fontSize: 16, fontWeight: '800', marginBottom: 6 },
-  cardSubtitle: { color: '#90A4AE', marginBottom: 12 },
-  labelMutedSmall: { color: '#90A4AE', marginBottom: 6 },
-  reportActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: {
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 18,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+  
+  section: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#334155',
+    marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 12,
+  },
+  chipWrapper: {
     marginRight: 8,
     marginBottom: 8,
-    backgroundColor: '#fff',
   },
-  chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  chipText: { color: '#546E7A', fontWeight: '700' },
-  chipTextActive: { color: '#fff' },
-  actionsRow: { flexDirection: 'row', gap: 12, marginTop: 16 },
-  actionBtn: {
-    flex: 1,
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: 'center',
+  chip: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  chipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  chipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  chipTextActive: {
+    color: '#fff',
+  },
+
+  // Date Control
+  dateControl: {
     flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 8,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 8,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
-  primaryBtn: { backgroundColor: colors.primary },
-  secondaryBtn: { backgroundColor: '#E8F0FF' },
-  actionText: { fontWeight: '800', color: '#fff' },
+  arrowBtn: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  dateLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#334155',
+  },
+
+  // Custom Range
+  customRangeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  datePickerBtn: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 10,
+    padding: 10,
+  },
+  datePickerLabel: {
+    fontSize: 11,
+    color: '#64748B',
+    marginBottom: 2,
+    textTransform: 'uppercase',
+  },
+  datePickerValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#334155',
+  },
+
+  summaryText: {
+    marginTop: 12,
+    fontSize: 13,
+    color: '#64748B',
+    textAlign: 'right',
+  },
+
+  // Options
+  optionsRow: {
+    marginTop: 12,
+  },
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  checkboxLabel: {
+    fontSize: 14,
+    color: '#334155',
+  },
+
+  exportBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    paddingVertical: 14,
+  },
 });
