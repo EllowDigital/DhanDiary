@@ -32,6 +32,7 @@ import Svg, {
   Circle,
 } from 'react-native-svg';
 import { spacing, colors } from '../utils/design';
+import { LocalEntry } from '../types/entries';
 
 // Chart Kit
 let LineChart: any = null;
@@ -50,16 +51,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 }
 
 // --- TYPES ---
-interface LocalEntry {
-  local_id?: string;
-  id?: string;
-  amount: string | number;
-  type: 'in' | 'out';
-  category?: string;
-  note?: string;
-  date?: string | Date;
-  created_at?: string | Date;
-}
+// Using `LocalEntry` from shared types to keep nullability consistent
 
 // --- UTILS ---
 const getSmartGreeting = () => {
