@@ -663,8 +663,8 @@ const StatsScreen = () => {
                 <MaterialIcon name="arrow-upward" size={24} color="#2E7D32" />
               </View>
               <View style={styles.gridContent}>
-                <Text style={styles.gridValue} adjustsFontSizeToFit numberOfLines={1}>
-                  ₹{maxIncome > 10000 ? (maxIncome / 1000).toFixed(1) + 'k' : maxIncome}
+                  <Text style={styles.gridValue} adjustsFontSizeToFit numberOfLines={1}>
+                  {currencySymbol}{maxIncome > 10000 ? (maxIncome / 1000).toFixed(1) + 'k' : maxIncome}
                 </Text>
                 <Text style={styles.gridLabel} numberOfLines={1}>
                   Max Income
@@ -677,8 +677,8 @@ const StatsScreen = () => {
                 <MaterialIcon name="arrow-downward" size={24} color="#C62828" />
               </View>
               <View style={styles.gridContent}>
-                <Text style={styles.gridValue} adjustsFontSizeToFit numberOfLines={1}>
-                  ₹{maxExpense > 10000 ? (maxExpense / 1000).toFixed(1) + 'k' : maxExpense}
+                  <Text style={styles.gridValue} adjustsFontSizeToFit numberOfLines={1}>
+                  {currencySymbol}{maxExpense > 10000 ? (maxExpense / 1000).toFixed(1) + 'k' : maxExpense}
                 </Text>
                 <Text style={styles.gridLabel} numberOfLines={1}>
                   Max Expense
@@ -700,11 +700,11 @@ const StatsScreen = () => {
             <View style={[styles.rowBetween, { marginTop: 20, marginBottom: 10 }]}>
               <View>
                 <Text style={styles.labelMutedSmall}>DAILY AVG</Text>
-                <Text style={styles.chartStatValue}>₹{avgDaily}</Text>
+                <Text style={styles.chartStatValue}>{currencySymbol}{avgDaily}</Text>
               </View>
               <View style={{ alignItems: 'flex-end' }}>
                 <Text style={styles.labelMutedSmall}>PEAK DAY</Text>
-                <Text style={styles.chartStatValue}>₹{peakDay ? peakDay.value : 0}</Text>
+                <Text style={styles.chartStatValue}>{currencySymbol}{peakDay ? peakDay.value : 0}</Text>
               </View>
             </View>
 
