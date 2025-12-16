@@ -1,13 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import {
-  View,
-  StyleSheet,
-  LayoutChangeEvent,
-  Platform,
-  Pressable,
-  Text,
-  Dimensions,
-} from 'react-native';
+import { View, StyleSheet, LayoutChangeEvent, Pressable, Text, Platform } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
@@ -18,7 +10,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
-// --- Placeholder Screens ---
+// --- Placeholder Screens (Replace with your actual imports) ---
 import HomeScreen from '../screens/HomeScreen';
 import HistoryScreen from '../screens/HistoryScreen';
 import MoreScreen from '../screens/MoreScreen';
@@ -32,11 +24,11 @@ const colors = {
   muted: '#9CA3AF',
   border: '#E5E7EB',
   shadow: '#000',
-  activeBackground: '#EEF2FF',
+  activeBackground: '#F3F4F6',
 };
 
-const TAB_HEIGHT = 60; // Height of the icon area
-const ICON_SIZE = 24;
+const TAB_HEIGHT = 64;
+const ICON_SIZE = 26;
 
 const Tab = createBottomTabNavigator();
 
@@ -63,7 +55,7 @@ const TabButton = ({
   }, [isFocused]);
 
   const handlePressIn = () => {
-    scale.value = withSpring(0.9, { duration: 100 });
+    scale.value = withSpring(0.95, { duration: 100 });
   };
 
   const handlePressOut = () => {
@@ -80,9 +72,8 @@ const TabButton = ({
 
   const animatedLabelStyle = useAnimatedStyle(() => {
     return {
-      opacity: withTiming(isFocused ? 1 : 0, { duration: 200 }),
-      transform: [{ translateY: withTiming(isFocused ? 0 : 5, { duration: 200 }) }],
-      height: isFocused ? 'auto' : 0,
+      opacity: withTiming(isFocused ? 1 : 0.5, { duration: 200 }),
+      transform: [{ translateY: withTiming(isFocused ? 0 : 2, { duration: 200 }) }],
     };
   });
 
@@ -120,7 +111,7 @@ const CustomTabBar = ({ state, descriptors, navigation }: any) => {
   useEffect(() => {
     if (tabWidth > 0) {
       translateX.value = withSpring(state.index * tabWidth, {
-        damping: 15,
+        damping: 18,
         stiffness: 120,
       });
     }
@@ -129,7 +120,7 @@ const CustomTabBar = ({ state, descriptors, navigation }: any) => {
   const animatedIndicatorStyle = useAnimatedStyle(() => {
     return {
       transform: [{ translateX: translateX.value }],
-      width: tabWidth - 20, // Padding inside the active area
+      width: tabWidth, // Full width of the tab slot
     };
   });
 
@@ -145,25 +136,17 @@ const CustomTabBar = ({ state, descriptors, navigation }: any) => {
       style={[
         styles.tabBarContainer,
         {
-          // We add the bottom inset here so the white background extends to the bottom edge
           paddingBottom: insets.bottom,
-          // Calculate height to include safe area
           height: TAB_HEIGHT + insets.bottom,
         },
       ]}
     >
-      {/* This internal View holds the actual tab items and animation.
-        It sits at the top of the container.
-      */}
       <View style={styles.tabBarContent} onLayout={onTabbarLayout}>
+        {/* Animated Pill Background */}
         {tabWidth > 0 && (
-          <Animated.View
-            style={[
-              styles.activeBackground,
-              animatedIndicatorStyle,
-              { left: 10 }, // Center alignment correction
-            ]}
-          />
+          <Animated.View style={[styles.activeBackgroundWrapper, animatedIndicatorStyle]}>
+            <View style={styles.activeBackground} />
+          </Animated.View>
         )}
 
         {state.routes.map((route: any, index: number) => {
@@ -240,29 +223,23 @@ const styles = StyleSheet.create({
     right: 0,
     backgroundColor: colors.card,
 
-    // --- CURVED TOP CORNERS ---
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
+    // --- ROUNDED TOP CORNERS ---
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
 
-    // Shadow
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.08,
+    // Subtle Shadow
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.05,
     shadowRadius: 10,
-    elevation: 10, // Android Shadow
+    elevation: 15, // Android
 
-    // Border for definition
-    borderTopWidth: 1,
-    borderLeftWidth: 1,
-    borderRightWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
-
-    justifyContent: 'flex-start', // Align content to top
+    justifyContent: 'flex-start',
   },
   tabBarContent: {
     flexDirection: 'row',
     width: '100%',
-    height: TAB_HEIGHT, // Height of the interactive area
+    height: TAB_HEIGHT,
     alignItems: 'center',
     justifyContent: 'space-around',
   },
@@ -276,17 +253,28 @@ const styles = StyleSheet.create({
   iconContainer: {
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 4,
   },
   label: {
     fontSize: 10,
     fontWeight: '700',
-    marginTop: 2,
+    marginTop: 0,
   },
-  activeBackground: {
+  // Wrapper allows us to center the inner pill perfectly
+  activeBackgroundWrapper: {
     position: 'absolute',
-    height: TAB_HEIGHT - 16, // Smaller than full height
-    backgroundColor: colors.activeBackground,
-    borderRadius: 20, // Fully rounded pill
+    height: TAB_HEIGHT,
+    top: 0,
+    left: 0,
     zIndex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // The actual pill
+  activeBackground: {
+    width: '60%', // Width relative to the single tab width
+    height: 48,
+    backgroundColor: colors.activeBackground,
+    borderRadius: 24,
   },
 });

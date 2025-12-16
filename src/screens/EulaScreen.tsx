@@ -74,11 +74,7 @@ const EulaSection = ({ item }: { item: (typeof sections)[0] }) => (
   <View style={styles.card}>
     <View style={styles.cardHeader}>
       <View style={styles.iconContainer}>
-        <MaterialCommunityIcons
-          name={item.icon as any}
-          size={20}
-          color={colors.primary}
-        />
+        <MaterialCommunityIcons name={item.icon as any} size={20} color={colors.primary} />
       </View>
       <Text style={styles.cardTitle}>{item.title}</Text>
     </View>
@@ -102,7 +98,6 @@ const EulaScreen = () => {
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       <SafeAreaView style={styles.safeArea}>
-        
         <View style={{ width: contentWidth, alignSelf: 'center' }}>
           <ScreenHeader
             title="End User License"
@@ -118,7 +113,6 @@ const EulaScreen = () => {
           showsVerticalScrollIndicator={false}
         >
           <View style={{ width: contentWidth, alignSelf: 'center' }}>
-            
             <Text style={styles.leadText}>
               By downloading or using <Text style={styles.bold}>DhanDiary</Text>, you agree to this
               End User License Agreement. If you do not agree, you must uninstall the app.
@@ -136,7 +130,8 @@ const EulaScreen = () => {
                 <Text style={styles.cardTitle}>Contact</Text>
               </View>
               <Text style={styles.cardBody}>
-                Questions about this license? Reach out and we will reply within a few business days.
+                Questions about this license? Reach out and we will reply within a few business
+                days.
               </Text>
 
               <TouchableOpacity onPress={() => handleEmailPress(CONTACT_EMAIL_PRIMARY)}>
@@ -150,7 +145,6 @@ const EulaScreen = () => {
             <View style={styles.footer}>
               <Text style={styles.footerText}>Last updated: {LAST_UPDATED}</Text>
             </View>
-
           </View>
         </ScrollView>
       </SafeAreaView>

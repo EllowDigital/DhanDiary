@@ -65,11 +65,7 @@ const TermSection = ({ item }: { item: (typeof sections)[0] }) => (
   <View style={styles.card}>
     <View style={styles.cardHeader}>
       <View style={styles.iconContainer}>
-        <MaterialCommunityIcons
-          name={item.icon as any}
-          size={20}
-          color={colors.primary}
-        />
+        <MaterialCommunityIcons name={item.icon as any} size={20} color={colors.primary} />
       </View>
       <Text style={styles.cardTitle}>{item.title}</Text>
     </View>
@@ -93,7 +89,6 @@ const TermsScreen = () => {
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       <SafeAreaView style={styles.safeArea}>
-        
         <View style={{ width: contentWidth, alignSelf: 'center' }}>
           <ScreenHeader
             title="Terms of Use"
@@ -109,12 +104,11 @@ const TermsScreen = () => {
           showsVerticalScrollIndicator={false}
         >
           <View style={{ width: contentWidth, alignSelf: 'center' }}>
-            
             {/* Intro Text */}
             <Text style={styles.leadText}>
               Please read these Terms carefully before using{' '}
-              <Text style={styles.bold}>DhanDiary</Text>. By creating an account or continuing to use
-              the app, you agree to the rules below.
+              <Text style={styles.bold}>DhanDiary</Text>. By creating an account or continuing to
+              use the app, you agree to the rules below.
             </Text>
 
             {/* Mapped Sections */}
@@ -137,7 +131,7 @@ const TermsScreen = () => {
               <TouchableOpacity onPress={() => handleEmailPress(CONTACT_EMAIL_PRIMARY)}>
                 <Text style={styles.linkText}>{CONTACT_EMAIL_PRIMARY}</Text>
               </TouchableOpacity>
-              
+
               <TouchableOpacity onPress={() => handleEmailPress(CONTACT_EMAIL_SECONDARY)}>
                 <Text style={styles.secondaryEmail}>{CONTACT_EMAIL_SECONDARY}</Text>
               </TouchableOpacity>
@@ -147,7 +141,6 @@ const TermsScreen = () => {
             <View style={styles.footer}>
               <Text style={styles.footerText}>Last updated: {LAST_UPDATED}</Text>
             </View>
-
           </View>
         </ScrollView>
       </SafeAreaView>

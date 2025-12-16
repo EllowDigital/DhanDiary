@@ -67,11 +67,7 @@ const PolicySection = ({ item }: { item: SectionData }) => (
   <View style={styles.sectionContainer}>
     <View style={styles.sectionHeader}>
       <View style={styles.iconContainer}>
-        <MaterialCommunityIcons
-          name={item.icon}
-          size={20}
-          color={colors.primary}
-        />
+        <MaterialCommunityIcons name={item.icon} size={20} color={colors.primary} />
       </View>
       <Text style={styles.sectionTitle}>{item.title}</Text>
     </View>
@@ -95,7 +91,6 @@ const PrivacyPolicyScreen = () => {
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       <SafeAreaView style={styles.safeArea}>
-        
         <View style={{ width: contentWidth, alignSelf: 'center' }}>
           <ScreenHeader
             title="Privacy Policy"
@@ -111,12 +106,11 @@ const PrivacyPolicyScreen = () => {
           showsVerticalScrollIndicator={false}
         >
           <View style={{ width: contentWidth, alignSelf: 'center' }}>
-            
             {/* Introduction */}
             <Text style={styles.leadText}>
               {COMPANY_NAME} built <Text style={styles.bold}>DhanDiary</Text> to help individuals
-              track their cash flow safely. This policy explains what data we collect, why we process
-              it, and your choices.
+              track their cash flow safely. This policy explains what data we collect, why we
+              process it, and your choices.
             </Text>
 
             {/* Policy Sections */}
@@ -136,11 +130,17 @@ const PrivacyPolicyScreen = () => {
                 Questions or privacy requests? We aim to respond within 3 business days.
               </Text>
 
-              <TouchableOpacity onPress={() => handleEmailPress(SUPPORT_EMAIL_PRIMARY)} activeOpacity={0.7}>
+              <TouchableOpacity
+                onPress={() => handleEmailPress(SUPPORT_EMAIL_PRIMARY)}
+                activeOpacity={0.7}
+              >
                 <Text style={styles.emailLink}>{SUPPORT_EMAIL_PRIMARY}</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity onPress={() => handleEmailPress(SUPPORT_EMAIL_SECONDARY)} activeOpacity={0.7}>
+              <TouchableOpacity
+                onPress={() => handleEmailPress(SUPPORT_EMAIL_SECONDARY)}
+                activeOpacity={0.7}
+              >
                 <Text style={styles.secondaryEmail}>Alt: {SUPPORT_EMAIL_SECONDARY}</Text>
               </TouchableOpacity>
             </View>
@@ -150,7 +150,6 @@ const PrivacyPolicyScreen = () => {
               <Text style={styles.footerText}>Last updated: {LAST_UPDATED}</Text>
               <Text style={styles.footerSubText}>Updates will be posted here.</Text>
             </View>
-
           </View>
         </ScrollView>
       </SafeAreaView>
