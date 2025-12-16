@@ -1,26 +1,52 @@
 import React, { useMemo, useState } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, Alert, Platform, TouchableOpacity } from 'react-native';
+import { 
+  View, 
+  StyleSheet, 
+  ScrollView, 
+  Pressable, 
+  Alert, 
+  Platform, 
+  TouchableOpacity, 
+  UIManager,
+  LayoutAnimation
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text, Button } from '@rneui/themed';
-import dayjs from 'dayjs';
 import ScreenHeader from '../components/ScreenHeader';
 import { useEntries } from '../hooks/useEntries';
 import { useAuth } from '../hooks/useAuth';
-import { colors, spacing } from '../utils/design';
+import { colors } from '../utils/design';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { exportToFile, shareFile } from '../utils/reportExporter';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { LocalEntry } from '../types/entries';
 import FullScreenSpinner from '../components/FullScreenSpinner';
+
+// --- DAYJS CONFIGURATION ---
+import dayjs from 'dayjs';
+import weekOfYear from 'dayjs/plugin/weekOfYear';
+import isoWeek from 'dayjs/plugin/isoWeek';
+
+// Extend dayjs with required plugins
+dayjs.extend(weekOfYear);
+dayjs.extend(isoWeek);
+
+// Fix for LayoutAnimation warning on Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+type Mode = 'Today' | 'Day' | 'Week' | 'Month' | 'Custom' | 'All';
 
 const ExportScreen = () => {
   const { user } = useAuth();
   const { entries = [] } = useEntries(user?.uid);
   
-  // State
+  // --- STATE ---
   const [exporting, setExporting] = useState(false);
-  const [mode, setMode] = useState<'Day' | 'Week' | 'Month' | 'Custom' | 'All'>('Month');
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [mode, setMode] = useState<Mode>('Month');
+  
+  // Pivot Date (Used for Day, Week, Month navigation)
+  const [pivotDate, setPivotDate] = useState(dayjs());
   
   // Custom Range State
   const [customStart, setCustomStart] = useState(new Date());
@@ -33,43 +59,87 @@ const ExportScreen = () => {
   const [includeNotes, setIncludeNotes] = useState(true);
   const [groupBy, setGroupBy] = useState<'none' | 'category' | 'date'>('date');
 
-  // --- FILTER LOGIC ---
+  // --- ACTIONS ---
+
+  const handleModeChange = (newMode: Mode) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setMode(newMode);
+    // Reset pivot to today when switching modes for better UX
+    if (newMode === 'Today') {
+      setPivotDate(dayjs());
+    }
+  };
+
+  const handlePrev = () => {
+    if (mode === 'Day') setPivotDate(pivotDate.subtract(1, 'day'));
+    else if (mode === 'Week') setPivotDate(pivotDate.subtract(1, 'week'));
+    else if (mode === 'Month') setPivotDate(pivotDate.subtract(1, 'month'));
+  };
+
+  const handleNext = () => {
+    if (mode === 'Day') setPivotDate(pivotDate.add(1, 'day'));
+    else if (mode === 'Week') setPivotDate(pivotDate.add(1, 'week'));
+    else if (mode === 'Month') setPivotDate(pivotDate.add(1, 'month'));
+  };
+
+  // --- DATA PROCESSING ---
+
+  const dateLabel = useMemo(() => {
+    if (mode === 'Day') return pivotDate.format('DD MMM YYYY');
+    if (mode === 'Month') return pivotDate.format('MMMM YYYY');
+    if (mode === 'Week') {
+      const start = pivotDate.startOf('week');
+      const end = pivotDate.endOf('week');
+      // If same month: "12 - 18 Nov"
+      if (start.month() === end.month()) return `${start.format('DD')} - ${end.format('DD MMM')}`;
+      // Diff month: "29 Oct - 04 Nov"
+      return `${start.format('DD MMM')} - ${end.format('DD MMM')}`;
+    }
+    return '';
+  }, [mode, pivotDate]);
+
   const targetEntries = useMemo(() => {
     if (!entries || entries.length === 0) return [];
     
     let filtered = [...entries];
-    const targetDate = dayjs(selectedDate);
 
-    if (mode === 'Day') {
-      filtered = filtered.filter(e => dayjs(e.date).isSame(targetDate, 'day'));
-    } else if (mode === 'Week') {
-      const start = targetDate.startOf('week');
-      const end = targetDate.endOf('week');
+    if (mode === 'Today') {
+      const today = dayjs();
+      filtered = filtered.filter(e => dayjs(e.date || e.created_at).isSame(today, 'day'));
+    } 
+    else if (mode === 'Day') {
+      filtered = filtered.filter(e => dayjs(e.date || e.created_at).isSame(pivotDate, 'day'));
+    } 
+    else if (mode === 'Week') {
+      const start = pivotDate.startOf('week');
+      const end = pivotDate.endOf('week');
       filtered = filtered.filter(e => {
-        const d = dayjs(e.date);
-        return d.isAfter(start.subtract(1, 'ms')) && d.isBefore(end.add(1, 'ms'));
+        const d = dayjs(e.date || e.created_at);
+        return d.isAfter(start.subtract(1, 'second')) && d.isBefore(end.add(1, 'second'));
       });
-    } else if (mode === 'Month') {
-      const start = targetDate.startOf('month');
-      const end = targetDate.endOf('month');
+    } 
+    else if (mode === 'Month') {
+      const start = pivotDate.startOf('month');
+      const end = pivotDate.endOf('month');
       filtered = filtered.filter(e => {
-        const d = dayjs(e.date);
-        return d.isAfter(start.subtract(1, 'ms')) && d.isBefore(end.add(1, 'ms'));
+        const d = dayjs(e.date || e.created_at);
+        return d.isAfter(start.subtract(1, 'second')) && d.isBefore(end.add(1, 'second'));
       });
-    } else if (mode === 'Custom') {
+    } 
+    else if (mode === 'Custom') {
       const s = dayjs(customStart).startOf('day');
       const e = dayjs(customEnd).endOf('day');
       filtered = filtered.filter(ent => {
-        const d = dayjs(ent.date);
-        return d.isAfter(s.subtract(1, 'ms')) && d.isBefore(e.add(1, 'ms'));
+        const d = dayjs(ent.date || ent.created_at);
+        return d.isAfter(s.subtract(1, 'second')) && d.isBefore(e.add(1, 'second'));
       });
     }
     
     // Sort by date descending
-    return filtered.sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf());
-  }, [entries, mode, selectedDate, customStart, customEnd]);
+    return filtered.sort((a, b) => dayjs(b.date || b.created_at).valueOf() - dayjs(a.date || a.created_at).valueOf());
+  }, [entries, mode, pivotDate, customStart, customEnd]);
 
-  // --- EXPORT HANDLER ---
+  // --- EXPORT ---
   const handleExport = async () => {
     if (targetEntries.length === 0) {
       return Alert.alert('No Data', 'There are no transactions to export for the selected range.');
@@ -77,23 +147,24 @@ const ExportScreen = () => {
 
     setExporting(true);
     try {
-      const title = `DhanDiary_Report_${dayjs().format('YYYYMMDD_HHmm')}`;
+      const title = `Report_${dayjs().format('YYYY-MM-DD_HHmm')}`;
       
       // Prepare data
       const dataToExport = includeNotes 
         ? targetEntries 
-        : targetEntries.map(({ note, ...rest }) => rest);
+        : targetEntries.map(({ note, ...rest }: any) => rest);
 
-      // Generate File
+      let periodLabel = 'All Time';
+      if (mode === 'Custom') periodLabel = `${dayjs(customStart).format('DD MMM')} - ${dayjs(customEnd).format('DD MMM')}`;
+      else if (mode === 'Today') periodLabel = `Today (${dayjs().format('DD MMM')})`;
+      else if (['Day', 'Week', 'Month'].includes(mode)) periodLabel = dateLabel;
+
       const filePath = await exportToFile(format, dataToExport, {
         title,
-        periodLabel: mode === 'Custom' 
-          ? `${dayjs(customStart).format('DD MMM')} - ${dayjs(customEnd).format('DD MMM')}`
-          : mode === 'All' ? 'All Time' : dayjs(selectedDate).format('MMMM YYYY'),
+        periodLabel,
         groupBy
       });
 
-      // Share
       if (filePath) {
         await shareFile(filePath);
       } else {
@@ -107,12 +178,13 @@ const ExportScreen = () => {
   };
 
   // --- RENDER HELPERS ---
-  const renderOption = (label: string, isSelected: boolean, onPress: () => void) => (
+  const renderChip = (label: string, value: Mode) => (
     <Pressable
-      style={[styles.chip, isSelected && styles.chipActive]}
-      onPress={onPress}
+      key={value}
+      style={[styles.chip, mode === value && styles.chipActive]}
+      onPress={() => handleModeChange(value)}
     >
-      <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>{label}</Text>
+      <Text style={[styles.chipText, mode === value && styles.chipTextActive]}>{label}</Text>
     </Pressable>
   );
 
@@ -122,85 +194,113 @@ const ExportScreen = () => {
       
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         
-        {/* SECTION 1: RANGE */}
+        {/* SECTION 1: RANGE SELECTION */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>1. Select Range</Text>
+          
           <View style={styles.chipRow}>
-            {['Week', 'Month', 'Custom', 'All'].map(m => (
-              <View key={m} style={styles.chipWrapper}>
-                {renderOption(m, mode === m, () => setMode(m as any))}
-              </View>
-            ))}
+            {renderChip('Today', 'Today')}
+            {renderChip('Daily', 'Day')}
+            {renderChip('Weekly', 'Week')}
+            {renderChip('Monthly', 'Month')}
+            {renderChip('Custom', 'Custom')}
+            {renderChip('All', 'All')}
           </View>
 
-          {/* Date Pickers based on Mode */}
-          {mode === 'Month' && (
+          {/* DYNAMIC DATE NAVIGATOR (For Day, Week, Month) */}
+          {['Day', 'Week', 'Month'].includes(mode) && (
              <View style={styles.dateControl}>
-                <TouchableOpacity onPress={() => setSelectedDate(dayjs(selectedDate).subtract(1, 'month').toDate())} style={styles.arrowBtn}>
-                   <MaterialIcon name="chevron-left" size={24} color={colors.text} />
+                <TouchableOpacity onPress={handlePrev} style={styles.arrowBtn} hitSlop={{top:10,bottom:10,left:10,right:10}}>
+                   <MaterialIcon name="chevron-left" size={26} color={colors.text} />
                 </TouchableOpacity>
-                <Text style={styles.dateLabel}>{dayjs(selectedDate).format('MMMM YYYY')}</Text>
-                <TouchableOpacity onPress={() => setSelectedDate(dayjs(selectedDate).add(1, 'month').toDate())} style={styles.arrowBtn}>
-                   <MaterialIcon name="chevron-right" size={24} color={colors.text} />
+                
+                <View style={{ alignItems: 'center' }}>
+                  <Text style={styles.dateLabel}>{dateLabel}</Text>
+                  {mode === 'Week' && <Text style={styles.subLabel}>Week {pivotDate.week()}</Text>}
+                </View>
+
+                <TouchableOpacity onPress={handleNext} style={styles.arrowBtn} hitSlop={{top:10,bottom:10,left:10,right:10}}>
+                   <MaterialIcon name="chevron-right" size={26} color={colors.text} />
                 </TouchableOpacity>
              </View>
           )}
 
+          {/* CUSTOM PICKERS */}
           {mode === 'Custom' && (
             <View style={styles.customRangeRow}>
                <TouchableOpacity style={styles.datePickerBtn} onPress={() => setShowStartPicker(true)}>
                   <Text style={styles.datePickerLabel}>Start</Text>
                   <Text style={styles.datePickerValue}>{dayjs(customStart).format('DD MMM YYYY')}</Text>
+                  <MaterialIcon name="event" size={18} color={colors.primary} style={{position:'absolute', right:10, top: 12}}/>
                </TouchableOpacity>
                <MaterialIcon name="arrow-forward" size={20} color={colors.muted} />
                <TouchableOpacity style={styles.datePickerBtn} onPress={() => setShowEndPicker(true)}>
                   <Text style={styles.datePickerLabel}>End</Text>
                   <Text style={styles.datePickerValue}>{dayjs(customEnd).format('DD MMM YYYY')}</Text>
+                  <MaterialIcon name="event" size={18} color={colors.primary} style={{position:'absolute', right:10, top: 12}}/>
                </TouchableOpacity>
             </View>
           )}
           
-          <Text style={styles.summaryText}>
-             Found <Text style={{fontWeight:'700', color: colors.primary}}>{targetEntries.length}</Text> records
-          </Text>
+          <View style={styles.summaryContainer}>
+             <MaterialIcon name="analytics" size={16} color={colors.primary} />
+             <Text style={styles.summaryText}>
+               Found <Text style={{fontWeight:'800', color: colors.text}}>{targetEntries.length}</Text> records
+             </Text>
+          </View>
         </View>
 
-        {/* SECTION 2: FORMAT */}
+        {/* SECTION 2: FORMAT OPTIONS */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>2. Format & Options</Text>
-           <View style={styles.chipRow}>
-             <View style={styles.chipWrapper}>{renderOption('PDF Report', format === 'pdf', () => setFormat('pdf'))}</View>
-             <View style={styles.chipWrapper}>{renderOption('Excel (CSV)', format === 'csv', () => setFormat('csv'))}</View>
-             <View style={styles.chipWrapper}>{renderOption('JSON', format === 'json', () => setFormat('json'))}</View>
-           </View>
+          
+          <View style={styles.formatRow}>
+             {['pdf', 'csv', 'json'].map((f) => (
+                <Pressable 
+                  key={f} 
+                  style={[styles.formatBtn, format === f && styles.formatBtnActive]}
+                  onPress={() => setFormat(f as any)}
+                >
+                   <MaterialIcon 
+                      name={f === 'pdf' ? 'picture-as-pdf' : f === 'csv' ? 'table-view' : 'code'} 
+                      size={20} 
+                      color={format === f ? colors.primary : colors.muted} 
+                   />
+                   <Text style={[styles.formatText, format === f && styles.formatTextActive]}>
+                      {f.toUpperCase()}
+                   </Text>
+                </Pressable>
+             ))}
+          </View>
 
-          <View style={styles.optionsRow}>
+          <View style={styles.optionsContainer}>
              <Pressable style={styles.checkboxRow} onPress={() => setIncludeNotes(!includeNotes)}>
-                <MaterialIcon name={includeNotes ? "check-box" : "check-box-outline-blank"} size={24} color={colors.primary} />
+                <MaterialIcon name={includeNotes ? "check-box" : "check-box-outline-blank"} size={22} color={colors.primary} />
                 <Text style={styles.checkboxLabel}>Include Notes</Text>
              </Pressable>
              
              {format === 'pdf' && (
                <Pressable style={styles.checkboxRow} onPress={() => setGroupBy(groupBy === 'category' ? 'date' : 'category')}>
-                  <MaterialIcon name={groupBy === 'category' ? "check-box" : "check-box-outline-blank"} size={24} color={colors.primary} />
+                  <MaterialIcon name={groupBy === 'category' ? "check-box" : "check-box-outline-blank"} size={22} color={colors.primary} />
                   <Text style={styles.checkboxLabel}>Group by Category</Text>
                </Pressable>
              )}
           </View>
         </View>
 
-        {/* ACTION */}
+        {/* EXPORT BUTTON */}
         <Button
-          title={exporting ? "Generating..." : `Export ${format.toUpperCase()}`}
+          title={exporting ? "Generating Report..." : `Export ${format.toUpperCase()}`}
           onPress={handleExport}
           disabled={exporting || targetEntries.length === 0}
           loading={exporting}
           buttonStyle={styles.exportBtn}
-          containerStyle={{ marginTop: 20 }}
-          icon={<MaterialIcon name="file-download" size={20} color="white" style={{marginRight:8}} />}
+          containerStyle={{ marginTop: 10, marginBottom: 40 }}
+          titleStyle={{ fontWeight: '700', fontSize: 16 }}
+          icon={!exporting ? <MaterialIcon name="file-download" size={20} color="white" style={{marginRight:8}} /> : undefined}
         />
 
-        {/* Pickers */}
+        {/* HIDDEN PICKERS */}
         {showStartPicker && (
           <DateTimePicker
             value={customStart}
@@ -238,44 +338,42 @@ const styles = StyleSheet.create({
   
   section: {
     backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
     elevation: 2,
   },
   sectionTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#334155',
-    marginBottom: 12,
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#64748B',
+    marginBottom: 16,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   
+  // Chips
   chipRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginBottom: 12,
-  },
-  chipWrapper: {
-    marginRight: 8,
-    marginBottom: 8,
+    gap: 8,
+    marginBottom: 16,
   },
   chip: {
     paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
+    paddingHorizontal: 14,
+    borderRadius: 12,
     backgroundColor: '#F1F5F9',
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
   chipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+    backgroundColor: colors.text, // Dark active state
+    borderColor: colors.text,
   },
   chipText: {
     fontSize: 13,
@@ -286,29 +384,37 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
 
-  // Date Control
+  // Date Navigator
   dateControl: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: '#F8FAFC',
-    borderRadius: 12,
-    padding: 8,
-    marginTop: 8,
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    marginTop: 4,
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
   arrowBtn: {
-    padding: 8,
-    borderRadius: 8,
+    padding: 6,
+    borderRadius: 10,
     backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    elevation: 1,
   },
   dateLabel: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '700',
     color: '#334155',
+  },
+  subLabel: {
+    fontSize: 11,
+    color: '#94A3B8',
+    fontWeight: '600',
+    marginTop: 2,
   },
 
   // Custom Range
@@ -316,51 +422,99 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 8,
+    marginTop: 4,
+    gap: 12,
   },
   datePickerBtn: {
     flex: 1,
     backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: '#CBD5E1',
-    borderRadius: 10,
-    padding: 10,
+    borderRadius: 14,
+    padding: 12,
+    position: 'relative',
   },
   datePickerLabel: {
-    fontSize: 11,
+    fontSize: 10,
     color: '#64748B',
     marginBottom: 2,
+    fontWeight: '700',
     textTransform: 'uppercase',
   },
   datePickerValue: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#334155',
   },
 
+  summaryContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginTop: 16,
+    gap: 6,
+  },
   summaryText: {
-    marginTop: 12,
     fontSize: 13,
     color: '#64748B',
-    textAlign: 'right',
+    fontWeight: '500',
   },
 
-  // Options
-  optionsRow: {
-    marginTop: 12,
+  // Format
+  formatRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+  },
+  formatBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    gap: 6,
+  },
+  formatBtnActive: {
+    backgroundColor: '#F0F9FF',
+    borderColor: colors.primary,
+  },
+  formatText: {
+    fontWeight: '700',
+    color: '#64748B',
+    fontSize: 13,
+  },
+  formatTextActive: {
+    color: colors.primary,
+  },
+
+  optionsContainer: {
+    gap: 12,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
   },
   checkboxRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 10,
   },
   checkboxLabel: {
     fontSize: 14,
     color: '#334155',
+    fontWeight: '500',
   },
 
   exportBtn: {
     backgroundColor: colors.primary,
-    borderRadius: 12,
-    paddingVertical: 14,
+    borderRadius: 16,
+    paddingVertical: 16,
+    elevation: 3,
+    shadowColor: colors.primary,
+    shadowOffset: {width:0, height:4},
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
   },
 });
