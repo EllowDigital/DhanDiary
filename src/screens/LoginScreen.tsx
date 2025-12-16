@@ -187,7 +187,7 @@ const LoginScreen = () => {
               text: 'Go to Sign In',
               onPress: () => {
                 try {
-                  // If we are already on Login screen, just prefill. 
+                  // If we are already on Login screen, just prefill.
                   // If navigating from register, navigate here.
                   if (prefill) setEmail(prefill);
                 } catch (err) {
@@ -244,7 +244,7 @@ const LoginScreen = () => {
                   source={require('../../assets/splash-icon.png')}
                   style={styles.logoCentered}
                   resizeMode="contain"
-                  defaultSource={{ uri: 'https://via.placeholder.com/60' }} 
+                  defaultSource={{ uri: 'https://via.placeholder.com/60' }}
                 />
               </View>
               <Text style={styles.appName}>Welcome Back</Text>
@@ -272,7 +272,11 @@ const LoginScreen = () => {
                 secureTextEntry={!showPass}
                 containerStyle={styles.fieldSpacing}
                 rightAccessory={
-                  <TouchableOpacity onPress={() => setShowPass(!showPass)} style={styles.eyeIcon} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <TouchableOpacity
+                    onPress={() => setShowPass(!showPass)}
+                    style={styles.eyeIcon}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
                     <MaterialIcon
                       name={showPass ? 'visibility' : 'visibility-off'}
                       color={colors.muted || '#9CA3AF'}

@@ -152,7 +152,14 @@ export async function buildPdfFile(
 export async function exportToFile(
   format: 'csv' | 'json' | 'pdf',
   entries: Entry[],
-  opts: { fields?: string[]; pretty?: boolean; title?: string; aiLayout?: boolean; periodLabel?: string; groupBy?: string } = {}
+  opts: {
+    fields?: string[];
+    pretty?: boolean;
+    title?: string;
+    aiLayout?: boolean;
+    periodLabel?: string;
+    groupBy?: string;
+  } = {}
 ) {
   if (!entries) throw new Error('No entries provided');
   if (format === 'csv') {
@@ -189,7 +196,14 @@ export async function exportToFile(
 export async function exportFromUser(
   userId: string,
   format: 'csv' | 'json' | 'pdf',
-  opts: { fields?: string[]; pretty?: boolean; title?: string; aiLayout?: boolean; periodLabel?: string; groupBy?: string } = {},
+  opts: {
+    fields?: string[];
+    pretty?: boolean;
+    title?: string;
+    aiLayout?: boolean;
+    periodLabel?: string;
+    groupBy?: string;
+  } = {},
   pageSize = 500
 ) {
   if (!userId) throw new Error('userId required for export');

@@ -58,14 +58,22 @@ const MoreScreen: React.FC = () => {
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true, easing: Easing.out(Easing.cubic) }),
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic),
+      }),
       Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, damping: 16 }),
     ]).start();
   }, []);
 
   // --- ACTIONS ---
-  const navigateParent = useCallback((route: RouteName) => navigation.navigate(route as any), [navigation]);
-  
+  const navigateParent = useCallback(
+    (route: RouteName) => navigation.navigate(route as any),
+    [navigation]
+  );
+
   const handleEmail = useCallback(() => {
     Linking.openURL('mailto:sarwanyadav26@outlook.com?subject=DhanDiary%20Support');
   }, []);
@@ -79,23 +87,64 @@ const MoreScreen: React.FC = () => {
   }, []);
 
   // --- MENU CONFIG ---
-  const primaryLinks = useMemo<MenuItem[]>(() => [
-    { icon: 'bar-chart', label: 'Analytics', description: 'Spending trends & reports', action: () => navigateParent('Stats'), color: colors.accentOrange },
-    { icon: 'person', label: 'Account', description: 'Profile & personal details', action: () => navigateParent('Account'), color: colors.primary },
-    { icon: 'tune', label: 'Settings', description: 'Preferences & backups', action: () => navigateParent('Settings'), color: colors.secondary },
-  ], [navigateParent]);
+  const primaryLinks = useMemo<MenuItem[]>(
+    () => [
+      {
+        icon: 'bar-chart',
+        label: 'Analytics',
+        description: 'Spending trends & reports',
+        action: () => navigateParent('Stats'),
+        color: colors.accentOrange,
+      },
+      {
+        icon: 'person',
+        label: 'Account',
+        description: 'Profile & personal details',
+        action: () => navigateParent('Account'),
+        color: colors.primary,
+      },
+      {
+        icon: 'tune',
+        label: 'Settings',
+        description: 'Preferences & backups',
+        action: () => navigateParent('Settings'),
+        color: colors.secondary,
+      },
+    ],
+    [navigateParent]
+  );
 
-  const supportLinks = useMemo<MenuItem[]>(() => [
-    { icon: 'map', label: 'Roadmap', description: 'Upcoming features', action: handleRoadmap, color: colors.accentGreen },
-    { icon: 'info-outline', label: 'About', description: 'Version & legal', action: () => navigateParent('About'), color: colors.accentBlue },
-    { icon: 'support-agent', label: 'Support', description: 'Contact us', action: handleEmail, color: colors.accentRed },
-  ], [handleRoadmap, handleEmail, navigateParent]);
+  const supportLinks = useMemo<MenuItem[]>(
+    () => [
+      {
+        icon: 'map',
+        label: 'Roadmap',
+        description: 'Upcoming features',
+        action: handleRoadmap,
+        color: colors.accentGreen,
+      },
+      {
+        icon: 'info-outline',
+        label: 'About',
+        description: 'Version & legal',
+        action: () => navigateParent('About'),
+        color: colors.accentBlue,
+      },
+      {
+        icon: 'support-agent',
+        label: 'Support',
+        description: 'Contact us',
+        action: handleEmail,
+        color: colors.accentRed,
+      },
+    ],
+    [handleRoadmap, handleEmail, navigateParent]
+  );
 
   return (
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       <SafeAreaView style={styles.safeArea}>
-        
         {/* HEADER */}
         <View style={styles.headerWrapper}>
           <View style={{ width: contentWidth }}>
@@ -109,7 +158,9 @@ const MoreScreen: React.FC = () => {
           </View>
         </View>
 
-        <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+        <Animated.View
+          style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}
+        >
           <ScrollView
             style={styles.scroll}
             contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomPadding }]}
@@ -118,7 +169,6 @@ const MoreScreen: React.FC = () => {
             showsVerticalScrollIndicator={false}
           >
             <View style={{ width: contentWidth }}>
-              
               {/* HERO CARD */}
               <View style={styles.heroCard}>
                 <Svg style={StyleSheet.absoluteFill}>
@@ -138,10 +188,17 @@ const MoreScreen: React.FC = () => {
                     <MaterialIcon name="verified" size={14} color="rgba(255,255,255,0.6)" />
                   </View>
                   <Text style={styles.heroTitle}>DhanDiary Hub</Text>
-                  <Text style={styles.heroSubtitle}>Manage your data, preferences, and account.</Text>
+                  <Text style={styles.heroSubtitle}>
+                    Manage your data, preferences, and account.
+                  </Text>
                 </View>
-                
-                <MaterialIcon name="dashboard" size={80} color="rgba(255,255,255,0.1)" style={styles.heroIconPos} />
+
+                <MaterialIcon
+                  name="dashboard"
+                  size={80}
+                  color="rgba(255,255,255,0.1)"
+                  style={styles.heroIconPos}
+                />
               </View>
 
               {/* SECTION: ESSENTIALS */}
@@ -167,7 +224,6 @@ const MoreScreen: React.FC = () => {
                 </Text>
                 <Text style={styles.footerSubText}>Made with ❤️ in India</Text>
               </View>
-
             </View>
           </ScrollView>
         </Animated.View>
@@ -177,14 +233,29 @@ const MoreScreen: React.FC = () => {
 };
 
 // --- SUB-COMPONENT: MENU ROW ---
-const MenuRow = ({ icon, label, description, action, color, isLast }: MenuItem & { isLast: boolean }) => (
-  <TouchableOpacity onPress={action} activeOpacity={0.7} style={[styles.row, isLast && styles.rowLast]}>
+const MenuRow = ({
+  icon,
+  label,
+  description,
+  action,
+  color,
+  isLast,
+}: MenuItem & { isLast: boolean }) => (
+  <TouchableOpacity
+    onPress={action}
+    activeOpacity={0.7}
+    style={[styles.row, isLast && styles.rowLast]}
+  >
     <View style={[styles.iconBox, { backgroundColor: `${color}15` }]}>
       <MaterialIcon name={icon} size={22} color={color} />
     </View>
     <View style={styles.rowTextContainer}>
-      <Text style={styles.rowTitle} numberOfLines={1}>{label}</Text>
-      <Text style={styles.rowDesc} numberOfLines={1}>{description}</Text>
+      <Text style={styles.rowTitle} numberOfLines={1}>
+        {label}
+      </Text>
+      <Text style={styles.rowDesc} numberOfLines={1}>
+        {description}
+      </Text>
     </View>
     <MaterialIcon name="chevron-right" size={20} color={colors.border} />
   </TouchableOpacity>
@@ -195,27 +266,95 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   safeArea: { flex: 1 },
   headerWrapper: { alignItems: 'center', width: '100%' },
-  
+
   scroll: { flex: 1 },
   scrollContent: { flexGrow: 1, alignItems: 'center', paddingTop: spacing(2) },
 
   // Hero
-  heroCard: { height: 160, borderRadius: 24, marginBottom: 28, overflow: 'hidden', position: 'relative', elevation: 8, shadowColor: colors.primary, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.25, shadowRadius: 16 },
+  heroCard: {
+    height: 160,
+    borderRadius: 24,
+    marginBottom: 28,
+    overflow: 'hidden',
+    position: 'relative',
+    elevation: 8,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+  },
   heroContent: { padding: 24, zIndex: 2, justifyContent: 'center', height: '100%' },
   heroTopRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
-  heroEyebrow: { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', letterSpacing: 1 },
-  heroTitle: { fontSize: 28, fontWeight: '800', color: '#FFFFFF', marginBottom: 4, letterSpacing: -0.5 },
-  heroSubtitle: { fontSize: 14, color: 'rgba(255,255,255,0.85)', fontWeight: '500', maxWidth: '85%' },
-  heroIconPos: { position: 'absolute', right: -10, bottom: -10, zIndex: 1, transform: [{ rotate: '-10deg' }] },
+  heroEyebrow: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.7)',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  heroTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginBottom: 4,
+    letterSpacing: -0.5,
+  },
+  heroSubtitle: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.85)',
+    fontWeight: '500',
+    maxWidth: '85%',
+  },
+  heroIconPos: {
+    position: 'absolute',
+    right: -10,
+    bottom: -10,
+    zIndex: 1,
+    transform: [{ rotate: '-10deg' }],
+  },
 
   // Menu Groups
-  sectionLabel: { fontSize: 13, fontWeight: '700', color: colors.muted, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10, marginLeft: 8 },
-  menuGroup: { backgroundColor: colors.card, borderRadius: 20, borderWidth: 1, borderColor: colors.border, marginBottom: 24, overflow: 'hidden', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.03, shadowRadius: 8 },
-  
+  sectionLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.muted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 10,
+    marginLeft: 8,
+  },
+  menuGroup: {
+    backgroundColor: colors.card,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 24,
+    overflow: 'hidden',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+  },
+
   // Rows
-  row: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: colors.surfaceMuted || '#F3F4F6', backgroundColor: colors.card },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.surfaceMuted || '#F3F4F6',
+    backgroundColor: colors.card,
+  },
   rowLast: { borderBottomWidth: 0 },
-  iconBox: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 14 },
+  iconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
   rowTextContainer: { flex: 1, justifyContent: 'center', marginRight: 8 },
   rowTitle: { fontSize: 16, fontWeight: '600', color: colors.text, marginBottom: 2 },
   rowDesc: { fontSize: 13, color: colors.muted },

@@ -32,7 +32,7 @@ const AuthScreen: React.FC = () => {
   const { showToast } = useToast();
   const navigation: any = useNavigation();
   const isOnline = useInternetStatus();
-  
+
   // State
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [name, setName] = useState('');
@@ -63,8 +63,9 @@ const AuthScreen: React.FC = () => {
   const handleLogin = async () => {
     if (loading) return;
     Keyboard.dismiss();
-    
-    if (!email || !password) return Alert.alert('Missing Fields', 'Please enter both email and password.');
+
+    if (!email || !password)
+      return Alert.alert('Missing Fields', 'Please enter both email and password.');
     if (!isOnline) return Alert.alert('Offline', 'An internet connection is required.');
 
     setLoading(true);
@@ -89,7 +90,8 @@ const AuthScreen: React.FC = () => {
 
     if (!name.trim()) return Alert.alert('Missing Name', 'Please enter your full name.');
     if (!email.trim()) return Alert.alert('Missing Email', 'Please enter your email.');
-    if (password.length < 8) return Alert.alert('Weak Password', 'Password must be at least 8 characters.');
+    if (password.length < 8)
+      return Alert.alert('Weak Password', 'Password must be at least 8 characters.');
     if (!isOnline) return Alert.alert('Offline', 'Internet connection required.');
 
     setLoading(true);
@@ -110,7 +112,7 @@ const AuthScreen: React.FC = () => {
 
   const handleForgotPassword = async () => {
     if (!email) return Alert.alert('Enter Email', 'Please enter your email to reset password.');
-    
+
     setLoading(true);
     try {
       await sendPasswordReset(email);
@@ -150,7 +152,7 @@ const AuthScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background || '#F0F2F5'} />
-      
+
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
@@ -161,8 +163,9 @@ const AuthScreen: React.FC = () => {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Animated.View style={[styles.card, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
-            
+          <Animated.View
+            style={[styles.card, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}
+          >
             {/* LOGO & TITLE */}
             <View style={styles.headerContainer}>
               <View style={styles.logoBadge}>
@@ -175,7 +178,9 @@ const AuthScreen: React.FC = () => {
               </View>
               <Text style={styles.appName}>Welcome Back</Text>
               <Text style={styles.appTagline}>
-                {mode === 'login' ? 'Sign in to access your finances' : 'Create an account to get started'}
+                {mode === 'login'
+                  ? 'Sign in to access your finances'
+                  : 'Create an account to get started'}
               </Text>
             </View>
 
@@ -210,8 +215,16 @@ const AuthScreen: React.FC = () => {
                 secureTextEntry={!showPass}
                 containerStyle={styles.fieldSpacing}
                 rightAccessory={
-                  <TouchableOpacity onPress={() => setShowPass(!showPass)} style={styles.eyeIcon} hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
-                    <MaterialIcon name={showPass ? 'visibility' : 'visibility-off'} color={colors.muted || '#9CA3AF'} size={20} />
+                  <TouchableOpacity
+                    onPress={() => setShowPass(!showPass)}
+                    style={styles.eyeIcon}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <MaterialIcon
+                      name={showPass ? 'visibility' : 'visibility-off'}
+                      color={colors.muted || '#9CA3AF'}
+                      size={20}
+                    />
                   </TouchableOpacity>
                 }
               />
@@ -225,20 +238,45 @@ const AuthScreen: React.FC = () => {
 
             {/* ACTION BUTTON */}
             <Button
-              title={loading ? (mode === 'login' ? 'Signing In...' : 'Creating...') : (mode === 'login' ? 'Sign In' : 'Create Account')}
+              title={
+                loading
+                  ? mode === 'login'
+                    ? 'Signing In...'
+                    : 'Creating...'
+                  : mode === 'login'
+                    ? 'Sign In'
+                    : 'Create Account'
+              }
               onPress={mode === 'login' ? handleLogin : handleRegister}
               disabled={isLoading}
               loading={loading}
               buttonStyle={styles.primaryButton}
               containerStyle={styles.buttonContainer}
               titleStyle={styles.buttonText}
-              icon={!loading ? <MaterialIcon name={mode === 'login' ? 'login' : 'person-add'} size={20} color="white" style={{ marginRight: 8 }} /> : undefined}
+              icon={
+                !loading ? (
+                  <MaterialIcon
+                    name={mode === 'login' ? 'login' : 'person-add'}
+                    size={20}
+                    color="white"
+                    style={{ marginRight: 8 }}
+                  />
+                ) : undefined
+              }
             />
 
             {/* TERMS (Register Only) */}
             {mode === 'register' && (
               <Text style={styles.termsText}>
-                By joining, you agree to our <Text style={styles.linkText} onPress={() => navigation.navigate('Terms')}>Terms</Text> and <Text style={styles.linkText} onPress={() => navigation.navigate('PrivacyPolicy')}>Privacy Policy</Text>.
+                By joining, you agree to our{' '}
+                <Text style={styles.linkText} onPress={() => navigation.navigate('Terms')}>
+                  Terms
+                </Text>{' '}
+                and{' '}
+                <Text style={styles.linkText} onPress={() => navigation.navigate('PrivacyPolicy')}>
+                  Privacy Policy
+                </Text>
+                .
               </Text>
             )}
 
@@ -256,7 +294,14 @@ const AuthScreen: React.FC = () => {
                     <Button
                       type="outline"
                       title="Google"
-                      icon={<FontAwesome name="google" size={16} color={colors.text} style={{ marginRight: 8 }} />}
+                      icon={
+                        <FontAwesome
+                          name="google"
+                          size={16}
+                          color={colors.text}
+                          style={{ marginRight: 8 }}
+                        />
+                      }
                       buttonStyle={styles.socialButton}
                       titleStyle={styles.socialButtonText}
                       containerStyle={{ flex: 1 }}
@@ -268,7 +313,14 @@ const AuthScreen: React.FC = () => {
                     <Button
                       type="outline"
                       title="GitHub"
-                      icon={<FontAwesome name="github" size={16} color={colors.text} style={{ marginRight: 8 }} />}
+                      icon={
+                        <FontAwesome
+                          name="github"
+                          size={16}
+                          color={colors.text}
+                          style={{ marginRight: 8 }}
+                        />
+                      }
                       buttonStyle={styles.socialButton}
                       titleStyle={styles.socialButtonText}
                       containerStyle={{ flex: 1 }}
@@ -283,15 +335,12 @@ const AuthScreen: React.FC = () => {
             {/* SWITCH MODE */}
             <View style={styles.footerRow}>
               <Text style={styles.footerText}>
-                {mode === 'login' ? "Don't have an account?" : "Already have an account?"}
+                {mode === 'login' ? "Don't have an account?" : 'Already have an account?'}
               </Text>
               <TouchableOpacity onPress={() => setMode(mode === 'login' ? 'register' : 'login')}>
-                <Text style={styles.switchModeText}>
-                  {mode === 'login' ? 'Sign Up' : 'Log In'}
-                </Text>
+                <Text style={styles.switchModeText}>{mode === 'login' ? 'Sign Up' : 'Log In'}</Text>
               </TouchableOpacity>
             </View>
-
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -306,7 +355,7 @@ export default AuthScreen;
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F0F2F5' },
   scrollContent: { flexGrow: 1, justifyContent: 'center', padding: 20 },
-  
+
   card: {
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
@@ -324,9 +373,12 @@ const styles = StyleSheet.create({
   /* HEADER */
   headerContainer: { alignItems: 'center', marginBottom: 24 },
   logoBadge: {
-    width: 64, height: 64, borderRadius: 16,
+    width: 64,
+    height: 64,
+    borderRadius: 16,
     backgroundColor: '#F3F4F6',
-    alignItems: 'center', justifyContent: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 16,
   },
   logoImage: { width: 40, height: 40 },
@@ -342,11 +394,22 @@ const styles = StyleSheet.create({
 
   /* BUTTONS */
   buttonContainer: { marginTop: 8 },
-  primaryButton: { backgroundColor: colors.primary || '#2563EB', paddingVertical: 14, borderRadius: 12, elevation: 2 },
+  primaryButton: {
+    backgroundColor: colors.primary || '#2563EB',
+    paddingVertical: 14,
+    borderRadius: 12,
+    elevation: 2,
+  },
   buttonText: { fontSize: 16, fontWeight: '700' },
 
   /* TERMS */
-  termsText: { fontSize: 12, color: colors.muted || '#6B7280', textAlign: 'center', marginTop: 16, lineHeight: 18 },
+  termsText: {
+    fontSize: 12,
+    color: colors.muted || '#6B7280',
+    textAlign: 'center',
+    marginTop: 16,
+    lineHeight: 18,
+  },
   linkText: { color: colors.primary || '#2563EB', fontWeight: '700' },
 
   /* SOCIAL */
@@ -359,7 +422,17 @@ const styles = StyleSheet.create({
   socialButtonText: { color: colors.text || '#111827', fontSize: 14, fontWeight: '600' },
 
   /* FOOTER */
-  footerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 24, alignItems: 'center' },
+  footerRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 24,
+    alignItems: 'center',
+  },
   footerText: { color: '#6B7280', fontSize: 14 },
-  switchModeText: { color: colors.primary || '#2563EB', fontWeight: '700', marginLeft: 6, fontSize: 14 },
+  switchModeText: {
+    color: colors.primary || '#2563EB',
+    fontWeight: '700',
+    marginLeft: 6,
+    fontSize: 14,
+  },
 });

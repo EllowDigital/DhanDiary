@@ -111,19 +111,25 @@ const RegisterScreen = () => {
   const showGithub = SHOW_GITHUB_LOGIN;
 
   // Optimized Handlers
-  const handleEmailChange = useCallback((text: string) => {
-    setEmail(text);
-    if (emailError) {
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      setEmailError(null);
-    }
-  }, [emailError]);
+  const handleEmailChange = useCallback(
+    (text: string) => {
+      setEmail(text);
+      if (emailError) {
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        setEmailError(null);
+      }
+    },
+    [emailError]
+  );
 
-  const handlePasswordChange = useCallback((text: string) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setPassword(text);
-    if (passwordError) setPasswordError(null);
-  }, [passwordError]);
+  const handlePasswordChange = useCallback(
+    (text: string) => {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setPassword(text);
+      if (passwordError) setPasswordError(null);
+    },
+    [passwordError]
+  );
 
   const performRegister = useCallback(async () => {
     if (loading || socialLoading) return;
@@ -180,7 +186,7 @@ const RegisterScreen = () => {
       const mod = await import('../services/firebaseAuth');
       await mod.startGithubSignIn('signIn');
     } catch (err: any) {
-        Alert.alert('GitHub Sign-up Failed', readProviderError(err, 'Unable to reach GitHub.'));
+      Alert.alert('GitHub Sign-up Failed', readProviderError(err, 'Unable to reach GitHub.'));
     } finally {
       setSocialLoading(false);
     }
@@ -198,12 +204,16 @@ const RegisterScreen = () => {
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         <ScrollView
-          contentContainerStyle={[styles.scrollContent, { minHeight: isSmallScreen ? '100%' : '90%' }]}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { minHeight: isSmallScreen ? '100%' : '90%' },
+          ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <Animated.View style={[styles.card, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-            
+          <Animated.View
+            style={[styles.card, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
+          >
             {/* --- HEADER --- */}
             <View style={styles.cardHeaderCenter}>
               <View style={styles.logoBadgeCentered}>
@@ -248,7 +258,11 @@ const RegisterScreen = () => {
                 error={passwordError}
                 rightAccessory={
                   <TouchableOpacity onPress={() => setShowPass(!showPass)} style={styles.eyeIcon}>
-                    <MaterialIcon name={showPass ? 'visibility' : 'visibility-off'} size={20} color={colors.muted || '#999'} />
+                    <MaterialIcon
+                      name={showPass ? 'visibility' : 'visibility-off'}
+                      size={20}
+                      color={colors.muted || '#999'}
+                    />
                   </TouchableOpacity>
                 }
               />
@@ -257,14 +271,37 @@ const RegisterScreen = () => {
               {password.length > 0 && (
                 <View style={styles.strengthWrapper}>
                   <View style={styles.strengthContainer}>
-                    <View style={[styles.strengthBar, {
-                        backgroundColor: passStrength >= 1 ? (passStrength >= 2 ? (passStrength >= 3 ? '#4CAF50' : '#FF9800') : '#F44336') : '#E0E0E0',
-                        flex: passStrength || 0.1 
-                    }]} />
-                    <View style={[styles.strengthBar, { backgroundColor: '#E0E0E0', flex: 3 - passStrength }]} />
+                    <View
+                      style={[
+                        styles.strengthBar,
+                        {
+                          backgroundColor:
+                            passStrength >= 1
+                              ? passStrength >= 2
+                                ? passStrength >= 3
+                                  ? '#4CAF50'
+                                  : '#FF9800'
+                                : '#F44336'
+                              : '#E0E0E0',
+                          flex: passStrength || 0.1,
+                        },
+                      ]}
+                    />
+                    <View
+                      style={[
+                        styles.strengthBar,
+                        { backgroundColor: '#E0E0E0', flex: 3 - passStrength },
+                      ]}
+                    />
                   </View>
                   <Text style={styles.strengthText}>
-                    {passStrength === 0 ? 'Too short' : passStrength === 1 ? 'Weak' : passStrength === 2 ? 'Good' : 'Strong'}
+                    {passStrength === 0
+                      ? 'Too short'
+                      : passStrength === 1
+                        ? 'Weak'
+                        : passStrength === 2
+                          ? 'Good'
+                          : 'Strong'}
                   </Text>
                 </View>
               )}
@@ -277,7 +314,16 @@ const RegisterScreen = () => {
                 buttonStyle={styles.primaryButton}
                 containerStyle={styles.buttonContainer}
                 titleStyle={styles.buttonText}
-                icon={!loading ? <MaterialIcon name="arrow-forward" size={18} color="white" style={{ marginRight: 8 }} /> : undefined}
+                icon={
+                  !loading ? (
+                    <MaterialIcon
+                      name="arrow-forward"
+                      size={18}
+                      color="white"
+                      style={{ marginRight: 8 }}
+                    />
+                  ) : undefined
+                }
               />
 
               {showGithub && (
@@ -289,7 +335,14 @@ const RegisterScreen = () => {
                   </View>
                   <Button
                     type="outline"
-                    icon={<FontAwesome name="github" size={18} color={colors.primary} style={{ marginRight: 8 }} />}
+                    icon={
+                      <FontAwesome
+                        name="github"
+                        size={18}
+                        color={colors.primary}
+                        style={{ marginRight: 8 }}
+                      />
+                    }
                     title="GitHub"
                     onPress={handleGithubSignup}
                     disabled={socialLoading}
@@ -302,7 +355,18 @@ const RegisterScreen = () => {
 
               <View style={styles.termsContainer}>
                 <Text style={styles.termsText}>
-                  By joining, you agree to our <Text style={styles.termsLink} onPress={() => navigation.navigate('Terms')}>Terms</Text> & <Text style={styles.termsLink} onPress={() => navigation.navigate('PrivacyPolicy')}>Privacy Policy</Text>.
+                  By joining, you agree to our{' '}
+                  <Text style={styles.termsLink} onPress={() => navigation.navigate('Terms')}>
+                    Terms
+                  </Text>{' '}
+                  &{' '}
+                  <Text
+                    style={styles.termsLink}
+                    onPress={() => navigation.navigate('PrivacyPolicy')}
+                  >
+                    Privacy Policy
+                  </Text>
+                  .
                 </Text>
               </View>
             </View>
@@ -318,7 +382,10 @@ const RegisterScreen = () => {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      <FullScreenSpinner visible={spinnerVisible} message={loading ? 'Creating account...' : 'Connecting...'} />
+      <FullScreenSpinner
+        visible={spinnerVisible}
+        message={loading ? 'Creating account...' : 'Connecting...'}
+      />
     </SafeAreaView>
   );
 };
@@ -329,7 +396,7 @@ export default RegisterScreen;
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F0F2F5' },
   scrollContent: { flexGrow: 1, padding: 20, justifyContent: 'center' },
-  
+
   card: {
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
@@ -347,9 +414,12 @@ const styles = StyleSheet.create({
   /* HEADER */
   cardHeaderCenter: { alignItems: 'center', marginBottom: 20 },
   logoBadgeCentered: {
-    width: 64, height: 64, borderRadius: 16,
+    width: 64,
+    height: 64,
+    borderRadius: 16,
     backgroundColor: '#F3F4F6',
-    alignItems: 'center', justifyContent: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 12,
   },
   logoCentered: { width: 40, height: 40 },
@@ -363,12 +433,22 @@ const styles = StyleSheet.create({
 
   /* STRENGTH METER */
   strengthWrapper: { marginTop: 4, marginBottom: 16 },
-  strengthContainer: { flexDirection: 'row', height: 4, borderRadius: 2, overflow: 'hidden', gap: 4 },
+  strengthContainer: {
+    flexDirection: 'row',
+    height: 4,
+    borderRadius: 2,
+    overflow: 'hidden',
+    gap: 4,
+  },
   strengthBar: { height: '100%', borderRadius: 2 },
   strengthText: { fontSize: 11, color: colors.muted || '#888', marginTop: 6, textAlign: 'right' },
 
   /* BUTTONS */
-  primaryButton: { backgroundColor: colors.primary || '#2563EB', paddingVertical: 12, borderRadius: 12 },
+  primaryButton: {
+    backgroundColor: colors.primary || '#2563EB',
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
   buttonContainer: { marginTop: 8, borderRadius: 12 },
   buttonText: { fontSize: 16, fontWeight: '700' },
 
@@ -376,18 +456,37 @@ const styles = StyleSheet.create({
   socialWrapper: { marginTop: 24 },
   socialDivider: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   socialLine: { flex: 1, height: 1, backgroundColor: '#E5E7EB' },
-  socialText: { marginHorizontal: 12, fontSize: 12, color: '#9CA3AF', fontWeight: '600', textTransform: 'uppercase' },
+  socialText: {
+    marginHorizontal: 12,
+    fontSize: 12,
+    color: '#9CA3AF',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
   socialButton: { borderRadius: 10, borderColor: '#E5E7EB', paddingVertical: 12, borderWidth: 1 },
   socialButtonText: { color: colors.text || '#111827', fontWeight: '600' },
   socialButtonContainer: { width: '100%' },
 
   /* TERMS */
   termsContainer: { marginTop: 16, paddingHorizontal: 4 },
-  termsText: { fontSize: 12, color: colors.muted || '#6B7280', textAlign: 'center', lineHeight: 18 },
+  termsText: {
+    fontSize: 12,
+    color: colors.muted || '#6B7280',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
   termsLink: { color: colors.primary || '#2563EB', fontWeight: '700' },
 
   /* FOOTER */
-  footerRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 24, paddingTop: 20, borderTopWidth: 1, borderTopColor: '#F3F4F6' },
+  footerRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 24,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
   footerText: { color: '#6B7280', fontSize: 14, marginRight: 6 },
   linkText: { color: colors.primary || '#2563EB', fontWeight: '700', fontSize: 14 },
 });

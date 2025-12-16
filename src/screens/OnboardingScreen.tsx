@@ -74,7 +74,7 @@ const OnboardingItem = ({
   scrollX: Animated.Value;
 }) => {
   const { width, height } = useWindowDimensions();
-  
+
   // Responsive sizing logic
   const isSmallScreen = width < 380;
   const isTablet = width > 700;
@@ -122,7 +122,17 @@ const OnboardingItem = ({
             },
           ]}
         >
-          <View style={[styles.iconBubble, { backgroundColor: item.accent, width: circleSize * 0.36, height: circleSize * 0.36, borderRadius: (circleSize * 0.36) / 2 }]}>
+          <View
+            style={[
+              styles.iconBubble,
+              {
+                backgroundColor: item.accent,
+                width: circleSize * 0.36,
+                height: circleSize * 0.36,
+                borderRadius: (circleSize * 0.36) / 2,
+              },
+            ]}
+          >
             <MaterialIcon name={item.icon as any} size={iconSize} color="#fff" />
           </View>
         </Animated.View>
@@ -212,8 +222,8 @@ const OnboardingScreen = () => {
     await markOnboardingComplete();
     // Use reset to prevent going back to onboarding
     navigation.reset({
-        index: 0,
-        routes: [{ name: 'Auth' }], // Assuming 'Auth' is the login/signup screen
+      index: 0,
+      routes: [{ name: 'Auth' }], // Assuming 'Auth' is the login/signup screen
     });
   };
 
