@@ -85,7 +85,7 @@ const AddEntryScreen: React.FC = () => {
   // --- ANIMATIONS ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
-  const colorAnim = useRef(new Animated.Value(initialType)).current; 
+  const colorAnim = useRef(new Animated.Value(initialType)).current;
 
   const activeType = typeConfigs[typeIndex];
 
@@ -107,7 +107,12 @@ const AddEntryScreen: React.FC = () => {
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true, easing: Easing.out(Easing.cubic) }),
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic),
+      }),
       Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true }),
     ]).start();
   }, []);
@@ -205,7 +210,6 @@ const AddEntryScreen: React.FC = () => {
             keyboardShouldPersistTaps="handled"
           >
             <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-              
               {/* 1. TYPE TOGGLE */}
               <View style={styles.toggleWrapper}>
                 <View style={styles.toggleContainer}>
@@ -220,8 +224,17 @@ const AddEntryScreen: React.FC = () => {
                           setTypeIndex(idx);
                         }}
                       >
-                        <MaterialIcon name={cfg.icon as any} size={20} color={isActive ? cfg.color : colors.muted} />
-                        <Text style={[styles.toggleText, isActive && { color: cfg.color, fontWeight: '700' }]}>
+                        <MaterialIcon
+                          name={cfg.icon as any}
+                          size={20}
+                          color={isActive ? cfg.color : colors.muted}
+                        />
+                        <Text
+                          style={[
+                            styles.toggleText,
+                            isActive && { color: cfg.color, fontWeight: '700' },
+                          ]}
+                        >
                           {cfg.label}
                         </Text>
                       </Pressable>
@@ -231,10 +244,14 @@ const AddEntryScreen: React.FC = () => {
               </View>
 
               {/* 2. AMOUNT CARD */}
-              <Animated.View style={[styles.amountCard, { backgroundColor: themeBg, borderColor: themeBorder }]}>
+              <Animated.View
+                style={[styles.amountCard, { backgroundColor: themeBg, borderColor: themeBorder }]}
+              >
                 <Text style={[styles.inputLabel, { color: activeType.color }]}>AMOUNT</Text>
                 <View style={styles.amountInputRow}>
-                  <Animated.Text style={[styles.currencySymbol, { color: themeColor }]}>₹</Animated.Text>
+                  <Animated.Text style={[styles.currencySymbol, { color: themeColor }]}>
+                    ₹
+                  </Animated.Text>
                   <TextInput
                     value={amount}
                     onChangeText={setAmount}
@@ -255,7 +272,9 @@ const AddEntryScreen: React.FC = () => {
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.gridLabel}>Category</Text>
-                    <Text style={styles.gridValue} numberOfLines={1}>{category}</Text>
+                    <Text style={styles.gridValue} numberOfLines={1}>
+                      {category}
+                    </Text>
                   </View>
                   <MaterialIcon name="chevron-right" size={24} color={colors.border} />
                 </Pressable>
@@ -284,27 +303,40 @@ const AddEntryScreen: React.FC = () => {
                     multiline
                     style={styles.noteInput}
                   />
-                  <MaterialIcon name="edit" size={18} color={colors.muted} style={styles.noteIcon} />
+                  <MaterialIcon
+                    name="edit"
+                    size={18}
+                    color={colors.muted}
+                    style={styles.noteIcon}
+                  />
                 </View>
               </View>
 
               {/* 5. QUICK CATEGORIES */}
               <Text style={styles.sectionTitle}>Quick Select</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipScroll}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.chipScroll}
+              >
                 {ALLOWED_CATEGORIES.map((cat) => (
                   <Pressable
                     key={cat}
                     style={[
                       styles.chip,
-                      category === cat && { backgroundColor: activeType.color, borderColor: activeType.color },
+                      category === cat && {
+                        backgroundColor: activeType.color,
+                        borderColor: activeType.color,
+                      },
                     ]}
                     onPress={() => setCategory(cat)}
                   >
-                    <Text style={[styles.chipText, category === cat && { color: 'white' }]}>{cat}</Text>
+                    <Text style={[styles.chipText, category === cat && { color: 'white' }]}>
+                      {cat}
+                    </Text>
                   </Pressable>
                 ))}
               </ScrollView>
-
             </Animated.View>
           </ScrollView>
 
@@ -313,7 +345,9 @@ const AddEntryScreen: React.FC = () => {
             <Button
               title={editingLocalId ? 'Update Transaction' : 'Save Transaction'}
               onPress={handleSave}
-              icon={<MaterialIcon name="check" size={22} color="white" style={{ marginRight: 8 }} />}
+              icon={
+                <MaterialIcon name="check" size={22} color="white" style={{ marginRight: 8 }} />
+              }
               buttonStyle={[styles.saveBtn, { backgroundColor: activeType.color }]}
               titleStyle={{ fontWeight: '700', fontSize: 16 }}
             />
@@ -352,13 +386,41 @@ const styles = StyleSheet.create({
 
   /* TOGGLE */
   toggleWrapper: { alignItems: 'center', marginBottom: 20 },
-  toggleContainer: { flexDirection: 'row', backgroundColor: colors.surfaceMuted, borderRadius: 16, padding: 4, width: '100%', maxWidth: 320 },
-  toggleBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 12, gap: 6 },
-  toggleBtnActive: { backgroundColor: colors.card, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
+  toggleContainer: {
+    flexDirection: 'row',
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: 16,
+    padding: 4,
+    width: '100%',
+    maxWidth: 320,
+  },
+  toggleBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 6,
+  },
+  toggleBtnActive: {
+    backgroundColor: colors.card,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
   toggleText: { fontSize: 14, fontWeight: '600', color: colors.muted },
 
   /* AMOUNT CARD */
-  amountCard: { borderRadius: 24, padding: 24, alignItems: 'center', borderWidth: 1.5, marginBottom: 24 },
+  amountCard: {
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    marginBottom: 24,
+  },
   inputLabel: { fontSize: 12, fontWeight: '700', letterSpacing: 1, marginBottom: 8, opacity: 0.8 },
   amountInputRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   currencySymbol: { fontSize: 32, fontWeight: '700', marginRight: 4 },
@@ -366,24 +428,83 @@ const styles = StyleSheet.create({
 
   /* GRID */
   gridContainer: { gap: 12, marginBottom: 24 },
-  gridCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, padding: 16, borderRadius: 18, borderWidth: 1, borderColor: colors.border, gap: 16 },
-  gridIconBg: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#f3f4f6', alignItems: 'center', justifyContent: 'center' },
+  gridCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    padding: 16,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: 16,
+  },
+  gridIconBg: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#f3f4f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   gridLabel: { fontSize: 12, color: colors.muted, marginBottom: 2 },
   gridValue: { fontSize: 16, fontWeight: '600', color: colors.text },
 
   /* NOTE INPUT */
   noteSection: { marginBottom: 24 },
-  sectionTitle: { fontSize: 14, fontWeight: '700', color: colors.text, marginBottom: 10, marginLeft: 4 },
-  noteInputWrapper: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: colors.surfaceMuted, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: 'transparent', minHeight: 100 },
-  noteInput: { flex: 1, fontSize: 15, color: colors.text, textAlignVertical: 'top', paddingTop: 0, height: '100%' },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 10,
+    marginLeft: 4,
+  },
+  noteInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    minHeight: 100,
+  },
+  noteInput: {
+    flex: 1,
+    fontSize: 15,
+    color: colors.text,
+    textAlignVertical: 'top',
+    paddingTop: 0,
+    height: '100%',
+  },
   noteIcon: { marginTop: 2, marginLeft: 8 },
 
   /* CHIPS */
   chipScroll: { paddingRight: 20, gap: 10, paddingBottom: 20 },
-  chip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+  chip: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
   chipText: { fontSize: 13, fontWeight: '600', color: colors.text },
 
   /* FOOTER */
-  footerContainer: { paddingHorizontal: 20, paddingTop: 10, backgroundColor: colors.background, borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.05)' },
-  saveBtn: { paddingVertical: 16, borderRadius: 18, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 },
+  footerContainer: {
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    backgroundColor: colors.background,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
+  },
+  saveBtn: {
+    paddingVertical: 16,
+    borderRadius: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
 });
