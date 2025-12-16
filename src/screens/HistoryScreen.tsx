@@ -513,7 +513,7 @@ const HistoryScreen = () => {
               <View
                 style={[
                   styles.modalContent,
-                  { maxWidth: 600, alignSelf: 'center', width: '100%', maxHeight: Math.max(300, Math.floor(height * 0. nine) ), },
+                  { maxWidth: 600, alignSelf: 'center', width: '100%', maxHeight: Math.max(300, Math.floor(height * 0.9)) },
                 ]}
               >
                 <View style={styles.sheetHandle} />
@@ -524,7 +524,12 @@ const HistoryScreen = () => {
                   </TouchableOpacity>
                 </View>
 
-                <ScrollView showsVerticalScrollIndicator={false}>
+                <ScrollView
+                  showsVerticalScrollIndicator={false}
+                  keyboardShouldPersistTaps="handled"
+                  nestedScrollEnabled
+                  contentContainerStyle={{ paddingBottom: keyboardHeight + 24 }}
+                >
                   <SimpleButtonGroup
                     buttons={['Expense', 'Income']}
                     selectedIndex={editTypeIndex}
