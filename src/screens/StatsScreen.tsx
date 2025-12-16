@@ -760,7 +760,7 @@ const StatsScreen = () => {
                     ]}
                   >
                     <Text style={styles.holeValue} adjustsFontSizeToFit numberOfLines={1}>
-                      ₹
+                      {currencySymbol}
                       {stats.totalOut > 999
                         ? (stats.totalOut / 1000).toFixed(1) + 'k'
                         : stats.totalOut}
