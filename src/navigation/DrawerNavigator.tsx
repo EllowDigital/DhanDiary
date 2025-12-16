@@ -56,7 +56,7 @@ const DrawerNavigator = () => {
         drawerActiveTintColor: colors.primary,
         drawerInactiveTintColor: colors.text,
         drawerActiveBackgroundColor: colors.primarySoft || '#EEF2FF',
-        
+
         drawerLabelStyle: {
           fontSize: 15,
           fontWeight: '600',

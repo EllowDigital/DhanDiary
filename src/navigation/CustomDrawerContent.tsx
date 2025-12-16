@@ -121,7 +121,10 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
       >
         {/* --- BRAND HEADER --- */}
         <Animated.View
-          style={[styles.headerContainer, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
+          style={[
+            styles.headerContainer,
+            { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+          ]}
         >
           <View style={styles.brandRow}>
             <View style={styles.logoContainer}>
@@ -153,8 +156,8 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
               options.drawerLabel !== undefined
                 ? options.drawerLabel
                 : options.title !== undefined
-                ? options.title
-                : route.name;
+                  ? options.title
+                  : route.name;
 
             // Animation values for this item
             const itemAnim = listAnims[index] || new Animated.Value(1);
@@ -204,7 +207,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
       {/* --- FOOTER (Fixed at bottom) --- */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}>
         <View style={styles.footerDivider} />
-        
+
         <TouchableOpacity
           style={styles.footerBtn}
           onPress={() => props.navigation.navigate('Export')}
@@ -241,7 +244,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  
+
   /* HEADER */
   headerContainer: {
     paddingHorizontal: spacing(3),
