@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -13,9 +13,9 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, User } from 'firebase/auth';
 import { getFirebaseAuth } from '../firebase';
-import { colors, shadows } from '../utils/design';
+import { colors } from '../utils/design';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,13 +23,13 @@ import { hasCompletedOnboarding } from '../utils/onboarding';
 
 type SplashNavProp = NativeStackNavigationProp<RootStackParamList, 'Splash'>;
 
-const MIN_SPLASH_TIME_MS = 2000; // Increased slightly for animation enjoyment
-const MAX_SPLASH_WAIT_MS = 8000;
+const MIN_SPLASH_TIME_MS = 2500; // Increased slightly for better perception of animation
 
 const SplashScreen = () => {
   const navigation = useNavigation<SplashNavProp>();
   const { width, height } = useWindowDimensions();
-  const insets = useSafeAreaInsets(); // CRITICAL: Handles Android Gestures/Notches
+  const insets = useSafeAreaInsets();
+  const [isReady, setIsReady] = useState(false);
 
   // --- ANIMATION VALUES ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -44,7 +44,7 @@ const SplashScreen = () => {
 
   useEffect(() => {
     // 1. Background Ambient Animation (Loops forever)
-    Animated.loop(
+    const orbAnimation = Animated.loop(
       Animated.parallel([
         Animated.sequence([
           Animated.timing(orbPulse, { toValue: 1.2, duration: 4000, useNativeDriver: true }),
@@ -65,7 +65,8 @@ const SplashScreen = () => {
           }),
         ]),
       ])
-    ).start();
+    );
+    orbAnimation.start();
 
     // 2. Entrance Sequence
     Animated.parallel([
@@ -88,7 +89,7 @@ const SplashScreen = () => {
         useNativeDriver: true,
         easing: Easing.out(Easing.back(1.5)),
       }),
-      // Text Staggered Entrance (slightly delayed)
+      // Text Staggered Entrance
       Animated.sequence([
         Animated.delay(300),
         Animated.spring(textSlideAnim, {
@@ -100,75 +101,56 @@ const SplashScreen = () => {
       // Progress Bar
       Animated.timing(progressAnim, {
         toValue: 1,
-        duration: 1800,
-        useNativeDriver: false,
+        duration: MIN_SPLASH_TIME_MS - 200, // Sync with min splash time roughly
+        useNativeDriver: false, // Width animation requires false
       }),
     ]).start();
 
-    // 3. Logic & Navigation
-    const startedAt = Date.now();
-    let hasNavigated = false;
-    const timeoutIds: Array<ReturnType<typeof setTimeout>> = [];
+    // Cleanup loop on unmount
+    return () => orbAnimation.stop();
+  }, []);
+
+  useEffect(() => {
     let mounted = true;
 
-    const runNavigation = (route: 'Auth' | 'Main' | 'Onboarding') => {
-      if (!hasNavigated) {
-        hasNavigated = true;
-
-        // Exit Animation
-        Animated.parallel([
-          Animated.timing(fadeAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
-          Animated.timing(scaleAnim, { toValue: 1.1, duration: 300, useNativeDriver: true }),
-        ]).start(() => {
-          navigation.replace(route);
-        });
-      }
-    };
-
-    const checkSessionAndNavigate = (hasSeenOnboarding: boolean) => {
+    const init = async () => {
+      const startTime = Date.now();
       const auth = getFirebaseAuth();
-      let resolved = false;
-      let unsubscribe: (() => void) | null = null;
 
-      const stopListening = () => {
-        if (unsubscribe) {
-          unsubscribe();
-          unsubscribe = null;
-        }
-      };
+      // Run checks in parallel with minimum timer
+      const [user, onboardingCompleted] = await Promise.all([
+        new Promise<User | null>((resolve) => {
+          const unsubscribe = onAuthStateChanged(auth, (u) => {
+            unsubscribe();
+            resolve(u);
+          });
+        }),
+        hasCompletedOnboarding(),
+        new Promise((resolve) => setTimeout(resolve, MIN_SPLASH_TIME_MS)), // Ensure min display time
+      ]);
 
-      const decide = (route: 'Auth' | 'Main' | 'Onboarding') => {
-        if (resolved) return;
-        resolved = true;
-        const elapsed = Date.now() - startedAt;
-        const delay = Math.max(0, MIN_SPLASH_TIME_MS - elapsed);
-        timeoutIds.push(setTimeout(() => runNavigation(route), delay));
-      };
-
-      unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-        stopListening();
-        decide(firebaseUser ? 'Main' : hasSeenOnboarding ? 'Auth' : 'Onboarding');
-      });
-
-      timeoutIds.push(
-        setTimeout(() => {
-          stopListening();
-          decide(auth.currentUser ? 'Main' : hasSeenOnboarding ? 'Auth' : 'Onboarding');
-        }, MAX_SPLASH_WAIT_MS)
-      );
-    };
-
-    const bootstrap = async () => {
-      const hasSeen = await hasCompletedOnboarding();
       if (!mounted) return;
-      checkSessionAndNavigate(hasSeen);
+
+      // Exit Animation before navigation
+      Animated.parallel([
+        Animated.timing(fadeAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
+        Animated.timing(scaleAnim, { toValue: 1.1, duration: 300, useNativeDriver: true }),
+      ]).start(() => {
+        // Use reset to prevent back-navigation to splash
+        if (user) {
+          navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+        } else if (onboardingCompleted) {
+          navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
+        } else {
+          navigation.reset({ index: 0, routes: [{ name: 'Onboarding' }] });
+        }
+      });
     };
 
-    bootstrap();
+    init();
 
     return () => {
       mounted = false;
-      timeoutIds.forEach(clearTimeout);
     };
   }, []);
 
@@ -189,7 +171,7 @@ const SplashScreen = () => {
       <Svg style={StyleSheet.absoluteFill}>
         <Defs>
           <LinearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0%" stopColor={colors.background} stopOpacity={1} />
+            <Stop offset="0%" stopColor={colors.background || '#ffffff'} stopOpacity={1} />
             <Stop offset="100%" stopColor="#Eef2ff" stopOpacity={1} />
           </LinearGradient>
         </Defs>
@@ -203,7 +185,7 @@ const SplashScreen = () => {
           {
             top: -height * 0.1,
             right: -width * 0.1,
-            backgroundColor: `${colors.primary}15`,
+            backgroundColor: `${colors.primary || '#4F46E5'}15`,
             transform: [{ scale: orbPulse }, { translateY: orbTranslate }],
           },
         ]}
@@ -214,7 +196,7 @@ const SplashScreen = () => {
           {
             bottom: -height * 0.1,
             left: -width * 0.1,
-            backgroundColor: `${colors.secondary}15`,
+            backgroundColor: `${colors.secondary || '#EC4899'}15`,
             transform: [{ scale: orbPulse }, { translateY: Animated.multiply(orbTranslate, -1) }],
           },
         ]}
@@ -238,10 +220,10 @@ const SplashScreen = () => {
           <Image
             source={(() => {
               try {
-                if (typeof require !== 'function') return undefined;
+                // Safe require logic
                 return require('../../assets/splash-icon.png');
               } catch (e) {
-                return undefined;
+                return { uri: 'https://via.placeholder.com/150' }; // Fallback
               }
             })()}
             style={[styles.logo, { borderRadius: logoSize * 0.25 }]}
@@ -284,7 +266,7 @@ const SplashScreen = () => {
           </View>
           <View style={styles.divider} />
           <View style={styles.badge}>
-            <MaterialIcon name="lock" size={16} color={colors.primary} />
+            <MaterialIcon name="lock" size={16} color={colors.primary || '#4F46E5'} />
             <Text style={styles.badgeText}>Encrypted</Text>
           </View>
         </View>
@@ -304,8 +286,8 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.background,
-    overflow: 'hidden', // Ensures orbs don't cause scrollbars
+    backgroundColor: colors.background || '#ffffff',
+    overflow: 'hidden',
   },
   centerContent: {
     alignItems: 'center',
@@ -319,11 +301,11 @@ const styles = StyleSheet.create({
   logoWrapper: {
     marginBottom: 30,
     backgroundColor: 'white',
-    shadowColor: colors.primary,
+    shadowColor: colors.primary || '#4F46E5',
     shadowOffset: { width: 0, height: 15 },
     shadowOpacity: 0.25,
     shadowRadius: 30,
-    elevation: 12, // High elevation for Android depth
+    elevation: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -335,14 +317,14 @@ const styles = StyleSheet.create({
   /* TYPOGRAPHY */
   appName: {
     fontWeight: '800',
-    color: colors.text,
+    color: colors.text || '#111827',
     textAlign: 'center',
     letterSpacing: -1,
-    includeFontPadding: false, // Fix vertical alignment on Android
+    includeFontPadding: false,
   },
   tagline: {
     fontSize: 16,
-    color: colors.muted || '#666',
+    color: colors.muted || '#6B7280',
     marginTop: 8,
     textAlign: 'center',
     fontWeight: '500',
@@ -351,7 +333,7 @@ const styles = StyleSheet.create({
 
   /* PROGRESS */
   progressTrack: {
-    width: '50%', // Responsive width
+    width: '50%',
     maxWidth: 200,
     height: 4,
     borderRadius: 2,
@@ -361,7 +343,7 @@ const styles = StyleSheet.create({
   },
   progressFill: {
     height: '100%',
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primary || '#4F46E5',
     borderRadius: 2,
   },
 
@@ -384,7 +366,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.9)', // Slight glass effect
+    backgroundColor: 'rgba(255,255,255,0.9)',
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 30,
@@ -408,7 +390,7 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 12,
     fontWeight: '600',
-    color: colors.text,
+    color: colors.text || '#111827',
   },
   divider: {
     width: 1,
@@ -418,11 +400,11 @@ const styles = StyleSheet.create({
   },
   powered: {
     fontSize: 12,
-    color: colors.muted || '#888',
+    color: colors.muted || '#6B7280',
     opacity: 0.8,
   },
   brand: {
     fontWeight: '700',
-    color: colors.text,
+    color: colors.text || '#111827',
   },
 });
