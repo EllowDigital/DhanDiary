@@ -18,7 +18,20 @@ import {
   updatePassword,
   updateProfile,
 } from 'firebase/auth';
-import { deleteDoc, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
+import {
+  deleteDoc,
+  doc,
+  getDoc,
+  serverTimestamp,
+  setDoc,
+  collection,
+  query,
+  orderBy,
+  startAfter,
+  limit,
+  getDocs,
+  writeBatch,
+} from 'firebase/firestore';
 import { useEffect, useRef } from 'react';
 import { getFirebaseAuth, getFirestoreDb } from '../firebase';
 
@@ -286,7 +299,35 @@ export const deleteAccount = async (currentPassword?: string) => {
     await reauthenticateWithCredential(user, credential);
   }
   const db = getFirestoreDb();
-  await deleteDoc(doc(db, 'users', user.uid));
+  // Delete user subcollections (cash_entries) in batches to avoid OOM and security errors
+  try {
+    const colRef = collection(db, 'users', user.uid, 'cash_entries');
+    let last: any = undefined;
+    const PAGE = 500;
+    while (true) {
+      const q = last
+        ? query(colRef, orderBy('createdAt', 'desc'), startAfter(last), limit(PAGE))
+        : query(colRef, orderBy('createdAt', 'desc'), limit(PAGE));
+      const snap = await getDocs(q);
+      if (!snap || !snap.docs || snap.docs.length === 0) break;
+      const batch = writeBatch(db);
+      snap.docs.forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+      if (snap.docs.length < PAGE) break;
+      last = snap.docs[snap.docs.length - 1];
+    }
+  } catch (err) {
+    console.warn('Failed to delete cash_entries subcollection for user', user.uid, err);
+  }
+
+  // Delete top-level user doc
+  try {
+    await deleteDoc(doc(db, 'users', user.uid));
+  } catch (err) {
+    console.warn('Failed to delete user profile doc', user.uid, err);
+  }
+
+  // Finally delete the Auth user
   await deleteUser(user);
 };
 
