@@ -256,6 +256,9 @@ const StatsScreen = () => {
     );
   }, [filteredEntries]);
 
+  
+
+
   // Computation state & async aggregation to avoid blocking UI on large datasets
   const [computing, setComputing] = useState(false);
   const [computed, setComputed] = useState<any>({ isReady: false });
