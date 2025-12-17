@@ -141,11 +141,17 @@ const RankList = React.memo(({ data, total }: { data: any[]; total: number }) =>
               <Text style={styles.rankName}>{item.name}</Text>
             </View>
             <Text style={styles.rankValue}>
-              {Math.round(percent)}% <Text style={styles.rankAmt}>(₹{Math.round(item.population)})</Text>
+              {Math.round(percent)}%{' '}
+              <Text style={styles.rankAmt}>(₹{Math.round(item.population)})</Text>
             </Text>
           </View>
           <View style={styles.progressBarBg}>
-            <View style={[styles.progressBarFill, { width: `${percent}%`, backgroundColor: item.color }]} />
+            <View
+              style={[
+                styles.progressBarFill,
+                { width: `${percent}%`, backgroundColor: item.color },
+              ]}
+            />
           </View>
         </View>
       );
@@ -154,28 +160,33 @@ const RankList = React.memo(({ data, total }: { data: any[]; total: number }) =>
 ));
 
 // 4. TRANSACTION ROW
-const TransactionItem = React.memo(({ item, onPress }: { item: LocalEntry; onPress: () => void }) => {
-  const isExpense = item.type === 'out';
-  const color = isExpense ? colors.danger : colors.success;
-  const icon = getIconForCategory(item.category);
+const TransactionItem = React.memo(
+  ({ item, onPress }: { item: LocalEntry; onPress: () => void }) => {
+    const isExpense = item.type === 'out';
+    const color = isExpense ? colors.danger : colors.success;
+    const icon = getIconForCategory(item.category);
 
-  return (
-    <TouchableOpacity style={styles.txnRow} onPress={onPress} activeOpacity={0.7}>
-      <View style={[styles.txnIconBox, { backgroundColor: isExpense ? '#FEF2F2' : '#F0FDF4' }]}>
-        <MaterialIcon name={icon as any} size={22} color={color} />
-      </View>
-      <View style={styles.txnContent}>
-        <Text style={styles.txnTitle} numberOfLines={1}>{item.category || 'General'}</Text>
-        <Text style={styles.txnSubtitle}>
-          {item.note ? `${item.note} • ` : ''}{dayjs(item.date).format('MMM D, h:mm A')}
+    return (
+      <TouchableOpacity style={styles.txnRow} onPress={onPress} activeOpacity={0.7}>
+        <View style={[styles.txnIconBox, { backgroundColor: isExpense ? '#FEF2F2' : '#F0FDF4' }]}>
+          <MaterialIcon name={icon as any} size={22} color={color} />
+        </View>
+        <View style={styles.txnContent}>
+          <Text style={styles.txnTitle} numberOfLines={1}>
+            {item.category || 'General'}
+          </Text>
+          <Text style={styles.txnSubtitle}>
+            {item.note ? `${item.note} • ` : ''}
+            {dayjs(item.date).format('MMM D, h:mm A')}
+          </Text>
+        </View>
+        <Text style={[styles.txnAmount, { color }]}>
+          {isExpense ? '-' : '+'}₹{Number(item.amount).toLocaleString()}
         </Text>
-      </View>
-      <Text style={[styles.txnAmount, { color }]}>
-        {isExpense ? '-' : '+'}₹{Number(item.amount).toLocaleString()}
-      </Text>
-    </TouchableOpacity>
-  );
-});
+      </TouchableOpacity>
+    );
+  }
+);
 
 // --- MAIN SCREEN ---
 const HomeScreen = () => {
@@ -218,34 +229,49 @@ const HomeScreen = () => {
 
   // --- DATA ENGINE ---
   const { stats, chartData, recentEntries } = useMemo(() => {
-    if (!entries) return { stats: { in: 0, out: 0, bal: 0 }, chartData: { wave: [], pie: [] }, recentEntries: [] };
+    if (!entries)
+      return {
+        stats: { in: 0, out: 0, bal: 0 },
+        chartData: { wave: [], pie: [] },
+        recentEntries: [],
+      };
 
     // 1. Totals
-    const inVal = entries.filter(e => e.type === 'in').reduce((acc, c) => acc + Number(c.amount), 0);
-    const outVal = entries.filter(e => e.type === 'out').reduce((acc, c) => acc + Number(c.amount), 0);
+    const inVal = entries
+      .filter((e) => e.type === 'in')
+      .reduce((acc, c) => acc + Number(c.amount), 0);
+    const outVal = entries
+      .filter((e) => e.type === 'out')
+      .reduce((acc, c) => acc + Number(c.amount), 0);
 
     // 2. Filtered Data for Charts
-    const cutOff = period === 'week' ? dayjs().subtract(6, 'day').startOf('day') : dayjs().startOf('month');
-    const filtered = entries.filter(e => dayjs(e.date || e.created_at).isAfter(cutOff));
+    const cutOff =
+      period === 'week' ? dayjs().subtract(6, 'day').startOf('day') : dayjs().startOf('month');
+    const filtered = entries.filter((e) => dayjs(e.date || e.created_at).isAfter(cutOff));
 
     // 3. Wave Data (Daily Totals)
     // Create array of 0s for buckets
-    const wavePoints = period === 'week' ? new Array(7).fill(0) : new Array(dayjs().daysInMonth()).fill(0);
-    
-    filtered.filter(e => e.type === 'out').forEach(e => {
+    const wavePoints =
+      period === 'week' ? new Array(7).fill(0) : new Array(dayjs().daysInMonth()).fill(0);
+
+    filtered
+      .filter((e) => e.type === 'out')
+      .forEach((e) => {
         const d = dayjs(e.date);
-        const idx = period === 'week' ? (6 - dayjs().diff(d, 'day')) : (d.date() - 1); // Reverse logic for week (Today is last)
+        const idx = period === 'week' ? 6 - dayjs().diff(d, 'day') : d.date() - 1; // Reverse logic for week (Today is last)
         if (idx >= 0 && idx < wavePoints.length) {
-            wavePoints[idx] += Number(e.amount);
+          wavePoints[idx] += Number(e.amount);
         }
-    });
+      });
 
     // 4. Pie Data (Categories)
     const catMap: Record<string, number> = {};
-    filtered.filter(e => e.type === 'out').forEach(e => {
-      const c = e.category || 'Other';
-      catMap[c] = (catMap[c] || 0) + Number(e.amount);
-    });
+    filtered
+      .filter((e) => e.type === 'out')
+      .forEach((e) => {
+        const c = e.category || 'Other';
+        catMap[c] = (catMap[c] || 0) + Number(e.amount);
+      });
 
     const piePoints = Object.entries(catMap)
       .map(([name, val], i) => ({
@@ -285,7 +311,9 @@ const HomeScreen = () => {
       </View>
 
       {/* 2. HERO CARD (Glassmorphism) */}
-      <Animated.View style={[styles.heroCard, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+      <Animated.View
+        style={[styles.heroCard, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
+      >
         <Svg style={StyleSheet.absoluteFill}>
           <Defs>
             <LinearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
@@ -304,32 +332,44 @@ const HomeScreen = () => {
               <Text style={styles.balanceLabel}>Total Balance</Text>
             </View>
             <TouchableOpacity onPress={() => setShowBalance(!showBalance)} style={styles.eyeButton}>
-              <MaterialIcon name={showBalance ? 'visibility' : 'visibility-off'} size={18} color="rgba(255,255,255,0.8)" />
+              <MaterialIcon
+                name={showBalance ? 'visibility' : 'visibility-off'}
+                size={18}
+                color="rgba(255,255,255,0.8)"
+              />
             </TouchableOpacity>
           </View>
 
           <View style={styles.balanceWrapper}>
-             <Text style={styles.currency}>₹</Text>
-             <Text style={styles.balanceText}>
-               {showBalance ? stats.bal.toLocaleString('en-IN') : '••••••'}
-             </Text>
+            <Text style={styles.currency}>₹</Text>
+            <Text style={styles.balanceText}>
+              {showBalance ? stats.bal.toLocaleString('en-IN') : '••••••'}
+            </Text>
           </View>
 
           <View style={styles.statsRow}>
             <View style={styles.statBox}>
-               <View style={styles.iconCircleIn}><MaterialIcon name="arrow-downward" size={14} color="#10B981" /></View>
-               <View>
-                 <Text style={styles.statLabel}>Income</Text>
-                 <Text style={styles.statValue}>{showBalance ? `₹${stats.in.toLocaleString()}` : '•••'}</Text>
-               </View>
+              <View style={styles.iconCircleIn}>
+                <MaterialIcon name="arrow-downward" size={14} color="#10B981" />
+              </View>
+              <View>
+                <Text style={styles.statLabel}>Income</Text>
+                <Text style={styles.statValue}>
+                  {showBalance ? `₹${stats.in.toLocaleString()}` : '•••'}
+                </Text>
+              </View>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statBox}>
-               <View style={styles.iconCircleOut}><MaterialIcon name="arrow-upward" size={14} color="#EF4444" /></View>
-               <View>
-                 <Text style={styles.statLabel}>Expense</Text>
-                 <Text style={styles.statValue}>{showBalance ? `₹${stats.out.toLocaleString()}` : '•••'}</Text>
-               </View>
+              <View style={styles.iconCircleOut}>
+                <MaterialIcon name="arrow-upward" size={14} color="#EF4444" />
+              </View>
+              <View>
+                <Text style={styles.statLabel}>Expense</Text>
+                <Text style={styles.statValue}>
+                  {showBalance ? `₹${stats.out.toLocaleString()}` : '•••'}
+                </Text>
+              </View>
             </View>
           </View>
         </View>
@@ -339,12 +379,24 @@ const HomeScreen = () => {
       <View style={styles.actionsRow}>
         {[
           { label: 'Add', icon: 'add', nav: 'AddEntry', bg: colors.primary, iconColor: '#FFF' },
-          { label: 'Stats', icon: 'bar-chart', nav: 'Stats', bg: '#FFF', iconColor: colors.primary },
-          { label: 'Export', icon: 'file-download', nav: 'Export', bg: '#FFF', iconColor: colors.primary },
+          {
+            label: 'Stats',
+            icon: 'bar-chart',
+            nav: 'Stats',
+            bg: '#FFF',
+            iconColor: colors.primary,
+          },
+          {
+            label: 'Export',
+            icon: 'file-download',
+            nav: 'Export',
+            bg: '#FFF',
+            iconColor: colors.primary,
+          },
         ].map((a, i) => (
           <View key={i} style={styles.actionCol}>
-            <TouchableOpacity 
-              style={[styles.actionBtn, { backgroundColor: a.bg }]} 
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: a.bg }]}
               onPress={() => navigation.navigate(a.nav)}
               activeOpacity={0.8}
             >
@@ -363,14 +415,18 @@ const HomeScreen = () => {
             {[
               { id: 'wave', icon: 'show-chart' },
               { id: 'pie', icon: 'pie-chart' },
-              { id: 'list', icon: 'list' }
+              { id: 'list', icon: 'list' },
             ].map((t) => (
               <TouchableOpacity
                 key={t.id}
                 onPress={() => handleToggleChart(t.id)}
                 style={[styles.toggleBtn, chartType === t.id && styles.toggleBtnActive]}
               >
-                <MaterialIcon name={t.icon as any} size={20} color={chartType === t.id ? colors.primary : '#94A3B8'} />
+                <MaterialIcon
+                  name={t.icon as any}
+                  size={20}
+                  color={chartType === t.id ? colors.primary : '#94A3B8'}
+                />
               </TouchableOpacity>
             ))}
           </View>
@@ -378,15 +434,15 @@ const HomeScreen = () => {
           {/* Period Toggles */}
           <View style={styles.periodGroup}>
             {['week', 'month'].map((p) => (
-               <TouchableOpacity
-                 key={p}
-                 onPress={() => handleTogglePeriod(p)}
-                 style={[styles.periodBtn, period === p && styles.periodBtnActive]}
-               >
-                 <Text style={[styles.periodText, period === p && styles.periodTextActive]}>
-                   {p === 'week' ? '7D' : 'Month'}
-                 </Text>
-               </TouchableOpacity>
+              <TouchableOpacity
+                key={p}
+                onPress={() => handleTogglePeriod(p)}
+                style={[styles.periodBtn, period === p && styles.periodBtnActive]}
+              >
+                <Text style={[styles.periodText, period === p && styles.periodTextActive]}>
+                  {p === 'week' ? '7D' : 'Month'}
+                </Text>
+              </TouchableOpacity>
             ))}
           </View>
         </View>
@@ -413,26 +469,28 @@ const HomeScreen = () => {
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
         <FullScreenSpinner visible={isLoading} />
-        
+
         <FlatList
           data={recentEntries}
           keyExtractor={(item) => item.local_id || Math.random().toString()}
           renderItem={({ item }) => (
             <View style={{ paddingHorizontal: 20 }}>
-              <TransactionItem 
-                item={item} 
-                onPress={() => navigation.navigate('AddEntry', { local_id: item.local_id })} 
+              <TransactionItem
+                item={item}
+                onPress={() => navigation.navigate('AddEntry', { local_id: item.local_id })}
               />
             </View>
           )}
           ListHeaderComponent={renderHeader()}
           contentContainerStyle={{ paddingBottom: 100 }}
           showsVerticalScrollIndicator={false}
-          ListEmptyComponent={!isLoading ? (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No transactions found.</Text>
-            </View>
-          ) : undefined}
+          ListEmptyComponent={
+            !isLoading ? (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>No transactions found.</Text>
+              </View>
+            ) : undefined
+          }
         />
       </SafeAreaView>
     </View>
@@ -446,50 +504,163 @@ const styles = StyleSheet.create({
   main: { flex: 1, backgroundColor: colors.background },
   safe: { flex: 1 },
   headerContainer: { paddingHorizontal: 20, paddingTop: 10 },
-  
+
   // Header
-  topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  topBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
   userInfo: { flexDirection: 'row', alignItems: 'center' },
-  menuBtn: { padding: 8, borderRadius: 12, backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E2E8F0' },
-  greetingText: { fontSize: fontScale(10), textTransform: 'uppercase', color: colors.subText, fontWeight: '700' },
+  menuBtn: {
+    padding: 8,
+    borderRadius: 12,
+    backgroundColor: '#FFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  greetingText: {
+    fontSize: fontScale(10),
+    textTransform: 'uppercase',
+    color: colors.subText,
+    fontWeight: '700',
+  },
   userName: { fontSize: fontScale(18), color: colors.text, fontWeight: '800' },
-  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#EFF6FF', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#BFDBFE' },
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#EFF6FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
   avatarInitial: { fontSize: fontScale(18), fontWeight: '700', color: colors.primary },
 
   // Hero Card
-  heroCard: { height: 210, borderRadius: 26, marginBottom: 24, overflow: 'hidden', shadowColor: colors.primary, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.2, shadowRadius: 16, elevation: 8 },
+  heroCard: {
+    height: 210,
+    borderRadius: 26,
+    marginBottom: 24,
+    overflow: 'hidden',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
+  },
   cardContent: { flex: 1, padding: 24, justifyContent: 'space-between' },
   cardTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  balanceLabelContainer: { backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+  balanceLabelContainer: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
   balanceLabel: { color: '#FFF', fontSize: fontScale(11), fontWeight: '600' },
   eyeButton: { padding: 4 },
-  
+
   balanceWrapper: { flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-start' },
-  currency: { fontSize: fontScale(24), color: 'rgba(255,255,255,0.8)', fontWeight: '600', marginTop: 8, marginRight: 2 },
+  currency: {
+    fontSize: fontScale(24),
+    color: 'rgba(255,255,255,0.8)',
+    fontWeight: '600',
+    marginTop: 8,
+    marginRight: 2,
+  },
   balanceText: { fontSize: fontScale(38), color: '#FFF', fontWeight: '800' },
 
-  statsRow: { flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.15)', borderRadius: 18, padding: 12 },
-  statBox: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
-  iconCircleIn: { width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(16, 185, 129, 0.2)', justifyContent: 'center', alignItems: 'center' },
-  iconCircleOut: { width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(239, 68, 68, 0.2)', justifyContent: 'center', alignItems: 'center' },
+  statsRow: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(0,0,0,0.15)',
+    borderRadius: 18,
+    padding: 12,
+  },
+  statBox: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  iconCircleIn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  iconCircleOut: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(239, 68, 68, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   statLabel: { color: 'rgba(255,255,255,0.7)', fontSize: fontScale(10), fontWeight: '600' },
   statValue: { color: '#FFF', fontSize: fontScale(14), fontWeight: '700' },
-  statDivider: { width: 1, height: '80%', backgroundColor: 'rgba(255,255,255,0.2)', alignSelf: 'center' },
+  statDivider: {
+    width: 1,
+    height: '80%',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignSelf: 'center',
+  },
 
   // Actions
-  actionsRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 10, marginBottom: 24 },
+  actionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 10,
+    marginBottom: 24,
+  },
   actionCol: { alignItems: 'center', gap: 8 },
-  actionBtn: { width: 60, height: 60, borderRadius: 22, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, elevation: 3 },
+  actionBtn: {
+    width: 60,
+    height: 60,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
+  },
   actionText: { fontSize: fontScale(12), fontWeight: '600', color: colors.subText },
 
   // Chart Widget
-  chartWidget: { backgroundColor: '#FFF', borderRadius: 24, padding: 16, marginBottom: 24, shadowColor: '#64748B', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
+  chartWidget: {
+    backgroundColor: '#FFF',
+    borderRadius: 24,
+    padding: 16,
+    marginBottom: 24,
+    shadowColor: '#64748B',
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
+  },
   widgetHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
   toggleGroup: { flexDirection: 'row', backgroundColor: '#F1F5F9', borderRadius: 12, padding: 4 },
   toggleBtn: { padding: 8, borderRadius: 8 },
-  toggleBtnActive: { backgroundColor: '#FFF', shadowColor: '#000', shadowOpacity: 0.05, elevation: 1 },
-  
-  periodGroup: { flexDirection: 'row', backgroundColor: '#EFF6FF', borderRadius: 12, padding: 4, flex: 1, maxWidth: 120, marginLeft: 16 },
+  toggleBtnActive: {
+    backgroundColor: '#FFF',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    elevation: 1,
+  },
+
+  periodGroup: {
+    flexDirection: 'row',
+    backgroundColor: '#EFF6FF',
+    borderRadius: 12,
+    padding: 4,
+    flex: 1,
+    maxWidth: 120,
+    marginLeft: 16,
+  },
   periodBtn: { flex: 1, alignItems: 'center', paddingVertical: 6, borderRadius: 8 },
   periodBtnActive: { backgroundColor: colors.primary, elevation: 1 },
   periodText: { fontSize: fontScale(11), fontWeight: '600', color: colors.subText },
@@ -498,7 +669,13 @@ const styles = StyleSheet.create({
 
   // Pie Components
   pieContainer: { alignItems: 'center' },
-  legendContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 12, marginTop: 12 },
+  legendContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 12,
+    marginTop: 12,
+  },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendText: { fontSize: fontScale(11), color: colors.text, fontWeight: '600' },
@@ -516,17 +693,40 @@ const styles = StyleSheet.create({
   progressBarFill: { height: '100%', borderRadius: 3 },
 
   // Transactions
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingHorizontal: 20 },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingHorizontal: 20,
+  },
   sectionTitle: { fontSize: fontScale(16), fontWeight: '800', color: colors.text },
   seeAllText: { fontSize: fontScale(13), fontWeight: '700', color: colors.primary },
-  
-  txnRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', padding: 14, borderRadius: 18, marginBottom: 10, elevation: 1, shadowColor: '#000', shadowOpacity: 0.02 },
-  txnIconBox: { width: 42, height: 42, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+
+  txnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF',
+    padding: 14,
+    borderRadius: 18,
+    marginBottom: 10,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOpacity: 0.02,
+  },
+  txnIconBox: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
   txnContent: { flex: 1 },
   txnTitle: { fontSize: fontScale(14), fontWeight: '700', color: colors.text, marginBottom: 2 },
   txnSubtitle: { fontSize: fontScale(11), color: colors.subText, fontWeight: '500' },
   txnAmount: { fontSize: fontScale(14), fontWeight: '800' },
-  
+
   emptyContainer: { alignItems: 'center', padding: 20 },
   emptyText: { color: colors.subText, fontStyle: 'italic' },
 });
