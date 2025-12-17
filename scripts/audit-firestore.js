@@ -7,7 +7,9 @@ const PER_USER_DOCS = Number(argv.perUser || 1000);
 const SAMPLE_LIMIT = 5;
 
 if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-  console.warn('Warning: GOOGLE_APPLICATION_CREDENTIALS not set. Ensure you have application default credentials.');
+  console.warn(
+    'Warning: GOOGLE_APPLICATION_CREDENTIALS not set. Ensure you have application default credentials.'
+  );
 }
 
 admin.initializeApp({ credential: admin.credential.applicationDefault() });
@@ -35,7 +37,10 @@ async function audit() {
   };
 
   outer: while (true) {
-    let q = db.collection('users').orderBy(admin.firestore.FieldPath.documentId()).limit(batchUsers);
+    let q = db
+      .collection('users')
+      .orderBy(admin.firestore.FieldPath.documentId())
+      .limit(batchUsers);
     if (lastUser) q = q.startAfter(lastUser);
     const usnap = await q.get();
     if (usnap.empty) break;
@@ -78,7 +83,8 @@ async function audit() {
         for (const k of Object.keys(data)) {
           if (typeof data[k] === 'string' && data[k].length === 0) {
             stats.emptyStrings += 1;
-            if (stats.samples.emptyStrings.length < SAMPLE_LIMIT) stats.samples.emptyStrings.push(docId + '#' + k);
+            if (stats.samples.emptyStrings.length < SAMPLE_LIMIT)
+              stats.samples.emptyStrings.push(docId + '#' + k);
             break;
           }
         }
@@ -111,7 +117,8 @@ async function audit() {
   showSamples('empty strings', stats.samples.emptyStrings);
 
   // PASS/WARN/ERROR logic
-  const totalErrors = stats.missingU + stats.nonNumericUpdatedAt + stats.missingA + stats.emptyStrings;
+  const totalErrors =
+    stats.missingU + stats.nonNumericUpdatedAt + stats.missingA + stats.emptyStrings;
   let status = 'PASS';
   if (totalErrors === 0) status = 'PASS';
   else if (totalErrors > 0 && totalErrors <= 100) status = 'WARN';
@@ -122,7 +129,9 @@ async function audit() {
   else if (status === 'WARN')
     console.log('Minor issues detected. Consider targeted fixes or a migration for affected docs.');
   else
-    console.log('Significant issues detected. Plan a migration / rollback of writes to fix inconsistencies.');
+    console.log(
+      'Significant issues detected. Plan a migration / rollback of writes to fix inconsistencies.'
+    );
 
   process.exit(status === 'PASS' ? 0 : 2);
 }
