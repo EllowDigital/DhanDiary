@@ -13,6 +13,10 @@ export type LocalEntry = {
   date?: string | null;
   created_at: string;
   updated_at: string;
+  device_id?: string | null;
+  is_deleted?: number | boolean;
+  syncStatus?: 'PENDING' | 'SYNCED' | 'CONFLICT';
+  version?: number;
 };
 
 export type EntryInput = {

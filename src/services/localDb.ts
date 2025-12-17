@@ -2,6 +2,7 @@ import * as SQLite from 'expo-sqlite';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { EntryInput, EntryUpdate, LocalEntry, mapToLocalEntry } from '../types/entries';
+import getDeviceId from './deviceId';
 import { ensureCategory, DEFAULT_CATEGORY } from '../constants/categories';
 
 let db: any = null;
@@ -49,13 +50,13 @@ const asyncStorageAdapter = {
         // Handle SELECT entries
         const selectEntries = /SELECT \* FROM entries WHERE user_id = \? AND is_deleted = 0 ORDER BY date DESC, created_at DESC LIMIT (\d+)/i.exec(sql);
         if (selectEntries) {
-          const limit = Number(params[0] === undefined ? params[limit] : params[1]) || Number(selectEntries[1]) || 1000;
           const userId = params[0];
+          const lim = Number(params[1] || selectEntries[1]) || 1000;
           const all = await asyncStorageAdapter.readEntries();
           const arr = (all[userId] || []).filter((r) => !r.is_deleted).sort((a, b) => {
             if (a.date === b.date) return (b.created_at || 0) - (a.created_at || 0);
             return String(b.date).localeCompare(String(a.date));
-          }).slice(0, limit);
+          }).slice(0, lim);
           const rows = { length: arr.length, item: (i: number) => arr[i] };
           success && success(tx, { rows });
           return;
@@ -79,11 +80,11 @@ const asyncStorageAdapter = {
 
         // INSERT OR REPLACE INTO entries
         if (/INSERT OR REPLACE INTO entries/i.test(sql)) {
-          const [id, user_id, amount, category, note, type, currency, date, created_at, updated_at, device_id] = params;
+          const [id, user_id, amount, category, note, type, currency, date, created_at, updated_at, device_id, sync_status] = params;
           const all = await asyncStorageAdapter.readEntries();
           if (!all[user_id]) all[user_id] = [];
           const idx = all[user_id].findIndex((r) => r.id === id);
-          const row = { id, user_id, amount, category, note, type, currency, date, created_at, updated_at, device_id, is_deleted: 0 };
+          const row = { id, user_id, amount, category, note, type, currency, date, created_at, updated_at, device_id, is_deleted: 0, sync_status: sync_status || 'SYNCED' };
           if (idx >= 0) all[user_id][idx] = row; else all[user_id].unshift(row);
           await asyncStorageAdapter.writeEntries(all);
           success && success(tx, { rows: { length: 1, item: (i: number) => row } });
@@ -93,7 +94,8 @@ const asyncStorageAdapter = {
         // UPDATE entries SET ... WHERE id = ?
         if (/UPDATE entries SET/i.test(sql) && /WHERE id = \?/i.test(sql)) {
           const updated_at = params[6];
-          const id = params[7];
+          const id = params[params.length - 1];
+          const sync_status = params.length >= 9 ? params[7] : undefined;
           const all = await asyncStorageAdapter.readEntries();
           for (const k of Object.keys(all)) {
             const idx = all[k].findIndex((r) => r.id === id);
@@ -106,6 +108,7 @@ const asyncStorageAdapter = {
               row.currency = params[4];
               row.date = params[5];
               row.updated_at = updated_at;
+              if (sync_status !== undefined) row.sync_status = sync_status;
               all[k][idx] = row;
               await asyncStorageAdapter.writeEntries(all);
               success && success(tx, { rows: { length: 1, item: (i: number) => row } });
@@ -116,14 +119,23 @@ const asyncStorageAdapter = {
           return;
         }
 
-        // UPDATE entries SET is_deleted = 1 WHERE id = ?
-        if (/UPDATE entries SET is_deleted = 1 WHERE id = \?/i.test(sql)) {
-          const id = params[0];
+        // UPDATE entries SET is_deleted = 1 WHERE id = ?  (or with updated_at/sync_status)
+        if (sql.toLowerCase().includes('is_deleted = 1')) {
+          const id = params[params.length - 1];
           const all = await asyncStorageAdapter.readEntries();
           for (const k of Object.keys(all)) {
             const idx = all[k].findIndex((r) => r.id === id);
             if (idx >= 0) {
               all[k][idx].is_deleted = 1;
+              if (params.length >= 2) {
+                const updatedAt = params[params.length - 2];
+                all[k][idx].updated_at = updatedAt;
+              }
+              // optional sync_status param may be present
+              if (params.length >= 3) {
+                const maybeSync = params[params.length - 2];
+                if (typeof maybeSync === 'string') all[k][idx].sync_status = maybeSync;
+              }
               await asyncStorageAdapter.writeEntries(all);
               success && success(tx, { rows: { length: 1, item: (i: number) => all[k][idx] } });
               return;
@@ -196,9 +208,10 @@ export function initDB() {
         currency TEXT,
         date TEXT,
         created_at INTEGER,
-        updated_at INTEGER,
-        device_id TEXT,
-        is_deleted INTEGER DEFAULT 0
+          updated_at INTEGER,
+          device_id TEXT,
+          is_deleted INTEGER DEFAULT 0,
+          sync_status TEXT DEFAULT 'SYNCED'
       );`
     );
 
@@ -224,6 +237,12 @@ export function initDB() {
         processed INTEGER DEFAULT 0
       );`
     );
+    // Ensure column exists on older DBs - ignore failure if already present
+    try {
+      tx.executeSql("ALTER TABLE entries ADD COLUMN sync_status TEXT DEFAULT 'SYNCED'");
+    } catch (e) {
+      // ignore
+    }
   });
 }
 
@@ -243,6 +262,10 @@ function rowToLocalEntry(row: any, userId: string): LocalEntry {
     date: row.date || created,
     created_at: created,
     updated_at: updated,
+    device_id: row.device_id || null,
+    is_deleted: row.is_deleted || 0,
+    syncStatus: row.sync_status || 'SYNCED',
+    version: row.version || 1,
   };
 }
 
@@ -337,10 +360,11 @@ export async function createEntry(userId: string, input: EntryInput): Promise<Lo
     updated_at: nowMs(),
   };
 
+  const deviceId = await getDeviceId();
   await new Promise<void>((resolve) => {
     db.transaction((tx: any) => {
       tx.executeSql(
-        'INSERT OR REPLACE INTO entries (id, user_id, amount, category, note, type, currency, date, created_at, updated_at, device_id, is_deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)',
+        'INSERT OR REPLACE INTO entries (id, user_id, amount, category, note, type, currency, date, created_at, updated_at, device_id, is_deleted, sync_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)',
         [
           payload.id,
           payload.user_id,
@@ -352,7 +376,8 @@ export async function createEntry(userId: string, input: EntryInput): Promise<Lo
           payload.date,
           payload.created_at,
           payload.updated_at,
-          null,
+          deviceId,
+          'PENDING',
         ],
         () => resolve(),
         () => resolve()
@@ -384,8 +409,8 @@ export async function patchEntry(userId: string, localId: string, updates: Entry
   await new Promise<void>((resolve) => {
     db.transaction((tx: any) => {
       tx.executeSql(
-        'UPDATE entries SET amount = ?, category = ?, note = ?, type = ?, currency = ?, date = ?, updated_at = ? WHERE id = ?',
-        [next.amount, next.category, next.note, next.type, next.currency, next.date, next.updated_at, localId],
+        'UPDATE entries SET amount = ?, category = ?, note = ?, type = ?, currency = ?, date = ?, updated_at = ?, sync_status = ? WHERE id = ?',
+        [next.amount, next.category, next.note, next.type, next.currency, next.date, next.updated_at, 'PENDING', localId],
         () => resolve(),
         () => resolve()
       );
@@ -408,7 +433,8 @@ export async function removeEntry(userId: string, localId: string): Promise<void
 
   await new Promise<void>((resolve) => {
     db.transaction((tx: any) => {
-      tx.executeSql('UPDATE entries SET is_deleted = 1 WHERE id = ?', [localId], () => resolve(), () => resolve());
+      const now = nowMs();
+      tx.executeSql('UPDATE entries SET is_deleted = 1, updated_at = ?, sync_status = ? WHERE id = ?', [now, 'PENDING', localId], () => resolve(), () => resolve());
     });
   });
 
