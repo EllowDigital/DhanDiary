@@ -459,6 +459,52 @@ export async function getSummary(period: 'daily' | 'monthly' | 'yearly', key: st
   });
 }
 
+// Wipe all local data for a given user (Option A - recommended)
+export async function wipeUserData(userId: string): Promise<void> {
+  // If using native sqlite, execute deletes; otherwise clear AsyncStorage entries for the user
+  if (useNativeSqlite) {
+    await new Promise<void>((resolve) => {
+      db.transaction((tx: any) => {
+        tx.executeSql('DELETE FROM entries WHERE user_id = ?', [userId], () => {}, () => {});
+        tx.executeSql('DELETE FROM outbox WHERE user_id = ?', [userId], () => {}, () => {});
+        // summaries are global in this schema; clear them to avoid cross-user leakage
+        tx.executeSql('DELETE FROM summaries', [], () => {}, () => {});
+        resolve();
+      });
+    });
+  } else {
+    const all = await asyncStorageAdapter.readEntries();
+    delete all[userId];
+    await asyncStorageAdapter.writeEntries(all);
+    await asyncStorageAdapter.writeSummaries({});
+  }
+  // notify subscribers
+  notify(userId);
+}
+
+const LOCK_KEY = (userId: string) => `localdb:locked:${userId}`;
+
+export async function lockUser(userId: string) {
+  try {
+    await AsyncStorage.setItem(LOCK_KEY(userId), '1');
+  } catch {}
+}
+
+export async function unlockUser(userId: string) {
+  try {
+    await AsyncStorage.removeItem(LOCK_KEY(userId));
+  } catch {}
+}
+
+export async function isUserLocked(userId: string): Promise<boolean> {
+  try {
+    const v = await AsyncStorage.getItem(LOCK_KEY(userId));
+    return !!v;
+  } catch {
+    return false;
+  }
+}
+
 export default {
   initDB,
   getEntries,
