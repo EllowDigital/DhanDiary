@@ -1,13 +1,18 @@
 #!/usr/bin/env node
 const admin = require('firebase-admin');
 const fs = require('fs');
+// load .env (can be overridden with --env)
 const argv = require('minimist')(process.argv.slice(2));
+const dotenv = require('dotenv');
+if (argv.env) dotenv.config({ path: String(argv.env) });
+else dotenv.config();
 
 const LIMIT_USERS = Number(argv.limit || 0); // 0 = unlimited
 const PER_USER_DOCS = Number(argv.perUser || 1000);
 const SAMPLE_LIMIT = 5;
 
 // Support: --key /path/to/serviceAccount.json  OR --emulator [host:port]
+// Also support SERVICE_ACCOUNT_JSON or SERVICE_ACCOUNT_PATH in .env
 if (argv.key) {
   const keyPath = String(argv.key);
   if (!fs.existsSync(keyPath)) {
@@ -22,12 +27,26 @@ if (argv.key) {
   const pid = argv.projectId || process.env.GCLOUD_PROJECT || 'demo-project';
   admin.initializeApp({ projectId: pid });
 } else {
-  if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-    console.warn(
-      'Warning: GOOGLE_APPLICATION_CREDENTIALS not set. Provide --key or set GOOGLE_APPLICATION_CREDENTIALS, or use --emulator.'
-    );
+  // Try SERVICE_ACCOUNT_JSON or SERVICE_ACCOUNT_PATH from env
+  if (process.env.SERVICE_ACCOUNT_JSON) {
+    try {
+      const key = JSON.parse(process.env.SERVICE_ACCOUNT_JSON);
+      admin.initializeApp({ credential: admin.credential.cert(key), projectId: argv.projectId || key.project_id });
+    } catch (err) {
+      console.error('Failed to parse SERVICE_ACCOUNT_JSON from env:', err.message);
+      process.exit(3);
+    }
+  } else if (process.env.SERVICE_ACCOUNT_PATH && fs.existsSync(process.env.SERVICE_ACCOUNT_PATH)) {
+    const key = require(process.env.SERVICE_ACCOUNT_PATH);
+    admin.initializeApp({ credential: admin.credential.cert(key), projectId: argv.projectId || key.project_id });
+  } else {
+    if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+      console.warn(
+        'Warning: GOOGLE_APPLICATION_CREDENTIALS not set. Provide --key, set SERVICE_ACCOUNT_JSON/SERVICE_ACCOUNT_PATH in .env, or use --emulator.'
+      );
+    }
+    admin.initializeApp({ credential: admin.credential.applicationDefault(), projectId: argv.projectId });
   }
-  admin.initializeApp({ credential: admin.credential.applicationDefault(), projectId: argv.projectId });
 }
 
 const db = admin.firestore();
