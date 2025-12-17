@@ -1,13 +1,5 @@
 import dayjs from 'dayjs';
-
-type LocalEntry = {
-  amount?: number | string;
-  date?: string;
-  created_at?: string;
-  type?: 'in' | 'out';
-  category?: string | null;
-  currency?: string;
-};
+import { LocalEntry } from '../types/entries';
 
 export type TrendPoint = { label: string; value: number };
 

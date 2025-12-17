@@ -353,7 +353,23 @@ const StatsScreen = () => {
 
   // Computation state & async aggregation to avoid blocking UI on large datasets
   const [computing, setComputing] = useState(false);
-  const [computed, setComputed] = useState<any>({ isReady: false });
+  const EMPTY_COMPUTED: any = {
+    isReady: false,
+    totalIn: 0n,
+    totalOut: 0n,
+    net: 0n,
+    count: 0,
+    mean: 0,
+    median: 0,
+    stddev: 0,
+    dailyTrend: [],
+    pieData: [],
+    topCategories: [],
+    maxIncome: 0,
+    maxExpense: 0,
+    currency: 'INR',
+  };
+  const [computed, setComputed] = useState<any>(EMPTY_COMPUTED);
 
   useEffect(() => {
     let cancelled = false;
@@ -370,14 +386,14 @@ const StatsScreen = () => {
           // timed out — fall back to base values
           timedOut = true;
           console.warn('Aggregation timed out; using fallback stats');
-          setComputed({ isReady: false });
+          setComputed(EMPTY_COMPUTED);
         } else {
           if (!timedOut) setComputed({ ...res, isReady: true });
         }
       } catch (err) {
         console.error('Aggregation error', err);
         // keep base values if aggregation fails
-        if (!cancelled) setComputed({ isReady: false });
+        if (!cancelled) setComputed(EMPTY_COMPUTED);
       } finally {
         if (!cancelled) setComputing(false);
       }
@@ -414,9 +430,9 @@ const StatsScreen = () => {
   const maxIncome = (computed && computed.isReady ? (computed.maxIncome ?? 0) : (baseMaxes?.maxIncome ?? 0));
   const maxExpense = (computed && computed.isReady ? (computed.maxExpense ?? 0) : (baseMaxes?.maxExpense ?? 0));
 
-  const dailyTrend = computed && computed.isReady ? (computed.dailyTrend || []) : (baseDailyTrend || []);
-  const pieData = computed && computed.isReady && computed.pieData
-    ? computed.pieData.map((p: any, i: number) => ({
+  const dailyTrend = (computed && computed.isReady ? (computed.dailyTrend || []) : (baseDailyTrend || [])) as TrendDataPoint[];
+  const pieData = (computed && computed.isReady && computed.pieData
+    ? (computed.pieData as any[]).map((p: any, i: number) => ({
         key: `${p.name}-${i}`,
         name: p.name,
         population: p.value,
@@ -424,7 +440,7 @@ const StatsScreen = () => {
         legendFontColor: '#333',
         legendFontSize: 12,
       }))
-    : (basePieData || []);
+    : (basePieData || [])) as PieDataPoint[];
 
   // Currency symbol from computed or fallback
   const currencySymbol = useMemo(() => {
@@ -440,19 +456,19 @@ const StatsScreen = () => {
   // Ensure numeric primitives for rendering to avoid undefined issues
   const totalInNum = Number(stats?.totalIn ?? 0);
   const totalOutNum = Number(stats?.totalOut ?? 0);
-  const netNum = Number(stats?.net ?? totalInNum - totalOutNum ?? 0);
+  const netNum = Number(stats?.net ?? (totalInNum - totalOutNum));
   const maxIncomeNum = Number(maxIncome ?? 0);
   const maxExpenseNum = Number(maxExpense ?? 0);
 
-  const hasTrendData = dailyTrend.some((d) => d.value > 0);
+  const hasTrendData = dailyTrend.some((d: TrendDataPoint) => d.value > 0);
   const peakDay = dailyTrend.reduce<TrendDataPoint | null>(
-    (a, b) => (!a || b.value > a.value ? b : a),
+    (a: TrendDataPoint | null, b: TrendDataPoint) => (!a || b.value > a.value ? b : a),
     null
   );
 
   // Trend averages
-  const activeDaysCount = dailyTrend.filter((d) => d.value > 0).length;
-  const trendTotal = dailyTrend.reduce((a, b) => a + b.value, 0);
+  const activeDaysCount = dailyTrend.filter((d: TrendDataPoint) => d.value > 0).length;
+  const trendTotal = dailyTrend.reduce((a: number, b: TrendDataPoint) => a + b.value, 0);
   const avgDailySpending = activeDaysCount ? Math.round(trendTotal / activeDaysCount) : 0;
 
   // --- HANDLERS ---
