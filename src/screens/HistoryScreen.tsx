@@ -29,7 +29,7 @@ import runInBackground from '../utils/background';
 import useDelayedLoading from '../hooks/useDelayedLoading';
 import FullScreenSpinner from '../components/FullScreenSpinner';
 import { colors, spacing } from '../utils/design';
-import { DEFAULT_CATEGORY, ensureCategory } from '../constants/categories';
+import { DEFAULT_CATEGORY, ensureCategory, getIconForCategory } from '../constants/categories';
 import ScreenHeader from '../components/ScreenHeader';
 import dayjs from 'dayjs';
 import { Swipeable } from 'react-native-gesture-handler';
@@ -44,8 +44,10 @@ const resolveEntryMoment = (entry: any) => dayjs(entry?.date || entry?.created_a
 // --- 1. MEMOIZED LIST ITEM (Performance) ---
 const SwipeableHistoryItem = React.memo(({ item, onEdit, onDelete }: any) => {
   const isIncome = item.type === 'in';
-  const color = isIncome ? colors.accentGreen : colors.text;
-  const iconName = isIncome ? 'arrow-downward' : 'arrow-upward';
+  const color = isIncome ? colors.accentGreen : colors.accentRed;
+  // Use category-based icon when available, fall back to type arrows
+  const catIcon = getIconForCategory(item.category);
+  const iconName = catIcon || (isIncome ? 'arrow-downward' : 'arrow-upward');
   const dateStr = dayjs(item.date || item.created_at).format('MMM D, h:mm A');
   const swipeableRef = useRef<Swipeable>(null);
 

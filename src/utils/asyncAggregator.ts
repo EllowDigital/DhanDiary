@@ -96,7 +96,8 @@ export async function aggregateForRange(
   let seen = 0;
 
   // adapt chunk size for very large processed set
-  const effectiveChunk = entriesToProcess.length > 200000 ? Math.max(500, Math.floor(CHUNK_SIZE / 4)) : CHUNK_SIZE;
+  const effectiveChunk =
+    entriesToProcess.length > 200000 ? Math.max(500, Math.floor(CHUNK_SIZE / 4)) : CHUNK_SIZE;
   for (let i = 0; i < entriesToProcess.length; i += effectiveChunk) {
     const chunk = entriesToProcess.slice(i, i + effectiveChunk);
     for (const e of chunk) {

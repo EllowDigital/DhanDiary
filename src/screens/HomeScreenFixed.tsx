@@ -32,6 +32,7 @@ import Svg, {
   Circle,
 } from 'react-native-svg';
 import { spacing, colors } from '../utils/design';
+import { getIconForCategory } from '../constants/categories';
 import { LocalEntry } from '../types/entries';
 
 // Chart Kit
@@ -61,25 +62,7 @@ const getSmartGreeting = () => {
   return 'Good Evening';
 };
 
-const getIconForCategory = (cat?: string | null): keyof typeof MaterialIcon.glyphMap => {
-  const normalized = (cat || 'other').trim().toLowerCase();
-  const map: Record<string, string> = {
-    food: 'restaurant',
-    transport: 'directions-car',
-    bills: 'receipt-long',
-    salary: 'attach-money',
-    shopping: 'shopping-bag',
-    health: 'medical-services',
-    education: 'school',
-    entertainment: 'movie',
-    groceries: 'shopping-cart',
-    fuel: 'local-gas-station',
-    rent: 'home',
-    utilities: 'lightbulb',
-    other: 'category',
-  };
-  return (map[normalized] || 'category') as any;
-};
+// use shared `getIconForCategory` from constants
 
 // --- CHART 1: AREA WAVE (Trend) ---
 const FinancialWaveChart = ({

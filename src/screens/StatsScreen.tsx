@@ -256,7 +256,7 @@ const StatsScreen = () => {
       { totalIn: 0, totalOut: 0, net: 0 }
     );
   }, [filteredEntries]);
-  
+
   // Advanced Stats - baseline
   const baseAdvanced = useMemo(() => {
     const overall = calcStats(filteredEntries);
@@ -389,11 +389,18 @@ const StatsScreen = () => {
         // If the filter is 'All' or the filtered set is large, stream pages from Firestore
         let aggPromise: Promise<any>;
         const LARGE_LOCAL_THRESHOLD = 200000;
-        if (filter === 'All' || (filteredEntries && filteredEntries.length > LARGE_LOCAL_THRESHOLD)) {
+        if (
+          filter === 'All' ||
+          (filteredEntries && filteredEntries.length > LARGE_LOCAL_THRESHOLD)
+        ) {
           const pages = fetchEntriesGenerator(user?.uid || '', 500);
-          aggPromise = aggregateFromPages(pages, rangeStart, rangeEnd, { signal: controller?.signal ?? null });
+          aggPromise = aggregateFromPages(pages, rangeStart, rangeEnd, {
+            signal: controller?.signal ?? null,
+          });
         } else {
-          aggPromise = asyncAggregator.aggregateForRange(filteredEntries, rangeStart, rangeEnd, { signal: controller?.signal ?? null });
+          aggPromise = asyncAggregator.aggregateForRange(filteredEntries, rangeStart, rangeEnd, {
+            signal: controller?.signal ?? null,
+          });
         }
         const timeoutPromise = new Promise<null>((res) => setTimeout(() => res(null), TIMEOUT_MS));
         const res: any = await Promise.race([aggPromise, timeoutPromise]);
@@ -431,59 +438,77 @@ const StatsScreen = () => {
   }, [filteredEntries, rangeStart, rangeEnd]);
 
   // Prefer computed results when available (fast fallback for small data)
-  const stats = computed && computed.isReady
-    ? {
-        totalIn: Number(computed.totalIn ?? 0n) / 100,
-        totalOut: Number(computed.totalOut ?? 0n) / 100,
-        net: Number(computed.net ?? 0n) / 100,
-      }
-    : baseStats || { totalIn: 0, totalOut: 0, net: 0 };
+  const stats =
+    computed && computed.isReady
+      ? {
+          totalIn: Number(computed.totalIn ?? 0n) / 100,
+          totalOut: Number(computed.totalOut ?? 0n) / 100,
+          net: Number(computed.net ?? 0n) / 100,
+        }
+      : baseStats || { totalIn: 0, totalOut: 0, net: 0 };
 
-  const advancedStats = computed && computed.isReady
-    ? {
-        overall: {
-          count: computed.count ?? 0,
-          mean: computed.mean ?? 0,
-          median: computed.median ?? 0,
-          stddev: computed.stddev ?? 0,
-        },
-        avgPerDay: Math.round((Number((computed.totalIn ?? 0n) - (computed.totalOut ?? 0n)) / 100) / Math.max(1, rangeEnd.diff(rangeStart, 'day') + 1)),
-      }
-    : baseAdvanced || { overall: { count: 0, mean: 0, median: 0, stddev: 0 }, avgPerDay: 0 };
+  const advancedStats =
+    computed && computed.isReady
+      ? {
+          overall: {
+            count: computed.count ?? 0,
+            mean: computed.mean ?? 0,
+            median: computed.median ?? 0,
+            stddev: computed.stddev ?? 0,
+          },
+          avgPerDay: Math.round(
+            Number((computed.totalIn ?? 0n) - (computed.totalOut ?? 0n)) /
+              100 /
+              Math.max(1, rangeEnd.diff(rangeStart, 'day') + 1)
+          ),
+        }
+      : baseAdvanced || { overall: { count: 0, mean: 0, median: 0, stddev: 0 }, avgPerDay: 0 };
 
-  const topExpenseCategories: { name: string; value: number }[] = computed && computed.isReady
-    ? (computed.topCategories || []).map((c: any) => ({ name: String(c.name), value: Math.round(Number(c.value) || 0) }))
-    : (baseTopExpenseCategories || []);
-  const maxIncome = (computed && computed.isReady ? (computed.maxIncome ?? 0) : (baseMaxes?.maxIncome ?? 0));
-  const maxExpense = (computed && computed.isReady ? (computed.maxExpense ?? 0) : (baseMaxes?.maxExpense ?? 0));
+  const topExpenseCategories: { name: string; value: number }[] =
+    computed && computed.isReady
+      ? (computed.topCategories || []).map((c: any) => ({
+          name: String(c.name),
+          value: Math.round(Number(c.value) || 0),
+        }))
+      : baseTopExpenseCategories || [];
+  const maxIncome =
+    computed && computed.isReady ? (computed.maxIncome ?? 0) : (baseMaxes?.maxIncome ?? 0);
+  const maxExpense =
+    computed && computed.isReady ? (computed.maxExpense ?? 0) : (baseMaxes?.maxExpense ?? 0);
 
-  const dailyTrend = (computed && computed.isReady ? (computed.dailyTrend || []) : (baseDailyTrend || [])) as TrendDataPoint[];
-  const pieData = (computed && computed.isReady && computed.pieData
-    ? (computed.pieData as any[]).map((p: any, i: number) => ({
-        key: `${p.name}-${i}`,
-        name: p.name,
-        population: p.value,
-        color: PIE_COLORS[i % PIE_COLORS.length],
-        legendFontColor: '#333',
-        legendFontSize: 12,
-      }))
-    : (basePieData || [])) as PieDataPoint[];
+  const dailyTrend = (
+    computed && computed.isReady ? computed.dailyTrend || [] : baseDailyTrend || []
+  ) as TrendDataPoint[];
+  const pieData = (
+    computed && computed.isReady && computed.pieData
+      ? (computed.pieData as any[]).map((p: any, i: number) => ({
+          key: `${p.name}-${i}`,
+          name: p.name,
+          population: p.value,
+          color: PIE_COLORS[i % PIE_COLORS.length],
+          legendFontColor: '#333',
+          legendFontSize: 12,
+        }))
+      : basePieData || []
+  ) as PieDataPoint[];
 
   // Currency symbol from computed or fallback
   const currencySymbol = useMemo(() => {
     const symbolMap: Record<string, string> = { INR: '₹', USD: '$', EUR: '€', GBP: '£' };
-    const currency = (computed && computed.isReady) ? computed.currency : (filteredEntries[0]?.currency || 'INR');
+    const currency =
+      computed && computed.isReady ? computed.currency : filteredEntries[0]?.currency || 'INR';
     return symbolMap[currency] || symbolMap.INR;
   }, [computed, filteredEntries]);
 
   baseStats.net = baseStats.totalIn - baseStats.totalOut;
 
-  const savingsRate = stats && stats.totalIn > 0 ? Math.max(0, (stats.net / stats.totalIn) * 100) : 0;
+  const savingsRate =
+    stats && stats.totalIn > 0 ? Math.max(0, (stats.net / stats.totalIn) * 100) : 0;
 
   // Ensure numeric primitives for rendering to avoid undefined issues
   const totalInNum = Number(stats?.totalIn ?? 0);
   const totalOutNum = Number(stats?.totalOut ?? 0);
-  const netNum = Number(stats?.net ?? (totalInNum - totalOutNum));
+  const netNum = Number(stats?.net ?? totalInNum - totalOutNum);
   const maxIncomeNum = Number(maxIncome ?? 0);
   const maxExpenseNum = Number(maxExpense ?? 0);
 
@@ -672,7 +697,7 @@ const StatsScreen = () => {
                   size={16}
                   color={netNum >= 0 ? '#2E7D32' : '#C62828'}
                 />
-                <Text style={[styles.badgeText, { color: netNum >= 0 ? '#2E7D32' : '#C62828' }]}> 
+                <Text style={[styles.badgeText, { color: netNum >= 0 ? '#2E7D32' : '#C62828' }]}>
                   {netNum >= 0 ? 'Surplus' : 'Deficit'}
                 </Text>
               </View>
