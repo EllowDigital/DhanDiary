@@ -357,14 +357,27 @@ const StatsScreen = () => {
 
   useEffect(() => {
     let cancelled = false;
+    let timedOut = false;
     setComputing(true);
     (async () => {
       try {
-        const res = await asyncAggregator.aggregateForRange(entries, rangeStart, rangeEnd);
+        const TIMEOUT_MS = 12000;
+        const aggPromise = asyncAggregator.aggregateForRange(entries, rangeStart, rangeEnd);
+        const timeoutPromise = new Promise<null>((res) => setTimeout(() => res(null), TIMEOUT_MS));
+        const res: any = await Promise.race([aggPromise, timeoutPromise]);
         if (cancelled) return;
-        setComputed({ ...res, isReady: true });
+        if (res === null) {
+          // timed out — fall back to base values
+          timedOut = true;
+          console.warn('Aggregation timed out; using fallback stats');
+          setComputed({ isReady: false });
+        } else {
+          if (!timedOut) setComputed({ ...res, isReady: true });
+        }
       } catch (err) {
+        console.error('Aggregation error', err);
         // keep base values if aggregation fails
+        if (!cancelled) setComputed({ isReady: false });
       } finally {
         if (!cancelled) setComputing(false);
       }
@@ -375,35 +388,34 @@ const StatsScreen = () => {
   }, [entries, rangeStart, rangeEnd]);
 
   // Prefer computed results when available (fast fallback for small data)
-  const stats = computed.isReady
+  const stats = computed && computed.isReady
     ? {
-        totalIn: Number(computed.totalIn) / 100,
-        totalOut: Number(computed.totalOut) / 100,
-        net: Number(computed.net) / 100,
+        totalIn: Number(computed.totalIn ?? 0n) / 100,
+        totalOut: Number(computed.totalOut ?? 0n) / 100,
+        net: Number(computed.net ?? 0n) / 100,
       }
-    : baseStats;
+    : baseStats || { totalIn: 0, totalOut: 0, net: 0 };
 
-  const advancedStats = computed.isReady
+  const advancedStats = computed && computed.isReady
     ? {
         overall: {
-          count: computed.count,
-          mean: computed.mean,
-          median: computed.median,
-          stddev: computed.stddev,
+          count: computed.count ?? 0,
+          mean: computed.mean ?? 0,
+          median: computed.median ?? 0,
+          stddev: computed.stddev ?? 0,
         },
-        avgPerDay: Math.round((Number(computed.totalIn - computed.totalOut) / 100) / Math.max(1, rangeEnd.diff(rangeStart, 'day') + 1)),
+        avgPerDay: Math.round((Number((computed.totalIn ?? 0n) - (computed.totalOut ?? 0n)) / 100) / Math.max(1, rangeEnd.diff(rangeStart, 'day') + 1)),
       }
-    : baseAdvanced;
+    : baseAdvanced || { overall: { count: 0, mean: 0, median: 0, stddev: 0 }, avgPerDay: 0 };
 
-  const topExpenseCategories = computed.isReady
-    ? computed.topCategories.map((c: any) => ({ name: c.name, value: Math.round(c.value) }))
-    : baseTopExpenseCategories;
+  const topExpenseCategories = computed && computed.isReady
+    ? (computed.topCategories || []).map((c: any) => ({ name: c.name, value: Math.round(c.value) }))
+    : baseTopExpenseCategories || [];
+  const maxIncome = (computed && computed.isReady ? (computed.maxIncome ?? 0) : (baseMaxes?.maxIncome ?? 0));
+  const maxExpense = (computed && computed.isReady ? (computed.maxExpense ?? 0) : (baseMaxes?.maxExpense ?? 0));
 
-  const maxIncome = computed.isReady ? computed.maxIncome : baseMaxes.maxIncome;
-  const maxExpense = computed.isReady ? computed.maxExpense : baseMaxes.maxExpense;
-
-  const dailyTrend = computed.isReady ? computed.dailyTrend : baseDailyTrend;
-  const pieData = computed.isReady
+  const dailyTrend = computed && computed.isReady ? (computed.dailyTrend || []) : (baseDailyTrend || []);
+  const pieData = computed && computed.isReady && computed.pieData
     ? computed.pieData.map((p: any, i: number) => ({
         key: `${p.name}-${i}`,
         name: p.name,
@@ -412,16 +424,25 @@ const StatsScreen = () => {
         legendFontColor: '#333',
         legendFontSize: 12,
       }))
-    : basePieData;
+    : (basePieData || []);
 
   // Currency symbol from computed or fallback
   const currencySymbol = useMemo(() => {
     const symbolMap: Record<string, string> = { INR: '₹', USD: '$', EUR: '€', GBP: '£' };
-    const currency = computed.isReady ? computed.currency : filteredEntries[0]?.currency || 'INR';
+    const currency = (computed && computed.isReady) ? computed.currency : (filteredEntries[0]?.currency || 'INR');
     return symbolMap[currency] || symbolMap.INR;
   }, [computed, filteredEntries]);
 
   baseStats.net = baseStats.totalIn - baseStats.totalOut;
+
+  const savingsRate = stats && stats.totalIn > 0 ? Math.max(0, (stats.net / stats.totalIn) * 100) : 0;
+
+  // Ensure numeric primitives for rendering to avoid undefined issues
+  const totalInNum = Number(stats?.totalIn ?? 0);
+  const totalOutNum = Number(stats?.totalOut ?? 0);
+  const netNum = Number(stats?.net ?? totalInNum - totalOutNum ?? 0);
+  const maxIncomeNum = Number(maxIncome ?? 0);
+  const maxExpenseNum = Number(maxExpense ?? 0);
 
   const hasTrendData = dailyTrend.some((d) => d.value > 0);
   const peakDay = dailyTrend.reduce<TrendDataPoint | null>(
@@ -494,6 +515,11 @@ const StatsScreen = () => {
         >
           {/* 1. FILTER TABS */}
           <View>
+            {computing && (
+              <View style={{ alignItems: 'center', marginBottom: 8 }}>
+                <ActivityIndicator size="small" color={colors.primary} />
+              </View>
+            )}
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -610,13 +636,13 @@ const StatsScreen = () => {
             </View>
 
             <Text
-              style={[styles.bigValue, { color: stats.net >= 0 ? '#2E7D32' : '#C62828' }]}
+              style={[styles.bigValue, { color: netNum >= 0 ? '#2E7D32' : '#C62828' }]}
               adjustsFontSizeToFit
               numberOfLines={1}
             >
-              {stats.net >= 0 ? '+' : ''}
+              {netNum >= 0 ? '+' : ''}
               {currencySymbol}
-              {Math.abs(stats.net).toLocaleString()}
+              {Math.abs(netNum).toLocaleString()}
             </Text>
 
             <View style={styles.divider} />
@@ -626,14 +652,14 @@ const StatsScreen = () => {
                 <Text style={styles.labelMutedSmall}>Income</Text>
                 <Text style={styles.subValueGreen}>
                   {currencySymbol}
-                  {stats.totalIn.toLocaleString()}
+                  {totalInNum.toLocaleString()}
                 </Text>
               </View>
               <View style={{ alignItems: 'flex-end' }}>
                 <Text style={styles.labelMutedSmall}>Expense</Text>
                 <Text style={styles.subValueRed}>
                   {currencySymbol}
-                  {stats.totalOut.toLocaleString()}
+                  {totalOutNum.toLocaleString()}
                 </Text>
               </View>
             </View>
@@ -747,7 +773,7 @@ const StatsScreen = () => {
               </View>
               <View style={styles.gridContent}>
                 <Text style={styles.gridValue} adjustsFontSizeToFit numberOfLines={1}>
-                  {maxIncome > 9999 ? (maxIncome / 1000).toFixed(1) + 'k' : maxIncome}
+                  {maxIncomeNum > 9999 ? (maxIncomeNum / 1000).toFixed(1) + 'k' : maxIncomeNum}
                 </Text>
                 <Text style={styles.gridLabel} numberOfLines={1}>
                   Max In
@@ -764,7 +790,7 @@ const StatsScreen = () => {
               </View>
               <View style={styles.gridContent}>
                 <Text style={styles.gridValue} adjustsFontSizeToFit numberOfLines={1}>
-                  {maxExpense > 9999 ? (maxExpense / 1000).toFixed(1) + 'k' : maxExpense}
+                  {maxExpenseNum > 9999 ? (maxExpenseNum / 1000).toFixed(1) + 'k' : maxExpenseNum}
                 </Text>
                 <Text style={styles.gridLabel} numberOfLines={1}>
                   Max Out
