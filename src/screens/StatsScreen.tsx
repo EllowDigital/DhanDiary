@@ -22,6 +22,7 @@ import ScreenHeader from '../components/ScreenHeader';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import DailyTrendChart from '../components/charts/DailyTrendChart';
 import { LocalEntry } from '../types/entries';
+import asyncAggregator from '../utils/asyncAggregator';
 // Standard import for stability on Android
 import { PieChart } from 'react-native-chart-kit';
 
@@ -240,15 +241,10 @@ const StatsScreen = () => {
     });
   }, [entries, rangeStart, rangeEnd]);
 
-  // Currency Handling
-  const currencySymbol = useMemo(() => {
-    const symbolMap: Record<string, string> = { INR: '₹', USD: '$', EUR: '€', GBP: '£' };
-    const currency = filteredEntries[0]?.currency || 'INR';
-    return symbolMap[currency] || symbolMap.INR;
-  }, [filteredEntries]);
+  // Currency handled by async aggregator when available
 
-  // Basic Stats (Totals)
-  const stats = useMemo(() => {
+  // Basic Stats (Totals) - baseline (fast path for small datasets)
+  const baseStats = useMemo(() => {
     return filteredEntries.reduce(
       (acc, entry) => {
         const amount = Number(entry.amount) || 0;
@@ -259,10 +255,82 @@ const StatsScreen = () => {
       { totalIn: 0, totalOut: 0, net: 0 }
     );
   }, [filteredEntries]);
-  stats.net = stats.totalIn - stats.totalOut;
 
-  // Advanced Stats
-  const advancedStats = useMemo(() => {
+  // Computation state & async aggregation to avoid blocking UI on large datasets
+  const [computing, setComputing] = useState(false);
+  const [computed, setComputed] = useState<any>({ isReady: false });
+
+  useEffect(() => {
+    let cancelled = false;
+    setComputing(true);
+    (async () => {
+      try {
+        const res = await asyncAggregator.aggregateForRange(entries, rangeStart, rangeEnd);
+        if (cancelled) return;
+        setComputed({ ...res, isReady: true });
+      } catch (err) {
+        // keep base values if aggregation fails
+      } finally {
+        if (!cancelled) setComputing(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [entries, rangeStart, rangeEnd]);
+
+  // Prefer computed results when available (fast fallback for small data)
+  const stats = computed.isReady
+    ? {
+        totalIn: Number(computed.totalIn) / 100,
+        totalOut: Number(computed.totalOut) / 100,
+        net: Number(computed.net) / 100,
+      }
+    : baseStats;
+
+  const advancedStats = computed.isReady
+    ? {
+        overall: {
+          count: computed.count,
+          mean: computed.mean,
+          median: computed.median,
+          stddev: computed.stddev,
+        },
+        avgPerDay: Math.round((Number(computed.totalIn - computed.totalOut) / 100) / Math.max(1, rangeEnd.diff(rangeStart, 'day') + 1)),
+      }
+    : baseAdvanced;
+
+  const topExpenseCategories = computed.isReady
+    ? computed.topCategories.map((c: any) => ({ name: c.name, value: Math.round(c.value) }))
+    : baseTopExpenseCategories;
+
+  const maxIncome = computed.isReady ? computed.maxIncome : baseMaxes.maxIncome;
+  const maxExpense = computed.isReady ? computed.maxExpense : baseMaxes.maxExpense;
+
+  const dailyTrend = computed.isReady ? computed.dailyTrend : baseDailyTrend;
+  const pieData = computed.isReady
+    ? computed.pieData.map((p: any, i: number) => ({
+        key: `${p.name}-${i}`,
+        name: p.name,
+        population: p.value,
+        color: PIE_COLORS[i % PIE_COLORS.length],
+        legendFontColor: '#333',
+        legendFontSize: 12,
+      }))
+    : basePieData;
+
+  // Currency symbol from computed or fallback
+  const currencySymbol = useMemo(() => {
+    const symbolMap: Record<string, string> = { INR: '₹', USD: '$', EUR: '€', GBP: '£' };
+    const currency = computed.isReady ? computed.currency : filteredEntries[0]?.currency || 'INR';
+    return symbolMap[currency] || symbolMap.INR;
+  }, [computed, filteredEntries]);
+
+  const savingsRate = stats.totalIn > 0 ? Math.max(0, (stats.net / stats.totalIn) * 100) : 0;
+  baseStats.net = baseStats.totalIn - baseStats.totalOut;
+
+  // Advanced Stats - baseline
+  const baseAdvanced = useMemo(() => {
     const overall = calcStats(filteredEntries);
     const days = Math.max(1, rangeEnd.diff(rangeStart, 'day') + 1);
     const totalAmount = filteredEntries.reduce((s, e) => s + Number(e.amount || 0), 0);
@@ -270,7 +338,7 @@ const StatsScreen = () => {
     return { overall, avgPerDay };
   }, [filteredEntries, rangeStart, rangeEnd]);
 
-  const topExpenseCategories = useMemo(() => {
+  const baseTopExpenseCategories = useMemo(() => {
     const map: Record<string, number> = {};
     filteredEntries
       .filter((e) => e.type === 'out')
@@ -285,7 +353,7 @@ const StatsScreen = () => {
   }, [filteredEntries]);
 
   // Max/Min for Grid
-  const { maxIncome, maxExpense } = useMemo(() => {
+  const baseMaxes = useMemo(() => {
     let maxIn = 0,
       maxOut = 0;
     filteredEntries.forEach((e) => {
@@ -296,10 +364,10 @@ const StatsScreen = () => {
     return { maxIncome: maxIn, maxExpense: maxOut };
   }, [filteredEntries]);
 
-  const savingsRate = stats.totalIn > 0 ? Math.max(0, (stats.net / stats.totalIn) * 100) : 0;
+  
 
   // --- CHART DATA PREP ---
-  const dailyTrend = useMemo(() => {
+  const baseDailyTrend = useMemo(() => {
     const diffDays = rangeEnd.diff(rangeStart, 'day');
     const totalDays = Math.max(1, diffDays + 1);
 
@@ -337,7 +405,7 @@ const StatsScreen = () => {
     return labels.map((label, i) => ({ label, value: values[i] }));
   }, [filteredEntries, rangeStart, rangeEnd]);
 
-  const pieData = useMemo<PieDataPoint[]>(() => {
+  const basePieData = useMemo<PieDataPoint[]>(() => {
     const cats = filteredEntries
       .filter((entry) => entry.type === 'out')
       .reduce<Record<string, number>>((acc, entry) => {
