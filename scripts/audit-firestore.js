@@ -1,18 +1,35 @@
 #!/usr/bin/env node
 const admin = require('firebase-admin');
+const fs = require('fs');
 const argv = require('minimist')(process.argv.slice(2));
 
 const LIMIT_USERS = Number(argv.limit || 0); // 0 = unlimited
 const PER_USER_DOCS = Number(argv.perUser || 1000);
 const SAMPLE_LIMIT = 5;
 
-if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-  console.warn(
-    'Warning: GOOGLE_APPLICATION_CREDENTIALS not set. Ensure you have application default credentials.'
-  );
+// Support: --key /path/to/serviceAccount.json  OR --emulator [host:port]
+if (argv.key) {
+  const keyPath = String(argv.key);
+  if (!fs.existsSync(keyPath)) {
+    console.error('Service account key not found at', keyPath);
+    process.exit(3);
+  }
+  const key = require(keyPath);
+  admin.initializeApp({ credential: admin.credential.cert(key), projectId: argv.projectId });
+} else if (argv.emulator || process.env.FIRESTORE_EMULATOR_HOST) {
+  // If using emulator, set host if provided and initialize with a dummy projectId
+  if (argv.emulator) process.env.FIRESTORE_EMULATOR_HOST = String(argv.emulator);
+  const pid = argv.projectId || process.env.GCLOUD_PROJECT || 'demo-project';
+  admin.initializeApp({ projectId: pid });
+} else {
+  if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+    console.warn(
+      'Warning: GOOGLE_APPLICATION_CREDENTIALS not set. Provide --key or set GOOGLE_APPLICATION_CREDENTIALS, or use --emulator.'
+    );
+  }
+  admin.initializeApp({ credential: admin.credential.applicationDefault(), projectId: argv.projectId });
 }
 
-admin.initializeApp({ credential: admin.credential.applicationDefault() });
 const db = admin.firestore();
 
 async function audit() {
