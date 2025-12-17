@@ -381,11 +381,17 @@ const StatsScreen = () => {
       return;
     }
     setComputing(true);
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
     (async () => {
       try {
         const TIMEOUT_MS = 12000;
         // Use the pre-filtered entries to avoid re-scanning the full dataset
-        const aggPromise = asyncAggregator.aggregateForRange(filteredEntries, rangeStart, rangeEnd);
+        const aggPromise = asyncAggregator.aggregateForRange(
+          filteredEntries,
+          rangeStart,
+          rangeEnd,
+          { signal: controller?.signal ?? null }
+        );
         const timeoutPromise = new Promise<null>((res) => setTimeout(() => res(null), TIMEOUT_MS));
         const res: any = await Promise.race([aggPromise, timeoutPromise]);
         if (cancelled) return;
@@ -394,6 +400,12 @@ const StatsScreen = () => {
           timedOut = true;
           console.warn('Aggregation timed out; using fallback stats');
           setComputed(EMPTY_COMPUTED);
+          // Abort the running aggregator so it stops consuming CPU
+          try {
+            controller?.abort();
+          } catch (e) {
+            /* ignore */
+          }
         } else {
           if (!timedOut) setComputed({ ...res, isReady: true });
         }
@@ -407,6 +419,11 @@ const StatsScreen = () => {
     })();
     return () => {
       cancelled = true;
+      try {
+        controller?.abort();
+      } catch (e) {
+        /* ignore */
+      }
     };
   }, [filteredEntries, rangeStart, rangeEnd]);
 

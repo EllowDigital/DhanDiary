@@ -25,7 +25,8 @@ function formatCents(bn: bigint): string {
 export async function aggregateForRange(
   entries: LocalEntry[],
   rangeStart: dayjs.Dayjs,
-  rangeEnd: dayjs.Dayjs
+  rangeEnd: dayjs.Dayjs,
+  options?: { signal?: AbortSignal | null }
 ) {
   // chunked processing to avoid blocking the JS thread for long
   let totalIn = 0n;
@@ -72,6 +73,7 @@ export async function aggregateForRange(
     let seenForSample = 0;
     for (const e of entries) {
       try {
+        if (options?.signal?.aborted) break;
         const d = dayjs(e.date || e.created_at);
         if (!d.isValid()) continue;
         if (d.isBefore(rangeStart) || d.isAfter(rangeEnd)) continue;
@@ -98,6 +100,44 @@ export async function aggregateForRange(
   for (let i = 0; i < entriesToProcess.length; i += effectiveChunk) {
     const chunk = entriesToProcess.slice(i, i + effectiveChunk);
     for (const e of chunk) {
+      if (options?.signal?.aborted) {
+        // Return partial results to allow caller to stop heavy work
+        const labels: string[] = [];
+        const values: number[] = [];
+        dayMap.forEach((val, key) => {
+          labels.push(key);
+          values.push(Number(val) / 100);
+        });
+        const pie = Object.entries(categoryMap)
+          .map(([name, v]) => ({ name, value: v }))
+          .sort((a, b) => (a.value > b.value ? -1 : 1))
+          .map((p) => ({ name: p.name, value: Number(p.value) / 100 }));
+
+        return {
+          totalIn,
+          totalOut,
+          net: totalIn - totalOut,
+          count,
+          mean,
+          median: 0,
+          stddev: Math.sqrt(m2 / Math.max(1, count - 1)),
+          dailyTrend: labels.map((label, idx) => ({ label, value: values[idx] })),
+          pieData: pie,
+          topCategories: pie.slice(0, 10),
+          maxIncome: Number(maxIn) / 100,
+          maxExpense: Number(maxOut) / 100,
+          formatCents,
+          currency: (() => {
+            for (const ee of entries) {
+              const d = dayjs(ee.date || ee.created_at);
+              if (!d.isValid()) continue;
+              if (d.isBefore(rangeStart) || d.isAfter(rangeEnd)) continue;
+              if (ee.currency) return ee.currency;
+            }
+            return 'INR';
+          })(),
+        };
+      }
       try {
         const d = dayjs(e.date || e.created_at);
         if (!d.isValid()) continue;
