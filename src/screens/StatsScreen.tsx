@@ -25,6 +25,7 @@ import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import DailyTrendChart from '../components/charts/DailyTrendChart'; // Ensure this path is correct
 import { LocalEntry } from '../types/entries';
 import asyncAggregator from '../utils/asyncAggregator'; // Ensure this path is correct
+import { aggregateWithPreferSummary } from '../services/aggregates';
 import { fetchEntriesGenerator } from '../services/firestoreEntries'; // Ensure this path is correct
 import { PieChart } from 'react-native-chart-kit';
 
@@ -228,7 +229,12 @@ const StatsScreen = () => {
     try {
       let result;
       // Handle Massive Data (Trillion Scale Logic)
-      if (filter === 'All' || entries.length > 10000) {
+      // Prefer server-side precomputed summaries; fall back to streaming aggregation
+      if (user?.uid) {
+        result = await aggregateWithPreferSummary(user.uid, rangeStart, rangeEnd, {
+          signal: controller.signal,
+        });
+      } else if (filter === 'All' || entries.length > 10000) {
         const pages = fetchEntriesGenerator(user?.uid || '', 1000);
         result = await asyncAggregator.aggregateFromPages(pages, rangeStart, rangeEnd, {
           signal: controller.signal,
