@@ -22,7 +22,8 @@ import ScreenHeader from '../components/ScreenHeader';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import DailyTrendChart from '../components/charts/DailyTrendChart';
 import { LocalEntry } from '../types/entries';
-import asyncAggregator from '../utils/asyncAggregator';
+import asyncAggregator, { aggregateFromPages } from '../utils/asyncAggregator';
+import { fetchEntriesGenerator } from '../services/firestoreEntries';
 // Standard import for stability on Android
 import { PieChart } from 'react-native-chart-kit';
 
@@ -385,13 +386,15 @@ const StatsScreen = () => {
     (async () => {
       try {
         const TIMEOUT_MS = 12000;
-        // Use the pre-filtered entries to avoid re-scanning the full dataset
-        const aggPromise = asyncAggregator.aggregateForRange(
-          filteredEntries,
-          rangeStart,
-          rangeEnd,
-          { signal: controller?.signal ?? null }
-        );
+        // If the filter is 'All' or the filtered set is large, stream pages from Firestore
+        let aggPromise: Promise<any>;
+        const LARGE_LOCAL_THRESHOLD = 200000;
+        if (filter === 'All' || (filteredEntries && filteredEntries.length > LARGE_LOCAL_THRESHOLD)) {
+          const pages = fetchEntriesGenerator(user?.uid || '', 500);
+          aggPromise = aggregateFromPages(pages, rangeStart, rangeEnd, { signal: controller?.signal ?? null });
+        } else {
+          aggPromise = asyncAggregator.aggregateForRange(filteredEntries, rangeStart, rangeEnd, { signal: controller?.signal ?? null });
+        }
         const timeoutPromise = new Promise<null>((res) => setTimeout(() => res(null), TIMEOUT_MS));
         const res: any = await Promise.race([aggPromise, timeoutPromise]);
         if (cancelled) return;

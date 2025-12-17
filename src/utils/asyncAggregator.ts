@@ -241,4 +241,129 @@ export async function aggregateForRange(
   };
 }
 
+export async function aggregateFromPages(
+  pages: AsyncIterable<LocalEntry[]>,
+  rangeStart: dayjs.Dayjs,
+  rangeEnd: dayjs.Dayjs,
+  options?: { signal?: AbortSignal | null }
+) {
+  // Reuse the same local accumulators as aggregateForRange but process pages
+  let totalIn = 0n;
+  let totalOut = 0n;
+  let count = 0;
+  let mean = 0;
+  let m2 = 0;
+  const categoryMap: Record<string, bigint> = {};
+  const dayMap = new Map<string, bigint>();
+  let maxIn = 0n;
+  let maxOut = 0n;
+
+  const rangeDays = rangeEnd.diff(rangeStart, 'day');
+  const totalDays = Math.max(1, rangeDays + 1);
+  for (let i = 0; i < totalDays; i++) {
+    dayMap.set(rangeStart.add(i, 'day').format('YYYY-MM-DD'), 0n);
+  }
+
+  const parseNumber = (v: number | string | undefined) => {
+    if (v === undefined || v === null) return 0;
+    if (typeof v === 'number') return Number(v) || 0;
+    try {
+      const cleaned = String(v).replace(/[^0-9.-]/g, '');
+      const n = parseFloat(cleaned);
+      return Number.isFinite(n) ? n : 0;
+    } catch (err) {
+      return 0;
+    }
+  };
+
+  const sampleLimit = 100000;
+  const samples: number[] = [];
+  let seen = 0;
+
+  for await (const page of pages) {
+    if (options?.signal?.aborted) break;
+    for (const e of page) {
+      if (options?.signal?.aborted) break;
+      try {
+        const d = dayjs(e.date || e.created_at);
+        if (!d.isValid()) continue;
+        if (d.isBefore(rangeStart) || d.isAfter(rangeEnd)) continue;
+
+        const parsed = parseNumber(e.amount);
+        const cents = BigInt(Math.round(parsed * 100));
+        count++;
+
+        seen++;
+        const valForSample = parsed;
+        if (samples.length < sampleLimit) samples.push(valForSample);
+        else {
+          const idx = Math.floor(Math.random() * seen);
+          if (idx < sampleLimit) samples[idx] = valForSample;
+        }
+
+        const x = Number(cents) / 100;
+        const delta = x - mean;
+        mean += delta / count;
+        m2 += delta * (x - mean);
+
+        if (e.type === 'in') {
+          totalIn += cents;
+          if (cents > maxIn) maxIn = cents;
+        } else {
+          totalOut += cents;
+          if (cents > maxOut) maxOut = cents;
+          const key = d.format('YYYY-MM-DD');
+          if (dayMap.has(key)) dayMap.set(key, dayMap.get(key)! + cents);
+        }
+
+        const cat = e.category || 'General';
+        categoryMap[cat] = (categoryMap[cat] || 0n) + cents;
+      } catch (err) {
+        continue;
+      }
+    }
+    // yield briefly to the loop
+    await new Promise((r) => setTimeout(r, 0));
+  }
+
+  const variance = count > 1 ? m2 / (count - 1) : 0;
+  const stddev = Math.sqrt(variance);
+
+  samples.sort((a, b) => a - b);
+  const median = samples.length
+    ? samples.length % 2 === 1
+      ? samples[(samples.length - 1) / 2]
+      : (samples[samples.length / 2 - 1] + samples[samples.length / 2]) / 2
+    : 0;
+
+  const labels: string[] = [];
+  const values: number[] = [];
+  dayMap.forEach((val, key) => {
+    labels.push(key);
+    values.push(Number(val) / 100);
+  });
+
+  const pie = Object.entries(categoryMap)
+    .map(([name, v]) => ({ name, value: v }))
+    .sort((a, b) => (a.value > b.value ? -1 : 1))
+    .map((p) => ({ name: p.name, value: Number(p.value) / 100 }));
+
+  return {
+    totalIn,
+    totalOut,
+    net: totalIn - totalOut,
+    count,
+    mean,
+    median,
+    stddev,
+    dailyTrend: labels.map((label, i) => ({ label, value: values[i] })),
+    pieData: pie,
+    topCategories: pie.slice(0, 10),
+    maxIncome: Number(maxIn) / 100,
+    maxExpense: Number(maxOut) / 100,
+    formatCents,
+    currency: (() => 'INR')(),
+  };
+}
+
 export default { aggregateForRange };
