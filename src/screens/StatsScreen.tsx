@@ -374,11 +374,18 @@ const StatsScreen = () => {
   useEffect(() => {
     let cancelled = false;
     let timedOut = false;
+    // If there are no entries in range, short-circuit to avoid work
+    if (!filteredEntries || filteredEntries.length === 0) {
+      setComputed(EMPTY_COMPUTED);
+      setComputing(false);
+      return;
+    }
     setComputing(true);
     (async () => {
       try {
         const TIMEOUT_MS = 12000;
-        const aggPromise = asyncAggregator.aggregateForRange(entries, rangeStart, rangeEnd);
+        // Use the pre-filtered entries to avoid re-scanning the full dataset
+        const aggPromise = asyncAggregator.aggregateForRange(filteredEntries, rangeStart, rangeEnd);
         const timeoutPromise = new Promise<null>((res) => setTimeout(() => res(null), TIMEOUT_MS));
         const res: any = await Promise.race([aggPromise, timeoutPromise]);
         if (cancelled) return;
@@ -401,7 +408,7 @@ const StatsScreen = () => {
     return () => {
       cancelled = true;
     };
-  }, [entries, rangeStart, rangeEnd]);
+  }, [filteredEntries, rangeStart, rangeEnd]);
 
   // Prefer computed results when available (fast fallback for small data)
   const stats = computed && computed.isReady
@@ -424,9 +431,9 @@ const StatsScreen = () => {
       }
     : baseAdvanced || { overall: { count: 0, mean: 0, median: 0, stddev: 0 }, avgPerDay: 0 };
 
-  const topExpenseCategories = computed && computed.isReady
-    ? (computed.topCategories || []).map((c: any) => ({ name: c.name, value: Math.round(c.value) }))
-    : baseTopExpenseCategories || [];
+  const topExpenseCategories: { name: string; value: number }[] = computed && computed.isReady
+    ? (computed.topCategories || []).map((c: any) => ({ name: String(c.name), value: Math.round(Number(c.value) || 0) }))
+    : (baseTopExpenseCategories || []);
   const maxIncome = (computed && computed.isReady ? (computed.maxIncome ?? 0) : (baseMaxes?.maxIncome ?? 0));
   const maxExpense = (computed && computed.isReady ? (computed.maxExpense ?? 0) : (baseMaxes?.maxExpense ?? 0));
 
@@ -745,7 +752,7 @@ const StatsScreen = () => {
                   Top Expense Categories
                 </Text>
                 {topExpenseCategories.length > 0 ? (
-                  topExpenseCategories.map((c, i) => (
+                  topExpenseCategories.map((c: { name: string; value: number }, i: number) => (
                     <View key={c.name} style={styles.catRow}>
                       <Text style={styles.catName}>
                         {i + 1}. {c.name}
@@ -902,7 +909,7 @@ const StatsScreen = () => {
 
                 {/* Legend */}
                 <View style={styles.legendContainer}>
-                  {pieData.slice(0, 5).map((item, i) => (
+                  {pieData.slice(0, 5).map((item: PieDataPoint, i: number) => (
                     <View key={i} style={styles.legendItem}>
                       <View style={[styles.dot, { backgroundColor: item.color }]} />
                       <Text style={styles.legendText}>{item.name}</Text>
