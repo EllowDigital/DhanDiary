@@ -254,7 +254,7 @@ const StatsScreen = () => {
           const othersValue = pieDataSafe
             .slice(4)
             .reduce((acc: number, curr: any) => acc + curr.value, 0);
-          if (othersValue > 0) top4.push({ name: 'Others', value: othersValue });
+          if (othersValue > 0) top4.push({ name: 'Others', value: othersValue, count: 0 });
           pieDataSafe = top4;
         }
 
