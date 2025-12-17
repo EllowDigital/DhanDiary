@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, Button } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
+import { getIconForCategory } from '../constants/categories';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Swipeable } from 'react-native-gesture-handler';
 
@@ -159,7 +160,7 @@ const SwipeableExpenseItem = React.memo(({ item, onEdit, onDelete }: any) => {
     >
       <View style={styles.compactRow}>
         <View style={[styles.compactIcon, { backgroundColor: '#fef2f2' }]}>
-          <MaterialIcon name="arrow-outward" size={18} color="#b91c1c" />
+          <MaterialIcon name={getIconForCategory(item.category)} size={18} color="#b91c1c" />
         </View>
         <View style={styles.compactContent}>
           <View style={styles.compactHeader}>
