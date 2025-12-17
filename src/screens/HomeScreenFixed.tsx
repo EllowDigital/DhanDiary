@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -20,10 +20,10 @@ import { useAuth } from '../hooks/useAuth';
 import { useEntries } from '../hooks/useEntries';
 import FullScreenSpinner from '../components/FullScreenSpinner';
 import dayjs from 'dayjs';
-import Svg, { Defs, LinearGradient, Stop, Rect, Circle } from 'react-native-svg';
+import Svg, { Defs, LinearGradient, Stop, Rect, Circle, Path } from 'react-native-svg';
 import { LineChart, PieChart } from 'react-native-chart-kit';
 import { LocalEntry } from '../types/entries';
-import { getIconForCategory } from '../constants/categories'; // Ensure this exists
+import { getIconForCategory } from '../constants/categories';
 
 // --- CONFIG ---
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -31,14 +31,14 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 }
 
 const colors = {
-  primary: '#3B82F6',
+  primary: '#3B82F6', // Tailwind Blue 500
+  secondary: '#EFF6FF', // Tailwind Blue 50
   background: '#F8FAFC',
   text: '#1E293B',
   subText: '#64748B',
   success: '#10B981',
   danger: '#EF4444',
   white: '#FFFFFF',
-  card: '#FFFFFF',
 };
 
 const CHART_COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#10b981', '#f59e0b', '#3b82f6'];
@@ -53,51 +53,70 @@ const getGreeting = () => {
 
 // --- SUB-COMPONENTS ---
 
-// 1. WAVE CHART (Optimized for Android)
+// 1. WAVE CHART (UI MATCHED TO SCREENSHOT)
 const WaveChart = React.memo(({ data, width }: { data: number[]; width: number }) => {
-  // Pad data to prevent chart crashes on single data points
-  const safeData = data.length > 0 ? data : [0, 0, 0, 0, 0, 0];
-  const chartWidth = width + 30; // Slight overflow to hide edges
+  // Pad data to ensure curve renders even with 1 data point
+  // The screenshot shows a curve, so we ensure at least some data points exist to prevent crash
+  const safeData = data.length >= 2 ? data : [0, 0, 0, 0, 0, 50, 100];
+
+  // React-native-chart-kit has internal padding. We widen the chart slightly
+  // and pull it left with negative margin to fill the container edge-to-edge.
+  const chartWidth = width + 40;
 
   return (
-    <View style={{ marginLeft: -20, overflow: 'hidden' }}>
+    <View style={{ marginLeft: -25, marginRight: -10, marginBottom: -10, overflow: 'hidden' }}>
       <LineChart
         data={{
-          labels: safeData.map(() => ''), // Empty labels to hide X-axis text
+          labels: safeData.map(() => ''), // Hide X labels
           datasets: [{ data: safeData }],
         }}
         width={chartWidth}
-        height={180}
+        height={200}
         withDots={false}
         withInnerLines={false}
         withOuterLines={false}
         withVerticalLines={false}
         withHorizontalLines={false}
+        withShadow={false}
         chartConfig={{
-          backgroundColor: 'transparent',
+          backgroundColor: '#fff',
           backgroundGradientFrom: '#fff',
           backgroundGradientTo: '#fff',
           decimalPlaces: 0,
+          // The line color
           color: (opacity = 1) => `rgba(59, 130, 246, ${opacity})`,
           labelColor: () => 'transparent',
+
+          // Crucial for the "Clean" look in screenshot
+          propsForDots: { r: '0' },
           propsForBackgroundLines: { strokeWidth: 0 },
+
+          // The Gradient Fill Effect
           fillShadowGradientFrom: colors.primary,
           fillShadowGradientTo: colors.primary,
-          fillShadowGradientFromOpacity: 0.25,
-          fillShadowGradientToOpacity: 0.0,
+          fillShadowGradientFromOpacity: 0.6, // Stronger at top
+          fillShadowGradientToOpacity: 0.05, // Fades to clear at bottom
           backgroundGradientFromOpacity: 0,
           backgroundGradientToOpacity: 0,
         }}
-        bezier
-        style={{ paddingRight: 0 }}
+        bezier // Makes the curve smooth
+        style={{
+          paddingRight: 0,
+          paddingLeft: 0,
+        }}
       />
     </View>
   );
 });
 
-// 2. PIE CHART (Custom Legend)
+// 2. PIE CHART
 const CustomPieChart = React.memo(({ data, width }: { data: any[]; width: number }) => {
-  if (data.length === 0) return <Text style={styles.emptyText}>No expenses yet</Text>;
+  if (data.length === 0)
+    return (
+      <View style={styles.centerBox}>
+        <Text style={styles.emptyText}>No data available</Text>
+      </View>
+    );
 
   return (
     <View style={styles.pieContainer}>
@@ -105,9 +124,7 @@ const CustomPieChart = React.memo(({ data, width }: { data: any[]; width: number
         data={data}
         width={width}
         height={200}
-        chartConfig={{
-          color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-        }}
+        chartConfig={{ color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})` }}
         accessor="population"
         backgroundColor="transparent"
         paddingLeft={String(width / 4)}
@@ -115,7 +132,6 @@ const CustomPieChart = React.memo(({ data, width }: { data: any[]; width: number
         absolute={false}
         hasLegend={false}
       />
-      {/* Custom Flex Legend */}
       <View style={styles.legendContainer}>
         {data.slice(0, 6).map((item, i) => (
           <View key={i} style={styles.legendItem}>
@@ -169,7 +185,7 @@ const TransactionItem = React.memo(
     return (
       <TouchableOpacity style={styles.txnRow} onPress={onPress} activeOpacity={0.7}>
         <View style={[styles.txnIconBox, { backgroundColor: isExpense ? '#FEF2F2' : '#F0FDF4' }]}>
-          <MaterialIcon name={icon as any} size={22} color={color} />
+          <MaterialIcon name={icon as any} size={24} color={color} />
         </View>
         <View style={styles.txnContent}>
           <Text style={styles.txnTitle} numberOfLines={1}>
@@ -197,7 +213,8 @@ const HomeScreen = () => {
 
   // Layout Constants
   const PADDING = 20;
-  const CHART_WIDTH = Math.min(600, width - PADDING * 2 - 32); // Responsive width cap
+  // Calculate Width for chart container (Screen width - padding - inner card padding)
+  const CHART_WIDTH = Math.min(600, width - PADDING * 2 - 32);
 
   // State
   const [showBalance, setShowBalance] = useState(true);
@@ -208,7 +225,6 @@ const HomeScreen = () => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(40)).current;
 
-  // Initial Animation
   useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
@@ -216,7 +232,6 @@ const HomeScreen = () => {
     ]).start();
   }, []);
 
-  // UI Handlers
   const handleToggleChart = (type: any) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setChartType(type);
@@ -236,7 +251,6 @@ const HomeScreen = () => {
         recentEntries: [],
       };
 
-    // 1. Totals
     const inVal = entries
       .filter((e) => e.type === 'in')
       .reduce((acc, c) => acc + Number(c.amount), 0);
@@ -244,27 +258,26 @@ const HomeScreen = () => {
       .filter((e) => e.type === 'out')
       .reduce((acc, c) => acc + Number(c.amount), 0);
 
-    // 2. Filtered Data for Charts
+    // Filter Logic
     const cutOff =
       period === 'week' ? dayjs().subtract(6, 'day').startOf('day') : dayjs().startOf('month');
     const filtered = entries.filter((e) => dayjs(e.date || e.created_at).isAfter(cutOff));
 
-    // 3. Wave Data (Daily Totals)
-    // Create array of 0s for buckets
+    // Wave Points Logic
     const wavePoints =
       period === 'week' ? new Array(7).fill(0) : new Array(dayjs().daysInMonth()).fill(0);
-
     filtered
       .filter((e) => e.type === 'out')
       .forEach((e) => {
         const d = dayjs(e.date);
-        const idx = period === 'week' ? 6 - dayjs().diff(d, 'day') : d.date() - 1; // Reverse logic for week (Today is last)
-        if (idx >= 0 && idx < wavePoints.length) {
-          wavePoints[idx] += Number(e.amount);
-        }
+        const idx = period === 'week' ? 6 - dayjs().diff(d, 'day') : d.date() - 1;
+        if (idx >= 0 && idx < wavePoints.length) wavePoints[idx] += Number(e.amount);
       });
 
-    // 4. Pie Data (Categories)
+    // If no data, give it a tiny curve so it looks good (like the screenshot placeholder)
+    const displayWave = wavePoints.some((v) => v > 0) ? wavePoints : [0, 0, 0, 0, 0, 10, 50];
+
+    // Pie Logic
     const catMap: Record<string, number> = {};
     filtered
       .filter((e) => e.type === 'out')
@@ -272,7 +285,6 @@ const HomeScreen = () => {
         const c = e.category || 'Other';
         catMap[c] = (catMap[c] || 0) + Number(e.amount);
       });
-
     const piePoints = Object.entries(catMap)
       .map(([name, val], i) => ({
         name,
@@ -285,12 +297,10 @@ const HomeScreen = () => {
 
     return {
       stats: { in: inVal, out: outVal, bal: inVal - outVal },
-      chartData: { wave: wavePoints, pie: piePoints },
+      chartData: { wave: displayWave, pie: piePoints },
       recentEntries: entries.slice(0, 10),
     };
   }, [entries, period]);
-
-  // --- RENDERS ---
 
   const renderHeader = () => (
     <View style={styles.headerContainer}>
@@ -302,28 +312,29 @@ const HomeScreen = () => {
           </TouchableOpacity>
           <View style={{ marginLeft: 12 }}>
             <Text style={styles.greetingText}>{getGreeting()}</Text>
-            <Text style={styles.userName}>{user?.name?.split(' ')[0] || 'User'}</Text>
+            <Text style={styles.userName}>{user?.name?.split(' ')[0] || 'Sotu'}</Text>
           </View>
         </View>
         <View style={styles.avatar}>
-          <Text style={styles.avatarInitial}>{user?.name?.[0]?.toUpperCase() || 'U'}</Text>
+          <Text style={styles.avatarInitial}>{user?.name?.[0]?.toUpperCase() || 'S'}</Text>
         </View>
       </View>
 
-      {/* 2. HERO CARD (Glassmorphism) */}
+      {/* 2. HERO CARD (Blue Gradient) */}
       <Animated.View
         style={[styles.heroCard, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
       >
         <Svg style={StyleSheet.absoluteFill}>
           <Defs>
             <LinearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
-              <Stop offset="0" stopColor="#3B82F6" />
+              <Stop offset="0" stopColor="#4F8EF7" />
               <Stop offset="1" stopColor="#2563EB" />
             </LinearGradient>
           </Defs>
-          <Rect width="100%" height="100%" rx={24} fill="url(#grad)" />
-          <Circle cx="90%" cy="10%" r="90" fill="white" fillOpacity="0.1" />
-          <Circle cx="5%" cy="90%" r="60" fill="white" fillOpacity="0.05" />
+          <Rect width="100%" height="100%" rx={26} fill="url(#grad)" />
+          {/* Decorative Circles matching screenshot */}
+          <Circle cx="85%" cy="15%" r="80" fill="white" fillOpacity="0.08" />
+          <Circle cx="10%" cy="90%" r="50" fill="white" fillOpacity="0.05" />
         </Svg>
 
         <View style={styles.cardContent}>
@@ -335,7 +346,7 @@ const HomeScreen = () => {
               <MaterialIcon
                 name={showBalance ? 'visibility' : 'visibility-off'}
                 size={18}
-                color="rgba(255,255,255,0.8)"
+                color="rgba(255,255,255,0.9)"
               />
             </TouchableOpacity>
           </View>
@@ -350,7 +361,7 @@ const HomeScreen = () => {
           <View style={styles.statsRow}>
             <View style={styles.statBox}>
               <View style={styles.iconCircleIn}>
-                <MaterialIcon name="arrow-downward" size={14} color="#10B981" />
+                <MaterialIcon name="arrow-downward" size={16} color="#10B981" />
               </View>
               <View>
                 <Text style={styles.statLabel}>Income</Text>
@@ -362,7 +373,7 @@ const HomeScreen = () => {
             <View style={styles.statDivider} />
             <View style={styles.statBox}>
               <View style={styles.iconCircleOut}>
-                <MaterialIcon name="arrow-upward" size={14} color="#EF4444" />
+                <MaterialIcon name="arrow-upward" size={16} color="#EF4444" />
               </View>
               <View>
                 <Text style={styles.statLabel}>Expense</Text>
@@ -400,17 +411,17 @@ const HomeScreen = () => {
               onPress={() => navigation.navigate(a.nav)}
               activeOpacity={0.8}
             >
-              <MaterialIcon name={a.icon as any} size={26} color={a.iconColor} />
+              <MaterialIcon name={a.icon as any} size={28} color={a.iconColor} />
             </TouchableOpacity>
             <Text style={styles.actionText}>{a.label}</Text>
           </View>
         ))}
       </View>
 
-      {/* 4. ANALYTICS WIDGET */}
+      {/* 4. CHART WIDGET */}
       <View style={styles.chartWidget}>
         <View style={styles.widgetHeader}>
-          {/* Chart Toggles */}
+          {/* Chart Type Toggles */}
           <View style={styles.toggleGroup}>
             {[
               { id: 'wave', icon: 'show-chart' },
@@ -431,19 +442,22 @@ const HomeScreen = () => {
             ))}
           </View>
 
-          {/* Period Toggles */}
-          <View style={styles.periodGroup}>
-            {['week', 'month'].map((p) => (
-              <TouchableOpacity
-                key={p}
-                onPress={() => handleTogglePeriod(p)}
-                style={[styles.periodBtn, period === p && styles.periodBtnActive]}
-              >
-                <Text style={[styles.periodText, period === p && styles.periodTextActive]}>
-                  {p === 'week' ? '7D' : 'Month'}
-                </Text>
-              </TouchableOpacity>
-            ))}
+          {/* Period Pill Toggle */}
+          <View style={styles.periodPill}>
+            <TouchableOpacity
+              onPress={() => handleTogglePeriod('week')}
+              style={[styles.pillBtn, period === 'week' && styles.pillBtnActive]}
+            >
+              <Text style={[styles.pillText, period === 'week' && styles.pillTextActive]}>7D</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => handleTogglePeriod('month')}
+              style={[styles.pillBtn, period === 'month' && styles.pillBtnActive]}
+            >
+              <Text style={[styles.pillText, period === 'month' && styles.pillTextActive]}>
+                Month
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -469,7 +483,6 @@ const HomeScreen = () => {
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
         <FullScreenSpinner visible={isLoading} />
-
         <FlatList
           data={recentEntries}
           keyExtractor={(item) => item.local_id || Math.random().toString()}
@@ -486,8 +499,8 @@ const HomeScreen = () => {
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             !isLoading ? (
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>No transactions found.</Text>
+              <View style={styles.centerBox}>
+                <Text style={styles.emptyText}>No recent transactions</Text>
               </View>
             ) : undefined
           }
@@ -504,6 +517,8 @@ const styles = StyleSheet.create({
   main: { flex: 1, backgroundColor: colors.background },
   safe: { flex: 1 },
   headerContainer: { paddingHorizontal: 20, paddingTop: 10 },
+  centerBox: { alignItems: 'center', justifyContent: 'center', padding: 20 },
+  emptyText: { color: colors.subText, fontStyle: 'italic' },
 
   // Header
   topBar: {
@@ -515,16 +530,18 @@ const styles = StyleSheet.create({
   userInfo: { flexDirection: 'row', alignItems: 'center' },
   menuBtn: {
     padding: 8,
-    borderRadius: 12,
+    borderRadius: 14,
     backgroundColor: '#FFF',
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    elevation: 1,
   },
   greetingText: {
     fontSize: fontScale(10),
     textTransform: 'uppercase',
     color: colors.subText,
     fontWeight: '700',
+    marginBottom: 2,
   },
   userName: { fontSize: fontScale(18), color: colors.text, fontWeight: '800' },
   avatar: {
@@ -542,40 +559,45 @@ const styles = StyleSheet.create({
   // Hero Card
   heroCard: {
     height: 210,
-    borderRadius: 26,
+    borderRadius: 28,
     marginBottom: 24,
     overflow: 'hidden',
     shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2,
-    shadowRadius: 16,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
   },
   cardContent: { flex: 1, padding: 24, justifyContent: 'space-between' },
   cardTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   balanceLabelContainer: {
     backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
   },
   balanceLabel: { color: '#FFF', fontSize: fontScale(11), fontWeight: '600' },
   eyeButton: { padding: 4 },
 
-  balanceWrapper: { flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-start' },
+  balanceWrapper: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+    marginTop: 4,
+  },
   currency: {
     fontSize: fontScale(24),
-    color: 'rgba(255,255,255,0.8)',
+    color: 'rgba(255,255,255,0.9)',
     fontWeight: '600',
-    marginTop: 8,
-    marginRight: 2,
+    marginTop: 6,
+    marginRight: 4,
   },
-  balanceText: { fontSize: fontScale(38), color: '#FFF', fontWeight: '800' },
+  balanceText: { fontSize: fontScale(42), color: '#FFF', fontWeight: '800' },
 
   statsRow: {
     flexDirection: 'row',
     backgroundColor: 'rgba(0,0,0,0.15)',
-    borderRadius: 18,
+    borderRadius: 20,
     padding: 12,
   },
   statBox: {
@@ -586,26 +608,26 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   iconCircleIn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     backgroundColor: 'rgba(16, 185, 129, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   iconCircleOut: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     backgroundColor: 'rgba(239, 68, 68, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  statLabel: { color: 'rgba(255,255,255,0.7)', fontSize: fontScale(10), fontWeight: '600' },
+  statLabel: { color: 'rgba(255,255,255,0.8)', fontSize: fontScale(10), fontWeight: '600' },
   statValue: { color: '#FFF', fontSize: fontScale(14), fontWeight: '700' },
   statDivider: {
     width: 1,
-    height: '80%',
+    height: '70%',
     backgroundColor: 'rgba(255,255,255,0.2)',
     alignSelf: 'center',
   },
@@ -614,27 +636,27 @@ const styles = StyleSheet.create({
   actionsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     marginBottom: 24,
   },
-  actionCol: { alignItems: 'center', gap: 8 },
+  actionCol: { alignItems: 'center', gap: 10 },
   actionBtn: {
-    width: 60,
-    height: 60,
-    borderRadius: 22,
+    width: 64,
+    height: 64,
+    borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
     shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowRadius: 10,
+    elevation: 4,
   },
   actionText: { fontSize: fontScale(12), fontWeight: '600', color: colors.subText },
 
   // Chart Widget
   chartWidget: {
     backgroundColor: '#FFF',
-    borderRadius: 24,
+    borderRadius: 26,
     padding: 16,
     marginBottom: 24,
     shadowColor: '#64748B',
@@ -643,29 +665,28 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   widgetHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
-  toggleGroup: { flexDirection: 'row', backgroundColor: '#F1F5F9', borderRadius: 12, padding: 4 },
-  toggleBtn: { padding: 8, borderRadius: 8 },
-  toggleBtnActive: {
-    backgroundColor: '#FFF',
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    elevation: 1,
-  },
+  toggleGroup: { flexDirection: 'row', gap: 4 },
+  toggleBtn: { padding: 8, borderRadius: 10, backgroundColor: '#F8FAFC' },
+  toggleBtnActive: { backgroundColor: '#EFF6FF' }, // Active light blue background
 
-  periodGroup: {
-    flexDirection: 'row',
-    backgroundColor: '#EFF6FF',
-    borderRadius: 12,
-    padding: 4,
-    flex: 1,
-    maxWidth: 120,
-    marginLeft: 16,
+  // Period Pill (Matches Screenshot)
+  periodPill: { flexDirection: 'row', backgroundColor: '#EFF6FF', borderRadius: 12, padding: 4 },
+  pillBtn: { paddingVertical: 6, paddingHorizontal: 16, borderRadius: 8 },
+  pillBtnActive: {
+    backgroundColor: colors.primary,
+    shadowColor: colors.primary,
+    shadowOpacity: 0.2,
+    elevation: 2,
   },
-  periodBtn: { flex: 1, alignItems: 'center', paddingVertical: 6, borderRadius: 8 },
-  periodBtnActive: { backgroundColor: colors.primary, elevation: 1 },
-  periodText: { fontSize: fontScale(11), fontWeight: '600', color: colors.subText },
-  periodTextActive: { color: '#FFF' },
-  chartContent: { alignItems: 'center', justifyContent: 'center', minHeight: 180 },
+  pillText: { fontSize: fontScale(11), fontWeight: '600', color: colors.subText },
+  pillTextActive: { color: '#FFF' },
+
+  chartContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 180,
+    overflow: 'hidden',
+  },
 
   // Pie Components
   pieContainer: { alignItems: 'center' },
@@ -697,36 +718,34 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 16,
     paddingHorizontal: 20,
   },
-  sectionTitle: { fontSize: fontScale(16), fontWeight: '800', color: colors.text },
+  sectionTitle: { fontSize: fontScale(17), fontWeight: '800', color: colors.text },
   seeAllText: { fontSize: fontScale(13), fontWeight: '700', color: colors.primary },
 
   txnRow: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFF',
-    padding: 14,
-    borderRadius: 18,
-    marginBottom: 10,
-    elevation: 1,
+    padding: 16,
+    borderRadius: 20,
+    marginBottom: 12,
+    elevation: 2,
     shadowColor: '#000',
-    shadowOpacity: 0.02,
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
   },
   txnIconBox: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
+    width: 44,
+    height: 44,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 14,
   },
   txnContent: { flex: 1 },
-  txnTitle: { fontSize: fontScale(14), fontWeight: '700', color: colors.text, marginBottom: 2 },
-  txnSubtitle: { fontSize: fontScale(11), color: colors.subText, fontWeight: '500' },
-  txnAmount: { fontSize: fontScale(14), fontWeight: '800' },
-
-  emptyContainer: { alignItems: 'center', padding: 20 },
-  emptyText: { color: colors.subText, fontStyle: 'italic' },
+  txnTitle: { fontSize: fontScale(15), fontWeight: '700', color: colors.text, marginBottom: 2 },
+  txnSubtitle: { fontSize: fontScale(12), color: colors.subText, fontWeight: '500' },
+  txnAmount: { fontSize: fontScale(15), fontWeight: '800' },
 });
