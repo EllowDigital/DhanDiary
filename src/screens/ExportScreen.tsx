@@ -229,7 +229,6 @@ const ExportScreen = () => {
 
         {showStartPicker && <DateTimePicker value={customStart} mode="date" onChange={(_, d) => { setShowStartPicker(false); if(d) setCustomStart(d); }} />}
         {showEndPicker && <DateTimePicker value={customEnd} mode="date" onChange={(_, d) => { setShowEndPicker(false); if(d) setCustomEnd(d); }} />}
-      </Animated.View>
       </ScrollView>
       <FullScreenSpinner visible={exporting} message="Processing Dataset..." />
     </SafeAreaView>
