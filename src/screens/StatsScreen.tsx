@@ -15,18 +15,15 @@ import DailyTrendChart from '../components/charts/DailyTrendChart';
 import { LocalEntry } from '../types/entries';
 import asyncAggregator from '../utils/asyncAggregator';
 import { fetchEntriesGenerator } from '../services/firestoreEntries';
-import { PieChart } from 'react-native-chart-kit';
+import { PieChart, LineChart } from 'react-native-chart-kit';
 import { Text } from '@rneui/themed';
 
 const FILTERS = ['Day', 'Week', '7 Days', '30 Days', 'This Month', 'This Year', 'All'];
 const PIE_COLORS = ['#FF6B6B', '#4ECDC4', '#FFD93D', '#6C5CE7', '#A8E6CF', '#FD79A8'];
 
 // --- UTILS ---
-
-// 1. Responsive Font Scaling for Android
 const fontScale = (size: number) => size / PixelRatio.getFontScale();
 
-// 2. Trillion-Safe Number Formatter
 const formatCompact = (val: number) => {
   const abs = Math.abs(val);
   if (abs >= 10000000) return (val / 10000000).toFixed(2) + 'Cr';
@@ -39,7 +36,8 @@ const StatsScreen = () => {
   const { width } = useWindowDimensions();
   const { user, loading: authLoading } = useAuth();
   const { entries: entriesRaw = [], isLoading } = useEntries(user?.uid);
-  
+  const entries = entriesRaw as LocalEntry[];
+
   // Animation & Refs
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
@@ -80,27 +78,23 @@ const StatsScreen = () => {
 
   // --- 2. ROBUST ASYNC CALCULATION ---
   const runAnalysis = useCallback(async () => {
-    // Kill any running calculation immediately when filter changes
     if (abortControllerRef.current) abortControllerRef.current.abort();
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
     setComputing(true);
-    
-    // Ensure UI navigation animation finishes before starting heavy math
     await new Promise(r => InteractionManager.runAfterInteractions(() => r(null)));
 
     try {
       let result;
-      // Use Generator for massive datasets to prevent OOM (Out Of Memory)
-      if (filter === 'All' || entriesRaw.length > 50000) {
+      // Trillion-Scale Protection
+      if (filter === 'All' || entries.length > 50000) {
         const pages = fetchEntriesGenerator(user?.uid || '', 1000);
         result = await asyncAggregator.aggregateFromPages(pages, rangeStart, rangeEnd, { signal: controller.signal });
       } else {
-        result = await asyncAggregator.aggregateForRange(entriesRaw, rangeStart, rangeEnd, { signal: controller.signal });
+        result = await asyncAggregator.aggregateForRange(entries, rangeStart, rangeEnd, { signal: controller.signal });
       }
 
-      // Check if component is still mounted and task wasn't aborted
       if (result && !controller.signal.aborted) {
         const totalIn = Number(result.totalIn) / 100;
         const totalOut = Number(result.totalOut) / 100;
@@ -108,37 +102,62 @@ const StatsScreen = () => {
 
         setStats({
           ...result,
-          totalIn, 
-          totalOut, 
-          net: totalIn - totalOut,
+          totalIn, totalOut, net: totalIn - totalOut,
           savingsRate: Math.max(0, savingsRate),
-          // Map Pie Data for UI
           pieData: (result.pieData || []).map((p: any, i: number) => ({
-            ...p, 
-            population: p.value, 
-            color: PIE_COLORS[i % PIE_COLORS.length],
-            legendFontColor: '#64748B', 
-            legendFontSize: 11,
+            ...p, population: p.value, color: PIE_COLORS[i % PIE_COLORS.length],
+            legendFontColor: '#64748B', legendFontSize: 11,
           }))
         });
 
-        // Trigger Entry Animation
         Animated.parallel([
           Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
           Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true })
         ]).start();
       }
     } catch (e) {
-      // Ignore AbortErrors, only log real errors
       if (e instanceof Error && e.message !== 'Aborted') console.warn('Calc Error', e);
     } finally {
-      if (abortControllerRef.current === controller) {
-        setComputing(false);
-      }
+      if (abortControllerRef.current === controller) setComputing(false);
     }
-  }, [filter, rangeStart, rangeEnd, entriesRaw]);
+  }, [filter, rangeStart, rangeEnd, entries]);
 
   useEffect(() => { runAnalysis(); }, [runAnalysis]);
+
+  // --- 3. YoY COMPARISON LOGIC (Improved) ---
+  const yoyData = useMemo(() => {
+    if (!stats?.dailyTrend || (filter !== 'All' && filter !== 'This Year')) return null;
+    
+    const trend = stats.dailyTrend;
+    const currentYear = dayjs().year();
+    const lastYear = currentYear - 1;
+
+    const currentYearData = new Array(12).fill(0);
+    const lastYearData = new Array(12).fill(0);
+
+    trend.forEach((point: any) => {
+      // Robust date parsing from label (supports YYYY-MM-DD or YYYY-MM)
+      const d = dayjs(point.label); 
+      if (d.isValid()) {
+        const y = d.year();
+        const m = d.month(); // 0-11
+        if (y === currentYear) currentYearData[m] += point.value;
+        if (y === lastYear) lastYearData[m] += point.value;
+      }
+    });
+
+    const hasData = currentYearData.some(v => v > 0) || lastYearData.some(v => v > 0);
+    if (!hasData) return null;
+
+    return {
+      labels: ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'],
+      datasets: [
+        { data: currentYearData, color: (opacity = 1) => `rgba(99, 102, 241, ${opacity})`, strokeWidth: 2 }, // Indigo
+        { data: lastYearData, color: (opacity = 1) => `rgba(148, 163, 184, ${opacity})`, strokeWidth: 2, withDots: false } // Slate
+      ],
+      legend: [`${currentYear}`, `${lastYear}`]
+    };
+  }, [stats, filter]);
 
   const currency = stats?.currency === 'USD' ? '$' : '₹';
 
@@ -206,9 +225,8 @@ const StatsScreen = () => {
             </View>
           </View>
 
-          {/* 3. MNC METRICS GRID (MAX IN | MAX OUT | SAVINGS) */}
+          {/* 3. METRICS GRID */}
           <View style={styles.gridContainer}>
-             {/* Card 1: Max Income */}
              <View style={styles.gridCard}>
                 <View style={[styles.iconBox, { backgroundColor: '#DBEAFE' }]}>
                   <MaterialIcon name="trending-up" size={20} color="#1E40AF" />
@@ -219,7 +237,6 @@ const StatsScreen = () => {
                 </Text>
              </View>
              
-             {/* Card 2: Max Expense */}
              <View style={styles.gridCard}>
                 <View style={[styles.iconBox, { backgroundColor: '#FEE2E2' }]}>
                   <MaterialIcon name="trending-down" size={20} color="#991B1B" />
@@ -230,7 +247,6 @@ const StatsScreen = () => {
                 </Text>
              </View>
 
-             {/* Card 3: Savings */}
              <View style={styles.gridCard}>
                 <View style={[styles.iconBox, { backgroundColor: '#F0FDF4' }]}>
                   <MaterialIcon name="savings" size={20} color="#166534" />
@@ -240,7 +256,32 @@ const StatsScreen = () => {
              </View>
           </View>
 
-          {/* 4. TOP EXPENSE LIST (Responsive) */}
+          {/* 4. YoY COMPARISON (New!) */}
+          {yoyData && (
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Year over Year</Text>
+              <Text style={styles.cardSubtitle}>Comparing {dayjs().year()} vs {dayjs().year()-1}</Text>
+              
+              <LineChart
+                data={yoyData}
+                width={contentWidth - 40}
+                height={200}
+                chartConfig={{
+                  backgroundColor: '#ffffff',
+                  backgroundGradientFrom: '#ffffff',
+                  backgroundGradientTo: '#ffffff',
+                  decimalPlaces: 0,
+                  color: (opacity = 1) => `rgba(71, 85, 105, ${opacity})`,
+                  labelColor: (opacity = 1) => `rgba(148, 163, 184, ${opacity})`,
+                  propsForDots: { r: "4", strokeWidth: "2", stroke: "#fff" }
+                }}
+                bezier
+                style={{ marginVertical: 8, borderRadius: 16 }}
+              />
+            </View>
+          )}
+
+          {/* 5. TOP EXPENSE LIST */}
           <View style={styles.card}>
             <View style={styles.rowBetween}>
                <Text style={styles.cardTitle}>Top Expenses</Text>
@@ -265,27 +306,29 @@ const StatsScreen = () => {
             )}
           </View>
 
-          {/* 5. TREND CHART */}
-          <View style={styles.card}>
-            <View style={styles.rowBetween}>
-              <Text style={styles.cardTitle}>Spending Trend</Text>
-              <Text style={styles.cardSubtitle}>{filter}</Text>
+          {/* 6. TREND CHART (Standard) */}
+          {!yoyData && (
+            <View style={styles.card}>
+              <View style={styles.rowBetween}>
+                <Text style={styles.cardTitle}>Spending Trend</Text>
+                <Text style={styles.cardSubtitle}>{filter}</Text>
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingTop: 20 }}>
+                {stats?.dailyTrend?.length > 0 ? (
+                  <DailyTrendChart 
+                    data={stats.dailyTrend} 
+                    width={Math.max(contentWidth - 40, stats.dailyTrend.length * 45)} 
+                  />
+                ) : (
+                  <View style={[styles.emptyChart, { width: contentWidth - 60 }]}>
+                    <Text style={styles.emptyText}>No transactions found in this period</Text>
+                  </View>
+                )}
+              </ScrollView>
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingTop: 20 }}>
-              {stats?.dailyTrend?.length > 0 ? (
-                <DailyTrendChart 
-                  data={stats.dailyTrend} 
-                  width={Math.max(contentWidth - 40, stats.dailyTrend.length * 45)} 
-                />
-              ) : (
-                <View style={[styles.emptyChart, { width: contentWidth - 60 }]}>
-                  <Text style={styles.emptyText}>No transactions found in this period</Text>
-                </View>
-              )}
-            </ScrollView>
-          </View>
+          )}
 
-          {/* 6. DONUT CHART */}
+          {/* 7. DONUT CHART */}
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Distribution</Text>
             {stats?.pieData?.length > 0 ? (
@@ -307,7 +350,7 @@ const StatsScreen = () => {
                 </View>
               </View>
             ) : (
-              <View style={styles.emptyChart}><Text style={styles.emptyText}>No distribution data</Text></View>
+              <View style={styles.emptyChart}><Text style={styles.emptyText}>No data</Text></View>
             )}
           </View>
 
@@ -317,13 +360,12 @@ const StatsScreen = () => {
   );
 };
 
-// --- STYLING (Pixel Perfect) ---
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F8FAFC' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   headerContainer: { marginBottom: 10, paddingHorizontal: 16 },
   container: { flex: 1 },
-  scrollContent: { paddingTop: 10, paddingHorizontal: 16 },
+  scrollContent: { paddingTop: 10, paddingHorizontal: 16, paddingBottom: 120 },
   
   // Filters
   filterBox: { marginBottom: 12, alignItems: 'center' },

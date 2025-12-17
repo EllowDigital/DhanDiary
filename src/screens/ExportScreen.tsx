@@ -105,8 +105,9 @@ const ExportScreen = () => {
     // Use timeout to allow UI spinner to render before blocking thread
     setTimeout(async () => {
       try {
-        const periodLabel = mode === 'All' ? 'All Time' : (mode === 'Custom' ? 'Custom Range' : dateLabel);
-        
+        const periodLabel =
+          mode === 'All' ? 'All Time' : mode === 'Custom' ? 'Custom Range' : dateLabel;
+
         // Final map to exclude notes if needed (yields per 500 items to keep UI responsive)
         let dataToProcess = targetEntries;
         if (!includeNotes) {
@@ -133,7 +134,6 @@ const ExportScreen = () => {
       <ScreenHeader title="Export Data" subtitle="Generate detailed financial reports" />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        
         {/* 1. RANGE SELECTION */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>1. Select Timeframe</Text>
@@ -141,24 +141,62 @@ const ExportScreen = () => {
             {FILTERS.map((f) => (
               <TouchableOpacity
                 key={f}
-                style={[styles.chip, mode === (f === 'Daily' ? 'Day' : f === 'Weekly' ? 'Week' : f === 'Monthly' ? 'Month' : f) && styles.chipActive]}
+                style={[
+                  styles.chip,
+                  mode ===
+                    (f === 'Daily'
+                      ? 'Day'
+                      : f === 'Weekly'
+                        ? 'Week'
+                        : f === 'Monthly'
+                          ? 'Month'
+                          : f) && styles.chipActive,
+                ]}
                 onPress={() => {
                   LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                  setMode((f === 'Daily' ? 'Day' : f === 'Weekly' ? 'Week' : f === 'Monthly' ? 'Month' : f) as Mode);
+                  setMode(
+                    (f === 'Daily'
+                      ? 'Day'
+                      : f === 'Weekly'
+                        ? 'Week'
+                        : f === 'Monthly'
+                          ? 'Month'
+                          : f) as Mode
+                  );
                 }}
               >
-                <Text style={[styles.chipText, mode === (f === 'Daily' ? 'Day' : f === 'Weekly' ? 'Week' : f === 'Monthly' ? 'Month' : f) && styles.chipTextActive]}>{f}</Text>
+                <Text
+                  style={[
+                    styles.chipText,
+                    mode ===
+                      (f === 'Daily'
+                        ? 'Day'
+                        : f === 'Weekly'
+                          ? 'Week'
+                          : f === 'Monthly'
+                            ? 'Month'
+                            : f) && styles.chipTextActive,
+                  ]}
+                >
+                  {f}
+                </Text>
               </TouchableOpacity>
             ))}
           </View>
 
           {['Day', 'Week', 'Month'].includes(mode) && (
             <View style={styles.navRow}>
-              <TouchableOpacity onPress={() => setPivotDate(pivotDate.subtract(1, mode.toLowerCase() as any))} style={styles.navBtn}>
+              <TouchableOpacity
+                onPress={() => setPivotDate(pivotDate.subtract(1, mode.toLowerCase() as any))}
+                style={styles.navBtn}
+              >
                 <MaterialIcon name="chevron-left" size={28} color={colors.primary} />
               </TouchableOpacity>
               <Text style={styles.navLabel}>{dateLabel}</Text>
-              <TouchableOpacity onPress={() => setPivotDate(pivotDate.add(1, mode.toLowerCase() as any))} style={styles.navBtn}>
+              <TouchableOpacity
+                onPress={() => setPivotDate(pivotDate.add(1, mode.toLowerCase() as any))}
+                style={styles.navBtn}
+              >
                 <MaterialIcon name="chevron-right" size={28} color={colors.primary} />
               </TouchableOpacity>
             </View>
@@ -189,30 +227,46 @@ const ExportScreen = () => {
           <Text style={styles.cardTitle}>2. Output Format</Text>
           <View style={styles.formatRow}>
             {(['pdf', 'csv', 'json'] as const).map((f) => (
-              <TouchableOpacity 
-                key={f} 
-                style={[styles.formatBtn, format === f && styles.formatBtnActive]} 
+              <TouchableOpacity
+                key={f}
+                style={[styles.formatBtn, format === f && styles.formatBtnActive]}
                 onPress={() => setFormat(f)}
               >
-                <MaterialIcon 
-                  name={f === 'pdf' ? 'picture-as-pdf' : f === 'csv' ? 'table-view' : 'code'} 
-                  size={22} 
-                  color={format === f ? colors.primary : '#94A3B8'} 
+                <MaterialIcon
+                  name={f === 'pdf' ? 'picture-as-pdf' : f === 'csv' ? 'table-view' : 'code'}
+                  size={22}
+                  color={format === f ? colors.primary : '#94A3B8'}
                 />
-                <Text style={[styles.formatBtnText, format === f && styles.formatBtnTextActive]}>{f.toUpperCase()}</Text>
+                <Text style={[styles.formatBtnText, format === f && styles.formatBtnTextActive]}>
+                  {f.toUpperCase()}
+                </Text>
               </TouchableOpacity>
             ))}
           </View>
 
           <View style={styles.optionList}>
-            <TouchableOpacity style={styles.optionRow} onPress={() => setIncludeNotes(!includeNotes)}>
-              <MaterialIcon name={includeNotes ? 'check-box' : 'check-box-outline-blank'} size={24} color={colors.primary} />
+            <TouchableOpacity
+              style={styles.optionRow}
+              onPress={() => setIncludeNotes(!includeNotes)}
+            >
+              <MaterialIcon
+                name={includeNotes ? 'check-box' : 'check-box-outline-blank'}
+                size={24}
+                color={colors.primary}
+              />
               <Text style={styles.optionText}>Include transaction notes</Text>
             </TouchableOpacity>
 
             {format === 'pdf' && (
-              <TouchableOpacity style={styles.optionRow} onPress={() => setGroupBy(groupBy === 'category' ? 'date' : 'category')}>
-                <MaterialIcon name={groupBy === 'category' ? 'check-box' : 'check-box-outline-blank'} size={24} color={colors.primary} />
+              <TouchableOpacity
+                style={styles.optionRow}
+                onPress={() => setGroupBy(groupBy === 'category' ? 'date' : 'category')}
+              >
+                <MaterialIcon
+                  name={groupBy === 'category' ? 'check-box' : 'check-box-outline-blank'}
+                  size={24}
+                  color={colors.primary}
+                />
                 <Text style={styles.optionText}>Group by category in PDF</Text>
               </TouchableOpacity>
             )}
@@ -220,15 +274,33 @@ const ExportScreen = () => {
         </View>
 
         <Button
-          title={exporting ? "Generating..." : "Export & Share"}
+          title={exporting ? 'Generating...' : 'Export & Share'}
           buttonStyle={styles.mainExportBtn}
           onPress={handleExport}
           disabled={count === 0}
-          icon={<MaterialIcon name="share" size={20} color="white" style={{marginRight: 10}} />}
+          icon={<MaterialIcon name="share" size={20} color="white" style={{ marginRight: 10 }} />}
         />
 
-        {showStartPicker && <DateTimePicker value={customStart} mode="date" onChange={(_, d) => { setShowStartPicker(false); if(d) setCustomStart(d); }} />}
-        {showEndPicker && <DateTimePicker value={customEnd} mode="date" onChange={(_, d) => { setShowEndPicker(false); if(d) setCustomEnd(d); }} />}
+        {showStartPicker && (
+          <DateTimePicker
+            value={customStart}
+            mode="date"
+            onChange={(_, d) => {
+              setShowStartPicker(false);
+              if (d) setCustomStart(d);
+            }}
+          />
+        )}
+        {showEndPicker && (
+          <DateTimePicker
+            value={customEnd}
+            mode="date"
+            onChange={(_, d) => {
+              setShowEndPicker(false);
+              if (d) setCustomEnd(d);
+            }}
+          />
+        )}
       </ScrollView>
       <FullScreenSpinner visible={exporting} message="Processing Dataset..." />
     </SafeAreaView>
