@@ -255,9 +255,101 @@ const StatsScreen = () => {
       { totalIn: 0, totalOut: 0, net: 0 }
     );
   }, [filteredEntries]);
-
   
+  // Advanced Stats - baseline
+  const baseAdvanced = useMemo(() => {
+    const overall = calcStats(filteredEntries);
+    const days = Math.max(1, rangeEnd.diff(rangeStart, 'day') + 1);
+    const totalAmount = filteredEntries.reduce((s, e) => s + Number(e.amount || 0), 0);
+    const avgPerDay = Math.round(totalAmount / days);
+    return { overall, avgPerDay };
+  }, [filteredEntries, rangeStart, rangeEnd]);
 
+  const baseTopExpenseCategories = useMemo(() => {
+    const map: Record<string, number> = {};
+    filteredEntries
+      .filter((e) => e.type === 'out')
+      .forEach((e) => {
+        const c = ensureCategory(e.category || 'General');
+        map[c] = (map[c] || 0) + (Number(e.amount) || 0);
+      });
+    return Object.entries(map)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([name, value]) => ({ name, value }));
+  }, [filteredEntries]);
+
+  // Max/Min for Grid
+  const baseMaxes = useMemo(() => {
+    let maxIn = 0,
+      maxOut = 0;
+    filteredEntries.forEach((e) => {
+      const val = Number(e.amount) || 0;
+      if (e.type === 'in') maxIn = Math.max(maxIn, val);
+      else maxOut = Math.max(maxOut, val);
+    });
+    return { maxIncome: maxIn, maxExpense: maxOut };
+  }, [filteredEntries]);
+
+  // --- CHART DATA PREP ---
+  const baseDailyTrend = useMemo(() => {
+    const diffDays = rangeEnd.diff(rangeStart, 'day');
+    const totalDays = Math.max(1, diffDays + 1);
+
+    // Create map of Date -> Value
+    const dayMap = new Map<string, number>();
+    for (let i = 0; i < totalDays; i++) {
+      dayMap.set(rangeStart.add(i, 'day').format('YYYY-MM-DD'), 0);
+    }
+
+    filteredEntries.forEach((entry) => {
+      if (entry.type === 'out') {
+        const key = dayjs(entry.date || entry.created_at).format('YYYY-MM-DD');
+        if (dayMap.has(key)) {
+          dayMap.set(key, (dayMap.get(key) || 0) + Number(entry.amount));
+        }
+      }
+    });
+
+    const labels: string[] = [];
+    const values: number[] = [];
+    let counter = 0;
+
+    dayMap.forEach((val, keyStr) => {
+      values.push(val);
+      // Only show label every few days if range is large to prevent clutter
+      const dateObj = dayjs(keyStr);
+      if (totalDays > 20) {
+        labels.push(counter % 4 === 0 ? dateObj.format('DD') : '');
+      } else {
+        labels.push(dateObj.format('ddd'));
+      }
+      counter++;
+    });
+
+    return labels.map((label, i) => ({ label, value: values[i] }));
+  }, [filteredEntries, rangeStart, rangeEnd]);
+
+  const basePieData = useMemo<PieDataPoint[]>(() => {
+    const cats = filteredEntries
+      .filter((entry) => entry.type === 'out')
+      .reduce<Record<string, number>>((acc, entry) => {
+        const c = ensureCategory(entry.category);
+        acc[c] = (acc[c] || 0) + Number(entry.amount);
+        return acc;
+      }, {});
+
+    return Object.entries(cats)
+      .map(([name, val], i) => ({
+        key: `${name}-${i}`,
+        name,
+        population: val,
+        color: PIE_COLORS[i % PIE_COLORS.length],
+        legendFontColor: '#333',
+        legendFontSize: 12,
+      }))
+      .sort((a, b) => b.population - a.population);
+  }, [filteredEntries]);
 
   // Computation state & async aggregation to avoid blocking UI on large datasets
   const [computing, setComputing] = useState(false);
@@ -329,105 +421,7 @@ const StatsScreen = () => {
     return symbolMap[currency] || symbolMap.INR;
   }, [computed, filteredEntries]);
 
-  const savingsRate = stats.totalIn > 0 ? Math.max(0, (stats.net / stats.totalIn) * 100) : 0;
   baseStats.net = baseStats.totalIn - baseStats.totalOut;
-
-  // Advanced Stats - baseline
-  const baseAdvanced = useMemo(() => {
-    const overall = calcStats(filteredEntries);
-    const days = Math.max(1, rangeEnd.diff(rangeStart, 'day') + 1);
-    const totalAmount = filteredEntries.reduce((s, e) => s + Number(e.amount || 0), 0);
-    const avgPerDay = Math.round(totalAmount / days);
-    return { overall, avgPerDay };
-  }, [filteredEntries, rangeStart, rangeEnd]);
-
-  const baseTopExpenseCategories = useMemo(() => {
-    const map: Record<string, number> = {};
-    filteredEntries
-      .filter((e) => e.type === 'out')
-      .forEach((e) => {
-        const c = ensureCategory(e.category || 'General');
-        map[c] = (map[c] || 0) + (Number(e.amount) || 0);
-      });
-    return Object.entries(map)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([name, value]) => ({ name, value }));
-  }, [filteredEntries]);
-
-  // Max/Min for Grid
-  const baseMaxes = useMemo(() => {
-    let maxIn = 0,
-      maxOut = 0;
-    filteredEntries.forEach((e) => {
-      const val = Number(e.amount) || 0;
-      if (e.type === 'in') maxIn = Math.max(maxIn, val);
-      else maxOut = Math.max(maxOut, val);
-    });
-    return { maxIncome: maxIn, maxExpense: maxOut };
-  }, [filteredEntries]);
-
-  
-
-  // --- CHART DATA PREP ---
-  const baseDailyTrend = useMemo(() => {
-    const diffDays = rangeEnd.diff(rangeStart, 'day');
-    const totalDays = Math.max(1, diffDays + 1);
-
-    // Create map of Date -> Value
-    const dayMap = new Map<string, number>();
-    for (let i = 0; i < totalDays; i++) {
-      dayMap.set(rangeStart.add(i, 'day').format('YYYY-MM-DD'), 0);
-    }
-
-    filteredEntries.forEach((entry) => {
-      if (entry.type === 'out') {
-        const key = dayjs(entry.date || entry.created_at).format('YYYY-MM-DD');
-        if (dayMap.has(key)) {
-          dayMap.set(key, (dayMap.get(key) || 0) + Number(entry.amount));
-        }
-      }
-    });
-
-    const labels: string[] = [];
-    const values: number[] = [];
-    let counter = 0;
-
-    dayMap.forEach((val, keyStr) => {
-      values.push(val);
-      // Only show label every few days if range is large to prevent clutter
-      const dateObj = dayjs(keyStr);
-      if (totalDays > 20) {
-        labels.push(counter % 4 === 0 ? dateObj.format('DD') : '');
-      } else {
-        labels.push(dateObj.format('ddd'));
-      }
-      counter++;
-    });
-
-    return labels.map((label, i) => ({ label, value: values[i] }));
-  }, [filteredEntries, rangeStart, rangeEnd]);
-
-  const basePieData = useMemo<PieDataPoint[]>(() => {
-    const cats = filteredEntries
-      .filter((entry) => entry.type === 'out')
-      .reduce<Record<string, number>>((acc, entry) => {
-        const c = ensureCategory(entry.category);
-        acc[c] = (acc[c] || 0) + Number(entry.amount);
-        return acc;
-      }, {});
-
-    return Object.entries(cats)
-      .map(([name, val], i) => ({
-        key: `${name}-${i}`,
-        name,
-        population: val,
-        color: PIE_COLORS[i % PIE_COLORS.length],
-        legendFontColor: '#333',
-        legendFontSize: 12,
-      }))
-      .sort((a, b) => b.population - a.population);
-  }, [filteredEntries]);
 
   const hasTrendData = dailyTrend.some((d) => d.value > 0);
   const peakDay = dailyTrend.reduce<TrendDataPoint | null>(
