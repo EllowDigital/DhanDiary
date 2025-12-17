@@ -176,7 +176,7 @@ class AnalyticsCore {
       }
     } catch (err: any) {
       this.skipped++;
-      if (this.errors.length < 20) this.errors.push(`ID ${e.id}: ${err.message}`);
+      if (this.errors.length < 20) this.errors.push(`ID ${e.local_id || 'unknown'}: ${err.message}`);
     }
   }
 
