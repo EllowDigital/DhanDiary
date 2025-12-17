@@ -26,7 +26,7 @@ import DailyTrendChart from '../components/charts/DailyTrendChart'; // Ensure th
 import { LocalEntry } from '../types/entries';
 import asyncAggregator from '../utils/asyncAggregator'; // Ensure this path is correct
 import { aggregateWithPreferSummary } from '../services/aggregates';
-import { fetchEntriesGenerator } from '../services/firestoreEntries'; // Ensure this path is correct
+import { fetchEntriesGenerator } from '../services/localDb'; // Ensure this path is correct
 import { PieChart } from 'react-native-chart-kit';
 
 // Enable LayoutAnimation for Android

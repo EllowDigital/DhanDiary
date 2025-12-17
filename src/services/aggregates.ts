@@ -2,7 +2,7 @@ import dayjs from 'dayjs';
 import { getFirestoreDb } from '../firebase';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import asyncAggregator from '../utils/asyncAggregator';
-import { fetchEntriesGenerator } from './firestoreEntries';
+import { fetchEntriesGenerator } from './localDb';
 import { StatResult } from '../utils/asyncAggregator';
 
 /**
