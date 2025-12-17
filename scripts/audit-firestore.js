@@ -31,21 +31,30 @@ if (argv.key) {
   if (process.env.SERVICE_ACCOUNT_JSON) {
     try {
       const key = JSON.parse(process.env.SERVICE_ACCOUNT_JSON);
-      admin.initializeApp({ credential: admin.credential.cert(key), projectId: argv.projectId || key.project_id });
+      admin.initializeApp({
+        credential: admin.credential.cert(key),
+        projectId: argv.projectId || key.project_id,
+      });
     } catch (err) {
       console.error('Failed to parse SERVICE_ACCOUNT_JSON from env:', err.message);
       process.exit(3);
     }
   } else if (process.env.SERVICE_ACCOUNT_PATH && fs.existsSync(process.env.SERVICE_ACCOUNT_PATH)) {
     const key = require(process.env.SERVICE_ACCOUNT_PATH);
-    admin.initializeApp({ credential: admin.credential.cert(key), projectId: argv.projectId || key.project_id });
+    admin.initializeApp({
+      credential: admin.credential.cert(key),
+      projectId: argv.projectId || key.project_id,
+    });
   } else {
     if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
       console.warn(
         'Warning: GOOGLE_APPLICATION_CREDENTIALS not set. Provide --key, set SERVICE_ACCOUNT_JSON/SERVICE_ACCOUNT_PATH in .env, or use --emulator.'
       );
     }
-    admin.initializeApp({ credential: admin.credential.applicationDefault(), projectId: argv.projectId });
+    admin.initializeApp({
+      credential: admin.credential.applicationDefault(),
+      projectId: argv.projectId,
+    });
   }
 }
 
