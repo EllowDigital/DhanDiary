@@ -69,7 +69,7 @@ const asyncStorageAdapter = {
             })
             .slice(0, lim);
           const rows = { length: arr.length, item: (i: number) => arr[i] };
-          success && success(tx, { rows });
+          if (success) success(tx, { rows });
           return;
         }
 
@@ -91,7 +91,7 @@ const asyncStorageAdapter = {
             })
             .slice(offset, offset + limit);
           const rows = { length: arr.length, item: (i: number) => arr[i] };
-          success && success(tx, { rows });
+          if (success) success(tx, { rows });
           return;
         }
 
@@ -132,7 +132,7 @@ const asyncStorageAdapter = {
           if (idx >= 0) all[user_id][idx] = row;
           else all[user_id].unshift(row);
           await asyncStorageAdapter.writeEntries(all);
-          success && success(tx, { rows: { length: 1, item: (i: number) => row } });
+          if (success) success(tx, { rows: { length: 1, item: (i: number) => row } });
           return;
         }
 
@@ -156,11 +156,11 @@ const asyncStorageAdapter = {
               if (sync_status !== undefined) row.sync_status = sync_status;
               all[k][idx] = row;
               await asyncStorageAdapter.writeEntries(all);
-              success && success(tx, { rows: { length: 1, item: (i: number) => row } });
+              if (success) success(tx, { rows: { length: 1, item: (i: number) => row } });
               return;
             }
           }
-          success && success(tx, { rows: { length: 0 } });
+          if (success) success(tx, { rows: { length: 0 } });
           return;
         }
 
@@ -182,11 +182,11 @@ const asyncStorageAdapter = {
                 if (typeof maybeSync === 'string') all[k][idx].sync_status = maybeSync;
               }
               await asyncStorageAdapter.writeEntries(all);
-              success && success(tx, { rows: { length: 1, item: (i: number) => all[k][idx] } });
+              if (success) success(tx, { rows: { length: 1, item: (i: number) => all[k][idx] } });
               return;
             }
           }
-          success && success(tx, { rows: { length: 0 } });
+          if (success) success(tx, { rows: { length: 0 } });
           return;
         }
 
@@ -209,7 +209,7 @@ const asyncStorageAdapter = {
           summaries[k].count = (summaries[k].count || 0) + (cnt || 0);
           summaries[k].updated_at = updated_at || Date.now();
           await asyncStorageAdapter.writeSummaries(summaries);
-          success && success(tx, { rows: { length: 1, item: (i: number) => summaries[k] } });
+          if (success) success(tx, { rows: { length: 1, item: (i: number) => summaries[k] } });
           return;
         }
 
@@ -220,12 +220,12 @@ const asyncStorageAdapter = {
           const k = `${period}:${key}`;
           const row = summaries[k] || null;
           const rows = row ? { length: 1, item: (i: number) => row } : { length: 0 };
-          success && success(tx, { rows });
+          if (success) success(tx, { rows });
           return;
         }
 
         // Default: no-op
-        success && success(tx, { rows: { length: 0 } });
+        if (success) success(tx, { rows: { length: 0 } });
       },
     };
     // call cb asynchronously to mirror sqlite behaviour

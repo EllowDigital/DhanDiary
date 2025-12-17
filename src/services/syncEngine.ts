@@ -231,7 +231,8 @@ export async function pullRemoteChanges(
         // accept both compressed and full forms
         const remote = decompress(remoteRaw);
         const rid = ds.id;
-        const remoteUpdated = toMs(remote.updatedAt || remote.u || 0);
+        // accept either decompressed `updatedAt` or compressed `u` (use any to avoid TS narrow type)
+        const remoteUpdated = toMs((remote as any).u ?? remote.updatedAt ?? 0);
         lastSeen = Math.max(lastSeen, remoteUpdated);
 
         const localRows = await getEntries(userId);
