@@ -160,7 +160,7 @@ const SwipeableIncomeItem = React.memo(({ item, onEdit, onDelete }: any) => {
     >
       <View style={styles.compactRow}>
         <View style={[styles.compactIcon, { backgroundColor: '#ecfdf5' }]}>
-          <MaterialIcon name={getIconForCategory(item.category)} size={18} color="#15803d" />
+          <MaterialIcon name={getIconForCategory(item.category) as any} size={18} color="#15803d" />
         </View>
         <View style={styles.compactContent}>
           <View style={styles.compactHeader}>

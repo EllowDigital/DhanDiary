@@ -202,7 +202,7 @@ const CompactTransactionRow = ({ item, onPress }: { item: LocalEntry; onPress: (
   return (
     <TouchableOpacity style={styles.compactRow} onPress={onPress} activeOpacity={0.7}>
       <View style={[styles.compactIcon, { backgroundColor: `${color}15` }]}>
-        <MaterialIcon name={iconName} size={20} color={color} />
+        <MaterialIcon name={iconName as any} size={20} color={color} />
       </View>
       <View style={styles.compactContent}>
         <Text style={styles.compactTitle} numberOfLines={1}>

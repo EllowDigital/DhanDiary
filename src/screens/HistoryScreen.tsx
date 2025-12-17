@@ -108,7 +108,7 @@ const SwipeableHistoryItem = React.memo(({ item, onEdit, onDelete }: any) => {
       <View style={styles.compactRow}>
         <View style={[styles.compactIcon, { backgroundColor: isIncome ? '#ecfdf5' : '#fef2f2' }]}>
           <MaterialIcon
-            name={iconName}
+            name={iconName as any}
             size={20}
             color={isIncome ? colors.accentGreen : colors.accentRed}
           />

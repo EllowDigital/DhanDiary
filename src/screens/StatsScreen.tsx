@@ -172,7 +172,7 @@ const StatsScreen = () => {
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.filterScroll}
+              contentContainerStyle={styles.segmentScroll}
             >
               <View style={styles.segmentControl}>
                 {FILTERS.map((f) => (
