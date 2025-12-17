@@ -140,9 +140,33 @@ export const createEntry = async (userId: string, input: EntryInput): Promise<Lo
     const inC = payload.type === 'in' ? toCents(payload.amount) : 0;
     const outC = payload.type === 'out' ? toCents(payload.amount) : 0;
 
-    const dailyRef = doc(getFirestoreDb(), 'users', userId, 'summaries', 'daily', 'items', when.day);
-    const monthlyRef = doc(getFirestoreDb(), 'users', userId, 'summaries', 'monthly', 'items', when.month);
-    const yearlyRef = doc(getFirestoreDb(), 'users', userId, 'summaries', 'yearly', 'items', when.year);
+    const dailyRef = doc(
+      getFirestoreDb(),
+      'users',
+      userId,
+      'summaries',
+      'daily',
+      'items',
+      when.day
+    );
+    const monthlyRef = doc(
+      getFirestoreDb(),
+      'users',
+      userId,
+      'summaries',
+      'monthly',
+      'items',
+      when.month
+    );
+    const yearlyRef = doc(
+      getFirestoreDb(),
+      'users',
+      userId,
+      'summaries',
+      'yearly',
+      'items',
+      when.year
+    );
 
     await applyIncrementsClient(tx, dailyRef, { inCents: inC, outCents: outC, count: 1 });
     await applyIncrementsClient(tx, monthlyRef, { inCents: inC, outCents: outC, count: 1 });
@@ -190,26 +214,122 @@ export const patchEntry = async (
       const inDelta = afterIn - beforeIn;
       const outDelta = afterOut - beforeOut;
       if (inDelta !== 0 || outDelta !== 0) {
-        const dailyRef = doc(getFirestoreDb(), 'users', userId, 'summaries', 'daily', 'items', afterWhen.day);
-        const monthlyRef = doc(getFirestoreDb(), 'users', userId, 'summaries', 'monthly', 'items', afterWhen.month);
-        const yearlyRef = doc(getFirestoreDb(), 'users', userId, 'summaries', 'yearly', 'items', afterWhen.year);
-        await applyIncrementsClient(tx, dailyRef, { inCents: inDelta, outCents: outDelta, count: 0 });
-        await applyIncrementsClient(tx, monthlyRef, { inCents: inDelta, outCents: outDelta, count: 0 });
-        await applyIncrementsClient(tx, yearlyRef, { inCents: inDelta, outCents: outDelta, count: 0 });
+        const dailyRef = doc(
+          getFirestoreDb(),
+          'users',
+          userId,
+          'summaries',
+          'daily',
+          'items',
+          afterWhen.day
+        );
+        const monthlyRef = doc(
+          getFirestoreDb(),
+          'users',
+          userId,
+          'summaries',
+          'monthly',
+          'items',
+          afterWhen.month
+        );
+        const yearlyRef = doc(
+          getFirestoreDb(),
+          'users',
+          userId,
+          'summaries',
+          'yearly',
+          'items',
+          afterWhen.year
+        );
+        await applyIncrementsClient(tx, dailyRef, {
+          inCents: inDelta,
+          outCents: outDelta,
+          count: 0,
+        });
+        await applyIncrementsClient(tx, monthlyRef, {
+          inCents: inDelta,
+          outCents: outDelta,
+          count: 0,
+        });
+        await applyIncrementsClient(tx, yearlyRef, {
+          inCents: inDelta,
+          outCents: outDelta,
+          count: 0,
+        });
       }
     } else {
       if (beforeWhen) {
-        const dref = doc(getFirestoreDb(), 'users', userId, 'summaries', 'daily', 'items', beforeWhen.day);
-        const mref = doc(getFirestoreDb(), 'users', userId, 'summaries', 'monthly', 'items', beforeWhen.month);
-        const yref = doc(getFirestoreDb(), 'users', userId, 'summaries', 'yearly', 'items', beforeWhen.year);
-        await applyIncrementsClient(tx, dref, { inCents: -beforeIn, outCents: -beforeOut, count: -1 });
-        await applyIncrementsClient(tx, mref, { inCents: -beforeIn, outCents: -beforeOut, count: -1 });
-        await applyIncrementsClient(tx, yref, { inCents: -beforeIn, outCents: -beforeOut, count: -1 });
+        const dref = doc(
+          getFirestoreDb(),
+          'users',
+          userId,
+          'summaries',
+          'daily',
+          'items',
+          beforeWhen.day
+        );
+        const mref = doc(
+          getFirestoreDb(),
+          'users',
+          userId,
+          'summaries',
+          'monthly',
+          'items',
+          beforeWhen.month
+        );
+        const yref = doc(
+          getFirestoreDb(),
+          'users',
+          userId,
+          'summaries',
+          'yearly',
+          'items',
+          beforeWhen.year
+        );
+        await applyIncrementsClient(tx, dref, {
+          inCents: -beforeIn,
+          outCents: -beforeOut,
+          count: -1,
+        });
+        await applyIncrementsClient(tx, mref, {
+          inCents: -beforeIn,
+          outCents: -beforeOut,
+          count: -1,
+        });
+        await applyIncrementsClient(tx, yref, {
+          inCents: -beforeIn,
+          outCents: -beforeOut,
+          count: -1,
+        });
       }
       if (afterWhen) {
-        const dref = doc(getFirestoreDb(), 'users', userId, 'summaries', 'daily', 'items', afterWhen.day);
-        const mref = doc(getFirestoreDb(), 'users', userId, 'summaries', 'monthly', 'items', afterWhen.month);
-        const yref = doc(getFirestoreDb(), 'users', userId, 'summaries', 'yearly', 'items', afterWhen.year);
+        const dref = doc(
+          getFirestoreDb(),
+          'users',
+          userId,
+          'summaries',
+          'daily',
+          'items',
+          afterWhen.day
+        );
+        const mref = doc(
+          getFirestoreDb(),
+          'users',
+          userId,
+          'summaries',
+          'monthly',
+          'items',
+          afterWhen.month
+        );
+        const yref = doc(
+          getFirestoreDb(),
+          'users',
+          userId,
+          'summaries',
+          'yearly',
+          'items',
+          afterWhen.year
+        );
         await applyIncrementsClient(tx, dref, { inCents: afterIn, outCents: afterOut, count: 1 });
         await applyIncrementsClient(tx, mref, { inCents: afterIn, outCents: afterOut, count: 1 });
         await applyIncrementsClient(tx, yref, { inCents: afterIn, outCents: afterOut, count: 1 });
@@ -234,7 +354,15 @@ export const removeEntry = async (userId: string, localId: string): Promise<void
     tx.delete(docRef);
     if (!when) return;
     const dref = doc(getFirestoreDb(), 'users', userId, 'summaries', 'daily', 'items', when.day);
-    const mref = doc(getFirestoreDb(), 'users', userId, 'summaries', 'monthly', 'items', when.month);
+    const mref = doc(
+      getFirestoreDb(),
+      'users',
+      userId,
+      'summaries',
+      'monthly',
+      'items',
+      when.month
+    );
     const yref = doc(getFirestoreDb(), 'users', userId, 'summaries', 'yearly', 'items', when.year);
     await applyIncrementsClient(tx, dref, { inCents: -inC, outCents: -outC, count: -1 });
     await applyIncrementsClient(tx, mref, { inCents: -inC, outCents: -outC, count: -1 });

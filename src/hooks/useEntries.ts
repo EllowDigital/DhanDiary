@@ -58,10 +58,14 @@ export const useEntries = (userId?: string | null) => {
     if (!userId) return;
     // Kick off a one-time background sync from Firestore into local DB
     syncFirestoreToLocalOnce(userId).catch((e) => console.warn('Sync error', e));
-    const unsub = subscribeEntries(userId, (payload) => {
-      setListenerError(null);
-      queryClient.setQueryData(queryKey, payload);
-    }, (err) => setListenerError(err));
+    const unsub = subscribeEntries(
+      userId,
+      (payload) => {
+        setListenerError(null);
+        queryClient.setQueryData(queryKey, payload);
+      },
+      (err) => setListenerError(err)
+    );
     return () => unsub();
   }, [userId, queryClient, queryKey]);
 
@@ -106,7 +110,8 @@ export const useEntries = (userId?: string | null) => {
           ? {
               ...item,
               ...updates,
-              category: updates.category !== undefined ? ensureCategory(updates.category) : item.category,
+              category:
+                updates.category !== undefined ? ensureCategory(updates.category) : item.category,
               updated_at: now,
             }
           : item

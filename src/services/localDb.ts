@@ -46,33 +46,50 @@ const asyncStorageAdapter = {
   // Minimal transaction/executeSql emulation for the queries used in this file
   transaction(cb: (tx: any) => void) {
     const tx = {
-      executeSql: async (sql: string, params: any[] = [], success?: (t: any, res: any) => void, _err?: any) => {
+      executeSql: async (
+        sql: string,
+        params: any[] = [],
+        success?: (t: any, res: any) => void,
+        _err?: any
+      ) => {
         // Handle SELECT entries
-        const selectEntries = /SELECT \* FROM entries WHERE user_id = \? AND is_deleted = 0 ORDER BY date DESC, created_at DESC LIMIT (\d+)/i.exec(sql);
+        const selectEntries =
+          /SELECT \* FROM entries WHERE user_id = \? AND is_deleted = 0 ORDER BY date DESC, created_at DESC LIMIT (\d+)/i.exec(
+            sql
+          );
         if (selectEntries) {
           const userId = params[0];
           const lim = Number(params[1] || selectEntries[1]) || 1000;
           const all = await asyncStorageAdapter.readEntries();
-          const arr = (all[userId] || []).filter((r) => !r.is_deleted).sort((a, b) => {
-            if (a.date === b.date) return (b.created_at || 0) - (a.created_at || 0);
-            return String(b.date).localeCompare(String(a.date));
-          }).slice(0, lim);
+          const arr = (all[userId] || [])
+            .filter((r) => !r.is_deleted)
+            .sort((a, b) => {
+              if (a.date === b.date) return (b.created_at || 0) - (a.created_at || 0);
+              return String(b.date).localeCompare(String(a.date));
+            })
+            .slice(0, lim);
           const rows = { length: arr.length, item: (i: number) => arr[i] };
           success && success(tx, { rows });
           return;
         }
 
         // SELECT with LIMIT OFFSET (generator)
-        const selectPage = /SELECT \* FROM entries WHERE user_id = \? AND is_deleted = 0 ORDER BY date DESC, created_at DESC LIMIT \? OFFSET \?/i.exec(sql);
+        const selectPage =
+          /SELECT \* FROM entries WHERE user_id = \? AND is_deleted = 0 ORDER BY date DESC, created_at DESC LIMIT \? OFFSET \?/i.exec(
+            sql
+          );
         if (selectPage) {
           const userId = params[0];
           const limit = Number(params[1] || 500);
           const offset = Number(params[2] || 0);
           const all = await asyncStorageAdapter.readEntries();
-          const arr = (all[userId] || []).filter((r) => !r.is_deleted).sort((a, b) => {
-            if (a.date === b.date) return (b.created_at || 0) - (a.created_at || 0);
-            return String(b.date).localeCompare(String(a.date));
-          }).slice(offset, offset + limit);
+          const arr = (all[userId] || [])
+            .filter((r) => !r.is_deleted)
+            .sort((a, b) => {
+              if (a.date === b.date) return (b.created_at || 0) - (a.created_at || 0);
+              return String(b.date).localeCompare(String(a.date));
+            })
+            .slice(offset, offset + limit);
           const rows = { length: arr.length, item: (i: number) => arr[i] };
           success && success(tx, { rows });
           return;
@@ -80,12 +97,40 @@ const asyncStorageAdapter = {
 
         // INSERT OR REPLACE INTO entries
         if (/INSERT OR REPLACE INTO entries/i.test(sql)) {
-          const [id, user_id, amount, category, note, type, currency, date, created_at, updated_at, device_id, sync_status] = params;
+          const [
+            id,
+            user_id,
+            amount,
+            category,
+            note,
+            type,
+            currency,
+            date,
+            created_at,
+            updated_at,
+            device_id,
+            sync_status,
+          ] = params;
           const all = await asyncStorageAdapter.readEntries();
           if (!all[user_id]) all[user_id] = [];
           const idx = all[user_id].findIndex((r) => r.id === id);
-          const row = { id, user_id, amount, category, note, type, currency, date, created_at, updated_at, device_id, is_deleted: 0, sync_status: sync_status || 'SYNCED' };
-          if (idx >= 0) all[user_id][idx] = row; else all[user_id].unshift(row);
+          const row = {
+            id,
+            user_id,
+            amount,
+            category,
+            note,
+            type,
+            currency,
+            date,
+            created_at,
+            updated_at,
+            device_id,
+            is_deleted: 0,
+            sync_status: sync_status || 'SYNCED',
+          };
+          if (idx >= 0) all[user_id][idx] = row;
+          else all[user_id].unshift(row);
           await asyncStorageAdapter.writeEntries(all);
           success && success(tx, { rows: { length: 1, item: (i: number) => row } });
           return;
@@ -150,7 +195,15 @@ const asyncStorageAdapter = {
           const [period, key, inC, outC, cnt, updated_at] = params;
           const summaries = await asyncStorageAdapter.readSummaries();
           const k = `${period}:${key}`;
-          if (!summaries[k]) summaries[k] = { period, key, totalInCents: 0, totalOutCents: 0, count: 0, updated_at: 0 };
+          if (!summaries[k])
+            summaries[k] = {
+              period,
+              key,
+              totalInCents: 0,
+              totalOutCents: 0,
+              count: 0,
+              updated_at: 0,
+            };
           summaries[k].totalInCents = (summaries[k].totalInCents || 0) + (inC || 0);
           summaries[k].totalOutCents = (summaries[k].totalOutCents || 0) + (outC || 0);
           summaries[k].count = (summaries[k].count || 0) + (cnt || 0);
@@ -291,11 +344,17 @@ export function getEntries(userId: string): Promise<LocalEntry[]> {
   });
 }
 
-export function subscribeEntries(userId: string, cb: Subscriber, onError?: (err: any) => void): () => void {
+export function subscribeEntries(
+  userId: string,
+  cb: Subscriber,
+  onError?: (err: any) => void
+): () => void {
   if (!subscribers.has(userId)) subscribers.set(userId, new Set());
   subscribers.get(userId)!.add(cb);
   // emit initial
-  getEntries(userId).then((rows) => cb(rows)).catch(onError);
+  getEntries(userId)
+    .then((rows) => cb(rows))
+    .catch(onError);
   return () => {
     subscribers.get(userId)!.delete(cb);
   };
@@ -316,7 +375,13 @@ function generateId() {
   });
 }
 
-async function applySummaryIncrements(userId: string, dateIso: string, type: 'in' | 'out', amount: number, deltaCount: number) {
+async function applySummaryIncrements(
+  userId: string,
+  dateIso: string,
+  type: 'in' | 'out',
+  amount: number,
+  deltaCount: number
+) {
   const d = new Date(dateIso);
   const year = d.getUTCFullYear();
   const month = String(d.getUTCMonth() + 1).padStart(2, '0');
@@ -386,15 +451,27 @@ export async function createEntry(userId: string, input: EntryInput): Promise<Lo
   });
 
   // update summaries
-  await applySummaryIncrements(userId, payload.date, payload.type as 'in' | 'out', payload.amount, 1);
+  await applySummaryIncrements(
+    userId,
+    payload.date,
+    payload.type as 'in' | 'out',
+    payload.amount,
+    1
+  );
 
   notify(userId);
   return rowToLocalEntry(payload as any, userId);
 }
 
-export async function patchEntry(userId: string, localId: string, updates: EntryUpdate): Promise<void> {
+export async function patchEntry(
+  userId: string,
+  localId: string,
+  updates: EntryUpdate
+): Promise<void> {
   // Read current
-  const existing = await getEntries(userId).then((rows) => rows.find((r) => r.local_id === localId));
+  const existing = await getEntries(userId).then((rows) =>
+    rows.find((r) => r.local_id === localId)
+  );
   if (!existing) throw new Error('entry not found');
 
   const next = { ...existing } as any;
@@ -410,7 +487,17 @@ export async function patchEntry(userId: string, localId: string, updates: Entry
     db.transaction((tx: any) => {
       tx.executeSql(
         'UPDATE entries SET amount = ?, category = ?, note = ?, type = ?, currency = ?, date = ?, updated_at = ?, sync_status = ? WHERE id = ?',
-        [next.amount, next.category, next.note, next.type, next.currency, next.date, next.updated_at, 'PENDING', localId],
+        [
+          next.amount,
+          next.category,
+          next.note,
+          next.type,
+          next.currency,
+          next.date,
+          next.updated_at,
+          'PENDING',
+          localId,
+        ],
         () => resolve(),
         () => resolve()
       );
@@ -428,13 +515,20 @@ export async function patchEntry(userId: string, localId: string, updates: Entry
 }
 
 export async function removeEntry(userId: string, localId: string): Promise<void> {
-  const existing = await getEntries(userId).then((rows) => rows.find((r) => r.local_id === localId));
+  const existing = await getEntries(userId).then((rows) =>
+    rows.find((r) => r.local_id === localId)
+  );
   if (!existing) return;
 
   await new Promise<void>((resolve) => {
     db.transaction((tx: any) => {
       const now = nowMs();
-      tx.executeSql('UPDATE entries SET is_deleted = 1, updated_at = ?, sync_status = ? WHERE id = ?', [now, 'PENDING', localId], () => resolve(), () => resolve());
+      tx.executeSql(
+        'UPDATE entries SET is_deleted = 1, updated_at = ?, sync_status = ? WHERE id = ?',
+        [now, 'PENDING', localId],
+        () => resolve(),
+        () => resolve()
+      );
     });
   });
 
@@ -465,10 +559,25 @@ export async function wipeUserData(userId: string): Promise<void> {
   if (useNativeSqlite) {
     await new Promise<void>((resolve) => {
       db.transaction((tx: any) => {
-        tx.executeSql('DELETE FROM entries WHERE user_id = ?', [userId], () => {}, () => {});
-        tx.executeSql('DELETE FROM outbox WHERE user_id = ?', [userId], () => {}, () => {});
+        tx.executeSql(
+          'DELETE FROM entries WHERE user_id = ?',
+          [userId],
+          () => {},
+          () => {}
+        );
+        tx.executeSql(
+          'DELETE FROM outbox WHERE user_id = ?',
+          [userId],
+          () => {},
+          () => {}
+        );
         // summaries are global in this schema; clear them to avoid cross-user leakage
-        tx.executeSql('DELETE FROM summaries', [], () => {}, () => {});
+        tx.executeSql(
+          'DELETE FROM summaries',
+          [],
+          () => {},
+          () => {}
+        );
         resolve();
       });
     });
@@ -527,7 +636,8 @@ export async function* fetchEntriesGenerator(userId: string, pageSize = 500) {
           [userId, pageSize, offset],
           (_t: any, result: any) => {
             const out: LocalEntry[] = [];
-            for (let i = 0; i < result.rows.length; i++) out.push(rowToLocalEntry(result.rows.item(i), userId));
+            for (let i = 0; i < result.rows.length; i++)
+              out.push(rowToLocalEntry(result.rows.item(i), userId));
             resolve(out);
           },
           () => resolve([])

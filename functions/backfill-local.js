@@ -7,7 +7,9 @@ const argv = require('minimist')(process.argv.slice(2));
 // Ensure GOOGLE_APPLICATION_CREDENTIALS env var points to a service account JSON
 
 if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-  console.warn('Warning: GOOGLE_APPLICATION_CREDENTIALS not set. Ensure you have application default credentials.');
+  console.warn(
+    'Warning: GOOGLE_APPLICATION_CREDENTIALS not set. Ensure you have application default credentials.'
+  );
 }
 
 admin.initializeApp({
@@ -39,12 +41,16 @@ async function writeSummaryMaps(uid, period, map) {
     const slice = entries.slice(i, i + batchLimit);
     for (const [key, val] of slice) {
       const docRef = db.doc(`users/${uid}/summaries/${period}/items/${key}`);
-      batch.set(docRef, {
-        totalInCents: val.inCents,
-        totalOutCents: val.outCents,
-        count: val.count,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      }, { merge: true });
+      batch.set(
+        docRef,
+        {
+          totalInCents: val.inCents,
+          totalOutCents: val.outCents,
+          count: val.count,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
     }
     await batch.commit();
   }

@@ -13,13 +13,21 @@ import { StatResult } from '../utils/asyncAggregator';
  *   with a native-worker bridging implementation later.
  */
 
-export const readPrecomputedDaily = async (userId: string, start: dayjs.Dayjs, end: dayjs.Dayjs) => {
+export const readPrecomputedDaily = async (
+  userId: string,
+  start: dayjs.Dayjs,
+  end: dayjs.Dayjs
+) => {
   if (!userId) return null;
   try {
     const db = getFirestoreDb();
     const col = collection(db, 'users', userId, 'summaries', 'daily', 'items');
     // Expect documents keyed by YYYY-MM-DD with fields { value, in, out }
-    const q = query(col, where('date', '>=', start.toISOString()), where('date', '<=', end.toISOString()));
+    const q = query(
+      col,
+      where('date', '>=', start.toISOString()),
+      where('date', '<=', end.toISOString())
+    );
     const snap = await getDocs(q);
     if (!snap || !snap.docs || snap.docs.length === 0) return null;
     return snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
@@ -47,7 +55,11 @@ export const aggregateWithPreferSummary = async (
       const dailyTrend: { label: string; value: number; date: string }[] = pre
         .slice()
         .sort((a: any, b: any) => (a.date > b.date ? 1 : -1))
-        .map((p: any) => ({ label: dayjs(p.date).format('DD MMM'), value: Number(p.out || 0), date: String(p.date) }));
+        .map((p: any) => ({
+          label: dayjs(p.date).format('DD MMM'),
+          value: Number(p.out || 0),
+          date: String(p.date),
+        }));
 
       return {
         totalIn,

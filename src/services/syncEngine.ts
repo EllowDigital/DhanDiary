@@ -125,8 +125,15 @@ export async function pushLocalChanges(userId: string, batchSize = DEFAULT_BATCH
     const lastPushed = await getLastPushedAt(userId);
     // Priority: deletes first, then updates (updated_at > lastPushed), then creates
     const deletes = local.filter((r: any) => r.is_deleted && r.syncStatus !== 'SYNCED');
-    const updates = local.filter((r: any) => !r.is_deleted && r.syncStatus === 'PENDING' && toMs(r.updated_at) > lastPushed);
-    const creates = local.filter((r: any) => !r.is_deleted && (r.syncStatus === 'PENDING' || !r.syncStatus) && toMs(r.updated_at) <= lastPushed);
+    const updates = local.filter(
+      (r: any) => !r.is_deleted && r.syncStatus === 'PENDING' && toMs(r.updated_at) > lastPushed
+    );
+    const creates = local.filter(
+      (r: any) =>
+        !r.is_deleted &&
+        (r.syncStatus === 'PENDING' || !r.syncStatus) &&
+        toMs(r.updated_at) <= lastPushed
+    );
     const pending = [...deletes, ...updates, ...creates];
     if (!pending || pending.length === 0) return;
 
@@ -184,14 +191,17 @@ export async function pullRemoteChanges(
 
     const col = collection(db, 'users', userId, 'cash_entries');
     // Determine lower bound: either lastPulled or windowStart (for lazy historical sync)
-    const lowerBound = opts?.includeHistory ? lastPulled || 0 : Math.max(lastPulled || 0, windowStart);
+    const lowerBound = opts?.includeHistory
+      ? lastPulled || 0
+      : Math.max(lastPulled || 0, windowStart);
 
     // Prefer compressed field 'u' (updated) if present on documents; fallback to 'updatedAt'
     let q: any;
     let fieldUsed = 'updatedAt';
     const tryField = async (field: string) => {
       try {
-        if (lowerBound) return query(col, orderBy(field), where(field, '>', lowerBound), limit(pageSize));
+        if (lowerBound)
+          return query(col, orderBy(field), where(field, '>', lowerBound), limit(pageSize));
         return query(col, orderBy(field), limit(pageSize));
       } catch (e) {
         return null;
@@ -240,7 +250,9 @@ export async function pullRemoteChanges(
         } else if (local && remote.isDeleted) {
           await localRemoveEntry(userId, rid);
         } else if (local && !remote.isDeleted) {
-          const localUpdated = toMs(local.updated_at || local.updatedAt || local.updatedAtMillis || 0);
+          const localUpdated = toMs(
+            local.updated_at || local.updatedAt || local.updatedAtMillis || 0
+          );
           if (localUpdated === remoteUpdated) {
             const localDevice = (local as any).device_id || null;
             const remoteDevice = remote.deviceId || null;
@@ -389,4 +401,3 @@ export default {
   stopSyncForUser,
   wipeLocalForUser,
 };
-

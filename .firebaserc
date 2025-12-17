@@ -1,5 +1,8 @@
 {
   "projects": {
-    "default": "dhandiary-25043"
-  }
+    "default": "dhandiary-25043",
+    "staging": "dhandiary-25043"
+  },
+  "targets": {},
+  "etags": {}
 }
