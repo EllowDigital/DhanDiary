@@ -622,15 +622,15 @@ const StatsScreen = () => {
             <View style={styles.rowBetween}>
               <Text style={styles.labelMuted}>Net balance</Text>
               <View
-                style={[styles.badge, { backgroundColor: stats.net >= 0 ? '#E8F5E9' : '#FFEBEE' }]}
+                style={[styles.badge, { backgroundColor: netNum >= 0 ? '#E8F5E9' : '#FFEBEE' }]}
               >
                 <MaterialIcon
-                  name={stats.net >= 0 ? 'trending-up' : 'trending-down'}
+                  name={netNum >= 0 ? 'trending-up' : 'trending-down'}
                   size={16}
-                  color={stats.net >= 0 ? '#2E7D32' : '#C62828'}
+                  color={netNum >= 0 ? '#2E7D32' : '#C62828'}
                 />
-                <Text style={[styles.badgeText, { color: stats.net >= 0 ? '#2E7D32' : '#C62828' }]}>
-                  {stats.net >= 0 ? 'Surplus' : 'Deficit'}
+                <Text style={[styles.badgeText, { color: netNum >= 0 ? '#2E7D32' : '#C62828' }]}> 
+                  {netNum >= 0 ? 'Surplus' : 'Deficit'}
                 </Text>
               </View>
             </View>
@@ -693,7 +693,7 @@ const StatsScreen = () => {
                   <Text style={styles.labelMutedSmall}>Net</Text>
                   <Text style={styles.chartStatValue}>
                     {currencySymbol}
-                    {stats.net.toLocaleString()}
+                    {netNum.toLocaleString()}
                   </Text>
                 </View>
               </View>
