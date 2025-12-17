@@ -282,7 +282,7 @@ const StatsScreen = () => {
 
         // Run Entry Animation
         Animated.parallel([
-          Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+                Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
           Animated.spring(slideAnim, { toValue: 0, damping: 12, useNativeDriver: true }),
         ]).start();
       }
@@ -330,7 +330,6 @@ const StatsScreen = () => {
           style={{
             opacity: fadeAnim,
             transform: [{ translateY: slideAnim }],
-            // @ts-expect-error - safe to spread containerStyle into Animated style
             ...containerStyle,
           }}
         >
