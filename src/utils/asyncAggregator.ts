@@ -34,8 +34,16 @@ export interface StatResult {
 // --- UTILS ---
 const yieldToUI = () =>
   new Promise<void>((resolve) => {
-    if (typeof setImmediate === 'function') setImmediate(resolve);
-    else setTimeout(resolve, 0);
+    // Avoid referencing `setImmediate` as a bare identifier to satisfy ESLint `no-undef`.
+    const g: any = typeof globalThis !== 'undefined' ? globalThis : {};
+    if (g && typeof g.setImmediate === 'function') return g.setImmediate(resolve);
+    if (typeof MessageChannel !== 'undefined') {
+      const mc = new MessageChannel();
+      mc.port1.onmessage = () => resolve();
+      mc.port2.postMessage(0);
+      return;
+    }
+    setTimeout(resolve, 0);
   });
 
 /**

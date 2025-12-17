@@ -134,7 +134,7 @@ const StatsScreen = () => {
   // --- RESPONSIVE CALCS ---
   const isTablet = width > 600;
   const maxContentWidth = 600;
-  const containerStyle = { width: Math.min(width - 32, maxContentWidth), alignSelf: 'center' };
+  const containerStyle: any = { width: Math.min(width - 32, maxContentWidth), alignSelf: 'center' };
   const donutSize = Math.min(width * 0.5, 220); // Responsive chart size
 
   // --- 1. DATA PREPARATION (Memoized) ---
@@ -189,16 +189,18 @@ const StatsScreen = () => {
         start = current.subtract(29, 'day').startOf('day');
         end = current.endOf('day');
         break;
-      case 'This Month':
+      case 'This Month': {
         const m = dayjs(`${activeMonthKey || current.format('YYYY-MM')}-01`);
         start = m.startOf('month');
         end = m.endOf('month');
         break;
-      case 'This Year':
+      }
+      case 'This Year': {
         const y = current.year(activeYear || current.year());
         start = y.startOf('year');
         end = y.endOf('year');
         break;
+      }
       case 'All':
         start = dayjs(0);
         end = current.endOf('day');
@@ -328,7 +330,7 @@ const StatsScreen = () => {
           style={{
             opacity: fadeAnim,
             transform: [{ translateY: slideAnim }],
-            // @ts-ignore
+            // @ts-expect-error - safe to spread containerStyle into Animated style
             ...containerStyle,
           }}
         >

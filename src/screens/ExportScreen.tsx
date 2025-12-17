@@ -197,7 +197,6 @@ const ExportScreen = () => {
           title: `Report_${dayjs().format('YYYY-MM-DD')}`,
           periodLabel,
           groupBy: format === 'pdf' ? groupBy : 'none',
-          totalAmount,
         });
 
         if (filePath) await shareFile(filePath);
