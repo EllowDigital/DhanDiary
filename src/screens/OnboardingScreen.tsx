@@ -57,7 +57,7 @@ const SLIDES = [
     key: 'privacy',
     title: 'Secure by Design',
     description:
-      'Your financial data is encrypted and private. Secured by Firebase Auth and granular privacy controls.',
+      'Your financial data is encrypted and private. Secured by local encryption and granular privacy controls.',
     icon: 'lock',
     accent: '#059669', // Emerald
   },

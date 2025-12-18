@@ -50,7 +50,7 @@ const sections = [
     id: 'availability',
     icon: 'server-network',
     title: 'Availability',
-    body: 'We strive for high uptime but cannot guarantee uninterrupted service. Scheduled maintenance or infrastructure partners (like Firebase and Expo services) may occasionally cause brief downtime.',
+    body: 'We strive for high uptime but cannot guarantee uninterrupted service. Scheduled maintenance or third-party infrastructure providers may occasionally cause brief downtime.',
   },
   {
     id: 'changes',
