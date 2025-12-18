@@ -26,38 +26,28 @@ import { LocalEntry } from '../types/entries';
 import { getIconForCategory } from '../constants/categories';
 
 // --- CRASH FIX: Safe LayoutAnimation Setup ---
-// This prevents the "property is not configurable" crash on Android
 try {
   if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
     UIManager.setLayoutAnimationEnabledExperimental(true);
   }
 } catch (e) {
-  // Gracefully fail if animation config is locked
   console.warn('LayoutAnimation config skipped');
 }
 
 // --- CONFIGURATION ---
 const colors = {
-  primary: '#3B82F6', // Bright Blue
-  background: '#F8FAFC', // Very Light Gray Background
-  text: '#1E293B', // Dark Slate
-  subText: '#64748B', // Medium Gray
-  success: '#10B981', // Emerald Green
-  danger: '#EF4444', // Red
+  primary: '#3B82F6',
+  background: '#F8FAFC',
+  text: '#1E293B',
+  subText: '#64748B',
+  success: '#10B981',
+  danger: '#EF4444',
   white: '#FFFFFF',
 };
 
 const CHART_COLORS = [
-  '#F59E0B',
-  '#10B981',
-  '#3B82F6',
-  '#EC4899',
-  '#8B5CF6',
-  '#EF4444',
-  '#06B6D4',
-  '#6366F1',
-  '#84CC16',
-  '#F43F5E',
+  '#F59E0B', '#10B981', '#3B82F6', '#EC4899', '#8B5CF6', 
+  '#EF4444', '#06B6D4', '#6366F1', '#84CC16', '#F43F5E',
 ];
 
 // --- UTILS ---
@@ -70,7 +60,7 @@ const getGreeting = () => {
 
 // --- SUB-COMPONENTS ---
 
-// 1. WAVE CHART (Safe & Clean)
+// 1. WAVE CHART
 const WaveChart = React.memo(({ data, width }: { data: number[]; width: number }) => {
   const safeData = data.length >= 2 ? data : [0, 0, 0, 0, 0, 50, 100];
   const chartWidth = width + 40;
@@ -182,20 +172,19 @@ const RankList = React.memo(({ data, total }: { data: any[]; total: number }) =>
   </View>
 ));
 
-// 4. TRANSACTION ITEM (Card Style - Matching Screenshot 4)
+// 4. TRANSACTION ITEM (UPDATED: COMPACT VERSION)
 const TransactionItem = React.memo(
   ({ item, onPress }: { item: LocalEntry; onPress: () => void }) => {
     const isExpense = item.type === 'out';
     const color = isExpense ? colors.danger : colors.success;
-    // Light background for icon
     const iconBg = isExpense ? '#FEF2F2' : '#F0FDF4';
     const icon = getIconForCategory(item.category);
 
     return (
       <TouchableOpacity style={styles.txnCard} onPress={onPress} activeOpacity={0.7}>
-        {/* Left: Icon Box (Rounded Square) */}
+        {/* Left: Icon Box (Smaller) */}
         <View style={[styles.txnIconBox, { backgroundColor: iconBg }]}>
-          <MaterialIcon name={icon as any} size={24} color={color} />
+          <MaterialIcon name={icon as any} size={20} color={color} />
         </View>
 
         {/* Middle: Info */}
@@ -244,13 +233,10 @@ const HomeScreen = () => {
     ]).start();
   }, []);
 
-  // Safe animation trigger
   const triggerLayoutAnimation = () => {
     try {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    } catch (e) {
-      // Ignore if layout animation fails
-    }
+    } catch (e) { }
   };
 
   const handleToggleChart = (type: any) => {
@@ -272,7 +258,6 @@ const HomeScreen = () => {
         recentEntries: [],
       };
 
-    // 1. Math.abs fixes negative stored values
     const inVal = entries
       .filter((e) => e.type === 'in')
       .reduce((acc, c) => acc + Math.abs(Number(c.amount)), 0);
@@ -280,12 +265,11 @@ const HomeScreen = () => {
       .filter((e) => e.type === 'out')
       .reduce((acc, c) => acc + Math.abs(Number(c.amount)), 0);
 
-    // 2. Filter
     const cutOff =
       period === 'week' ? dayjs().subtract(6, 'day').startOf('day') : dayjs().startOf('month');
     const filtered = entries.filter((e) => dayjs(e.date || e.created_at).isAfter(cutOff));
 
-    // 3. Wave
+    // Wave
     const wavePoints =
       period === 'week' ? new Array(7).fill(0) : new Array(dayjs().daysInMonth()).fill(0);
     filtered
@@ -297,7 +281,7 @@ const HomeScreen = () => {
       });
     const displayWave = wavePoints.some((v) => v > 0) ? wavePoints : [0, 0, 0, 0, 0, 10, 50];
 
-    // 4. Pie
+    // Pie
     const catMap: Record<string, number> = {};
     filtered
       .filter((e) => e.type === 'out')
@@ -378,7 +362,6 @@ const HomeScreen = () => {
             </Text>
           </View>
 
-          {/* INCOME / EXPENSE PILLS */}
           <View style={styles.statsRow}>
             <View style={styles.statBox}>
               <View style={styles.iconCircleIn}>
@@ -411,20 +394,8 @@ const HomeScreen = () => {
       <View style={styles.actionsRow}>
         {[
           { label: 'Add', icon: 'add', nav: 'AddEntry', bg: colors.primary, iconColor: '#FFF' },
-          {
-            label: 'Stats',
-            icon: 'bar-chart',
-            nav: 'Stats',
-            bg: '#FFF',
-            iconColor: colors.primary,
-          },
-          {
-            label: 'Export',
-            icon: 'file-download',
-            nav: 'Export',
-            bg: '#FFF',
-            iconColor: colors.primary,
-          },
+          { label: 'Stats', icon: 'bar-chart', nav: 'Stats', bg: '#FFF', iconColor: colors.primary },
+          { label: 'Export', icon: 'file-download', nav: 'Export', bg: '#FFF', iconColor: colors.primary },
         ].map((a, i) => (
           <View key={i} style={styles.actionCol}>
             <TouchableOpacity
@@ -610,7 +581,7 @@ const styles = StyleSheet.create({
   },
   balanceText: { fontSize: fontScale(42), color: '#FFF', fontWeight: '800' },
 
-  // Stats Row (Income/Expense Pill)
+  // Stats Row
   statsRow: {
     flexDirection: 'row',
     backgroundColor: 'rgba(0,0,0,0.15)',
@@ -738,49 +709,49 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: fontScale(17), fontWeight: '800', color: colors.text },
   seeAllText: { fontSize: fontScale(13), fontWeight: '700', color: colors.primary },
 
-  // TRANSACTION CARD (MATCHING SCREENSHOT 4)
+  // --- UPDATED COMPACT TRANSACTION STYLES ---
   txnCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFF',
-    padding: 16,
-    borderRadius: 20, // Rounded Corners
-    marginBottom: 12, // Spacing
-    // Card Shadows
-    elevation: 3,
+    paddingVertical: 12, // Reduced padding
+    paddingHorizontal: 16,
+    borderRadius: 16, // Reduced corner radius
+    marginBottom: 8, // Reduced spacing
+    elevation: 2,
     shadowColor: '#64748B',
     shadowOpacity: 0.08,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
   },
   txnIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 14, // Rounded Square
+    width: 40, // Smaller icon box (was 44)
+    height: 40,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 14,
+    marginRight: 12,
   },
   txnContent: { flex: 1 },
   txnTitle: {
-    fontSize: fontScale(15),
+    fontSize: fontScale(14), // Slightly smaller font
     fontWeight: '700',
     color: colors.text,
     marginBottom: 2,
   },
   txnSubtitle: {
-    fontSize: fontScale(12),
+    fontSize: fontScale(11), // Compact text
     color: colors.subText,
     fontWeight: '500',
   },
   txnRight: { alignItems: 'flex-end' },
   txnAmount: {
-    fontSize: fontScale(15),
+    fontSize: fontScale(14),
     fontWeight: '800',
     marginBottom: 2,
   },
   txnDate: {
-    fontSize: fontScale(11),
+    fontSize: fontScale(10),
     color: colors.subText,
   },
 });

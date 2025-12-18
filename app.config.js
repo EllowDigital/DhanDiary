@@ -39,48 +39,13 @@ module.exports = (ctx) => {
     }
   }
 
-  const firebaseExtra = {
-    apiKey:
-      process.env.EXPO_PUBLIC_FIREBASE_API_KEY ||
-      (baseConfig.extra && baseConfig.extra.firebase && baseConfig.extra.firebase.apiKey) ||
-      null,
-    authDomain:
-      process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN ||
-      (baseConfig.extra && baseConfig.extra.firebase && baseConfig.extra.firebase.authDomain) ||
-      null,
-    projectId:
-      process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID ||
-      (baseConfig.extra && baseConfig.extra.firebase && baseConfig.extra.firebase.projectId) ||
-      null,
-    storageBucket:
-      process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET ||
-      (baseConfig.extra && baseConfig.extra.firebase && baseConfig.extra.firebase.storageBucket) ||
-      null,
-    messagingSenderId:
-      process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ||
-      (baseConfig.extra &&
-        baseConfig.extra.firebase &&
-        baseConfig.extra.firebase.messagingSenderId) ||
-      null,
-    appId:
-      process.env.EXPO_PUBLIC_FIREBASE_APP_ID ||
-      (baseConfig.extra && baseConfig.extra.firebase && baseConfig.extra.firebase.appId) ||
-      null,
-    measurementId:
-      process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID ||
-      (baseConfig.extra && baseConfig.extra.firebase && baseConfig.extra.firebase.measurementId) ||
-      null,
-    webClientId:
-      process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
-      (baseConfig.extra && baseConfig.extra.firebase && baseConfig.extra.firebase.webClientId) ||
-      null,
-  };
+  // Firebase removed for local-only mode; do not expose Firebase keys in app config.
+  const firebaseExtra = null;
 
   const oauthExtra = {
     googleClientId:
       process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
       (baseConfig.extra && baseConfig.extra.oauth && baseConfig.extra.oauth.googleClientId) ||
-      firebaseExtra.webClientId ||
       null,
     githubClientId:
       process.env.EXPO_PUBLIC_GITHUB_CLIENT_ID ||
@@ -92,18 +57,9 @@ module.exports = (ctx) => {
     ...baseConfig,
     extra: {
       ...(baseConfig.extra || {}),
-      firebase: firebaseExtra,
       oauth: oauthExtra,
     },
-    // Ensure the native Google Sign-In plugin is applied for EAS/dev-client builds
-    plugins: [
-      ...(baseConfig.plugins || []),
-      [
-        '@react-native-google-signin/google-signin',
-        {
-          iosUrlScheme: 'com.googleusercontent.apps.315200510366-8ek2cvlnsidt7e6bgi16tn0kinvtasgb',
-        },
-      ],
-    ],
+    // Keep existing plugins but do not implicitly add Google Sign-In plugin.
+    plugins: [...(baseConfig.plugins || [])],
   };
 };

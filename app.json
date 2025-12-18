@@ -22,7 +22,6 @@
     },
     "android": {
       "package": "com.ellowdigital.dhandiary",
-      "googleServicesFile": "./google-services.json",
       "versionCode": 200,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -63,14 +62,6 @@
     "extra": {
       "eas": {
         "projectId": "77c33e0a-8d3a-4f5b-afcf-72967c9af0bf"
-      },
-      "firebase": {
-        "apiKey": "AIzaSyB98yGMNX0C_AuuuAFA_TWQvhkP_736dnU",
-        "authDomain": "dhandiary-25043.firebaseapp.com",
-        "projectId": "dhandiary-25043",
-        "storageBucket": "dhandiary-25043.firebasestorage.app",
-        "messagingSenderId": "560282913610",
-        "appId": "1:560282913610:android:de863313eacd017b600fb3"
       }
     }
   }
