@@ -6,8 +6,6 @@
     "node": "18"
   },
   "dependencies": {
-    "firebase-admin": "^11.10.0",
-    "firebase-functions": "^4.4.0",
     "minimist": "^1.2.8",
     "dayjs": "^1.11.19"
   },
@@ -16,7 +14,6 @@
   },
   "scripts": {
     "build": "tsc",
-    "deploy": "firebase deploy --only functions",
     "backfill:local": "node backfill-local.js"
   }
 }
