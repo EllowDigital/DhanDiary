@@ -4,3 +4,12 @@
 // to work.
 
 export * from './auth';
+
+import * as authMod from './auth';
+
+export async function startGithubSignIn(intent: 'signIn' | 'link' = 'signIn') {
+	if (typeof (authMod as any).startGithubSignIn === 'function') {
+		return (authMod as any).startGithubSignIn(intent);
+	}
+	throw new Error('GitHub sign-in is not available in local-only build.');
+}
