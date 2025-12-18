@@ -46,8 +46,16 @@ const colors = {
 };
 
 const CHART_COLORS = [
-  '#F59E0B', '#10B981', '#3B82F6', '#EC4899', '#8B5CF6', 
-  '#EF4444', '#06B6D4', '#6366F1', '#84CC16', '#F43F5E',
+  '#F59E0B',
+  '#10B981',
+  '#3B82F6',
+  '#EC4899',
+  '#8B5CF6',
+  '#EF4444',
+  '#06B6D4',
+  '#6366F1',
+  '#84CC16',
+  '#F43F5E',
 ];
 
 // --- UTILS ---
@@ -236,7 +244,7 @@ const HomeScreen = () => {
   const triggerLayoutAnimation = () => {
     try {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    } catch (e) { }
+    } catch (e) {}
   };
 
   const handleToggleChart = (type: any) => {
@@ -394,8 +402,20 @@ const HomeScreen = () => {
       <View style={styles.actionsRow}>
         {[
           { label: 'Add', icon: 'add', nav: 'AddEntry', bg: colors.primary, iconColor: '#FFF' },
-          { label: 'Stats', icon: 'bar-chart', nav: 'Stats', bg: '#FFF', iconColor: colors.primary },
-          { label: 'Export', icon: 'file-download', nav: 'Export', bg: '#FFF', iconColor: colors.primary },
+          {
+            label: 'Stats',
+            icon: 'bar-chart',
+            nav: 'Stats',
+            bg: '#FFF',
+            iconColor: colors.primary,
+          },
+          {
+            label: 'Export',
+            icon: 'file-download',
+            nav: 'Export',
+            bg: '#FFF',
+            iconColor: colors.primary,
+          },
         ].map((a, i) => (
           <View key={i} style={styles.actionCol}>
             <TouchableOpacity

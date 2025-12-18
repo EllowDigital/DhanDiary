@@ -27,7 +27,13 @@ export const readPrecomputedDaily = async (
       const key = cur.format('YYYY-MM-DD');
       const s = await getSummary('daily', key);
       if (s) {
-        results.push({ id: key, date: key, in: (s.totalInCents || 0) / 100, out: (s.totalOutCents || 0) / 100, count: s.count || 0 });
+        results.push({
+          id: key,
+          date: key,
+          in: (s.totalInCents || 0) / 100,
+          out: (s.totalOutCents || 0) / 100,
+          count: s.count || 0,
+        });
       }
       cur = cur.add(1, 'day');
     }

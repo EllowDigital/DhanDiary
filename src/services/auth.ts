@@ -64,7 +64,9 @@ export const onAuthStateChanged = (cb: (u: LocalUserRecord | null) => void) => {
 
 export const registerWithEmail = async (name: string, email: string, password: string) => {
   const users = await readUsers();
-  const exists = Object.values(users).find((u) => u.email.toLowerCase() === email.trim().toLowerCase());
+  const exists = Object.values(users).find(
+    (u) => u.email.toLowerCase() === email.trim().toLowerCase()
+  );
   if (exists) {
     const err: any = new Error('auth/email-already-in-use');
     err.code = 'auth/email-already-in-use';

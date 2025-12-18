@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react';
-import {
-  onAuthStateChanged,
-} from '../services/auth';
+import { onAuthStateChanged } from '../services/auth';
 
 export type AuthUser = {
   uid: string;
