@@ -48,7 +48,7 @@ const decompress = (remote: any) => ({
 function toMs(v: any): number {
   if (!v) return 0;
   if (typeof v === 'number') return v;
-  if (v instanceof Timestamp) return v.toMillis();
+  if (v && typeof (v as any).toMillis === 'function') return (v as any).toMillis();
   const n = Number(v);
   if (!Number.isNaN(n)) return n;
   const d = new Date(String(v));

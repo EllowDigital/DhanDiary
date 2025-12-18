@@ -66,7 +66,7 @@ async function applyIncrementsClient(
   increments: { inCents?: number; outCents?: number; count?: number }
 ) {
   const snap = await tx.get(docRef);
-  const now = serverTimestamp();
+  const now = new Date().toISOString();
   if (!snap.exists()) {
     const base: any = {
       totalInCents: 0,
@@ -82,10 +82,18 @@ async function applyIncrementsClient(
   }
 
   const updates: any = { updatedAt: now };
-  if (increments.inCents) updates.totalInCents = increment(increments.inCents);
-  if (increments.outCents) updates.totalOutCents = increment(increments.outCents);
-  if (increments.count) updates.count = increment(increments.count);
-  tx.update(docRef, updates);
+  // For local DB we compute absolute totals instead of using server increments
+  const curData = snap.data ? snap.data() : (snap as any);
+  const curIn = (curData && (curData.totalInCents || 0)) || 0;
+  const curOut = (curData && (curData.totalOutCents || 0)) || 0;
+  const curCount = (curData && (curData.count || 0)) || 0;
+  const newIn = typeof increments.inCents === 'number' ? curIn + increments.inCents : curIn;
+  const newOut = typeof increments.outCents === 'number' ? curOut + increments.outCents : curOut;
+  const newCount = typeof increments.count === 'number' ? curCount + increments.count : curCount;
+  updates.totalInCents = newIn;
+  updates.totalOutCents = newOut;
+  updates.count = newCount;
+  await tx.update(docRef, updates);
 }
 
 export const createEntry = async (userId: string, input: EntryInput): Promise<LocalEntry> => {

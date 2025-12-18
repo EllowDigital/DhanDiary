@@ -132,5 +132,25 @@ module.exports = [
   // -------------------------------------------------------
   // 3. Prettier Config (must be last)
   // -------------------------------------------------------
+  // -------------------------------------------------------
+  // 4. Functions folder: neutralize linting for removed cloud code
+  // -------------------------------------------------------
+  {
+    files: ['functions/**'],
+    languageOptions: {
+      globals: {
+        functions: true,
+        admin: true,
+        exports: true,
+        module: true,
+        process: true,
+        console: true,
+      },
+    },
+    rules: {
+      'no-undef': 'off',
+    },
+  },
+
   prettier,
 ];
