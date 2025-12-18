@@ -27,7 +27,7 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { AuthStackParamList } from '../types/navigation';
 import { useToast } from '../context/ToastContext';
 import { useInternetStatus } from '../hooks/useInternetStatus';
-import { registerWithEmail } from '../services/firebaseAuth';
+import { registerWithEmail } from '../services/auth';
 import { SHOW_GITHUB_LOGIN } from '../config/featureFlags';
 
 // Components & Utils
@@ -183,7 +183,7 @@ const RegisterScreen = () => {
     if (!showGithub) return;
     setSocialLoading(true);
     try {
-      const mod = await import('../services/firebaseAuth');
+      const mod = await import('../services/auth');
       await mod.startGithubSignIn('signIn');
     } catch (err: any) {
       Alert.alert('GitHub Sign-up Failed', readProviderError(err, 'Unable to reach GitHub.'));

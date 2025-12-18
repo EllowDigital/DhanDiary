@@ -16,7 +16,7 @@ import { Text } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 
 // Logic
-import { logoutUser } from '../services/firebaseAuth';
+import { logoutUser } from '../services/auth';
 import { useAuth } from '../hooks/useAuth';
 import { useNavigation } from '@react-navigation/native';
 import { useQueryClient } from '@tanstack/react-query';

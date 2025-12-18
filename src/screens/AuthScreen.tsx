@@ -25,7 +25,7 @@ import AuthField from '../components/AuthField';
 import FullScreenSpinner from '../components/FullScreenSpinner';
 
 import { colors } from '../utils/design';
-import { loginWithEmail, registerWithEmail, sendPasswordReset } from '../services/firebaseAuth';
+import { loginWithEmail, registerWithEmail, sendPasswordReset } from '../services/auth';
 import { SHOW_GOOGLE_LOGIN, SHOW_GITHUB_LOGIN } from '../config/featureFlags';
 
 const AuthScreen: React.FC = () => {
@@ -132,7 +132,7 @@ const AuthScreen: React.FC = () => {
         const mod = await import('../services/googleAuth');
         await mod.signInWithGoogle();
       } else {
-        const mod = await import('../services/firebaseAuth');
+        const mod = await import('../services/auth');
         await mod.startGithubSignIn('signIn');
       }
       try {

@@ -25,7 +25,7 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { AuthStackParamList } from '../types/navigation';
 import { useToast } from '../context/ToastContext';
 import { useInternetStatus } from '../hooks/useInternetStatus';
-import { loginWithEmail, sendPasswordReset } from '../services/firebaseAuth';
+import { loginWithEmail, sendPasswordReset } from '../services/auth';
 import { SHOW_GOOGLE_LOGIN, SHOW_GITHUB_LOGIN } from '../config/featureFlags';
 
 // Components & Utils
@@ -150,7 +150,7 @@ const LoginScreen = () => {
     if (!showGithub) return;
     setSocialLoading(true);
     try {
-      const mod = await import('../services/firebaseAuth');
+      const mod = await import('../services/auth');
       await mod.startGithubSignIn('signIn');
     } catch (err) {
       const e: any = err || {};

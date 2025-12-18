@@ -13,7 +13,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
-import { onAuthStateChanged } from '../services/firebaseAuth';
+import { onAuthStateChanged } from '../services/auth';
 import { colors } from '../utils/design';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
