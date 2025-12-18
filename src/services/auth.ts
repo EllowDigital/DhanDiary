@@ -253,3 +253,7 @@ export default {
   clearPendingCredential,
   consumePendingCredentialForCurrentUser,
 };
+
+export const startGithubSignIn = async (intent: 'signIn' | 'link' = 'signIn') => {
+  throw new Error('GitHub sign-in is not available in local-only build.');
+};
