@@ -1,6 +1,5 @@
 import dayjs from 'dayjs';
-import { getFirestoreDb } from '../firebase';
-import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { getSummary } from './localDb';
 import asyncAggregator from '../utils/asyncAggregator';
 import { fetchEntriesGenerator } from './localDb';
 import { StatResult } from '../utils/asyncAggregator';
@@ -20,17 +19,20 @@ export const readPrecomputedDaily = async (
 ) => {
   if (!userId) return null;
   try {
-    const db = getFirestoreDb();
-    const col = collection(db, 'users', userId, 'summaries', 'daily', 'items');
-    // Expect documents keyed by YYYY-MM-DD with fields { value, in, out }
-    const q = query(
-      col,
-      where('date', '>=', start.toISOString()),
-      where('date', '<=', end.toISOString())
-    );
-    const snap = await getDocs(q);
-    if (!snap || !snap.docs || snap.docs.length === 0) return null;
-    return snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
+    // Read summaries from local DB for each day in range (inclusive)
+    const results: any[] = [];
+    let cur = start.startOf('day');
+    const last = end.startOf('day');
+    while (cur.isSameOrBefore(last)) {
+      const key = cur.format('YYYY-MM-DD');
+      const s = await getSummary('daily', key);
+      if (s) {
+        results.push({ id: key, date: key, in: (s.totalInCents || 0) / 100, out: (s.totalOutCents || 0) / 100, count: s.count || 0 });
+      }
+      cur = cur.add(1, 'day');
+    }
+    if (results.length === 0) return null;
+    return results;
   } catch (err) {
     console.warn('Failed to read precomputed daily summaries', err);
     return null;
