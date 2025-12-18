@@ -13,8 +13,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
-import { onAuthStateChanged, User } from 'firebase/auth';
-import { getFirebaseAuth } from '../firebase';
+import { onAuthStateChanged } from '../services/firebaseAuth';
 import { colors } from '../utils/design';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
@@ -115,12 +114,10 @@ const SplashScreen = () => {
 
     const init = async () => {
       const startTime = Date.now();
-      const auth = getFirebaseAuth();
-
       // Run checks in parallel with minimum timer
       const [user, onboardingCompleted] = await Promise.all([
-        new Promise<User | null>((resolve) => {
-          const unsubscribe = onAuthStateChanged(auth, (u) => {
+        new Promise<any | null>((resolve) => {
+          const unsubscribe = onAuthStateChanged((u: any) => {
             unsubscribe();
             resolve(u);
           });

@@ -1,5 +1,4 @@
 import React from 'react';
-import type { FirestoreError } from 'firebase/firestore';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ensureCategory, DEFAULT_CATEGORY } from '../constants/categories';
 import {
