@@ -16,7 +16,7 @@ import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Logic & Utils
-import { logoutUser } from '../services/firebaseAuth';
+import { logoutUser } from '../services/auth';
 import { colors, spacing } from '../utils/design';
 import appConfig from '../../app.json';
 

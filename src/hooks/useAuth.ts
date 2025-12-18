@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   onAuthStateChanged,
-} from '../services/firebaseAuth';
+} from '../services/auth';
 
 export type AuthUser = {
   uid: string;

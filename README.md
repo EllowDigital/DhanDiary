@@ -17,8 +17,8 @@ Manage your daily finances effortlessly with a beautiful dashboard, history trac
 
 - 🧾 **Smart Tracking:** Track income & expenses with notes.
 - 📊 **Analytics:** Clean analytics & spending overview.
-- 💾 **Offline-First:** Works offline with auto-sync when online.
-- 🔐 **Secure:** Firebase Auth sign-in with Firestore-backed encryption and rules.
+-- 💾 **Offline-First:** Works fully offline using local storage (SQLite / AsyncStorage).
+-- 🔐 **Secure:** Local encrypted storage for user data; cloud backup was optional and has been removed in this offline build.
 - 📚 **History:** Full transaction history log.
 - ⚡ **Performance:** Lightweight, smooth & beginner-friendly UI.
 
@@ -28,7 +28,7 @@ Manage your daily finances effortlessly with a beautiful dashboard, history trac
 
 - **Framework:** React Native (Expo)
 - **Routing:** React Navigation
-- **Cloud:** Firebase Auth + Cloud Firestore
+-- **Cloud:** Optional remote sync (previously used Firebase) — disabled in this local-only build
 - **Local Storage:** Async Storage
 - **Language:** TypeScript / JavaScript
 

@@ -20,7 +20,7 @@ import { Input, Button } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 
 // Logic Imports
-import { updateProfileDetails, changePassword, deleteAccount } from '../services/firebaseAuth';
+import { updateProfileDetails, changePassword, deleteAccount } from '../services/auth';
 import { retry } from '../utils/retry';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../context/ToastContext';
