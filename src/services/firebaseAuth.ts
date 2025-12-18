@@ -25,259 +25,259 @@ export const changePassword = async (currentPassword: string, newPassword: strin
   const curRaw = await AsyncStorage.getItem(CURRENT_KEY);
   if (!curRaw) throw new Error('No authenticated user');
   const cur: LocalUserRecord = JSON.parse(curRaw);
-  const users = await readUsers();
-  const rec = users[cur.uid];
-  if (!rec) throw new Error('User record not found');
-  if (rec.password !== currentPassword) {
-    const err: any = new Error('auth/wrong-password');
-    err.code = 'auth/wrong-password';
-    throw err;
-  }
-  rec.password = newPassword;
-  rec.updatedAt = new Date().toISOString();
-  users[cur.uid] = rec;
-  await writeUsers(users);
-  await setCurrent(rec);
-};
+  import AsyncStorage from '@react-native-async-storage/async-storage';
+  import { wipeUserData } from './localDb';
 
-export const deleteAccount = async (currentPassword?: string) => {
-  const curRaw = await AsyncStorage.getItem(CURRENT_KEY);
-  if (!curRaw) return;
-  const cur: LocalUserRecord = JSON.parse(curRaw);
-  const users = await readUsers();
-  const rec = users[cur.uid];
-  if (!rec) return;
-  if (currentPassword && rec.password !== currentPassword) {
-    const err: any = new Error('auth/wrong-password');
-    err.code = 'auth/wrong-password';
-    throw err;
-  }
-  delete users[cur.uid];
-  await writeUsers(users);
-  // wipe local app data for this user
-  try {
-    await wipeUserData(cur.uid);
-  } catch (e) {
-    // ignore
-  }
-  await setCurrent(null);
-};
-
-export default {
-  onAuthStateChanged,
-  registerWithEmail,
-  loginWithEmail,
-  sendPasswordReset,
-  logoutUser,
-  signInWithFirebaseCredential,
-  linkCurrentUserWithCredential,
-  updateProfileDetails,
-  changePassword,
-  deleteAccount,
-  storePendingCredential,
-  clearPendingCredential,
-  consumePendingCredentialForCurrentUser,
-};
-
-const upsertProfile = async (
-  uid: string,
-  data: { name?: string; email?: string; provider?: string; photoURL?: string | null }
-) => {
-  const db = getFirestoreDb();
-  const ref = doc(db, 'users', uid);
-  const existing = await getDoc(ref);
-  const existingData = existing.exists() ? existing.data() || {} : {};
-  const resolvedProvider = data.provider || existingData.provider || 'password';
-  const providersArray = Array.isArray(existingData.providers)
-    ? existingData.providers
-    : existingData.providers
-      ? [existingData.providers]
-      : [];
-  if (data.provider) {
-    const p = String(data.provider).toLowerCase();
-    if (!providersArray.includes(p)) providersArray.push(p);
-  }
-  const resolvedCreatedAt = existingData.createdAt || serverTimestamp();
-
-  await setDoc(
-    ref,
-    {
-      displayName: data.name ?? existingData.displayName ?? '',
-      email: data.email ?? existingData.email ?? '',
-      photoURL: data.photoURL ?? existingData.photoURL ?? null,
-      providers: providersArray,
-      createdAt: resolvedCreatedAt,
-      updatedAt: serverTimestamp(),
-      lastLoginAt: serverTimestamp(),
-    },
-    { merge: true }
-  );
-};
-
-const summarizeProviderIds = (providerData: Array<{ providerId?: string | null }>) => {
-  const ids = providerData
-    .map((p) => p.providerId)
-    .filter((id): id is string => Boolean(id))
-    .map((id) => id!.toLowerCase());
-  if (!ids.length) return 'password';
-  return Array.from(new Set(ids)).sort().join('|');
-};
-
-export const registerWithEmail = async (name: string, email: string, password: string) => {
-  const auth = getFirebaseAuth();
-  const creds = await createUserWithEmailAndPassword(auth, email, password);
-  await updateProfile(creds.user, { displayName: name });
-  await upsertProfile(creds.user.uid, { name, email, provider: 'password' });
-  // After a fresh registration, consume any pending credential for this email
-  try {
-    await consumePendingCredentialForCurrentUser();
-  } catch (err) {
-    // Non-fatal: log and continue
-    console.warn('Failed to consume pending credential after registration', err);
-  }
-  return creds.user;
-};
-
-export const loginWithEmail = (email: string, password: string) => {
-  const auth = getFirebaseAuth();
-  return signInWithEmailAndPassword(auth, email, password).then(async (creds) => {
-    // After successful email login, attempt to link any pending social credential for this user
-    try {
-      await consumePendingCredentialForCurrentUser();
-    } catch (err) {
-      console.warn('Failed to consume pending credential after email login', err);
-    }
-    return creds;
-  });
-};
-
-export const sendPasswordReset = async (email: string) => {
-  const auth = getFirebaseAuth();
-  const extra = getExtra();
-  const expoConfig: any = Constants?.expoConfig || {};
-  const actionCodeSettings = {
-    url:
-      extra?.passwordResetRedirectUrl ||
-      process.env.EXPO_PUBLIC_PASSWORD_RESET_URL ||
-      'https://dhandiary-25043.firebaseapp.com',
-    // Must not handle code in app for the React Native flow here — use Firebase-hosted URL
-    handleCodeInApp: false,
-    dynamicLinkDomain: extra?.passwordResetDynamicLinkDomain || undefined,
-    android: {
-      packageName:
-        expoConfig?.android?.package || extra?.androidPackageName || 'com.ellowdigital.dhandiary',
-      installApp: true,
-      minimumVersion: String(expoConfig?.android?.versionCode || '1'),
-    },
-    iOS: {
-      bundleId:
-        expoConfig?.ios?.bundleIdentifier || extra?.iosBundleId || 'com.ellowdigital.dhandiary',
-    },
+  type LocalUserRecord = {
+    uid: string;
+    name: string;
+    email: string;
+    password?: string;
+    providers?: string[];
+    createdAt: string;
+    updatedAt: string;
   };
 
-  try {
-    await sendPasswordResetEmail(auth, email.trim(), actionCodeSettings);
-  } catch (error: any) {
-    // If user doesn't exist, swallow error to avoid leaking existence
-    if (error?.code === 'auth/user-not-found') {
-      await sleep(350);
-      return;
+  const USERS_KEY = 'local:users';
+  const CURRENT_KEY = 'local:currentUser';
+  const PENDING_KEY = 'local:pendingCredentials';
+
+  let listeners: Array<(u: LocalUserRecord | null) => void> = [];
+
+  const nowIso = () => new Date().toISOString();
+  const genId = () => `local_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`;
+
+  const readUsers = async (): Promise<Record<string, LocalUserRecord>> => {
+    const raw = await AsyncStorage.getItem(USERS_KEY);
+    if (!raw) return {};
+    try {
+      return JSON.parse(raw) as Record<string, LocalUserRecord>;
+    } catch (e) {
+      return {};
     }
+  };
 
-    // If the continue/redirect domain isn't allowlisted, retry without a custom URL
-    if (
-      error?.code === 'auth/unauthorized-continue-uri' ||
-      (error?.message && String(error.message).includes('unauthorized-continue-uri'))
-    ) {
-      console.warn('Password reset continue URL not allowlisted:', actionCodeSettings.url);
-      // Try the default flow (no custom continue URL) so the user can still receive a reset email
-      await sendPasswordResetEmail(auth, email.trim());
-      Alert.alert(
-        'Reset Sent',
-        'Password reset email sent using the default flow. To use a custom continue URL, add its domain to Firebase Console → Authentication → Authorized domains.'
-      );
-      return;
+  const writeUsers = async (users: Record<string, LocalUserRecord>) => {
+    await AsyncStorage.setItem(USERS_KEY, JSON.stringify(users));
+  };
+
+  const setCurrent = async (rec: LocalUserRecord | null) => {
+    if (rec) {
+      await AsyncStorage.setItem(CURRENT_KEY, JSON.stringify(rec));
+    } else {
+      await AsyncStorage.removeItem(CURRENT_KEY);
     }
+    listeners.forEach((l) => l(rec));
+  };
 
-    throw error;
-  }
-};
+  const getCurrent = async (): Promise<LocalUserRecord | null> => {
+    const raw = await AsyncStorage.getItem(CURRENT_KEY);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw) as LocalUserRecord;
+    } catch (e) {
+      return null;
+    }
+  };
 
-export const logoutUser = () => {
-  const auth = getFirebaseAuth();
-  return signOut(auth);
-};
+  export const onAuthStateChanged = (cb: (u: LocalUserRecord | null) => void) => {
+    listeners.push(cb);
+    // call immediately with current value
+    (async () => cb(await getCurrent()))();
+    return () => {
+      listeners = listeners.filter((x) => x !== cb);
+    };
+  };
 
-export const signInWithFirebaseCredential = async (credential: AuthCredential) => {
-  const auth = getFirebaseAuth();
-  try {
-    const result = await signInWithCredential(auth, credential);
-    const provider = summarizeProviderIds(result.user.providerData || []);
-    await upsertProfile(result.user.uid, {
-      name: result.user.displayName || '',
-      email: result.user.email || '',
-      provider,
-    });
-    // After social sign-in, consume any pending credential (unlikely but safe)
+  export const registerWithEmail = async (name: string, email: string, password: string) => {
+    const users = await readUsers();
+    const exists = Object.values(users).find((u) => u.email.toLowerCase() === email.trim().toLowerCase());
+    if (exists) {
+      const err: any = new Error('auth/email-already-in-use');
+      err.code = 'auth/email-already-in-use';
+      throw err;
+    }
+    const uid = genId();
+    const rec: LocalUserRecord = {
+      uid,
+      name: name || '',
+      email: email.trim().toLowerCase(),
+      password,
+      providers: ['password'],
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    };
+    users[uid] = rec;
+    await writeUsers(users);
+    await setCurrent(rec);
+    // consume any pending credential for this email (best-effort)
     try {
       await consumePendingCredentialForCurrentUser();
-    } catch (err) {
-      console.warn('Failed to consume pending credential after social sign-in', err);
+    } catch (e) {
+      // ignore
     }
-    return result.user;
-  } catch (error: any) {
-    // Handle account exists with different credential
-    if (
-      error?.code === 'auth/account-exists-with-different-credential' ||
-      error?.message?.includes('account-exists-with-different-credential')
-    ) {
-      const email = error?.customData?.email || (credential as any)?.email || null;
-      if (email) {
-        const methods = await fetchSignInMethodsForEmail(getFirebaseAuth(), email);
-        // store pending credential so it can be linked after the user signs in with existing provider
-        try {
-          storePendingCredential(email, credential);
-        } catch (err) {
-          console.warn('Failed to store pending credential', err);
-        }
-        const friendly: any = new Error('auth/account-exists-with-different-credential');
-        friendly.code = 'auth/account-exists-with-different-credential';
-        friendly.email = email;
-        friendly.methods = methods || [];
-        throw friendly;
-      }
+    return rec;
+  };
+
+  export const loginWithEmail = async (email: string, password: string) => {
+    const users = await readUsers();
+    const found = Object.values(users).find((u) => u.email === email.trim().toLowerCase());
+    if (!found) {
+      const err: any = new Error('auth/user-not-found');
+      err.code = 'auth/user-not-found';
+      throw err;
     }
-    throw error;
-  }
-};
+    if (found.password !== password) {
+      const err: any = new Error('auth/wrong-password');
+      err.code = 'auth/wrong-password';
+      throw err;
+    }
+    await setCurrent(found);
+    // attempt to consume pending credential
+    try {
+      await consumePendingCredentialForCurrentUser();
+    } catch (e) {
+      // ignore
+    }
+    return found;
+  };
 
-export const linkCurrentUserWithCredential = async (credential: AuthCredential) => {
-  const auth = getFirebaseAuth();
-  const user = auth.currentUser;
-  if (!user) throw new Error('You need to be signed in to link an account.');
-  const result = await linkWithCredential(user, credential);
-  await result.user.reload();
-  const provider = summarizeProviderIds(result.user.providerData || []);
-  await upsertProfile(result.user.uid, {
-    name: result.user.displayName || '',
-    email: result.user.email || '',
-    provider,
-  });
-  return result.user;
-};
+  export const sendPasswordReset = async (email: string) => {
+    const users = await readUsers();
+    const found = Object.values(users).find((u) => u.email === email.trim().toLowerCase());
+    if (!found) {
+      const err: any = new Error('auth/user-not-found');
+      err.code = 'auth/user-not-found';
+      throw err;
+    }
+    // No real email is sent in local mode; simulate success.
+    return;
+  };
 
-export const updateProfileDetails = async (payload: { name?: string; email?: string }) => {
-  const auth = getFirebaseAuth();
-  const current = auth.currentUser;
-  if (!current) throw new Error('No authenticated user');
-  const updates: { name?: string; email?: string } = {};
+  export const logoutUser = async () => {
+    await setCurrent(null);
+  };
 
-  if (payload.name && payload.name !== current.displayName) {
-    await updateProfile(current, { displayName: payload.name });
-    updates.name = payload.name;
-  }
-  if (payload.email && payload.email !== current.email) {
-    await updateEmail(current, payload.email);
+  export const signInWithFirebaseCredential = async (_credential: any) => {
+    const err: any = new Error('auth/social-not-supported');
+    err.code = 'auth/social-not-supported';
+    throw err;
+  };
+
+  export const linkCurrentUserWithCredential = async (_credential: any) => {
+    const err: any = new Error('auth/social-not-supported');
+    err.code = 'auth/social-not-supported';
+    throw err;
+  };
+
+  export const updateProfileDetails = async (payload: { name?: string; email?: string }) => {
+    const cur = await getCurrent();
+    if (!cur) throw new Error('No authenticated user');
+    const users = await readUsers();
+    const rec = users[cur.uid];
+    if (!rec) throw new Error('User record not found');
+    if (payload.name) rec.name = payload.name;
+    if (payload.email) rec.email = payload.email.trim().toLowerCase();
+    rec.updatedAt = nowIso();
+    users[cur.uid] = rec;
+    await writeUsers(users);
+    await setCurrent(rec);
+    return rec;
+  };
+
+  export const changePassword = async (currentPassword: string, newPassword: string) => {
+    const cur = await getCurrent();
+    if (!cur) throw new Error('No authenticated user');
+    const users = await readUsers();
+    const rec = users[cur.uid];
+    if (!rec) throw new Error('User record not found');
+    if (rec.password !== currentPassword) {
+      const err: any = new Error('auth/wrong-password');
+      err.code = 'auth/wrong-password';
+      throw err;
+    }
+    rec.password = newPassword;
+    rec.updatedAt = nowIso();
+    users[cur.uid] = rec;
+    await writeUsers(users);
+    await setCurrent(rec);
+  };
+
+  export const deleteAccount = async (currentPassword?: string) => {
+    const cur = await getCurrent();
+    if (!cur) return;
+    const users = await readUsers();
+    const rec = users[cur.uid];
+    if (!rec) return;
+    if (currentPassword && rec.password !== currentPassword) {
+      const err: any = new Error('auth/wrong-password');
+      err.code = 'auth/wrong-password';
+      throw err;
+    }
+    delete users[cur.uid];
+    await writeUsers(users);
+    try {
+      await wipeUserData(cur.uid);
+    } catch (e) {
+      // ignore
+    }
+    await setCurrent(null);
+  };
+
+  export const storePendingCredential = async (email: string, credential: any) => {
+    const raw = await AsyncStorage.getItem(PENDING_KEY);
+    const map = raw ? (JSON.parse(raw) as Record<string, any>) : {};
+    map[email.toLowerCase()] = credential;
+    await AsyncStorage.setItem(PENDING_KEY, JSON.stringify(map));
+  };
+
+  export const clearPendingCredential = async (email: string) => {
+    const raw = await AsyncStorage.getItem(PENDING_KEY);
+    if (!raw) return;
+    const map = JSON.parse(raw) as Record<string, any>;
+    delete map[email.toLowerCase()];
+    await AsyncStorage.setItem(PENDING_KEY, JSON.stringify(map));
+  };
+
+  export const consumePendingCredentialForCurrentUser = async () => {
+    const cur = await getCurrent();
+    if (!cur) return null;
+    const raw = await AsyncStorage.getItem(PENDING_KEY);
+    if (!raw) return null;
+    const map = JSON.parse(raw) as Record<string, any>;
+    const cred = map[cur.email.toLowerCase()];
+    if (!cred) return null;
+    delete map[cur.email.toLowerCase()];
+    await AsyncStorage.setItem(PENDING_KEY, JSON.stringify(map));
+    // link provider to user record
+    const users = await readUsers();
+    const rec = users[cur.uid];
+    if (rec && cred?.provider) {
+      const p = String(cred.provider).toLowerCase();
+      rec.providers = Array.from(new Set([...(rec.providers || []), p]));
+      rec.updatedAt = nowIso();
+      users[cur.uid] = rec;
+      await writeUsers(users);
+      await setCurrent(rec);
+    }
+    return cred;
+  };
+
+  export default {
+    onAuthStateChanged,
+    registerWithEmail,
+    loginWithEmail,
+    sendPasswordReset,
+    logoutUser,
+    signInWithFirebaseCredential,
+    linkCurrentUserWithCredential,
+    updateProfileDetails,
+    changePassword,
+    deleteAccount,
+    storePendingCredential,
+    clearPendingCredential,
+    consumePendingCredentialForCurrentUser,
+  };
     updates.email = payload.email;
   }
 
