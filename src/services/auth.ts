@@ -341,6 +341,22 @@ type LocalUserRecord = {
   return user;
 };
 
+export const reauthenticateWithPassword = async (password: string) => {
+  const firebaseAuth = tryGetFirebaseAuth();
+  if (!firebaseAuth) throw new Error('Firebase auth not available');
+  const authInstance = firebaseAuth.default ? firebaseAuth.default() : firebaseAuth();
+  const user = authInstance.currentUser;
+  if (!user) throw new Error('No authenticated user');
+  if (!user.email) throw new Error('User has no email for password reauthentication');
+  if (firebaseAuth.EmailAuthProvider && firebaseAuth.EmailAuthProvider.credential) {
+    const cred = firebaseAuth.EmailAuthProvider.credential(user.email, password);
+    if (typeof user.reauthenticateWithCredential === 'function') {
+      return user.reauthenticateWithCredential(cred);
+    }
+  }
+  throw new Error('Reauthentication not supported on this platform');
+};
+
 /**
  * Returns available sign-in methods for an email (e.g. ['password','google.com']).
  */
