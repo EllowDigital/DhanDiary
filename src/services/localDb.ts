@@ -116,9 +116,22 @@ export async function createEntry(userId: string, input: EntryInput): Promise<Lo
     sync_status: 'SYNCED',
   };
   const col = entriesCollection(userId);
-  await col.doc(id).set(payload, { merge: true });
-  const doc = await col.doc(id).get();
-  return mapDocToEntry(doc, userId);
+  try {
+    await col.doc(id).set(payload, { merge: true });
+    const doc = await col.doc(id).get();
+    return mapDocToEntry(doc, userId);
+  } catch (e: any) {
+    // Surface helpful debugging info: project/uid/auth state may cause permission errors
+    console.error('localDb.createEntry: failed to write entry', {
+      userId,
+      payloadSample: { amount: payload.amount, date: payload.date },
+      error: e?.message || e,
+    });
+    // Re-throw for callers to show friendly UI message
+    const out: any = new Error('Failed to save entry. Check authentication and Firestore rules. ' + (e?.message || String(e)));
+    out.original = e;
+    throw out;
+  }
 }
 
 export async function patchEntry(userId: string, localId: string, updates: EntryUpdate) {
