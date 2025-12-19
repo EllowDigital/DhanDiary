@@ -2,7 +2,6 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged as servicesOnAuthStateChanged } from '../services/auth';
 const tryGetUserService = () => {
   try {
-    // eslint-disable-next-line global-require
     return require('../services/userService');
   } catch (e) {
     return null;

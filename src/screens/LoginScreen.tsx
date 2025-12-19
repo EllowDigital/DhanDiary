@@ -121,8 +121,7 @@ const LoginScreen = () => {
         }
       } catch (linkErr) {
         // linking failed - allow normal login but surface a toast
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          try {
           const msg = (linkErr as any)?.message || 'Linking failed';
           showToast('Account linked failed.');
         } catch (e) {}
