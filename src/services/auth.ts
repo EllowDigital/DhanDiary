@@ -157,17 +157,13 @@ export const changePassword = async (currentPassword: string | undefined, newPas
   if (!user) throw new Error('No authenticated user');
 
   // If caller provided currentPassword, attempt reauthentication first (Email provider path)
-  try {
-    if (currentPassword && user.email) {
-      if (firebaseAuth.EmailAuthProvider && firebaseAuth.EmailAuthProvider.credential) {
-        const cred = firebaseAuth.EmailAuthProvider.credential(user.email, currentPassword);
-        if (typeof user.reauthenticateWithCredential === 'function') {
-          await user.reauthenticateWithCredential(cred);
-        }
+  if (currentPassword && user.email) {
+    if (firebaseAuth.EmailAuthProvider && firebaseAuth.EmailAuthProvider.credential) {
+      const cred = firebaseAuth.EmailAuthProvider.credential(user.email, currentPassword);
+      if (typeof user.reauthenticateWithCredential === 'function') {
+        await user.reauthenticateWithCredential(cred);
       }
     }
-  } catch (e) {
-    throw e;
   }
 
   if (user.updatePassword) {
@@ -187,34 +183,26 @@ export const deleteAccount = async (currentPassword?: string) => {
   if (!user) return;
   // If currentPassword provided, attempt reauth to satisfy Firebase's recent-login requirement
   if (currentPassword && user.email) {
-    try {
-      if (firebaseAuth.EmailAuthProvider && firebaseAuth.EmailAuthProvider.credential) {
-        const cred = firebaseAuth.EmailAuthProvider.credential(user.email, currentPassword);
-        if (typeof user.reauthenticateWithCredential === 'function') {
-          await user.reauthenticateWithCredential(cred);
-        }
+    if (firebaseAuth.EmailAuthProvider && firebaseAuth.EmailAuthProvider.credential) {
+      const cred = firebaseAuth.EmailAuthProvider.credential(user.email, currentPassword);
+      if (typeof user.reauthenticateWithCredential === 'function') {
+        await user.reauthenticateWithCredential(cred);
       }
-    } catch (e) {
-      throw e;
     }
   } else {
     // No password provided — attempt provider-based reauthentication for OAuth users (Google/GitHub)
-    try {
-      const providerId = user?.providerData?.[0]?.providerId;
-      if (providerId === 'google.com' || providerId === 'github.com') {
-        try {
-          const oauthMod: any = require('./googleAuth');
-          const signRes = await oauthMod.signInWithGoogle();
-          const cred = signRes?.credential || signRes?.firebaseResult?.credential || null;
-          if (cred && typeof user.reauthenticateWithCredential === 'function') {
-            await user.reauthenticateWithCredential(cred);
-          }
-        } catch (e) {
-          // ignore — we'll throw if delete fails due to recent-login requirement
+    const providerId = user?.providerData?.[0]?.providerId;
+    if (providerId === 'google.com' || providerId === 'github.com') {
+      try {
+        const oauthMod: any = require('./googleAuth');
+        const signRes = await oauthMod.signInWithGoogle();
+        const cred = signRes?.credential || signRes?.firebaseResult?.credential || null;
+        if (cred && typeof user.reauthenticateWithCredential === 'function') {
+          await user.reauthenticateWithCredential(cred);
         }
+      } catch (e) {
+        // ignore — we'll throw if delete fails due to recent-login requirement
       }
-    } catch (e) {
-      // ignore
     }
   }
 
