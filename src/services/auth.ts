@@ -245,23 +245,19 @@ export const reauthenticateWithGoogle = async () => {
   const authInstance = firebaseAuth.default ? firebaseAuth.default() : firebaseAuth();
   const user = authInstance.currentUser;
   if (!user) throw new Error('No authenticated user');
-  try {
-    const oauthMod: any = require('./googleAuth');
-    const signRes = await oauthMod.signInWithGoogle();
-    const cred = signRes?.credential || signRes?.firebaseResult?.credential || null;
-    if (!cred) throw new Error('No credential returned from Google reauth');
-    if (typeof user.reauthenticateWithCredential === 'function') {
-      return user.reauthenticateWithCredential(cred);
-    }
-    // Try higher-level helper
-    if (firebaseAuth.reauthenticateWithCredential) {
-      const { reauthenticateWithCredential } = firebaseAuth;
-      return reauthenticateWithCredential(authInstance, cred);
-    }
-    throw new Error('Reauthentication not supported');
-  } catch (e) {
-    throw e;
+  const oauthMod: any = require('./googleAuth');
+  const signRes = await oauthMod.signInWithGoogle();
+  const cred = signRes?.credential || signRes?.firebaseResult?.credential || null;
+  if (!cred) throw new Error('No credential returned from Google reauth');
+  if (typeof user.reauthenticateWithCredential === 'function') {
+    return user.reauthenticateWithCredential(cred);
   }
+  // Try higher-level helper
+  if (firebaseAuth.reauthenticateWithCredential) {
+    const { reauthenticateWithCredential } = firebaseAuth;
+    return reauthenticateWithCredential(authInstance, cred);
+  }
+  throw new Error('Reauthentication not supported');
 };
 
 export const getAuthErrorMessage = (code: string | null | undefined) => {

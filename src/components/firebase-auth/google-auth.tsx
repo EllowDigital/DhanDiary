@@ -25,13 +25,9 @@ const GoogleAuth: React.FC<Props> = ({ onPress, disabled }) => {
   if (isNative && !isExpo) {
     try {
       // Check native module first to avoid requiring the package in environments without native bindings
-      try {
-        const { NativeModules } = require('react-native');
-        if (!NativeModules || !NativeModules.RNGoogleSignin) {
-          throw new Error('native module not present');
-        }
-      } catch (e) {
-        throw e;
+      const { NativeModules } = require('react-native');
+      if (!NativeModules || !NativeModules.RNGoogleSignin) {
+        throw new Error('native module not present');
       }
 
       // Dynamically require to avoid top-level native module resolution in non-native envs
