@@ -176,7 +176,19 @@ const AccountManagementScreen = () => {
       showToast('Email updated successfully');
       toggleCard('');
     } catch (err: any) {
-      Alert.alert('Error', err?.message);
+      // If Firebase requires recent login, instruct user to reauthenticate
+      if (err?.code === 'auth/requires-recent-login' || err?.code === 'auth/requires-recent-login') {
+        Alert.alert(
+          'Reauthentication required',
+          'For security reasons you need to sign in again before changing your email. Please reauthenticate.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Reauthenticate', onPress: () => navigation.navigate('Auth') },
+          ]
+        );
+      } else {
+        Alert.alert('Error', err?.message);
+      }
     } finally {
       setSavingEmail(false);
     }
@@ -216,7 +228,18 @@ const AccountManagementScreen = () => {
             showToast('Account deleted');
             navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
           } catch (err: any) {
-            Alert.alert('Error', err?.message);
+              if (err?.code === 'auth/requires-recent-login') {
+                Alert.alert(
+                  'Reauthentication required',
+                  'Please sign in again to delete your account.',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Reauthenticate', onPress: () => navigation.navigate('Auth') },
+                  ]
+                );
+              } else {
+                Alert.alert('Error', err?.message);
+              }
           } finally {
             setDeletingAccount(false);
           }
