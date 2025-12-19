@@ -43,6 +43,27 @@ export async function createOrUpdateUserFromAuth(user: any) {
     return null;
   }
 
+  // If auth module is available, ensure the calling runtime has an authenticated
+  // Firebase user matching the uid we're about to write. This prevents surprising
+  // permission-denied errors from Firestore rules that require request.auth.uid == uid.
+  try {
+    const authMod = tryGetAuth();
+    if (authMod) {
+      const authInstance = authMod.default ? authMod.default() : authMod();
+      const current = authInstance.currentUser;
+      console.debug('userService: current auth user', current ? current.uid : null);
+      if (!current || current.uid !== user.uid) {
+        const err: any = new Error('No authenticated Firebase user matching uid; aborting Firestore write');
+        err.code = 'firestore/unauthenticated';
+        throw err;
+      }
+    }
+  } catch (e) {
+    // If auth check itself errored, continue — the upcoming Firestore operation
+    // will surface the permission error which we will log.
+    console.debug('userService: auth check failed (continuing)', e?.message || e);
+  }
+
   const firestore = fsMod.default ? fsMod.default() : fsMod();
   const FieldValue =
     firestore.FieldValue ||
