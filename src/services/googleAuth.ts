@@ -82,9 +82,26 @@ export const signInWithGoogle = async () => {
       signInResult = await GoogleSignin.signInSilently();
       console.debug('googleAuth: silent signIn result', signInResult);
     } catch (silentErr) {
-      console.debug('googleAuth: silent sign-in failed, falling back to interactive sign-in', silentErr?.message || silentErr);
-      signInResult = await GoogleSignin.signIn();
+      console.debug('googleAuth: silent sign-in threw, falling back to interactive sign-in', silentErr?.message || silentErr);
     }
+
+    // Some runtimes (or versions) return an object like { type: 'noSavedCredentialFound', data: null }
+    // from signInSilently instead of throwing. Handle that shape by falling back to interactive sign-in.
+    const shouldDoInteractive =
+      !signInResult ||
+      (typeof signInResult === 'object' && (signInResult.type === 'noSavedCredentialFound' || signInResult.type === 'no_saved_credential' || (signInResult.data == null && !signInResult.idToken)));
+
+    if (shouldDoInteractive) {
+      try {
+        console.debug('googleAuth: performing interactive signIn');
+        signInResult = await GoogleSignin.signIn();
+      } catch (interactiveErr) {
+        console.debug('googleAuth: interactive sign-in failed', interactiveErr?.message || interactiveErr);
+        // preserve the interactive error if present, otherwise fallthrough to idToken check
+        if (interactiveErr) throw interactiveErr;
+      }
+    }
+
     console.debug('googleAuth: signInResult', signInResult);
 
     // return the raw response so callers can inspect provider tokens if needed
