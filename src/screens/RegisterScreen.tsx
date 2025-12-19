@@ -335,34 +335,10 @@ const RegisterScreen = () => {
                   onGooglePress={async () => {
                     setSocialLoading(true);
                     try {
-                      const mod = await import('../services/googleAuth');
-                      const res = await mod.signInWithGoogle();
-                      try {
-                        const userService: any = require('../services/userService');
-                        const firebaseAuth: any = (() => {
-                          try {
-                            return require('@react-native-firebase/auth');
-                          } catch (e) {
-                            return null;
-                          }
-                        })();
-                        const firebaseUser =
-                          res?.user ||
-                          (firebaseAuth
-                            ? firebaseAuth.default
-                              ? firebaseAuth.default().currentUser
-                              : firebaseAuth().currentUser
-                            : null);
-                        if (
-                          firebaseUser &&
-                          userService &&
-                          typeof userService.createOrUpdateUserFromAuth === 'function'
-                        ) {
-                          await userService.createOrUpdateUserFromAuth(firebaseUser);
-                        }
-                      } catch (e) {
-                        // ignore
-                      }
+                      const mod = await import('../services/auth');
+                      await mod.startGoogleSignIn('signIn');
+                      showToast('Welcome!');
+                      (navigation.getParent() as any)?.replace('Main');
                     } catch (err: any) {
                       if (
                         err?.message &&
@@ -375,33 +351,30 @@ const RegisterScreen = () => {
                         );
                         return;
                       }
+                      if (err && err.code === 'auth/account-exists-with-different-credential') {
+                        const prefill = err.email || undefined;
+                        (navigation as any).navigate('Login', { prefillEmail: prefill, pendingCredential: err.pendingCredential });
+                        Alert.alert('Account exists', 'An account with this email exists. Sign in with your existing method to link Google.');
+                        return;
+                      }
                       // Handle google statusCodes if available
                       try {
                         const googleMod: any = require('@react-native-google-signin/google-signin');
                         const { statusCodes } = googleMod;
                         if (err && err.code) {
                           if (err.code === statusCodes?.IN_PROGRESS) {
-                            Alert.alert(
-                              'Sign-in in progress',
-                              'A sign-in operation is already in progress.'
-                            );
+                            Alert.alert('Sign-in in progress', 'A sign-in operation is already in progress.');
                             return;
                           }
                           if (err.code === statusCodes?.PLAY_SERVICES_NOT_AVAILABLE) {
-                            Alert.alert(
-                              'Play Services',
-                              'Google Play Services not available or outdated.'
-                            );
+                            Alert.alert('Play Services', 'Google Play Services not available or outdated.');
                             return;
                           }
                         }
                       } catch (e) {
                         // ignore
                       }
-                      Alert.alert(
-                        'Google Sign-up Failed',
-                        readProviderError(err, 'Unable to reach Google.')
-                      );
+                      Alert.alert('Google Sign-up Failed', readProviderError(err, 'Unable to reach Google.'));
                     } finally {
                       setSocialLoading(false);
                     }

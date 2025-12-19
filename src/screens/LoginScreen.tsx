@@ -112,6 +112,21 @@ const LoginScreen = () => {
     setLoading(true);
     try {
       await loginWithEmail(email, password);
+      // If we were navigated here with a pending OAuth credential, link it now
+      try {
+        const pending: any = (route as any)?.params?.pendingCredential;
+        if (pending) {
+          const authMod: any = await import('../services/auth');
+          await authMod.linkPendingCredentialWithPassword(email, password, pending);
+        }
+      } catch (linkErr) {
+        // linking failed - allow normal login but surface a toast
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const msg = (linkErr as any)?.message || 'Linking failed';
+          showToast('Account linked failed.');
+        } catch (e) {}
+      }
       showToast('Welcome back!');
       // Navigation is typically handled by auth state listener in App.tsx
       // But explicit replace is safe if auth state updates slowly
