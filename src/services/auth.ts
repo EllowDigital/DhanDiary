@@ -30,6 +30,26 @@ const readUsers = async (): Promise<Record<string, LocalUserRecord>> => {
   }
 };
 
+const tryGetFirebaseAuth = () => {
+  try {
+    // require dynamically so Expo Go doesn't crash on import
+    // eslint-disable-next-line global-require
+    const firebaseAuth = require('@react-native-firebase/auth');
+    return firebaseAuth;
+  } catch (e) {
+    return null;
+  }
+};
+
+const tryGetUserService = () => {
+  try {
+    // eslint-disable-next-line global-require
+    return require('./userService');
+  } catch (e) {
+    return null;
+  }
+};
+
 const writeUsers = async (users: Record<string, LocalUserRecord>) => {
   await AsyncStorage.setItem(USERS_KEY, JSON.stringify(users));
 };
