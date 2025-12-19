@@ -336,7 +336,23 @@ const RegisterScreen = () => {
                     setSocialLoading(true);
                     try {
                       const mod = await import('../services/googleAuth');
-                      await mod.signInWithGoogle();
+                      const res = await mod.signInWithGoogle();
+                      try {
+                        const userService: any = require('../services/userService');
+                        const firebaseAuth: any = (() => {
+                          try {
+                            return require('@react-native-firebase/auth');
+                          } catch (e) {
+                            return null;
+                          }
+                        })();
+                        const firebaseUser = res?.user || (firebaseAuth ? (firebaseAuth.default ? firebaseAuth.default().currentUser : firebaseAuth().currentUser) : null);
+                        if (firebaseUser && userService && typeof userService.createOrUpdateUserFromAuth === 'function') {
+                          await userService.createOrUpdateUserFromAuth(firebaseUser);
+                        }
+                      } catch (e) {
+                        // ignore
+                      }
                     } catch (err: any) {
                       if (err?.message && typeof err.message === 'string' && err.message.includes('native module not available')) {
                         Alert.alert(
