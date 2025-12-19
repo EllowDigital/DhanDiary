@@ -71,7 +71,19 @@ export async function getEntries(userId: string): Promise<LocalEntry[]> {
     const snap = await col.where('is_deleted', '==', false).orderBy('date', 'desc').limit(1000).get();
     return snap.docs.map((d: any) => mapDocToEntry(d, userId));
   } catch (e) {
-    return [];
+    // If the read failed, try a paged generator fallback which can succeed
+    // in some environments or provide more useful logs for large datasets.
+    try {
+      const out: LocalEntry[] = [];
+      for await (const page of fetchEntriesGenerator(userId, 500)) {
+        out.push(...page);
+        if (out.length >= 1000) break;
+      }
+      return out;
+    } catch (gerr) {
+      console.error('localDb.getEntries: failed to fetch entries', e?.message || e, gerr?.message || gerr);
+      return [];
+    }
   }
 }
 
@@ -80,13 +92,22 @@ const listeners = new Map<string, { ref: any; unsubscribe: any }>();
 
 export function subscribeEntries(userId: string, cb: Subscriber) {
   const col = entriesCollection(userId);
-  const ref = col.where('is_deleted', '==', false).orderBy('date', 'desc').limit(1000);
-  const unsub = ref.onSnapshot((snap: any) => {
-    const rows = snap.docs.map((d: any) => mapDocToEntry(d, userId));
-    try {
-      cb(rows);
-    } catch (e) {}
-  });
+  // Smaller realtime window for performance
+  const ref = col.where('is_deleted', '==', false).orderBy('date', 'desc').limit(500);
+  const unsub = ref.onSnapshot(
+    (snap: any) => {
+      try {
+        const rows = snap.docs.map((d: any) => mapDocToEntry(d, userId));
+        cb(rows);
+      } catch (e) {
+        console.error('subscribeEntries: callback error', e?.message || e);
+      }
+    },
+    (err: any) => {
+      console.error('subscribeEntries: onSnapshot error', err?.message || err);
+      // Do not throw — caller's listener should decide how to recover.
+    }
+  );
   listeners.set(userId, { ref, unsubscribe: unsub });
   // return unsubscribe
   return () => {
@@ -116,22 +137,30 @@ export async function createEntry(userId: string, input: EntryInput): Promise<Lo
     sync_status: 'SYNCED',
   };
   const col = entriesCollection(userId);
-  try {
-    await col.doc(id).set(payload, { merge: true });
-    const doc = await col.doc(id).get();
-    return mapDocToEntry(doc, userId);
-  } catch (e: any) {
-    // Surface helpful debugging info: project/uid/auth state may cause permission errors
-    console.error('localDb.createEntry: failed to write entry', {
-      userId,
-      payloadSample: { amount: payload.amount, date: payload.date },
-      error: e?.message || e,
-    });
-    // Re-throw for callers to show friendly UI message
-    const out: any = new Error('Failed to save entry. Check authentication and Firestore rules. ' + (e?.message || String(e)));
-    out.original = e;
-    throw out;
+  // Retry a couple times for transient network / quota issues
+  const maxAttempts = 3;
+  let attempt = 0;
+  while (attempt < maxAttempts) {
+    try {
+      attempt++;
+      await col.doc(id).set(payload, { merge: true });
+      const doc = await col.doc(id).get();
+      return mapDocToEntry(doc, userId);
+    } catch (e: any) {
+      console.error('localDb.createEntry: write attempt failed', { attempt, userId, err: e?.message || e });
+      // If non-transient error (permission etc) abort early
+      const msg = String(e?.message || e || 'unknown');
+      if (msg.includes('permission') || msg.includes('PERMISSION_DENIED') || msg.includes('missing or insufficient permissions')) {
+        const out: any = new Error('Failed to save entry due to Firestore permissions. ' + msg);
+        out.original = e;
+        throw out;
+      }
+      // small backoff
+      await new Promise((res) => setTimeout(res, 200 * attempt));
+    }
   }
+  const out: any = new Error('Failed to save entry after multiple attempts. Check network and Firestore rules.');
+  throw out;
 }
 
 export async function patchEntry(userId: string, localId: string, updates: EntryUpdate) {

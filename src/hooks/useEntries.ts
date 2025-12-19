@@ -48,7 +48,8 @@ export const useEntries = (userId?: string | null) => {
       return await fetchEntries(userId);
     },
     enabled: !!userId,
-    staleTime: 30_000,
+    // Keep entries cached for a longer period to avoid unnecessary refetches
+    staleTime: 300_000, // 5 minutes
     refetchOnWindowFocus: false,
     keepPreviousData: true,
   } as any);
