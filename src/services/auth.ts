@@ -83,6 +83,29 @@ export const onAuthStateChanged = (cb: (u: LocalUserRecord | null) => void) => {
 };
 
 export const registerWithEmail = async (name: string, email: string, password: string) => {
+  const firebaseAuth = tryGetFirebaseAuth();
+  const userService = tryGetUserService();
+  if (firebaseAuth) {
+    // Use Firebase auth when available
+    const authInstance = firebaseAuth.default ? firebaseAuth.default() : firebaseAuth();
+    const credential = await authInstance.createUserWithEmailAndPassword(email.trim(), password);
+    try {
+      if (credential?.user && credential.user.updateProfile && name) {
+        await credential.user.updateProfile({ displayName: name });
+      }
+    } catch (e) {
+      // ignore profile update errors
+    }
+    // create or update Firestore user doc if userService present
+    if (userService && typeof userService.createOrUpdateUserFromAuth === 'function') {
+      try {
+        await userService.createOrUpdateUserFromAuth(credential.user);
+      } catch (e) {}
+    }
+    return credential.user;
+  }
+
+  // Fallback to local implementation
   const users = await readUsers();
   const exists = Object.values(users).find(
     (u) => u.email.toLowerCase() === email.trim().toLowerCase()
@@ -115,6 +138,19 @@ export const registerWithEmail = async (name: string, email: string, password: s
 };
 
 export const loginWithEmail = async (email: string, password: string) => {
+  const firebaseAuth = tryGetFirebaseAuth();
+  const userService = tryGetUserService();
+  if (firebaseAuth) {
+    const authInstance = firebaseAuth.default ? firebaseAuth.default() : firebaseAuth();
+    const credential = await authInstance.signInWithEmailAndPassword(email.trim(), password);
+    if (userService && typeof userService.createOrUpdateUserFromAuth === 'function') {
+      try {
+        await userService.createOrUpdateUserFromAuth(credential.user || authInstance.currentUser);
+      } catch (e) {}
+    }
+    return credential.user || authInstance.currentUser;
+  }
+
   const users = await readUsers();
   const found = Object.values(users).find((u) => u.email === email.trim().toLowerCase());
   if (!found) {
