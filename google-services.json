@@ -12,7 +12,20 @@
           "package_name": "com.ellowdigital.dhandiary"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "418870485636-pecvq0geo7q3622sr85p6osg7jta728n.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.ellowdigital.dhandiary",
+            "certificate_hash": "efd104817a0d15826b97cf221629b82b99c22156"
+          }
+        },
+        {
+          "client_id": "418870485636-2lgpr9s8odud9rudnijisc9r776dqfnu.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyChCskhIPU3Vc8jcRb0cm2UWv1k0npmdX4"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "418870485636-2lgpr9s8odud9rudnijisc9r776dqfnu.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "418870485636-iiomdfip7ttc1l2n9msr0uk17h7vac0n.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.ellowdigital.dhandairy"
+              }
+            }
+          ]
         }
       }
     }
