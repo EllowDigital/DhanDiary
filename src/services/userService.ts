@@ -19,7 +19,6 @@ type UserDoc = {
 const tryGetFirestore = () => {
   try {
     // dynamic require to avoid import-time native resolution
-    // eslint-disable-next-line global-require
     return require('@react-native-firebase/firestore');
   } catch (e) {
     return null;
@@ -28,7 +27,6 @@ const tryGetFirestore = () => {
 
 const tryGetAuth = () => {
   try {
-    // eslint-disable-next-line global-require
     return require('@react-native-firebase/auth');
   } catch (e) {
     return null;
