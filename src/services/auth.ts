@@ -380,7 +380,6 @@ export const startGoogleSignIn = async (intent: 'signIn' | 'link' = 'signIn') =>
 export const startGithubSignIn = async (intent: 'signIn' | 'link' = 'signIn') => {
   // Try to load a githubAuth helper if present
   try {
-    // eslint-disable-next-line global-require
     const gh = require('./githubAuth');
     if (gh && typeof gh.signInWithGithub === 'function') {
       return await gh.signInWithGithub();
