@@ -109,3 +109,11 @@ export async function signInWithGithub() {
 }
 
 export default { signInWithGithub };
+
+export const isGithubConfigured = (): boolean => {
+  try {
+    return !!getGithubClientId();
+  } catch (e) {
+    return false;
+  }
+};
