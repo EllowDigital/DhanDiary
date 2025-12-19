@@ -178,33 +178,44 @@ const LoginScreen = () => {
       await mod.signInWithGoogle();
     } catch (err) {
       const e: any = err || {};
-      if (e.code === 'auth/account-exists-with-different-credential') {
-        const prefill = e.email || undefined;
-        Alert.alert(
-          'Account already exists',
-          'An account with this email already exists using a different sign-in method.\n\nPlease sign in using the original method to securely link your accounts.',
-          [
-            {
-              text: 'Go to Sign In',
-              onPress: () => {
-                try {
-                  // If we are already on Login screen, just prefill.
-                  // If navigating from register, navigate here.
-                  if (prefill) setEmail(prefill);
-                } catch (err) {
-                  // ignore
-                }
-              },
-            },
-            { text: 'Cancel', style: 'cancel' },
-          ]
-        );
-      } else {
-        Alert.alert(
-          'Google Login Failed',
-          getProviderErrorMessage(err, 'Unable to sign in with Google.')
-        );
+      // Try to read statusCodes if available
+      try {
+        const googleMod: any = require('@react-native-google-signin/google-signin');
+        const { statusCodes } = googleMod;
+        if (e && e.code) {
+          if (e.code === statusCodes?.IN_PROGRESS) {
+            Alert.alert('Sign-in in progress', 'A sign-in operation is already in progress.');
+            return;
+          }
+          if (e.code === statusCodes?.PLAY_SERVICES_NOT_AVAILABLE) {
+            Alert.alert('Play Services', 'Google Play Services not available or outdated.');
+            return;
+          }
+          if (e.code === 'auth/account-exists-with-different-credential') {
+            const prefill = e.email || undefined;
+            Alert.alert(
+              'Account already exists',
+              'An account with this email already exists using a different sign-in method.\n\nPlease sign in using the original method to securely link your accounts.',
+              [
+                {
+                  text: 'Go to Sign In',
+                  onPress: () => {
+                    try {
+                      if (prefill) setEmail(prefill);
+                    } catch (err) {}
+                  },
+                },
+                { text: 'Cancel', style: 'cancel' },
+              ]
+            );
+            return;
+          }
+        }
+      } catch (err2) {
+        // ignore module load errors
       }
+
+      Alert.alert('Google Login Failed', getProviderErrorMessage(err, 'Unable to sign in with Google.'));
     } finally {
       setSocialLoading(false);
     }

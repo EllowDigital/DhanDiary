@@ -338,6 +338,23 @@ const RegisterScreen = () => {
                       const mod = await import('../services/googleAuth');
                       await mod.signInWithGoogle();
                     } catch (err: any) {
+                      // Handle google statusCodes if available
+                      try {
+                        const googleMod: any = require('@react-native-google-signin/google-signin');
+                        const { statusCodes } = googleMod;
+                        if (err && err.code) {
+                          if (err.code === statusCodes?.IN_PROGRESS) {
+                            Alert.alert('Sign-in in progress', 'A sign-in operation is already in progress.');
+                            return;
+                          }
+                          if (err.code === statusCodes?.PLAY_SERVICES_NOT_AVAILABLE) {
+                            Alert.alert('Play Services', 'Google Play Services not available or outdated.');
+                            return;
+                          }
+                        }
+                      } catch (e) {
+                        // ignore
+                      }
                       Alert.alert('Google Sign-up Failed', readProviderError(err, 'Unable to reach Google.'));
                     } finally {
                       setSocialLoading(false);
