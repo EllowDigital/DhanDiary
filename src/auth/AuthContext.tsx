@@ -61,7 +61,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => {
       mounted = false;
       try {
-        unsub && typeof unsub === 'function' && unsub();
+        if (unsub && typeof unsub === 'function') unsub();
       } catch (e) {}
     };
   }, []);
