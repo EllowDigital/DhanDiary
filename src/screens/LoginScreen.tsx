@@ -20,6 +20,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { GoogleSigninButton } from '@react-native-google-signin/google-signin';
 
 // Types & Services
 import { AuthStackParamList } from '../types/navigation';
@@ -322,23 +323,14 @@ const LoginScreen = () => {
 
                   <View style={styles.socialButtonsRow}>
                     {showGoogle && (
-                      <Button
-                        type="outline"
-                        icon={
-                          <FontAwesome
-                            name="google"
-                            size={18}
-                            color={colors.primary}
-                            style={{ marginRight: 8 }}
-                          />
-                        }
-                        title="Google"
-                        onPress={handleGoogleLogin}
-                        disabled={socialLoading}
-                        buttonStyle={styles.socialButton}
-                        titleStyle={styles.socialButtonText}
-                        containerStyle={styles.socialButtonContainer}
-                      />
+                      <View style={styles.socialButtonContainer}>
+                        <GoogleSigninButton
+                          size={GoogleSigninButton.Size.Wide}
+                          color={GoogleSigninButton.Color.Dark}
+                          onPress={handleGoogleLogin}
+                          disabled={socialLoading}
+                        />
+                      </View>
                     )}
                     {showGithub && (
                       <Button
