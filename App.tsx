@@ -18,8 +18,8 @@ import DrawerNavigator from './src/navigation/DrawerNavigator';
 import { ToastProvider } from './src/context/ToastContext';
 import { RootStackParamList, AuthStackParamList } from './src/types/navigation';
 import { configureGoogleSignIn } from './src/services/googleAuth';
+import GoogleAuth from './src/components/firebase-auth/google-auth';
 import { enableLegacyLayoutAnimations } from './src/utils/layoutAnimation';
-import GoogleAuth from '@firebase-auth';
 
 enableLegacyLayoutAnimations();
 
@@ -60,6 +60,15 @@ export default function App() {
       console.warn('configureGoogleSignIn failed', err);
     }
   }, []);
+
+  // Debug shortcut: return only the GoogleAuth button when explicitly requested
+  if (process.env.RETURN_GOOGLE === '1') {
+    return (
+      <SafeAreaProvider>
+        <GoogleAuth onPress={() => console.log('GoogleAuth pressed')} disabled={false} />
+      </SafeAreaProvider>
+    );
+  }
 
   return (
     <SafeAreaProvider>
