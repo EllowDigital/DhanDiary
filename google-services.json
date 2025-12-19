@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "418870485636",
+    "project_id": "dhandiary-official",
+    "storage_bucket": "dhandiary-official.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:418870485636:android:32955396cd002344c1d8d1",
+        "android_client_info": {
+          "package_name": "com.ellowdigital.dhandiary"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyChCskhIPU3Vc8jcRb0cm2UWv1k0npmdX4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
