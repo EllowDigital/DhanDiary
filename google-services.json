@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "418870485636-ds8r1p2u8u6of8clms2rkt9a9vkgrhca.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.ellowdigital.dhandiary",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
           "client_id": "418870485636-pecvq0geo7q3622sr85p6osg7jta728n.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
