@@ -155,7 +155,11 @@ const LoginScreen = () => {
       await mod.startGithubSignIn('signIn');
     } catch (err) {
       const e: any = err || {};
-      if (e?.message && typeof e.message === 'string' && e.message.includes('native module not available')) {
+      if (
+        e?.message &&
+        typeof e.message === 'string' &&
+        e.message.includes('native module not available')
+      ) {
         Alert.alert(
           'Google Sign-In Unavailable',
           'Google Sign-In native module is not available in this build. Use a development build / dev-client or run a native build (prebuild) so native modules are linked.'
@@ -193,8 +197,18 @@ const LoginScreen = () => {
             return null;
           }
         })();
-        const firebaseUser = res?.user || (firebaseAuth ? (firebaseAuth.default ? firebaseAuth.default().currentUser : firebaseAuth().currentUser) : null);
-        if (firebaseUser && userService && typeof userService.createOrUpdateUserFromAuth === 'function') {
+        const firebaseUser =
+          res?.user ||
+          (firebaseAuth
+            ? firebaseAuth.default
+              ? firebaseAuth.default().currentUser
+              : firebaseAuth().currentUser
+            : null);
+        if (
+          firebaseUser &&
+          userService &&
+          typeof userService.createOrUpdateUserFromAuth === 'function'
+        ) {
           await userService.createOrUpdateUserFromAuth(firebaseUser);
         }
       } catch (e) {
@@ -239,7 +253,10 @@ const LoginScreen = () => {
         // ignore module load errors
       }
 
-      Alert.alert('Google Login Failed', getProviderErrorMessage(err, 'Unable to sign in with Google.'));
+      Alert.alert(
+        'Google Login Failed',
+        getProviderErrorMessage(err, 'Unable to sign in with Google.')
+      );
     } finally {
       setSocialLoading(false);
     }

@@ -41,7 +41,14 @@ const FirebaseAuth: React.FC<Props> = ({
           <View style={styles.buttonContainer}>
             <Button
               type="outline"
-              icon={<FontAwesome name="github" size={18} color={colors.primary} style={{ marginRight: 8 }} />}
+              icon={
+                <FontAwesome
+                  name="github"
+                  size={18}
+                  color={colors.primary}
+                  style={{ marginRight: 8 }}
+                />
+              }
               title="GitHub"
               onPress={onGithubPress}
               disabled={!!socialLoading}
@@ -60,7 +67,13 @@ const styles = StyleSheet.create({
   socialWrapper: { marginTop: 24 },
   socialDivider: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   socialLine: { flex: 1, height: 1, backgroundColor: '#E5E7EB' },
-  socialText: { marginHorizontal: 12, fontSize: 12, color: '#9CA3AF', fontWeight: '600', textTransform: 'uppercase' },
+  socialText: {
+    marginHorizontal: 12,
+    fontSize: 12,
+    color: '#9CA3AF',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
   buttonsRow: { flexDirection: 'row', gap: 12 },
   buttonContainer: { flex: 1 },
   socialButton: { borderRadius: 12, borderColor: '#E5E7EB', borderWidth: 1, paddingVertical: 12 },

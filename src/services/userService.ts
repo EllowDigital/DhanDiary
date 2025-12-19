@@ -39,12 +39,17 @@ export async function createOrUpdateUserFromAuth(user: any) {
   if (!user || !user.uid) throw new Error('Invalid user object');
   const fsMod = tryGetFirestore();
   if (!fsMod) {
-    console.debug('userService: @react-native-firebase/firestore not available, skipping user doc creation');
+    console.debug(
+      'userService: @react-native-firebase/firestore not available, skipping user doc creation'
+    );
     return null;
   }
 
   const firestore = fsMod.default ? fsMod.default() : fsMod();
-  const FieldValue = firestore.FieldValue || (fsMod.FieldValue || (fsMod.FieldValue && fsMod.FieldValue.serverTimestamp ? fsMod.FieldValue : null));
+  const FieldValue =
+    firestore.FieldValue ||
+    fsMod.FieldValue ||
+    (fsMod.FieldValue && fsMod.FieldValue.serverTimestamp ? fsMod.FieldValue : null);
 
   const uid = user.uid;
   const docRef = firestore.collection('users').doc(uid);
@@ -53,7 +58,7 @@ export async function createOrUpdateUserFromAuth(user: any) {
     email: user.email ?? null,
     displayName: user.displayName ?? null,
     photoURL: user.photoURL ?? null,
-    provider: user.providerId ?? (user?.providerData?.[0]?.providerId) ?? 'password',
+    provider: user.providerId ?? user?.providerData?.[0]?.providerId ?? 'password',
     providerData: user.providerData ?? [],
     emailVerified: !!user.emailVerified,
     lastLoginAt: FieldValue ? FieldValue.serverTimestamp() : new Date(),
@@ -64,7 +69,11 @@ export async function createOrUpdateUserFromAuth(user: any) {
   await firestore.runTransaction(async (tx) => {
     const snap = await tx.get(docRef);
     if (!snap.exists) {
-      tx.set(docRef, { ...payload, createdAt: FieldValue ? FieldValue.serverTimestamp() : new Date() }, { merge: true });
+      tx.set(
+        docRef,
+        { ...payload, createdAt: FieldValue ? FieldValue.serverTimestamp() : new Date() },
+        { merge: true }
+      );
     } else {
       tx.set(docRef, payload, { merge: true });
     }
@@ -76,7 +85,9 @@ export async function createOrUpdateUserFromAuth(user: any) {
 export async function ensureUserDocumentForCurrentUser() {
   const authMod = tryGetAuth();
   if (!authMod) {
-    console.debug('userService: @react-native-firebase/auth not available, ensureUserDocumentForCurrentUser noop');
+    console.debug(
+      'userService: @react-native-firebase/auth not available, ensureUserDocumentForCurrentUser noop'
+    );
     return null;
   }
   const authInstance = authMod.default ? authMod.default() : authMod();

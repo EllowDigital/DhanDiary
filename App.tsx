@@ -46,7 +46,6 @@ const AppContent = () => (
   </NavigationContainer>
 );
 
-
 export default function App() {
   const [queryClient] = React.useState(() => new QueryClient());
 

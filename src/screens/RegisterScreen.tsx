@@ -346,15 +346,29 @@ const RegisterScreen = () => {
                             return null;
                           }
                         })();
-                        const firebaseUser = res?.user || (firebaseAuth ? (firebaseAuth.default ? firebaseAuth.default().currentUser : firebaseAuth().currentUser) : null);
-                        if (firebaseUser && userService && typeof userService.createOrUpdateUserFromAuth === 'function') {
+                        const firebaseUser =
+                          res?.user ||
+                          (firebaseAuth
+                            ? firebaseAuth.default
+                              ? firebaseAuth.default().currentUser
+                              : firebaseAuth().currentUser
+                            : null);
+                        if (
+                          firebaseUser &&
+                          userService &&
+                          typeof userService.createOrUpdateUserFromAuth === 'function'
+                        ) {
                           await userService.createOrUpdateUserFromAuth(firebaseUser);
                         }
                       } catch (e) {
                         // ignore
                       }
                     } catch (err: any) {
-                      if (err?.message && typeof err.message === 'string' && err.message.includes('native module not available')) {
+                      if (
+                        err?.message &&
+                        typeof err.message === 'string' &&
+                        err.message.includes('native module not available')
+                      ) {
                         Alert.alert(
                           'Google Sign-In Unavailable',
                           'Google Sign-In native module is not available in this build. Use a development build / dev-client or run a native build (prebuild) so native modules are linked.'
@@ -367,18 +381,27 @@ const RegisterScreen = () => {
                         const { statusCodes } = googleMod;
                         if (err && err.code) {
                           if (err.code === statusCodes?.IN_PROGRESS) {
-                            Alert.alert('Sign-in in progress', 'A sign-in operation is already in progress.');
+                            Alert.alert(
+                              'Sign-in in progress',
+                              'A sign-in operation is already in progress.'
+                            );
                             return;
                           }
                           if (err.code === statusCodes?.PLAY_SERVICES_NOT_AVAILABLE) {
-                            Alert.alert('Play Services', 'Google Play Services not available or outdated.');
+                            Alert.alert(
+                              'Play Services',
+                              'Google Play Services not available or outdated.'
+                            );
                             return;
                           }
                         }
                       } catch (e) {
                         // ignore
                       }
-                      Alert.alert('Google Sign-up Failed', readProviderError(err, 'Unable to reach Google.'));
+                      Alert.alert(
+                        'Google Sign-up Failed',
+                        readProviderError(err, 'Unable to reach Google.')
+                      );
                     } finally {
                       setSocialLoading(false);
                     }

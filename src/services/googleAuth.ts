@@ -3,11 +3,7 @@ import Constants from 'expo-constants';
 const getWebClientId = (): string | null => {
   try {
     const extra = (Constants?.expoConfig?.extra || {}) as any;
-    return (
-      process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
-      extra?.oauth?.googleClientId ||
-      null
-    );
+    return process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || extra?.oauth?.googleClientId || null;
   } catch (e) {
     return null;
   }
@@ -82,21 +78,30 @@ export const signInWithGoogle = async () => {
       signInResult = await GoogleSignin.signInSilently();
       console.debug('googleAuth: silent signIn result', signInResult);
     } catch (silentErr) {
-      console.debug('googleAuth: silent sign-in threw, falling back to interactive sign-in', silentErr?.message || silentErr);
+      console.debug(
+        'googleAuth: silent sign-in threw, falling back to interactive sign-in',
+        silentErr?.message || silentErr
+      );
     }
 
     // Some runtimes (or versions) return an object like { type: 'noSavedCredentialFound', data: null }
     // from signInSilently instead of throwing. Handle that shape by falling back to interactive sign-in.
     const shouldDoInteractive =
       !signInResult ||
-      (typeof signInResult === 'object' && (signInResult.type === 'noSavedCredentialFound' || signInResult.type === 'no_saved_credential' || (signInResult.data == null && !signInResult.idToken)));
+      (typeof signInResult === 'object' &&
+        (signInResult.type === 'noSavedCredentialFound' ||
+          signInResult.type === 'no_saved_credential' ||
+          (signInResult.data == null && !signInResult.idToken)));
 
     if (shouldDoInteractive) {
       try {
         console.debug('googleAuth: performing interactive signIn');
         signInResult = await GoogleSignin.signIn();
       } catch (interactiveErr) {
-        console.debug('googleAuth: interactive sign-in failed', interactiveErr?.message || interactiveErr);
+        console.debug(
+          'googleAuth: interactive sign-in failed',
+          interactiveErr?.message || interactiveErr
+        );
         // preserve the interactive error if present, otherwise fallthrough to idToken check
         if (interactiveErr) throw interactiveErr;
       }
@@ -113,7 +118,9 @@ export const signInWithGoogle = async () => {
     if (!idToken) {
       const msg = 'No ID token returned from Google Sign-In';
       console.error('googleAuth: no idToken', { signInResult });
-      throw new Error(msg + (signInResult ? ` (raw response: ${JSON.stringify(signInResult).slice(0, 500)})` : ''));
+      throw new Error(
+        msg + (signInResult ? ` (raw response: ${JSON.stringify(signInResult).slice(0, 500)})` : '')
+      );
     }
 
     // If Firebase auth native module is available, sign in with credential
@@ -121,8 +128,13 @@ export const signInWithGoogle = async () => {
       const firebaseAuth: any = require('@react-native-firebase/auth');
       // Try classic API: auth().signInWithCredential
       if (typeof firebaseAuth === 'function' || firebaseAuth.default) {
-        const authInstance = (typeof firebaseAuth === 'function' ? firebaseAuth() : firebaseAuth.default());
-        const GoogleAuthProvider = firebaseAuth.GoogleAuthProvider || firebaseAuth.default?.GoogleAuthProvider || authInstance.GoogleAuthProvider || (firebaseAuth.auth && firebaseAuth.auth.GoogleAuthProvider);
+        const authInstance =
+          typeof firebaseAuth === 'function' ? firebaseAuth() : firebaseAuth.default();
+        const GoogleAuthProvider =
+          firebaseAuth.GoogleAuthProvider ||
+          firebaseAuth.default?.GoogleAuthProvider ||
+          authInstance.GoogleAuthProvider ||
+          (firebaseAuth.auth && firebaseAuth.auth.GoogleAuthProvider);
         let credential: any = null;
         if (GoogleAuthProvider && typeof GoogleAuthProvider.credential === 'function') {
           credential = GoogleAuthProvider.credential(idToken);
@@ -133,21 +145,30 @@ export const signInWithGoogle = async () => {
           // guard against hangs: timeout after 20s
           const result = await Promise.race([
             signPromise,
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Firebase signInWithCredential timeout')), 20000)),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Firebase signInWithCredential timeout')), 20000)
+            ),
           ]);
           console.debug('googleAuth: firebase classic sign-in result', result);
           return result;
         }
       }
       // Try modular API
-      if (firebaseAuth && firebaseAuth.getAuth && firebaseAuth.GoogleAuthProvider && firebaseAuth.signInWithCredential) {
+      if (
+        firebaseAuth &&
+        firebaseAuth.getAuth &&
+        firebaseAuth.GoogleAuthProvider &&
+        firebaseAuth.signInWithCredential
+      ) {
         console.debug('googleAuth: signing in to firebase (modular api) with credential');
         const { getAuth, GoogleAuthProvider, signInWithCredential } = firebaseAuth;
         const credential = GoogleAuthProvider.credential(idToken);
         const signPromise = signInWithCredential(getAuth(), credential);
         const result = await Promise.race([
           signPromise,
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Firebase signInWithCredential timeout')), 20000)),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Firebase signInWithCredential timeout')), 20000)
+          ),
         ]);
         console.debug('googleAuth: firebase modular sign-in result', result);
         return result;
@@ -158,7 +179,12 @@ export const signInWithGoogle = async () => {
 
     return { success: true, data: signInResult };
   } catch (err: any) {
-    console.error('googleAuth: signIn error', { message: err?.message, code: err?.code, stack: err?.stack, raw: err });
+    console.error('googleAuth: signIn error', {
+      message: err?.message,
+      code: err?.code,
+      stack: err?.stack,
+      raw: err,
+    });
     // Rewrap known shapes to include code/message for UI
     const code = err?.code || err?.statusCode || null;
     const message = err?.message || String(err);

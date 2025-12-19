@@ -1,5 +1,13 @@
 import React from 'react';
-import { Platform, View, TouchableOpacity, Text, Image, StyleSheet, NativeModules } from 'react-native';
+import {
+  Platform,
+  View,
+  TouchableOpacity,
+  Text,
+  Image,
+  StyleSheet,
+  NativeModules,
+} from 'react-native';
 import Constants from 'expo-constants';
 
 type Props = {
@@ -32,7 +40,12 @@ const GoogleAuth: React.FC<Props> = ({ onPress, disabled }) => {
       if (NativeButton) {
         return (
           <View>
-            <NativeButton size={NativeButton.Size?.Wide ?? 2} color={NativeButton.Color?.Dark ?? 0} onPress={onPress} disabled={!!disabled} />
+            <NativeButton
+              size={NativeButton.Size?.Wide ?? 2}
+              color={NativeButton.Color?.Dark ?? 0}
+              onPress={onPress}
+              disabled={!!disabled}
+            />
           </View>
         );
       }
