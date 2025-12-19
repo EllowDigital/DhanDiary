@@ -393,6 +393,22 @@ export const startGoogleSignIn = async (intent: 'signIn' | 'link' = 'signIn') =>
   return user;
 };
 
+// Minimal stub for GitHub sign-in helper to satisfy callers. Replace with full implementation
+// if `githubAuth` helper is added later.
+export const startGithubSignIn = async (intent: 'signIn' | 'link' = 'signIn') => {
+  // Try to load a githubAuth helper if present
+  try {
+    // eslint-disable-next-line global-require
+    const gh = require('./githubAuth');
+    if (gh && typeof gh.signInWithGithub === 'function') {
+      return await gh.signInWithGithub();
+    }
+  } catch (e) {
+    // ignore
+  }
+  throw new Error('GitHub sign-in not configured in this build');
+};
+
 /**
  * Sign in existing email/password user and link a pending OAuth credential to them.
  * Returns the linked user.

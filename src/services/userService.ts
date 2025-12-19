@@ -88,7 +88,7 @@ export async function createOrUpdateUserFromAuth(user: any) {
   }
 
   // Safe create/update using transaction to avoid races.
-  await firestore.runTransaction(async (tx) => {
+  await firestore.runTransaction(async (tx: any) => {
     const snap = await tx.get(docRef);
     const nowVal = FieldValue ? FieldValue.serverTimestamp() : new Date();
     if (!snap.exists) {

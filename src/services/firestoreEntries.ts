@@ -26,7 +26,7 @@ export const subscribeEntries = (
   onError?: (error: any) => void
 ) => {
   if (!userId) return () => undefined;
-  return localSubscribeEntries(userId, onChange, onError);
+  return localSubscribeEntries(userId, onChange);
 };
 
 const sanitizeInput = (input: EntryInput) => {

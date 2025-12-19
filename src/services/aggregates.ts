@@ -28,7 +28,7 @@ export const readPrecomputedDaily = async (
     const last = end.startOf('day');
     while (cur.isSameOrBefore(last)) {
       const key = cur.format('YYYY-MM-DD');
-      const s = await getSummary('daily', key);
+      const s: any = await getSummary('daily', key);
       if (s) {
         results.push({
           id: key,

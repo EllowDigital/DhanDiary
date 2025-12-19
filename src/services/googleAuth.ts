@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import { Alert } from 'react-native';
 
 const getWebClientId = (): string | null => {
   try {
@@ -77,7 +78,7 @@ export const signInWithGoogle = async () => {
     try {
       signInResult = await GoogleSignin.signInSilently();
       console.debug('googleAuth: silent signIn result', signInResult);
-    } catch (silentErr) {
+    } catch (silentErr: any) {
       console.debug(
         'googleAuth: silent sign-in threw, falling back to interactive sign-in',
         silentErr?.message || silentErr
@@ -97,7 +98,7 @@ export const signInWithGoogle = async () => {
       try {
         console.debug('googleAuth: performing interactive signIn');
         signInResult = await GoogleSignin.signIn();
-      } catch (interactiveErr) {
+      } catch (interactiveErr: any) {
         console.debug(
           'googleAuth: interactive sign-in failed',
           interactiveErr?.message || interactiveErr

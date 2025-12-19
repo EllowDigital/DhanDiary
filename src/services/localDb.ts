@@ -186,6 +186,19 @@ export async function wipeUserData(userId: string) {
   if (counter > 0) await batch.commit();
 }
 
+// Minimal lock API kept for compatibility. These are no-ops for Firestore-backed store.
+export async function isUserLocked(_userId: string) {
+  return false;
+}
+
+export async function lockUser(_userId: string) {
+  return;
+}
+
+export async function unlockUser(_userId: string) {
+  return;
+}
+
 export default {
   initDB,
   getEntries,
