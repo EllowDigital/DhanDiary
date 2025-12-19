@@ -338,6 +338,13 @@ const RegisterScreen = () => {
                       const mod = await import('../services/googleAuth');
                       await mod.signInWithGoogle();
                     } catch (err: any) {
+                      if (err?.message && typeof err.message === 'string' && err.message.includes('native module not available')) {
+                        Alert.alert(
+                          'Google Sign-In Unavailable',
+                          'Google Sign-In native module is not available in this build. Use a development build / dev-client or run a native build (prebuild) so native modules are linked.'
+                        );
+                        return;
+                      }
                       // Handle google statusCodes if available
                       try {
                         const googleMod: any = require('@react-native-google-signin/google-signin');

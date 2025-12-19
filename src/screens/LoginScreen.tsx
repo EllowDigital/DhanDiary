@@ -155,6 +155,13 @@ const LoginScreen = () => {
       await mod.startGithubSignIn('signIn');
     } catch (err) {
       const e: any = err || {};
+      if (e?.message && typeof e.message === 'string' && e.message.includes('native module not available')) {
+        Alert.alert(
+          'Google Sign-In Unavailable',
+          'Google Sign-In native module is not available in this build. Use a development build / dev-client or run a native build (prebuild) so native modules are linked.'
+        );
+        return;
+      }
       if (e.code === 'auth/account-exists-with-different-credential') {
         Alert.alert(
           'Account already exists',

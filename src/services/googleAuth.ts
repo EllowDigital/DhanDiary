@@ -29,7 +29,22 @@ export const configureGoogleSignIn = () => {
     const { GoogleSignin } = mod;
     const webClientId = getWebClientId();
     const config: any = { offlineAccess: true };
-    if (webClientId) config.webClientId = webClientId;
+    if (webClientId) {
+      if (typeof webClientId !== 'string') {
+        try {
+          console.warn('googleAuth: webClientId is not a string', webClientId);
+          Alert.alert(
+            'Google Sign-In Misconfigured',
+            'webClientId is invalid—please set EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID to the Web client id string.'
+          );
+        } catch (e) {
+          // ignore Alert failures in non-UI contexts
+        }
+      } else {
+        console.debug('googleAuth: using webClientId', webClientId);
+        config.webClientId = webClientId;
+      }
+    }
 
     if (GoogleSignin && typeof GoogleSignin.configure === 'function') {
       GoogleSignin.configure(config);
@@ -61,10 +76,45 @@ export const signInWithGoogle = async () => {
     }
 
     await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-    const userInfo = await GoogleSignin.signIn();
+    const signInResult = await GoogleSignin.signIn();
 
     // return the raw response so callers can inspect provider tokens if needed
-    return { success: true, data: userInfo };
+    // Extract idToken (newer versions place it under data.idToken)
+    let idToken: string | undefined | null = null;
+    if (signInResult && typeof signInResult === 'object') {
+      idToken = signInResult?.data?.idToken ?? signInResult?.idToken ?? null;
+    }
+    if (!idToken) {
+      const msg = 'No ID token returned from Google Sign-In';
+      throw new Error(msg);
+    }
+
+    // If Firebase auth native module is available, sign in with credential
+    try {
+      const firebaseAuth: any = require('@react-native-firebase/auth');
+      // Try classic API: auth().signInWithCredential
+      if (typeof firebaseAuth === 'function' || firebaseAuth.default) {
+        const authInstance = (typeof firebaseAuth === 'function' ? firebaseAuth() : firebaseAuth.default());
+        const GoogleAuthProvider = firebaseAuth.GoogleAuthProvider || firebaseAuth.default?.GoogleAuthProvider || authInstance.GoogleAuthProvider || (firebaseAuth.auth && firebaseAuth.auth.GoogleAuthProvider);
+        let credential: any = null;
+        if (GoogleAuthProvider && typeof GoogleAuthProvider.credential === 'function') {
+          credential = GoogleAuthProvider.credential(idToken);
+        }
+        if (credential && authInstance && typeof authInstance.signInWithCredential === 'function') {
+          return await authInstance.signInWithCredential(credential);
+        }
+      }
+      // Try modular API
+      if (firebaseAuth && firebaseAuth.getAuth && firebaseAuth.GoogleAuthProvider && firebaseAuth.signInWithCredential) {
+        const { getAuth, GoogleAuthProvider, signInWithCredential } = firebaseAuth;
+        const credential = GoogleAuthProvider.credential(idToken);
+        return await signInWithCredential(getAuth(), credential);
+      }
+    } catch (e) {
+      // If firebase auth not available, fall back to returning raw google result
+    }
+
+    return { success: true, data: signInResult };
   } catch (err: any) {
     // Normalize known statusCodes into a thrown error with code so callers can switch on it
     try {
