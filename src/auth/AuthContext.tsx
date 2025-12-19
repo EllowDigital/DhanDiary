@@ -26,30 +26,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     let mounted = true;
-    const unsub = servicesOnAuthStateChanged(async (u: any) => {
+    const unsub = servicesOnAuthStateChanged((u: any) => {
       if (!mounted) return;
-      setStatus('loading');
       setError(null);
+
+      // Immediately reflect auth state so UI isn't blocked by Firestore sync
       if (!u) {
         setUser(null);
         setStatus('unauthenticated');
         return;
       }
 
-      // Ensure Firestore user exists/updated before marking authenticated
-      try {
-        const userService: any = tryGetUserService();
-        if (userService && typeof userService.ensureUserDocumentForCurrentUser === 'function') {
-          await userService.ensureUserDocumentForCurrentUser();
-        } else if (userService && typeof userService.syncUserToFirestore === 'function') {
-          await userService.syncUserToFirestore(u);
+      setUser(u);
+      setStatus('authenticated');
+
+      // Run Firestore sync in background. Don't block UI; capture errors.
+      (async () => {
+        try {
+          const userService: any = tryGetUserService();
+          if (userService) {
+            if (typeof userService.ensureUserDocumentForCurrentUser === 'function') {
+              await userService.ensureUserDocumentForCurrentUser();
+            } else if (typeof userService.syncUserToFirestore === 'function') {
+              await userService.syncUserToFirestore(u);
+            }
+          }
+        } catch (e: any) {
+          // Don't change auth status; surface error for UI if needed
+          if (mounted) setError(e?.message || String(e));
         }
-        setUser(u);
-        setStatus('authenticated');
-      } catch (e: any) {
-        setError(e?.message || String(e));
-        setStatus('error');
-      }
+      })();
     });
 
     return () => {
