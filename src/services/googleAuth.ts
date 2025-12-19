@@ -76,7 +76,15 @@ export const signInWithGoogle = async () => {
     }
 
     await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-    const signInResult = await GoogleSignin.signIn();
+    // Try silent sign-in first to avoid showing account chooser if a user previously signed in
+    let signInResult: any = null;
+    try {
+      signInResult = await GoogleSignin.signInSilently();
+      console.debug('googleAuth: silent signIn result', signInResult);
+    } catch (silentErr) {
+      console.debug('googleAuth: silent sign-in failed, falling back to interactive sign-in', silentErr?.message || silentErr);
+      signInResult = await GoogleSignin.signIn();
+    }
     console.debug('googleAuth: signInResult', signInResult);
 
     // return the raw response so callers can inspect provider tokens if needed
