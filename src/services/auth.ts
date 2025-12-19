@@ -544,6 +544,7 @@ export default {
   startGoogleSignIn,
   linkPendingCredentialWithPassword,
   reauthenticateWithGoogle,
+  setPasswordForCurrentUser,
   getAuthErrorMessage,
   fetchSignInMethodsForEmail,
   linkCredentialToCurrentUser,
