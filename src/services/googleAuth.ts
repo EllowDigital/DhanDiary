@@ -72,11 +72,21 @@ export const signInWithGoogle = async () => {
       throw new Error('Google Signin native module not available');
     }
 
-    await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+    // Avoid showing Play Services update dialog which can block automation/emulators
+    await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: false });
+
+    // Helper to wrap a promise with a timeout so UI doesn't hang indefinitely.
+    const withTimeout = async <T>(p: Promise<T>, ms = 15000): Promise<T> => {
+      return Promise.race([
+        p,
+        new Promise<T>((_, reject) => setTimeout(() => reject(new Error('Google Sign-In timeout')), ms)),
+      ]) as Promise<T>;
+    };
+
     // Try silent sign-in first to avoid showing account chooser if a user previously signed in
     let signInResult: any = null;
     try {
-      signInResult = await GoogleSignin.signInSilently();
+      signInResult = await withTimeout(GoogleSignin.signInSilently(), 8000);
       console.debug('googleAuth: silent signIn result', signInResult);
     } catch (silentErr: any) {
       console.debug(
@@ -97,13 +107,13 @@ export const signInWithGoogle = async () => {
     if (shouldDoInteractive) {
       try {
         console.debug('googleAuth: performing interactive signIn');
-        signInResult = await GoogleSignin.signIn();
+        // Wrap interactive sign-in with timeout to avoid long hangs on some devices/emulators
+        signInResult = await withTimeout(GoogleSignin.signIn(), 15000);
       } catch (interactiveErr: any) {
         console.debug(
           'googleAuth: interactive sign-in failed',
           interactiveErr?.message || interactiveErr
         );
-        // preserve the interactive error if present, otherwise fallthrough to idToken check
         if (interactiveErr) throw interactiveErr;
       }
     }
