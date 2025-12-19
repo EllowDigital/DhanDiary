@@ -54,7 +54,10 @@ export const registerWithEmail = async (name: string, email: string, password: s
     // ignore profile update errors
   }
   const userService = tryGetUserService();
-  if (userService && typeof userService.createOrUpdateUserFromAuth === 'function') {
+  if (userService && typeof userService.syncUserToFirestore === 'function') {
+    await userService.syncUserToFirestore(cred.user);
+  } else if (userService && typeof userService.createOrUpdateUserFromAuth === 'function') {
+    // fallback
     await userService.createOrUpdateUserFromAuth(cred.user);
   }
   return cred.user;
@@ -66,7 +69,9 @@ export const loginWithEmail = async (email: string, password: string) => {
   const authInstance = firebaseAuth.default ? firebaseAuth.default() : firebaseAuth();
   const cred = await authInstance.signInWithEmailAndPassword(email.trim(), password);
   const userService = tryGetUserService();
-  if (userService && typeof userService.createOrUpdateUserFromAuth === 'function') {
+  if (userService && typeof userService.syncUserToFirestore === 'function') {
+    await userService.syncUserToFirestore(cred.user || authInstance.currentUser);
+  } else if (userService && typeof userService.createOrUpdateUserFromAuth === 'function') {
     await userService.createOrUpdateUserFromAuth(cred.user || authInstance.currentUser);
   }
   return cred.user || authInstance.currentUser;
@@ -230,37 +235,140 @@ export const startGoogleSignIn = async (intent: 'signIn' | 'link' = 'signIn') =>
   const authMod: any = tryGetFirebaseAuth();
   if (!authMod) throw new Error('Firebase auth not available');
 
+  // Get raw sign-in result from Google helper. It may already have performed
+  // Firebase sign-in (returning firebaseResult), or only contain raw tokens.
   const signResult = await googleMod.signInWithGoogle();
-  const { firebaseResult, credential, raw } = signResult as any;
+  const { firebaseResult, credential: returnedCredential, raw } = signResult as any;
   const authInstance = authMod.default ? authMod.default() : authMod();
-  const user = (firebaseResult && (firebaseResult.user || firebaseResult)) || authInstance.currentUser;
-  if (!user) throw new Error('No firebase user after sign-in');
 
-  const email = user.email ? String(user.email).toLowerCase() : null;
-  try {
-    if (email) {
-      const userService: any = tryGetUserService();
-      if (userService && typeof userService.findUserByEmail === 'function') {
-        const found = await userService.findUserByEmail(email);
-        if (found && found.uid !== user.uid) {
-          const err: any = new Error('auth/email-exists-with-different-uid');
-          err.code = 'auth/email-exists-with-different-uid';
-          err.existingUid = found.uid;
-          err.existingData = found.data;
-          throw err;
+  // If firebaseResult was returned, use that user. Otherwise try signing in here.
+  let user: any = (firebaseResult && (firebaseResult.user || firebaseResult)) || authInstance.currentUser;
+
+  if (!user) {
+    const idToken = raw?.data?.idToken ?? raw?.idToken ?? null;
+    const accessToken = raw?.data?.accessToken ?? raw?.accessToken ?? null;
+    try {
+      // Try classic RN Firebase API first
+      const firebaseAuth: any = authMod;
+      if (typeof firebaseAuth === 'function' || firebaseAuth.default) {
+        const authInst = typeof firebaseAuth === 'function' ? firebaseAuth() : firebaseAuth.default();
+        const GoogleAuthProvider =
+          firebaseAuth.GoogleAuthProvider || firebaseAuth.default?.GoogleAuthProvider || authInst.GoogleAuthProvider;
+        let cred: any = null;
+        if (GoogleAuthProvider && typeof GoogleAuthProvider.credential === 'function') {
+          cred = GoogleAuthProvider.credential(idToken, accessToken);
+        }
+        if (cred && typeof authInst.signInWithCredential === 'function') {
+          const res = await authInst.signInWithCredential(cred);
+          user = res.user || authInst.currentUser;
         }
       }
-    }
 
-    const userService2: any = tryGetUserService();
-    if (userService2 && typeof userService2.createOrUpdateUserFromAuth === 'function') {
-      await userService2.createOrUpdateUserFromAuth(user);
+      // Modular API fallback
+      if (!user && firebaseAuth && firebaseAuth.getAuth && firebaseAuth.signInWithCredential && firebaseAuth.GoogleAuthProvider) {
+        const { getAuth, GoogleAuthProvider, signInWithCredential } = firebaseAuth;
+        const cred = GoogleAuthProvider.credential(idToken, accessToken);
+        const res = await signInWithCredential(getAuth(), cred);
+        user = res.user || (getAuth && getAuth().currentUser);
+      }
+    } catch (err: any) {
+      // Surface account-exists-with-different-credential with helpful payload
+      if (err && err.code === 'auth/account-exists-with-different-credential') {
+        const email = err?.customData?.email || raw?.user?.email || raw?.email || null;
+        const pendingCredential = (() => {
+          try {
+            const firebaseAuth: any = authMod;
+            const GoogleAuthProvider =
+              firebaseAuth.GoogleAuthProvider || firebaseAuth.default?.GoogleAuthProvider;
+            if (GoogleAuthProvider && typeof GoogleAuthProvider.credential === 'function') {
+              return GoogleAuthProvider.credential(idToken, accessToken);
+            }
+            return { providerId: 'google.com', token: idToken, accessToken };
+          } catch (e) {
+            return { providerId: 'google.com', token: idToken, accessToken };
+          }
+        })();
+        const out: any = new Error('auth/account-exists-with-different-credential');
+        out.code = 'auth/account-exists-with-different-credential';
+        out.email = email;
+        out.pendingCredential = pendingCredential;
+        throw out;
+      }
+      throw err;
     }
-  } catch (e) {
-    throw e;
+  }
+
+  if (!user) throw new Error('No firebase user after Google sign-in');
+
+  const email = user.email ? String(user.email).toLowerCase() : null;
+  if (email) {
+    const userService: any = tryGetUserService();
+    if (userService && typeof userService.findUserByEmail === 'function') {
+      const found = await userService.findUserByEmail(email);
+      if (found && found.uid !== user.uid) {
+        const err: any = new Error('auth/email-exists-with-different-uid');
+        err.code = 'auth/email-exists-with-different-uid';
+        err.existingUid = found.uid;
+        err.existingData = found.data;
+        throw err;
+      }
+    }
+  }
+
+  const userService2: any = tryGetUserService();
+  if (userService2 && typeof userService2.syncUserToFirestore === 'function') {
+    await userService2.syncUserToFirestore(user);
+  } else if (userService2 && typeof userService2.createOrUpdateUserFromAuth === 'function') {
+    await userService2.createOrUpdateUserFromAuth(user);
   }
 
   return user;
+};
+
+/**
+ * Sign in existing email/password user and link a pending OAuth credential to them.
+ * Returns the linked user.
+ */
+export const linkPendingCredentialWithPassword = async (email: string, password: string, pendingCredential: any) => {
+  if (!email || !password) throw new Error('Email and password required');
+  const firebaseAuth = tryGetFirebaseAuth();
+  if (!firebaseAuth) throw new Error('Firebase auth not available');
+
+  // Classic API
+  if (typeof firebaseAuth === 'function' || firebaseAuth.default) {
+    const authInstance = typeof firebaseAuth === 'function' ? firebaseAuth() : firebaseAuth.default();
+    if (typeof authInstance.signInWithEmailAndPassword === 'function') {
+      const res = await authInstance.signInWithEmailAndPassword(email, password);
+      const user = res.user || authInstance.currentUser;
+      if (!user) throw new Error('Failed to sign in existing user');
+      if (typeof user.linkWithCredential === 'function') {
+        await user.linkWithCredential(pendingCredential);
+      } else {
+        await linkCredentialToCurrentUser(pendingCredential);
+      }
+      const userService: any = tryGetUserService();
+      if (userService && typeof userService.syncUserToFirestore === 'function') {
+        await userService.syncUserToFirestore(user);
+      }
+      return user;
+    }
+  }
+
+  // Modular API
+  if (firebaseAuth && firebaseAuth.getAuth && firebaseAuth.signInWithEmailAndPassword) {
+    const { getAuth, signInWithEmailAndPassword } = firebaseAuth;
+    const res = await signInWithEmailAndPassword(getAuth(), email, password);
+    const user = res.user || (getAuth && getAuth().currentUser);
+    if (!user) throw new Error('Failed to sign in existing user (modular)');
+    if (typeof linkCredentialToCurrentUser === 'function') await linkCredentialToCurrentUser(pendingCredential);
+    const userService: any = tryGetUserService();
+    if (userService && typeof userService.syncUserToFirestore === 'function') {
+      await userService.syncUserToFirestore(user);
+    }
+    return user;
+  }
+
+  throw new Error('Email/password sign-in not supported on this platform');
 };
 
 export const fetchSignInMethodsForEmail = async (email: string) => {
@@ -305,6 +413,7 @@ export default {
   deleteAccount,
   reauthenticateWithPassword,
   startGoogleSignIn,
+  linkPendingCredentialWithPassword,
   fetchSignInMethodsForEmail,
   linkCredentialToCurrentUser,
 };

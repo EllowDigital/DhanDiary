@@ -166,3 +166,12 @@ export async function deleteUserFromFirestore(uid: string) {
 }
 
 export default { createOrUpdateUserFromAuth, ensureUserDocumentForCurrentUser, deleteUserFromFirestore };
+
+/**
+ * Alias/sync function for callers: central place to ensure Firestore user exists/updated.
+ * Keeps existing createOrUpdateUserFromAuth behavior but exposes a clearer name
+ * matching app architecture: "syncUserToFirestore".
+ */
+export async function syncUserToFirestore(user: any) {
+  return createOrUpdateUserFromAuth(user);
+}
