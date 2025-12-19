@@ -26,6 +26,15 @@ export const onAuthStateChanged = (cb: (u: any | null) => void) => {
   }
   const authInstance = firebaseAuth.default ? firebaseAuth.default() : firebaseAuth();
   const unsub = authInstance.onAuthStateChanged((fbUser: any) => {
+    // Debug: log the raw Firebase user object to help diagnose missing email/provider data
+    try {
+      console.debug('onAuthStateChanged: raw fbUser', fbUser && typeof fbUser === 'object' ? {
+        uid: fbUser.uid,
+        email: fbUser.email,
+        providerData: fbUser.providerData,
+        metadata: fbUser.metadata,
+      } : fbUser);
+    } catch (e) {}
     if (!fbUser) return cb(null);
     cb({
       uid: fbUser.uid,
