@@ -187,7 +187,6 @@ export const signInWithGoogle = async () => {
       // try Firebase JS SDK (web/modular) if present. This helps in Expo web or
       // environments where the react-native-firebase native modules are not linked.
       try {
-        // eslint-disable-next-line global-require
         const firebaseJsAuth = require('firebase/auth');
         if (firebaseJsAuth && firebaseJsAuth.getAuth && firebaseJsAuth.signInWithCredential && firebaseJsAuth.GoogleAuthProvider) {
           console.debug('googleAuth: signing in to firebase via firebase JS SDK');

@@ -3,7 +3,6 @@ import { wipeUserData } from './localDb';
 const tryGetFirebaseAuth = () => {
   try {
     // dynamic require to avoid import-time errors in environments without native modules
-    // eslint-disable-next-line global-require
     const firebaseAuth = require('@react-native-firebase/auth');
     return firebaseAuth;
   } catch (e) {
@@ -13,7 +12,6 @@ const tryGetFirebaseAuth = () => {
 
 const tryGetUserService = () => {
   try {
-    // eslint-disable-next-line global-require
     return require('./userService');
   } catch (e) {
     return null;
