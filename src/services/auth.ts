@@ -40,10 +40,17 @@ export const onAuthStateChanged = (cb: (u: any | null) => void) => {
 };
 
 export const registerWithEmail = async (name: string, email: string, password: string) => {
+  console.debug('auth.registerWithEmail called', { email });
   const firebaseAuth = tryGetFirebaseAuth();
   if (!firebaseAuth) throw new Error('Firebase auth not available');
   const authInstance = firebaseAuth.default ? firebaseAuth.default() : firebaseAuth();
-  const cred = await authInstance.createUserWithEmailAndPassword(email.trim(), password);
+  let cred: any;
+  try {
+    cred = await authInstance.createUserWithEmailAndPassword(email.trim(), password);
+  } catch (e: any) {
+    console.error('auth.registerWithEmail: createUser error', e);
+    throw e;
+  }
   try {
     if (cred?.user && cred.user.updateProfile && name) {
       await cred.user.updateProfile({ displayName: name });
@@ -62,10 +69,17 @@ export const registerWithEmail = async (name: string, email: string, password: s
 };
 
 export const loginWithEmail = async (email: string, password: string) => {
+  console.debug('auth.loginWithEmail called', { email });
   const firebaseAuth = tryGetFirebaseAuth();
   if (!firebaseAuth) throw new Error('Firebase auth not available');
   const authInstance = firebaseAuth.default ? firebaseAuth.default() : firebaseAuth();
-  const cred = await authInstance.signInWithEmailAndPassword(email.trim(), password);
+  let cred: any;
+  try {
+    cred = await authInstance.signInWithEmailAndPassword(email.trim(), password);
+  } catch (e: any) {
+    console.error('auth.loginWithEmail: signIn error', e);
+    throw e;
+  }
   const userService = tryGetUserService();
   if (userService && typeof userService.syncUserToFirestore === 'function') {
     await userService.syncUserToFirestore(cred.user || authInstance.currentUser);
@@ -281,6 +295,7 @@ export const getAuthErrorMessage = (code: string | null | undefined) => {
 
 // Google + linking helpers
 export const startGoogleSignIn = async (intent: 'signIn' | 'link' = 'signIn') => {
+  console.debug('auth.startGoogleSignIn called', { intent });
   const googleMod: any = require('./googleAuth');
   const authMod: any = tryGetFirebaseAuth();
   if (!authMod) throw new Error('Firebase auth not available');
