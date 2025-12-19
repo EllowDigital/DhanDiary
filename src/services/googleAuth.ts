@@ -77,6 +77,7 @@ export const signInWithGoogle = async () => {
 
     await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
     const signInResult = await GoogleSignin.signIn();
+    console.debug('googleAuth: signInResult', signInResult);
 
     // return the raw response so callers can inspect provider tokens if needed
     // Extract idToken (newer versions place it under data.idToken)
@@ -86,7 +87,8 @@ export const signInWithGoogle = async () => {
     }
     if (!idToken) {
       const msg = 'No ID token returned from Google Sign-In';
-      throw new Error(msg);
+      console.error('googleAuth: no idToken', { signInResult });
+      throw new Error(msg + (signInResult ? ` (raw response: ${JSON.stringify(signInResult).slice(0, 500)})` : ''));
     }
 
     // If Firebase auth native module is available, sign in with credential
@@ -101,14 +103,29 @@ export const signInWithGoogle = async () => {
           credential = GoogleAuthProvider.credential(idToken);
         }
         if (credential && authInstance && typeof authInstance.signInWithCredential === 'function') {
-          return await authInstance.signInWithCredential(credential);
+          console.debug('googleAuth: signing in to firebase (classic api) with credential');
+          const signPromise = authInstance.signInWithCredential(credential);
+          // guard against hangs: timeout after 20s
+          const result = await Promise.race([
+            signPromise,
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Firebase signInWithCredential timeout')), 20000)),
+          ]);
+          console.debug('googleAuth: firebase classic sign-in result', result);
+          return result;
         }
       }
       // Try modular API
       if (firebaseAuth && firebaseAuth.getAuth && firebaseAuth.GoogleAuthProvider && firebaseAuth.signInWithCredential) {
+        console.debug('googleAuth: signing in to firebase (modular api) with credential');
         const { getAuth, GoogleAuthProvider, signInWithCredential } = firebaseAuth;
         const credential = GoogleAuthProvider.credential(idToken);
-        return await signInWithCredential(getAuth(), credential);
+        const signPromise = signInWithCredential(getAuth(), credential);
+        const result = await Promise.race([
+          signPromise,
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Firebase signInWithCredential timeout')), 20000)),
+        ]);
+        console.debug('googleAuth: firebase modular sign-in result', result);
+        return result;
       }
     } catch (e) {
       // If firebase auth not available, fall back to returning raw google result
@@ -116,19 +133,14 @@ export const signInWithGoogle = async () => {
 
     return { success: true, data: signInResult };
   } catch (err: any) {
-    // Normalize known statusCodes into a thrown error with code so callers can switch on it
-    try {
-      const mod: any = require('@react-native-google-signin/google-signin');
-      const { statusCodes } = mod;
-      if (err && err.code) throw err;
-      // Map some common cases
-      if (err && typeof err === 'string') {
-        throw err;
-      }
-    } catch (e) {
-      // ignore
-    }
-    throw err;
+    console.error('googleAuth: signIn error', { message: err?.message, code: err?.code, stack: err?.stack, raw: err });
+    // Rewrap known shapes to include code/message for UI
+    const code = err?.code || err?.statusCode || null;
+    const message = err?.message || String(err);
+    const wrapped = new Error(`Google Sign-in failed${code ? ` (code=${code})` : ''}: ${message}`);
+    // preserve original properties
+    (wrapped as any).original = err;
+    throw wrapped;
   }
 };
 
