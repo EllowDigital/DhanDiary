@@ -187,6 +187,55 @@ export const changePassword = async (currentPassword: string | undefined, newPas
   throw err;
 };
 
+/**
+ * Set a password for the current user. Useful for OAuth-only accounts (e.g. Google)
+ * that do not yet have a password provider. Attempts to update the password directly
+ * and will try provider reauthentication (Google) if Firebase requires a recent login.
+ */
+export const setPasswordForCurrentUser = async (newPassword: string) => {
+  const firebaseAuth = tryGetFirebaseAuth();
+  if (!firebaseAuth) throw new Error('Firebase auth not available');
+  const authInstance = firebaseAuth.default ? firebaseAuth.default() : firebaseAuth();
+  const user = authInstance.currentUser;
+  if (!user) throw new Error('No authenticated user');
+  if (!user.email) throw new Error('User has no email');
+
+  // Try instance method first
+  try {
+    if (typeof user.updatePassword === 'function') {
+      await user.updatePassword(newPassword);
+      return;
+    }
+
+    // Modular API fallback
+    if (firebaseAuth.updatePassword) {
+      const { getAuth, updatePassword } = firebaseAuth;
+      const currentUser = getAuth && getAuth().currentUser;
+      if (currentUser) {
+        await updatePassword(currentUser, newPassword);
+        return;
+      }
+    }
+  } catch (e: any) {
+    // If update failed due to requiring recent login, try reauth via provider
+    if (e && (e.code === 'auth/requires-recent-login' || e.code === 'auth/requires-recent-login')) {
+      try {
+        await reauthenticateWithGoogle();
+        const refreshed = authInstance.currentUser;
+        if (refreshed && typeof refreshed.updatePassword === 'function') {
+          await refreshed.updatePassword(newPassword);
+          return;
+        }
+      } catch (reauthErr) {
+        throw reauthErr;
+      }
+    }
+    throw e;
+  }
+
+  throw new Error('Password update not supported on this platform');
+};
+
 export const deleteAccount = async (currentPassword?: string) => {
   const firebaseAuth = tryGetFirebaseAuth();
   if (!firebaseAuth) throw new Error('Firebase auth not available');

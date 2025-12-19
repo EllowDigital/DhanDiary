@@ -20,7 +20,7 @@ import { Input, Button } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 
 // Logic Imports
-import { updateProfileDetails, changePassword, deleteAccount } from '../services/auth';
+import { updateProfileDetails, changePassword, deleteAccount, setPasswordForCurrentUser } from '../services/auth';
 import { retry } from '../utils/retry';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../context/ToastContext';
@@ -195,25 +195,62 @@ const AccountManagementScreen = () => {
   }, [email, user]);
 
   const handlePasswordSave = useCallback(async () => {
-    if (!curPass || !newPass || !confirmPass)
-      return Alert.alert('Missing Fields', 'All fields required');
+    const hasPassword = Array.isArray(user?.providers) && user?.providers.includes('password');
+
+    // If user already has a password provider, require current password
+    if (hasPassword) {
+      if (!curPass || !newPass || !confirmPass)
+        return Alert.alert('Missing Fields', 'All fields required');
+      if (newPass !== confirmPass) return Alert.alert('Mismatch', 'New passwords do not match');
+      if (newPass.length < 8) return Alert.alert('Weak Password', 'Minimum 8 characters required');
+      setSavingPasswordState(true);
+      try {
+        await retry(() => changePassword(curPass, newPass), 3, 300);
+        showToast('Password changed successfully');
+        setCurPass('');
+        setNewPass('');
+        setConfirmPass('');
+        toggleCard('');
+      } catch (err: any) {
+        Alert.alert('Error', err?.message || 'Update failed');
+      } finally {
+        setSavingPasswordState(false);
+      }
+      return;
+    }
+
+    // OAuth-only user: allow setting a new password without current password
+    if (!newPass || !confirmPass) return Alert.alert('Missing Fields', 'Please enter and confirm a new password');
     if (newPass !== confirmPass) return Alert.alert('Mismatch', 'New passwords do not match');
     if (newPass.length < 8) return Alert.alert('Weak Password', 'Minimum 8 characters required');
 
     setSavingPasswordState(true);
     try {
-      await retry(() => changePassword(curPass, newPass), 3, 300);
-      showToast('Password changed successfully');
-      setCurPass('');
+      await retry(() => setPasswordForCurrentUser(newPass), 3, 300);
+      showToast('Password set successfully. You can now sign in using email and password.');
       setNewPass('');
       setConfirmPass('');
       toggleCard('');
     } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Update failed');
+      // If reauthentication is required, instruct user
+      if (err?.code === 'auth/requires-recent-login') {
+        Alert.alert(
+          'Reauthentication required',
+          'Please sign in again to set a password.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Reauthenticate', onPress: () => navigation.navigate('Auth') },
+          ]
+        );
+      } else {
+        Alert.alert('Error', err?.message || 'Failed to set password');
+      }
     } finally {
       setSavingPasswordState(false);
     }
-  }, [curPass, newPass, confirmPass]);
+  }, [curPass, newPass, confirmPass, user]);
+
+  const hasPassword = Array.isArray(user?.providers) && user?.providers.includes('password');
 
   const handleDelete = useCallback(async () => {
     Alert.alert('Delete Account?', 'This is permanent. All your data will be wiped.', [
@@ -361,20 +398,22 @@ const AccountManagementScreen = () => {
                 isExpanded={activeCard === 'password'}
                 onToggle={() => toggleCard('password')}
               >
-                <CustomInput
-                  label="Current Password"
-                  secureTextEntry={!showCur}
-                  value={curPass}
-                  onChangeText={setCurPass}
-                  rightIcon={
-                    <MaterialIcon
-                      name={showCur ? 'visibility' : 'visibility-off'}
-                      size={20}
-                      color={colors.muted}
-                      onPress={() => setShowCur(!showCur)}
-                    />
-                  }
-                />
+                {hasPassword && (
+                  <CustomInput
+                    label="Current Password"
+                    secureTextEntry={!showCur}
+                    value={curPass}
+                    onChangeText={setCurPass}
+                    rightIcon={
+                      <MaterialIcon
+                        name={showCur ? 'visibility' : 'visibility-off'}
+                        size={20}
+                        color={colors.muted}
+                        onPress={() => setShowCur(!showCur)}
+                      />
+                    }
+                  />
+                )}
                 <CustomInput
                   label="New Password"
                   secureTextEntry={!showNew}
@@ -404,7 +443,7 @@ const AccountManagementScreen = () => {
                   }
                 />
                 <Button
-                  title="Update Password"
+                  title={hasPassword ? 'Update Password' : 'Set Password'}
                   loading={savingPasswordState}
                   onPress={handlePasswordSave}
                   buttonStyle={styles.primaryBtn}
