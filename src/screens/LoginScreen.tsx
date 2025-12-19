@@ -185,38 +185,21 @@ const LoginScreen = () => {
   const handleGoogleLogin = async () => {
     setSocialLoading(true);
     try {
-      const mod = await import('../services/googleAuth');
-      const res = await mod.signInWithGoogle();
-      // If firebase user present, ensure user doc exists
-      try {
-        const userService: any = require('../services/userService');
-        const firebaseAuth: any = (() => {
-          try {
-            return require('@react-native-firebase/auth');
-          } catch (e) {
-            return null;
-          }
-        })();
-        const firebaseUser =
-          res?.user ||
-          (firebaseAuth
-            ? firebaseAuth.default
-              ? firebaseAuth.default().currentUser
-              : firebaseAuth().currentUser
-            : null);
-        if (
-          firebaseUser &&
-          userService &&
-          typeof userService.createOrUpdateUserFromAuth === 'function'
-        ) {
-          await userService.createOrUpdateUserFromAuth(firebaseUser);
-        }
-      } catch (e) {
-        // ignore user doc creation failures
-      }
+      const mod = await import('../services/auth');
+      await mod.startGoogleSignIn('signIn');
+      showToast('Welcome!');
+      (navigation.getParent() as any)?.replace('Main');
     } catch (err) {
       const e: any = err || {};
       // Try to read statusCodes if available
+      // If account exists with different credential, redirect user to Login to enter password and link
+      if (e && e.code === 'auth/account-exists-with-different-credential') {
+        const prefill = e.email || undefined;
+        (navigation as any).navigate('Login', { prefillEmail: prefill, pendingCredential: e.pendingCredential });
+        Alert.alert('Account exists', 'An account with this email exists. Sign in with your existing method to link Google.');
+        return;
+      }
+
       try {
         const googleMod: any = require('@react-native-google-signin/google-signin');
         const { statusCodes } = googleMod;
@@ -229,34 +212,12 @@ const LoginScreen = () => {
             Alert.alert('Play Services', 'Google Play Services not available or outdated.');
             return;
           }
-          if (e.code === 'auth/account-exists-with-different-credential') {
-            const prefill = e.email || undefined;
-            Alert.alert(
-              'Account already exists',
-              'An account with this email already exists using a different sign-in method.\n\nPlease sign in using the original method to securely link your accounts.',
-              [
-                {
-                  text: 'Go to Sign In',
-                  onPress: () => {
-                    try {
-                      if (prefill) setEmail(prefill);
-                    } catch (err) {}
-                  },
-                },
-                { text: 'Cancel', style: 'cancel' },
-              ]
-            );
-            return;
-          }
         }
       } catch (err2) {
         // ignore module load errors
       }
 
-      Alert.alert(
-        'Google Login Failed',
-        getProviderErrorMessage(err, 'Unable to sign in with Google.')
-      );
+      Alert.alert('Google Login Failed', getProviderErrorMessage(err, 'Unable to sign in with Google.'));
     } finally {
       setSocialLoading(false);
     }
