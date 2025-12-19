@@ -1,39 +1,7 @@
-import { useEffect, useState } from 'react';
-import { onAuthStateChanged } from '../services/auth';
+import { useAuthContext } from '../auth/AuthContext';
 
-export type AuthUser = {
-  uid: string;
-  name: string;
-  email: string;
-  provider: string;
-};
-
+// Re-export the context-based hook so existing imports remain valid.
 export const useAuth = () => {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    let isMounted = true;
-    const unsubscribe = onAuthStateChanged((localUser) => {
-      if (!isMounted) return;
-      if (!localUser) {
-        setUser(null);
-        setLoading(false);
-        return;
-      }
-      setUser({
-        uid: localUser.uid,
-        name: localUser.name || '',
-        email: localUser.email || '',
-        provider: (localUser.providers && localUser.providers[0]) || 'password',
-      });
-      setLoading(false);
-    });
-
-    return () => {
-      isMounted = false;
-      unsubscribe();
-    };
-  }, []);
-
-  return { user, loading };
+  const { status, user, error } = useAuthContext();
+  return { user, loading: status === 'loading', status, error };
 };

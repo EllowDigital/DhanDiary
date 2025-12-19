@@ -185,7 +185,6 @@ export const deleteAccount = async (currentPassword?: string) => {
   const authInstance = firebaseAuth.default ? firebaseAuth.default() : firebaseAuth();
   const user = authInstance.currentUser;
   if (!user) return;
-
   // If currentPassword provided, attempt reauth to satisfy Firebase's recent-login requirement
   if (currentPassword && user.email) {
     try {
@@ -197,6 +196,25 @@ export const deleteAccount = async (currentPassword?: string) => {
       }
     } catch (e) {
       throw e;
+    }
+  } else {
+    // No password provided — attempt provider-based reauthentication for OAuth users (Google/GitHub)
+    try {
+      const providerId = user?.providerData?.[0]?.providerId;
+      if (providerId === 'google.com' || providerId === 'github.com') {
+        try {
+          const oauthMod: any = require('./googleAuth');
+          const signRes = await oauthMod.signInWithGoogle();
+          const cred = signRes?.credential || signRes?.firebaseResult?.credential || null;
+          if (cred && typeof user.reauthenticateWithCredential === 'function') {
+            await user.reauthenticateWithCredential(cred);
+          }
+        } catch (e) {
+          // ignore — we'll throw if delete fails due to recent-login requirement
+        }
+      }
+    } catch (e) {
+      // ignore
     }
   }
 
@@ -227,6 +245,56 @@ export const reauthenticateWithPassword = async (password: string) => {
     }
   }
   throw new Error('Reauthentication not supported on this platform');
+};
+
+/**
+ * Reauthenticate current user via Google (or other OAuth) using `googleAuth` helper.
+ * Useful for provider-based accounts where password is not available.
+ */
+export const reauthenticateWithGoogle = async () => {
+  const firebaseAuth = tryGetFirebaseAuth();
+  if (!firebaseAuth) throw new Error('Firebase auth not available');
+  const authInstance = firebaseAuth.default ? firebaseAuth.default() : firebaseAuth();
+  const user = authInstance.currentUser;
+  if (!user) throw new Error('No authenticated user');
+  try {
+    const oauthMod: any = require('./googleAuth');
+    const signRes = await oauthMod.signInWithGoogle();
+    const cred = signRes?.credential || signRes?.firebaseResult?.credential || null;
+    if (!cred) throw new Error('No credential returned from Google reauth');
+    if (typeof user.reauthenticateWithCredential === 'function') {
+      return user.reauthenticateWithCredential(cred);
+    }
+    // Try higher-level helper
+    if (firebaseAuth.reauthenticateWithCredential) {
+      const { reauthenticateWithCredential } = firebaseAuth;
+      return reauthenticateWithCredential(authInstance, cred);
+    }
+    throw new Error('Reauthentication not supported');
+  } catch (e) {
+    throw e;
+  }
+};
+
+export const getAuthErrorMessage = (code: string | null | undefined) => {
+  switch (code) {
+    case 'auth/user-not-found':
+      return 'No account found with this email.';
+    case 'auth/wrong-password':
+      return 'Incorrect password.';
+    case 'auth/email-already-in-use':
+      return 'This email is already registered.';
+    case 'auth/weak-password':
+      return 'Password should be at least 6 characters.';
+    case 'auth/invalid-email':
+      return 'Invalid email address.';
+    case 'auth/account-exists-with-different-credential':
+      return 'Account exists with another sign-in method.';
+    case 'auth/requires-recent-login':
+      return 'Please re-authenticate to complete this action.';
+    default:
+      return 'Something went wrong. Please try again.';
+  }
 };
 
 // Google + linking helpers
@@ -414,6 +482,8 @@ export default {
   reauthenticateWithPassword,
   startGoogleSignIn,
   linkPendingCredentialWithPassword,
+  reauthenticateWithGoogle,
+  getAuthErrorMessage,
   fetchSignInMethodsForEmail,
   linkCredentialToCurrentUser,
 };

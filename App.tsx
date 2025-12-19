@@ -16,6 +16,7 @@ import TermsScreen from './src/screens/TermsScreen';
 import EulaScreen from './src/screens/EulaScreen';
 import DrawerNavigator from './src/navigation/DrawerNavigator';
 import { ToastProvider } from './src/context/ToastContext';
+import { AuthProvider } from './src/auth/AuthContext';
 import { RootStackParamList, AuthStackParamList } from './src/types/navigation';
 import { configureGoogleSignIn } from './src/services/googleAuth';
 import GoogleAuth from './src/components/firebase-auth/google-auth';
@@ -72,9 +73,11 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
-        <ToastProvider>
-          <AppContent />
-        </ToastProvider>
+        <AuthProvider>
+          <ToastProvider>
+            <AppContent />
+          </ToastProvider>
+        </AuthProvider>
       </QueryClientProvider>
     </SafeAreaProvider>
   );
