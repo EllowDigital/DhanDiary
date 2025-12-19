@@ -28,7 +28,8 @@ import { AuthStackParamList } from '../types/navigation';
 import { useToast } from '../context/ToastContext';
 import { useInternetStatus } from '../hooks/useInternetStatus';
 import { registerWithEmail } from '../services/auth';
-import { SHOW_GITHUB_LOGIN } from '../config/featureFlags';
+import { SHOW_GITHUB_LOGIN, SHOW_GOOGLE_LOGIN } from '../config/featureFlags';
+import FirebaseAuth from '../components/firebase-auth/FirebaseAuth';
 
 // Components & Utils
 import { colors } from '../utils/design';
@@ -326,31 +327,24 @@ const RegisterScreen = () => {
                 }
               />
 
-              {showGithub && (
-                <View style={styles.socialWrapper}>
-                  <View style={styles.socialDivider}>
-                    <View style={styles.socialLine} />
-                    <Text style={styles.socialText}>or sign up with</Text>
-                    <View style={styles.socialLine} />
-                  </View>
-                  <Button
-                    type="outline"
-                    icon={
-                      <FontAwesome
-                        name="github"
-                        size={18}
-                        color={colors.primary}
-                        style={{ marginRight: 8 }}
-                      />
+              {(showGithub || SHOW_GOOGLE_LOGIN) && (
+                <FirebaseAuth
+                  showGoogle={SHOW_GOOGLE_LOGIN}
+                  showGithub={showGithub}
+                  socialLoading={socialLoading}
+                  onGooglePress={async () => {
+                    setSocialLoading(true);
+                    try {
+                      const mod = await import('../services/googleAuth');
+                      await mod.signInWithGoogle();
+                    } catch (err: any) {
+                      Alert.alert('Google Sign-up Failed', readProviderError(err, 'Unable to reach Google.'));
+                    } finally {
+                      setSocialLoading(false);
                     }
-                    title="GitHub"
-                    onPress={handleGithubSignup}
-                    disabled={socialLoading}
-                    buttonStyle={styles.socialButton}
-                    titleStyle={styles.socialButtonText}
-                    containerStyle={styles.socialButtonContainer}
-                  />
-                </View>
+                  }}
+                  onGithubPress={handleGithubSignup}
+                />
               )}
 
               <View style={styles.termsContainer}>

@@ -20,7 +20,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { GoogleSigninButton } from '@react-native-google-signin/google-signin';
+import FirebaseAuth from '../components/firebase-auth/FirebaseAuth';
 
 // Types & Services
 import { AuthStackParamList } from '../types/navigation';
@@ -314,45 +314,13 @@ const LoginScreen = () => {
               />
 
               {(showGithub || showGoogle) && (
-                <View style={styles.socialWrapper}>
-                  <View style={styles.socialDivider}>
-                    <View style={styles.socialLine} />
-                    <Text style={styles.socialText}>or continue with</Text>
-                    <View style={styles.socialLine} />
-                  </View>
-
-                  <View style={styles.socialButtonsRow}>
-                    {showGoogle && (
-                      <View style={styles.socialButtonContainer}>
-                        <GoogleSigninButton
-                          size={GoogleSigninButton.Size.Wide}
-                          color={GoogleSigninButton.Color.Dark}
-                          onPress={handleGoogleLogin}
-                          disabled={socialLoading}
-                        />
-                      </View>
-                    )}
-                    {showGithub && (
-                      <Button
-                        type="outline"
-                        icon={
-                          <FontAwesome
-                            name="github"
-                            size={18}
-                            color={colors.primary}
-                            style={{ marginRight: 8 }}
-                          />
-                        }
-                        title="GitHub"
-                        onPress={handleGithubLogin}
-                        disabled={socialLoading}
-                        buttonStyle={styles.socialButton}
-                        titleStyle={styles.socialButtonText}
-                        containerStyle={styles.socialButtonContainer}
-                      />
-                    )}
-                  </View>
-                </View>
+                <FirebaseAuth
+                  showGoogle={showGoogle}
+                  showGithub={showGithub}
+                  socialLoading={socialLoading}
+                  onGooglePress={handleGoogleLogin}
+                  onGithubPress={handleGithubLogin}
+                />
               )}
             </View>
 
