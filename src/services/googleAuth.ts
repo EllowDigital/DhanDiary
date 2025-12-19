@@ -110,14 +110,16 @@ export const signInWithGoogle = async () => {
     console.debug('googleAuth: signInResult', signInResult);
 
     // return the raw response so callers can inspect provider tokens if needed
-    // Extract idToken (newer versions place it under data.idToken)
+    // Extract idToken and accessToken (newer versions place tokens under data)
     let idToken: string | undefined | null = null;
+    let accessToken: string | undefined | null = null;
     if (signInResult && typeof signInResult === 'object') {
       idToken = signInResult?.data?.idToken ?? signInResult?.idToken ?? null;
+      accessToken = signInResult?.data?.accessToken ?? signInResult?.accessToken ?? null;
     }
-    if (!idToken) {
-      const msg = 'No ID token returned from Google Sign-In';
-      console.error('googleAuth: no idToken', { signInResult });
+    if (!idToken && !accessToken) {
+      const msg = 'No ID token or access token returned from Google Sign-In';
+      console.error('googleAuth: no idToken/accessToken', { signInResult });
       throw new Error(
         msg + (signInResult ? ` (raw response: ${JSON.stringify(signInResult).slice(0, 500)})` : '')
       );
@@ -162,18 +164,46 @@ export const signInWithGoogle = async () => {
         firebaseAuth.GoogleAuthProvider &&
         firebaseAuth.signInWithCredential
       ) {
-        console.debug('googleAuth: signing in to firebase (modular api) with credential');
-        const { getAuth, GoogleAuthProvider, signInWithCredential } = firebaseAuth;
-        const credential = GoogleAuthProvider.credential(idToken);
-        const signPromise = signInWithCredential(getAuth(), credential);
-        const result = await Promise.race([
-          signPromise,
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Firebase signInWithCredential timeout')), 20000)
-          ),
-        ]);
-        console.debug('googleAuth: firebase modular sign-in result', result);
-        return { firebaseResult: result, credential: { providerId: 'google.com', token: idToken }, raw: signInResult };
+        try {
+          console.debug('googleAuth: signing in to firebase (modular api) with credential');
+          const { getAuth, GoogleAuthProvider, signInWithCredential } = firebaseAuth;
+          const credential = GoogleAuthProvider.credential(idToken, accessToken);
+          const signPromise = signInWithCredential(getAuth(), credential);
+          const result = await Promise.race([
+            signPromise,
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Firebase signInWithCredential timeout')), 20000)
+            ),
+          ]);
+          console.debug('googleAuth: firebase modular sign-in result', result);
+          return { firebaseResult: result, credential: { providerId: 'google.com', token: idToken }, raw: signInResult };
+        } catch (e) {
+          console.debug('googleAuth: modular firebase sign-in failed, falling back', e);
+        }
+      }
+
+      // If @react-native-firebase/auth wasn't available or sign-in above failed,
+      // try Firebase JS SDK (web/modular) if present. This helps in Expo web or
+      // environments where the react-native-firebase native modules are not linked.
+      try {
+        // eslint-disable-next-line global-require
+        const firebaseJsAuth = require('firebase/auth');
+        if (firebaseJsAuth && firebaseJsAuth.getAuth && firebaseJsAuth.signInWithCredential && firebaseJsAuth.GoogleAuthProvider) {
+          console.debug('googleAuth: signing in to firebase via firebase JS SDK');
+          const { getAuth, GoogleAuthProvider, signInWithCredential } = firebaseJsAuth;
+          const credential = GoogleAuthProvider.credential(idToken, accessToken);
+          const signPromise = signInWithCredential(getAuth(), credential);
+          const result = await Promise.race([
+            signPromise,
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Firebase JS signInWithCredential timeout')), 20000)
+            ),
+          ]);
+          console.debug('googleAuth: firebase js sign-in result', result);
+          return { firebaseResult: result, credential: { providerId: 'google.com', token: idToken }, raw: signInResult };
+        }
+      } catch (e) {
+        // ignore and fall through to returning raw google result
       }
     } catch (e) {
       // If firebase auth not available, fall back to returning raw google result
