@@ -66,20 +66,72 @@ export async function createOrUpdateUserFromAuth(user: any) {
     settings: {},
   };
 
+  // Sanitize email for equality checks
+  const email = (user.email && String(user.email).toLowerCase()) || null;
+
+  // Ensure single document per user UID and avoid creating duplicates by email.
+  // If a different document with the same email already exists, we DO NOT create a new
+  // document for this uid. Instead we surface a conflict so the caller can handle linking.
+  if (email) {
+    const q = await firestore.collection('users').where('email', '==', email).limit(1).get();
+    if (!q.empty) {
+      const existing = q.docs[0];
+      if (existing.id !== uid) {
+        // Conflict: another user document exists with the same email but different UID.
+        const err: any = new Error('userService:email-conflict');
+        err.code = 'userService/email-conflict';
+        err.existingUid = existing.id;
+        err.existingData = existing.data();
+        throw err;
+      }
+    }
+  }
+
+  // Safe create/update using transaction to avoid races.
   await firestore.runTransaction(async (tx) => {
     const snap = await tx.get(docRef);
+    const nowVal = FieldValue ? FieldValue.serverTimestamp() : new Date();
     if (!snap.exists) {
       tx.set(
         docRef,
-        { ...payload, createdAt: FieldValue ? FieldValue.serverTimestamp() : new Date() },
+        { ...payload, createdAt: nowVal, lastLoginAt: nowVal },
         { merge: true }
       );
     } else {
-      tx.set(docRef, payload, { merge: true });
+      // Merge updates and update lastLoginAt. Preserve and merge providerData arrays.
+      const existing = snap.data() || {};
+      const existingProviders: any[] = Array.isArray(existing.providerData) ? existing.providerData : [];
+      const incomingProviders: any[] = Array.isArray(payload.providerData) ? payload.providerData : [];
+      // Merge by providerId+uid key
+      const map = new Map<string, any>();
+      const keyFor = (p: any) => `${p.providerId || ''}::${p.uid || ''}`;
+      for (const p of existingProviders) map.set(keyFor(p), p);
+      for (const p of incomingProviders) map.set(keyFor(p), p);
+      const mergedProviders = Array.from(map.values());
+      tx.set(
+        docRef,
+        { ...payload, providerData: mergedProviders, lastLoginAt: nowVal },
+        { merge: true }
+      );
     }
   });
 
   return docRef;
+
+}
+
+/**
+ * Find a user document by email. Returns { uid, data } or null.
+ */
+export async function findUserByEmail(email: string) {
+  const fsMod = tryGetFirestore();
+  if (!fsMod) return null;
+  const firestore = fsMod.default ? fsMod.default() : fsMod();
+  if (!email) return null;
+  const q = await firestore.collection('users').where('email', '==', String(email).toLowerCase()).limit(1).get();
+  if (q.empty) return null;
+  const doc = q.docs[0];
+  return { uid: doc.id, data: doc.data() };
 }
 
 export async function ensureUserDocumentForCurrentUser() {
@@ -96,4 +148,21 @@ export async function ensureUserDocumentForCurrentUser() {
   return createOrUpdateUserFromAuth(u);
 }
 
-export default { createOrUpdateUserFromAuth, ensureUserDocumentForCurrentUser };
+export async function deleteUserFromFirestore(uid: string) {
+  const fsMod = tryGetFirestore();
+  if (!fsMod) {
+    console.debug('userService: @react-native-firebase/firestore not available, skip deleteUserFromFirestore');
+    return null;
+  }
+  const firestore = fsMod.default ? fsMod.default() : fsMod();
+  try {
+    const docRef = firestore.collection('users').doc(uid);
+    await docRef.delete();
+    return true;
+  } catch (e) {
+    console.debug('userService: failed to delete user document', e);
+    throw e;
+  }
+}
+
+export default { createOrUpdateUserFromAuth, ensureUserDocumentForCurrentUser, deleteUserFromFirestore };

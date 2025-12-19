@@ -150,7 +150,9 @@ export const signInWithGoogle = async () => {
             ),
           ]);
           console.debug('googleAuth: firebase classic sign-in result', result);
-          return result;
+          // Return both the firebase sign-in result and the credential so callers can
+          // perform post-sign-in user management (linking, firestore writes) safely.
+          return { firebaseResult: result, credential, raw: signInResult };
         }
       }
       // Try modular API
@@ -171,7 +173,7 @@ export const signInWithGoogle = async () => {
           ),
         ]);
         console.debug('googleAuth: firebase modular sign-in result', result);
-        return result;
+        return { firebaseResult: result, credential: { providerId: 'google.com', token: idToken }, raw: signInResult };
       }
     } catch (e) {
       // If firebase auth not available, fall back to returning raw google result
