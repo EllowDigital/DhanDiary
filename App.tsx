@@ -17,9 +17,9 @@ import EulaScreen from './src/screens/EulaScreen';
 import DrawerNavigator from './src/navigation/DrawerNavigator';
 import { ToastProvider } from './src/context/ToastContext';
 import { RootStackParamList, AuthStackParamList } from './src/types/navigation';
-import vexoService from './src/services/vexo';
 import { configureGoogleSignIn } from './src/services/googleAuth';
 import { enableLegacyLayoutAnimations } from './src/utils/layoutAnimation';
+import GoogleAuth from '@firebase-auth';
 
 enableLegacyLayoutAnimations();
 
@@ -46,24 +46,11 @@ const AppContent = () => (
   </NavigationContainer>
 );
 
-const getVexoKey = () => {
-  if (process.env.VEXO_API_KEY) return process.env.VEXO_API_KEY;
-  try {
-    const extra = (Constants?.expoConfig?.extra || {}) as Record<string, any>;
-    return extra?.VEXO_API_KEY || extra?.vexoApiKey || null;
-  } catch (error) {
-    return null;
-  }
-};
 
 export default function App() {
   const [queryClient] = React.useState(() => new QueryClient());
 
   React.useEffect(() => {
-    const key = getVexoKey();
-    if (key) {
-      vexoService.initVexo(key);
-    }
     try {
       configureGoogleSignIn();
     } catch (err) {
