@@ -1,5 +1,6 @@
 {
   "expo": {
+    "platforms": ["android"],
     "name": "DhanDiary",
     "slug": "DhanDiary",
     "version": "1.0.0",
