@@ -208,8 +208,8 @@ export async function exportFromUser(
 ) {
   if (!userId) throw new Error('userId required for export');
 
-  const { fetchEntriesGenerator } = await import('../services/localDb');
-  const gen = fetchEntriesGenerator(userId, pageSize);
+  const localDbMod: any = await import('../services/localDb');
+  const gen = (localDbMod.fetchEntriesGenerator || localDbMod.default?.fetchEntriesGenerator)(userId, pageSize);
 
   const FS = await import('expo-file-system/legacy');
   const enc = (FS as any).EncodingType?.UTF8;

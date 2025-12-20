@@ -293,7 +293,7 @@ const StatsScreen = () => {
         ]).start();
       }
     } catch (e) {
-      if (e.message !== 'Aborted') console.warn('Analysis Error:', e);
+      if ((e as any)?.message !== 'Aborted') console.warn('Analysis Error:', e);
     } finally {
       if (abortControllerRef.current === controller) setComputing(false);
     }

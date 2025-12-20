@@ -186,7 +186,7 @@ const RegisterScreen = () => {
                         await authMod2.startGithubSignIn('signIn');
                       }
                     } catch (e) {
-                      Alert.alert('Sign-in Failed', (e && e.message) || 'Unable to sign in with provider.');
+                      Alert.alert('Sign-in Failed', (e as any)?.message || 'Unable to sign in with provider.');
                     } finally {
                       setSocialLoading(false);
                     }
@@ -200,7 +200,7 @@ const RegisterScreen = () => {
                       await authMod3.sendPasswordReset(email.trim());
                       showToast('Password reset sent');
                     } catch (e) {
-                      Alert.alert('Reset Failed', (e && e.message) || 'Unable to send reset email right now.');
+                      Alert.alert('Reset Failed', (e as any)?.message || 'Unable to send reset email right now.');
                     }
                   },
                 },
