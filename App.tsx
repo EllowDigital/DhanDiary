@@ -55,6 +55,8 @@ import tokenCache from './src/utils/tokenCache';
 
 const CLERK_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY || '';
 
+import { BiometricAuth } from './src/components/BiometricAuth';
+
 // Telemetry integrations removed
 const AppContent = () => {
   const { user, loading } = useAuth();
@@ -64,14 +66,17 @@ const AppContent = () => {
   // Telemetry integrations removed
 
   return (
-    <NavigationContainer>
-      <RootStack.Navigator screenOptions={{ headerShown: false }}>
-        <RootStack.Screen name="Splash" component={SplashScreen} />
-        <RootStack.Screen name="Onboarding" component={OnboardingScreen} />
-        <RootStack.Screen name="Auth" component={AuthNavigator} />
-        <RootStack.Screen name="Main" component={MainNavigator} />
-      </RootStack.Navigator>
-    </NavigationContainer>
+    <>
+      <BiometricAuth />
+      <NavigationContainer>
+        <RootStack.Navigator screenOptions={{ headerShown: false }}>
+          <RootStack.Screen name="Splash" component={SplashScreen} />
+          <RootStack.Screen name="Onboarding" component={OnboardingScreen} />
+          <RootStack.Screen name="Auth" component={AuthNavigator} />
+          <RootStack.Screen name="Main" component={MainNavigator} />
+        </RootStack.Navigator>
+      </NavigationContainer>
+    </>
   );
 };
 
