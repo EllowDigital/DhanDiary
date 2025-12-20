@@ -69,36 +69,25 @@ function entriesCollection(userId: string) {
     const authMod = tryGetAuth();
     if (authMod) {
       const authInstance = authMod.default ? authMod.default() : authMod();
-      const waitForAuth = async (timeoutMs = 6000) => {
-        const start = Date.now();
-        while (Date.now() - start < timeoutMs) {
-          const current = authInstance.currentUser;
-          if (current && current.uid === userId) return current;
-          // small delay
-          // eslint-disable-next-line no-await-in-loop
-          await new Promise((r) => setTimeout(r, 200));
-        }
-        return authInstance.currentUser;
-      };
-      const current = authInstance.currentUser && authInstance.currentUser.uid === userId ? authInstance.currentUser : await waitForAuth();
+      const current = authInstance.currentUser;
+      // If current user not available or doesn't match requested uid, abort synchronously.
       if (!current || current.uid !== userId) {
         const err: any = new Error('localDb:unauthenticated');
         err.code = 'localdb/unauthenticated';
         err.message = 'No authenticated Firebase user matching uid; aborting Firestore access';
         throw err;
       }
+      // Trigger a non-blocking token refresh so Firestore requests have a better
+      // chance of being authenticated. Do not await here to keep this function sync.
       try {
         if (typeof current.getIdToken === 'function') {
-          // Force refresh token to ensure Firestore sees authenticated requests
-          await current.getIdToken(true).catch(() => {});
+          current.getIdToken(true).catch(() => {});
         }
       } catch (e) {
-        // ignore token refresh errors; we'll likely surface a permission error later
+        // ignore
       }
     }
   } catch (e) {
-    // If auth checks fail, let Firestore operation attempt and surface the proper error
-    // but log for diagnostics.
     console.debug('entriesCollection: auth propagation check failed', e?.message || e);
   }
 

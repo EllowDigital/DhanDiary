@@ -2,18 +2,46 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Users collection: one document per Firebase UID. Only the authenticated
+    // user may create/read/update their own document. Deletions are disallowed
+    // from the client.
     match /users/{uid} {
+      allow read: if isOwner(uid);
 
-      allow read: if request.auth != null
-                  && request.auth.uid == uid;
+      // Create only if the authenticated UID matches the document id and
+      // the payload includes the same uid. Prevent clients from creating
+      // a user document for another uid.
+      allow create: if isOwner(uid)
+                    && request.resource.data.uid == uid
+                    // basic sanity: role must be 'user' (server may set other roles)
+                    && (request.resource.data.role == 'user' || !('role' in request.resource.data));
 
-      allow create: if request.auth != null
-                    && request.auth.uid == uid;
+      // Updates allowed only by owner. Prevent writing sensitive fields like
+      // plaintext passwords from the client.
+      allow update: if isOwner(uid)
+                    && request.resource.data.uid == uid
+                    && !request.resource.data.keys().hasAny(['password','passwordHash']);
 
-      allow update: if request.auth != null
-                    && request.auth.uid == uid;
-
+      // Never allow client deletes (prevent accidental or malicious removal)
       allow delete: if false;
+
+      // Entries subcollection: only the owner may read/write their entries.
+      match /entries/{entryId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid)
+                      && request.resource.data.user_id == uid
+                      && request.resource.data.is_deleted == false;
+        allow update: if isOwner(uid) && request.resource.data.user_id == uid;
+        allow delete: if false;
+      }
     }
   }
 }
