@@ -75,13 +75,59 @@ export async function deleteUserFromFirestore(uid: string) {
   }
   const firestore = fsMod.default ? fsMod.default() : fsMod();
   try {
-    const docRef = firestore.collection('users').doc(uid);
-    await docRef.delete();
-    return true;
+    const userRef = firestore.collection('users').doc(uid);
+    // Try to delete entries subcollection in batches (best-effort). On strict
+    // security rules this may fail; the admin SDK/cloud function approach is
+    // recommended for complete deletion.
+    try {
+      const entriesCol = userRef.collection('entries');
+      const snap = await entriesCol.get();
+      const batchSize = 500;
+      let batch = firestore.batch();
+      let counter = 0;
+      for (const doc of snap.docs) {
+        batch.delete(doc.ref);
+        counter++;
+        if (counter >= batchSize) {
+          await batch.commit();
+          batch = firestore.batch();
+          counter = 0;
+        }
+      }
+      if (counter > 0) await batch.commit();
+    } catch (e) {
+      console.debug('userService.deleteUserFromFirestore: failed to delete entries subcollection (may require admin privileges)', e);
+    }
+
+    try {
+      await userRef.delete();
+      return true;
+    } catch (e) {
+      console.debug('userService.deleteUserFromFirestore: failed to delete user doc (may require admin privileges)', e);
+      // Return false to indicate client-side deletion not possible
+      return false;
+    }
   } catch (e) {
     console.debug('userService: failed to delete user document', e);
     throw e;
   }
+}
+
+/**
+ * Client-side request to mark this account for server-side deletion.
+ * Creates a small document under `account_deletions/{uid}` that an
+ * admin Cloud Function or scheduled job can process with elevated privileges.
+ */
+export async function requestAccountDeletion(uid: string) {
+  const fsMod = tryGetFirestore();
+  if (!fsMod) {
+    console.debug('userService: firestore not available, cannot request account deletion');
+    return null;
+  }
+  const firestore = fsMod.default ? fsMod.default() : fsMod();
+  const ref = firestore.collection('account_deletions').doc(uid);
+  await ref.set({ requestedBy: uid, requestedAt: firestore.FieldValue ? firestore.FieldValue.serverTimestamp() : new Date() });
+  return true;
 }
 
 export default { createOrUpdateUserFromAuth, ensureUserDocumentForCurrentUser, deleteUserFromFirestore, syncUserToFirestore };

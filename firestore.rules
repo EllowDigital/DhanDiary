@@ -45,6 +45,18 @@ service cloud.firestore {
         allow delete: if false;
       }
     }
+
+    // Allow owners to request account deletion by creating a document in
+    // `account_deletions/{uid}`. This document should be processed by a
+    // trusted server-side function (admin SDK) which will perform the actual
+    // deletion of user data. Clients are *not* allowed to directly delete
+    // user docs or entries for security reasons.
+    match /account_deletions/{uid} {
+      allow create: if isOwner(uid) && request.resource.data.requestedBy == uid;
+      allow read: if false;
+      allow update: if false;
+      allow delete: if false;
+    }
   }
 }
 
