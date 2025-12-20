@@ -175,7 +175,7 @@ export const syncPending = async () => {
         for (const it of inserts) {
           placeholders.push(
             // cast created_at and updated_at to timestamptz to match remote column type
-            `($${idx++},$${idx++},$${idx++},$${idx++},$${idx++},$${idx++},$${idx++}::timestamptz,$${idx++}::timestamptz,false,$${idx++})`
+            `($${idx++},$${idx++},$${idx++},$${idx++},$${idx++},$${idx++},$${idx++}::timestamptz,$${idx++}::timestamptz,false,$${idx++},$${idx++}::timestamptz)`
           );
           values.push(
             it.user_id,
@@ -187,10 +187,11 @@ export const syncPending = async () => {
             it.currency || 'INR',
             it.created_at,
             it.updated_at,
-            it.local_id
+            it.local_id,
+            it.date || it.created_at
           );
         }
-        const sql = `INSERT INTO cash_entries (user_id, type, amount, category, note, currency, created_at, updated_at, need_sync, client_id) VALUES ${placeholders.join(',')} ON CONFLICT (client_id) DO NOTHING RETURNING id, client_id, server_version, updated_at`;
+        const sql = `INSERT INTO cash_entries (user_id, type, amount, category, note, currency, created_at, updated_at, need_sync, client_id, date) VALUES ${placeholders.join(',')} ON CONFLICT (client_id) DO NOTHING RETURNING id, client_id, server_version, updated_at`;
         const res = await safeQ(sql, values);
         if (res && res.length) {
           for (const r of res) {
@@ -218,8 +219,8 @@ export const syncPending = async () => {
       for (const it of inserts) {
         try {
           const insertRes = await safeQ(
-            `INSERT INTO cash_entries (user_id, type, amount, category, note, currency, created_at, updated_at, need_sync, client_id)
-               VALUES ($1, $2, $3::numeric, $4, $5, $6, $7::timestamptz, $8::timestamptz, false, $9) RETURNING id, server_version, updated_at`,
+            `INSERT INTO cash_entries (user_id, type, amount, category, note, currency, created_at, updated_at, need_sync, client_id, date)
+               VALUES ($1, $2, $3::numeric, $4, $5, $6, $7::timestamptz, $8::timestamptz, false, $9, $10::timestamptz) RETURNING id, server_version, updated_at`,
             [
               it.user_id,
               it.type,
@@ -230,6 +231,7 @@ export const syncPending = async () => {
               it.created_at,
               it.updated_at,
               it.local_id,
+              it.date || it.created_at,
             ]
           );
           let remoteId = insertRes && insertRes[0] && insertRes[0].id ? insertRes[0].id : undefined;
@@ -280,7 +282,7 @@ export const syncPending = async () => {
       // Cast the id column, amount and updated_at timestamp in the VALUES to correct types
       // so Postgres compares types correctly and accepts the timestamp input.
       rowPlaceholders.push(
-        `($${j++}::uuid,$${j++}::numeric,$${j++},$${j++},$${j++},$${j++},$${j++}::timestamptz)`
+        `($${j++}::uuid,$${j++}::numeric,$${j++},$${j++},$${j++},$${j++},$${j++}::timestamptz,$${j++}::timestamptz)`
       );
       vals.push(
         u.remote_id,
@@ -290,11 +292,13 @@ export const syncPending = async () => {
         u.category,
         u.note || null,
         u.currency || 'INR',
-        u.updated_at
+        u.currency || 'INR',
+        u.updated_at,
+        u.date || u.created_at,
       );
     }
 
-    const updateSql = `UPDATE cash_entries AS c SET amount = v.amount, type = v.type, category = v.category, note = v.note, currency = v.currency, updated_at = v.updated_at::timestamptz, need_sync = true FROM (VALUES ${rowPlaceholders.join(',')}) AS v(id, amount, type, category, note, currency, updated_at) WHERE c.id = v.id RETURNING c.id, c.server_version, c.updated_at`;
+    const updateSql = `UPDATE cash_entries AS c SET amount = v.amount, type = v.type, category = v.category, note = v.note, currency = v.currency, updated_at = v.updated_at::timestamptz, need_sync = true, date = v.date::timestamptz FROM (VALUES ${rowPlaceholders.join(',')}) AS v(id, amount, type, category, note, currency, updated_at, date) WHERE c.id = v.id RETURNING c.id, c.server_version, c.updated_at`;
 
     // Batch updates (wrapped in transaction to keep consistency)
     try {
@@ -327,7 +331,7 @@ export const syncPending = async () => {
       for (const u of updates) {
         try {
           const res = await safeQ(
-            `UPDATE cash_entries SET amount = $1::numeric, type = $2, category = $3, note = $4, currency = $5, updated_at = $6::timestamptz, need_sync = true WHERE id = $7 RETURNING id, server_version, updated_at`,
+            `UPDATE cash_entries SET amount = $1::numeric, type = $2, category = $3, note = $4, currency = $5, updated_at = $6::timestamptz, need_sync = true, date = $8::timestamptz WHERE id = $7 RETURNING id, server_version, updated_at`,
             [
               Number(u.amount),
               u.type,
@@ -336,6 +340,7 @@ export const syncPending = async () => {
               u.currency || 'INR',
               u.updated_at,
               u.remote_id,
+              u.date || u.created_at,
             ]
           );
           if (res && res[0] && res[0].id) {
@@ -440,7 +445,7 @@ export const pullRemote = async () => {
     }
     // fetch all remote rows for this user (including deleted flag)
     const rows = await Q(
-      `SELECT id, user_id, type, amount, category, note, currency, created_at, updated_at, deleted, client_id, server_version FROM cash_entries WHERE user_id = $1`,
+      `SELECT id, user_id, type, amount, category, note, currency, created_at, updated_at, deleted, client_id, server_version, date FROM cash_entries WHERE user_id = $1`,
       [session.id]
     );
 
@@ -481,7 +486,8 @@ export const pullRemote = async () => {
                        note = $4,
                        currency = $5,
                        updated_at = $6::timestamptz,
-                       need_sync = false
+                       need_sync = false,
+                       date = $8::timestamptz
                  WHERE id = $7
                  RETURNING id, server_version, updated_at`,
                 [
@@ -491,7 +497,9 @@ export const pullRemote = async () => {
                   localForDeleted.note || null,
                   localForDeleted.currency || 'INR',
                   revivedUpdatedAt,
+                  revivedUpdatedAt,
                   r.id,
+                  localForDeleted.date || localForDeleted.created_at,
                 ]
               );
               const revivedRow = revived && revived[0];
@@ -556,7 +564,7 @@ export const pullRemote = async () => {
           const pushLocalToRemote = async () => {
             try {
               const pushed = await Q(
-                `UPDATE cash_entries SET amount = $1::numeric, type = $2, category = $3, note = $4, currency = $5, updated_at = $6::timestamptz WHERE id = $7 RETURNING id, server_version, updated_at`,
+                `UPDATE cash_entries SET amount = $1::numeric, type = $2, category = $3, note = $4, currency = $5, updated_at = $6::timestamptz, date = $8::timestamptz WHERE id = $7 RETURNING id, server_version, updated_at`,
                 [
                   Number(local.amount),
                   local.type,
@@ -565,6 +573,7 @@ export const pullRemote = async () => {
                   local.currency || 'INR',
                   local.updated_at,
                   r.id,
+                  local.date || local.created_at,
                 ]
               );
               const pushedRow = pushed && pushed[0];
@@ -617,7 +626,7 @@ export const pullRemote = async () => {
             try {
               // Prefer updating the existing remote row (client-wins) instead of creating duplicates.
               const upd = await Q(
-                `UPDATE cash_entries SET amount = $1::numeric, type = $2, category = $3, note = $4, currency = $5, updated_at = $6::timestamptz WHERE id = $7 RETURNING id, server_version, updated_at`,
+                `UPDATE cash_entries SET amount = $1::numeric, type = $2, category = $3, note = $4, currency = $5, updated_at = $6::timestamptz, date = $8::timestamptz WHERE id = $7 RETURNING id, server_version, updated_at`,
                 [
                   Number(local.amount),
                   local.type,
@@ -626,6 +635,7 @@ export const pullRemote = async () => {
                   local.currency || 'INR',
                   local.updated_at,
                   r.id,
+                  local.date || local.created_at,
                 ]
               );
               if (upd && upd[0] && upd[0].id) {
@@ -686,6 +696,7 @@ export const pullRemote = async () => {
             deleted: !!r.deleted,
             client_id: r.client_id || null,
             server_version: typeof r.server_version === 'number' ? r.server_version : undefined,
+            date: r.date,
           });
           pulled += 1;
         } catch (err) {

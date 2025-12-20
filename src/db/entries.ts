@@ -286,6 +286,8 @@ export const upsertLocalFromRemote = async (remote: any) => {
     // Preserve existing created_at if present (normalize it), otherwise normalize remote.created_at
     const preserved = normalizeDate(existing.created_at) || normalizeDate(remote.created_at) || now;
     const updatedAt = normalizeDate(remote.updated_at) || normalizeDate(remote.created_at) || now;
+    const dateVal = normalizeDate(remote.date) || preserved;
+
     // Warn when remote timestamps couldn't be normalized so we can detect format issues
     if (!normalizeDate(remote.created_at)) {
       try {
@@ -297,7 +299,7 @@ export const upsertLocalFromRemote = async (remote: any) => {
       } catch (e) { }
     }
     await db.run(
-      `UPDATE local_entries SET user_id = ?, type = ?, amount = ?, category = ?, note = ?, currency = ?, server_version = ?, created_at = ?, updated_at = ?, is_synced = 1, is_deleted = ? WHERE local_id = ?`,
+      `UPDATE local_entries SET user_id = ?, type = ?, amount = ?, category = ?, note = ?, currency = ?, server_version = ?, created_at = ?, updated_at = ?, is_synced = 1, is_deleted = ?, date = ? WHERE local_id = ?`,
       [
         remote.user_id,
         remote.type,
@@ -309,6 +311,7 @@ export const upsertLocalFromRemote = async (remote: any) => {
         preserved,
         updatedAt,
         remote.deleted ? 1 : 0,
+        dateVal,
         existing.local_id,
       ]
     );
@@ -319,6 +322,7 @@ export const upsertLocalFromRemote = async (remote: any) => {
   }
   const localId =
     remote.client_id && remote.client_id.length ? String(remote.client_id) : `remote_${remote.id}`;
+  const newDateVal = normalizeDate(remote.date) || normalizeDate(remote.created_at) || now;
   await db.run(
     `INSERT OR REPLACE INTO local_entries (local_id, remote_id, user_id, type, amount, category, note, date, currency, server_version, created_at, updated_at, is_synced, is_deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
     [
@@ -329,10 +333,7 @@ export const upsertLocalFromRemote = async (remote: any) => {
       remote.amount,
       ensureCategory(remote.category || FALLBACK_CATEGORY),
       remote.note || null,
-      // Normalize date/created/updated timestamps from remote before storing.
-      remote.client_id && remote.client_id.length
-        ? normalizeDate(remote.created_at) || remote.created_at || now
-        : normalizeDate(remote.created_at) || remote.created_at || now,
+      newDateVal,
       remote.currency || 'INR',
       typeof remote.server_version === 'number' ? remote.server_version : 0,
       normalizeDate(remote.created_at) || remote.created_at || now,
