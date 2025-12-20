@@ -123,11 +123,28 @@ const LoginScreen = () => {
     setLoading(true);
     try {
       const startFlow = strategy === 'google' ? startGoogleFlow : startGithubFlow;
+      console.log('Starting OAuth flow for', strategy);
 
-      const { createdSessionId, signIn, signUp, setActive } = await startFlow();
+      const flowResult: any = await startFlow();
+      console.log('OAuth startFlow result:', flowResult);
+
+      // If Clerk returns a URL, open it in the browser (fallback)
+      if (flowResult && flowResult.url) {
+        try {
+          await WebBrowser.openBrowserAsync(flowResult.url);
+        } catch (e) {
+          console.warn('Failed to open OAuth URL in browser', e);
+        }
+      }
+
+      const { createdSessionId, signIn, signUp, setActive } = flowResult || {};
 
       if (createdSessionId) {
-        await setActive!({ session: createdSessionId });
+        try {
+          await setActive!({ session: createdSessionId });
+        } catch (e) {
+          console.warn('setActive failed after OAuth', e);
+        }
 
         // For OAuth, we might need to fetch the user details if they aren't readily available
         // Clerk usually populates basic info.
@@ -171,9 +188,15 @@ const LoginScreen = () => {
         // flow cancelled or incomplete
         setLoading(false);
       }
+      } else {
+        // Flow did not immediately create a session — let background hooks handle it,
+        // but inform the user we started the flow.
+        console.log('OAuth flow started but no immediate session; waiting for Clerk update');
+        setLoading(false);
+      }
     } catch (err: any) {
       console.error('OAuth Error', err);
-      // Alert.alert('Social Login Failed', err.message);
+      Alert.alert('Social Login Failed', err?.message || 'Unexpected error during social login');
       setLoading(false);
     }
   };
