@@ -211,7 +211,6 @@ export async function syncUserToFirestore(user: any) {
           user.getIdToken(true).catch(() => {});
         }
 
-        // eslint-disable-next-line no-await-in-loop
         await new Promise((r) => setTimeout(r, 250));
       }
     }
