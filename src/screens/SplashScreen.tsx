@@ -27,8 +27,11 @@ const SplashScreen = ({ navigation }: any) => {
     const slideAnim = useRef(new Animated.Value(50)).current;
 
     useEffect(() => {
-        // Start Animation
+    type SplashProps = {
+      navigation?: { replace: (route: string) => void };
+    };
         Animated.parallel([
+    const SplashScreen: React.FC<SplashProps> = ({ navigation }) => {
             Animated.timing(fadeAnim, {
                 toValue: 1,
                 duration: 1000,
@@ -60,11 +63,14 @@ const SplashScreen = ({ navigation }: any) => {
         }, 3000); // 3 seconds splash time
 
         return () => clearTimeout(timer);
-    }, []);
-
-    return (
-        <View style={styles.container}>
-            <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
+                if (navigation && typeof navigation.replace === 'function') {
+                    navigation.replace('Login');
+                } else {
+                    // no navigation provided (App.js may render this directly) — just log
+                    // In a full app the navigation container will handle route replacement
+                    // eslint-disable-next-line no-console
+                    console.log('Splash finished, would navigate to', 'Login');
+                }
 
             {/* Main Content */}
             <View style={styles.centerContent}>
