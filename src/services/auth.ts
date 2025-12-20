@@ -56,7 +56,7 @@ export const registerWithEmail = async (name: string, email: string, password: s
   let cred: any;
   try {
     cred = await authInstance.createUserWithEmailAndPassword(email.trim(), password);
-  } catch (e: any) {
+  } catch (e) {
     console.error('auth.registerWithEmail: createUser error', e);
     throw e;
   }
@@ -124,7 +124,7 @@ export const loginWithEmail = async (email: string, password: string) => {
   } catch (e) {}
   try {
     cred = await authInstance.signInWithEmailAndPassword(email.trim(), password);
-  } catch (e: any) {
+  } catch (e) {
     console.error('auth.loginWithEmail: signIn error', e);
     // If we receive auth/invalid-credential, attempt to determine whether this
     // account actually has a password provider; if not, surface a clearer error.
@@ -289,7 +289,7 @@ export const setPasswordForCurrentUser = async (newPassword: string) => {
         return;
       }
     }
-  } catch (e: any) {
+  } catch (e) {
     // If update failed due to requiring recent login, try reauth via provider
     if (e && (e.code === 'auth/requires-recent-login' || e.code === 'auth/requires-recent-login')) {
       try {
