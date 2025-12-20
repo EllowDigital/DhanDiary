@@ -48,6 +48,7 @@ const LoginScreen = () => {
   // State
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
 
@@ -189,8 +190,13 @@ const LoginScreen = () => {
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 100}
         >
-          <ScrollView contentContainerStyle={styles.scrollContent}>
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
+          >
 
             {/* Header / Logo */}
             <View style={styles.logoSection}>
@@ -228,8 +234,13 @@ const LoginScreen = () => {
                   placeholderTextColor="#64748b"
                   value={password}
                   onChangeText={setPassword}
-                  secureTextEntry
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
                 />
+                <TouchableOpacity onPress={() => setShowPassword((s) => !s)} style={styles.eyeBtn} accessibilityLabel="Toggle password visibility">
+                  <Ionicons name={showPassword ? 'eye' : 'eye-off'} size={20} color="#64748b" />
+                </TouchableOpacity>
               </View>
 
               <TouchableOpacity
@@ -249,10 +260,10 @@ const LoginScreen = () => {
 
               <View style={styles.socialRow}>
                 <TouchableOpacity style={styles.socialBtn} onPress={() => onSocialLogin('google')}>
-                  <FontAwesome name="google" size={24} color="#fff" />
+                  <FontAwesome name="google" size={22} color="#DB4437" />
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.socialBtn} onPress={() => onSocialLogin('github')}>
-                  <FontAwesome name="github" size={24} color="#fff" />
+                  <FontAwesome name="github" size={22} color="#111111" />
                 </TouchableOpacity>
               </View>
 
@@ -328,7 +339,7 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#fff',
+    color: '#0f172a',
     marginBottom: 24,
     textAlign: 'center',
   },
@@ -345,6 +356,12 @@ const styles = StyleSheet.create({
   },
   inputIcon: { marginRight: 12 },
   input: { flex: 1, color: '#0f172a', fontSize: 16 },
+  eyeBtn: {
+    marginLeft: 8,
+    padding: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   primaryBtn: {
     backgroundColor: '#2563eb',
     borderRadius: 12,

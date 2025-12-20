@@ -10,7 +10,7 @@ const sql = NEON_URL ? neon(NEON_URL) : null;
 
 const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
-const defaultTimeout = 60000; // 60s default timeout per request
+const defaultTimeout = 120000; // 120s default timeout per request (mobile networks can be slow)
 const NETINFO_CACHE_MS = 15000;
 const CIRCUIT_FUSE_MAX_MS = 15000;
 
@@ -111,7 +111,7 @@ export const warmNeonConnection = async () => {
       const start = Date.now();
       // Use the HTTP client's query method consistently to avoid SDK surface differences
       const runner = (sql as any).query || (sql as any);
-      await withTimeout(runner('SELECT 1', []), 25000);
+      await withTimeout(runner('SELECT 1', []), 45000);
       recordSuccess(Date.now() - start);
     } catch (err) {
       recordFailure(err);

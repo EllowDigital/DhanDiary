@@ -92,6 +92,27 @@ export default function App() {
   const queryClient = React.useMemo(() => new QueryClient(), []);
   const { user } = useAuth();
 
+  // Log presence of important runtime config to help debug Clerk/Neon wiring.
+  React.useEffect(() => {
+    try {
+      const extra = (Constants?.expoConfig?.extra as any) || {};
+      const neonUrl = extra.NEON_URL || process.env.NEON_URL || null;
+      const clerkKey =
+        (extra.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY as string) || process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY || '';
+      let host: string | null = null;
+      if (neonUrl) {
+        try {
+          host = new URL(neonUrl).hostname;
+        } catch (e) {
+          host = String(neonUrl).split('@').pop()?.split('/')[0] || null;
+        }
+      }
+      console.log('Startup config — neon host:', host || '(not configured)', 'clerkKey present:', !!clerkKey);
+    } catch (e) {
+      // ignore
+    }
+  }, []);
+
   // Run DB migrations early on startup (best-effort). This helps ensure
   // the local tables are present before session or other DB operations
   // attempt to read/write them. Fail silently if migrations can't run.

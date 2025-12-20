@@ -27,6 +27,7 @@ const RegisterScreen = ({ navigation }: any) => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [pendingVerification, setPendingVerification] = useState(false);
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
@@ -117,8 +118,9 @@ const RegisterScreen = ({ navigation }: any) => {
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 100}
         >
-          <ScrollView contentContainerStyle={styles.scrollContent}>
+          <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
 
             {/* Header */}
             <View style={styles.header}>
@@ -164,8 +166,13 @@ const RegisterScreen = ({ navigation }: any) => {
                     placeholderTextColor="#64748b"
                     value={password}
                     onChangeText={setPassword}
-                    secureTextEntry
+                    secureTextEntry={!showPassword}
+                    autoCapitalize="none"
+                    autoCorrect={false}
                   />
+                  <TouchableOpacity onPress={() => setShowPassword((s) => !s)} style={styles.eyeBtn} accessibilityLabel="Toggle password visibility">
+                    <Ionicons name={showPassword ? 'eye' : 'eye-off'} size={20} color="#64748b" />
+                  </TouchableOpacity>
                 </View>
 
                 <TouchableOpacity
@@ -298,6 +305,12 @@ const styles = StyleSheet.create({
     flex: 1,
     color: '#0f172a',
     fontSize: 16,
+  },
+  eyeBtn: {
+    marginLeft: 8,
+    padding: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   primaryBtn: {
     backgroundColor: '#2563eb',
