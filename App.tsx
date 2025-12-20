@@ -211,12 +211,14 @@ export default function App() {
   }
 
   return (
-    <SafeAreaProvider>
-      <QueryClientProvider client={queryClient}>
-        <ToastProvider>
-          <AppContent />
-        </ToastProvider>
-      </QueryClientProvider>
-    </SafeAreaProvider>
+    <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY} tokenCache={tokenCache}>
+      <SafeAreaProvider>
+        <QueryClientProvider client={queryClient}>
+          <ToastProvider>
+            <AppContent />
+          </ToastProvider>
+        </QueryClientProvider>
+      </SafeAreaProvider>
+    </ClerkProvider>
   );
 }
