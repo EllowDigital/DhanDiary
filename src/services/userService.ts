@@ -213,5 +213,68 @@ export default { createOrUpdateUserFromAuth, ensureUserDocumentForCurrentUser, d
  * matching app architecture: "syncUserToFirestore".
  */
 export async function syncUserToFirestore(user: any) {
-  return createOrUpdateUserFromAuth(user);
+  if (!user || !user.uid) return null;
+  const fsMod = tryGetFirestore();
+  if (!fsMod) {
+    console.debug('syncUserToFirestore: firestore not available');
+    return null;
+  }
+
+  // Try to refresh token to avoid permission-denied during immediate post-signup writes
+  try {
+    const authMod = tryGetAuth();
+    if (authMod) {
+      const authInstance = authMod.default ? authMod.default() : authMod();
+      const current = authInstance.currentUser || user;
+      if (current && typeof current.getIdToken === 'function') {
+        try {
+          await current.getIdToken(true);
+        } catch (e) {
+          console.debug('syncUserToFirestore: getIdToken failed', e?.message || e);
+        }
+      }
+    }
+  } catch (e) {
+    console.debug('syncUserToFirestore: auth token refresh check failed', e?.message || e);
+  }
+
+  const firestore = fsMod.default ? fsMod.default() : fsMod();
+  const FieldValue =
+    firestore.FieldValue ||
+    fsMod.FieldValue ||
+    (fsMod.FieldValue && fsMod.FieldValue.serverTimestamp ? fsMod.FieldValue : null);
+
+  const uid = user.uid;
+  const userRef = firestore.collection('users').doc(uid);
+
+  // Build providers list from providerData; ensure uniqueness
+  const providers: string[] = Array.isArray(user.providerData)
+    ? Array.from(new Set(user.providerData.map((p: any) => p.providerId).filter(Boolean)))
+    : [];
+
+  const data: any = {
+    uid,
+    email: user.email ?? null,
+    providers,
+    updatedAt: FieldValue ? FieldValue.serverTimestamp() : new Date(),
+  };
+
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await userRef.set(
+        {
+          ...data,
+          createdAt: FieldValue ? FieldValue.serverTimestamp() : new Date(),
+        },
+        { merge: true }
+      );
+      return userRef;
+    } catch (err: any) {
+      console.debug('syncUserToFirestore: set attempt failed', { attempt, err: err?.message || err });
+      if (attempt === maxAttempts) throw err;
+      await new Promise((r) => setTimeout(r, 400 * attempt));
+    }
+  }
+  return null;
 }
