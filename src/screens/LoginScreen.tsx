@@ -128,7 +128,7 @@ const LoginScreen = () => {
       // Navigation is typically handled by auth state listener in App.tsx
       // But explicit replace is safe if auth state updates slowly
       (navigation.getParent() as any)?.replace('Main');
-    } catch (err: any) {
+    } catch (err) {
       const code = err?.code || null;
       if (code === 'auth/wrong-password') {
         Alert.alert('Incorrect password');
@@ -157,7 +157,7 @@ const LoginScreen = () => {
     try {
       await sendPasswordReset(email);
       Alert.alert('Email Sent', 'Check your inbox for reset instructions.');
-    } catch (err: any) {
+    } catch (err) {
       const msg = err?.message || 'Unable to send reset email right now.';
       Alert.alert('Reset Failed', msg);
     } finally {

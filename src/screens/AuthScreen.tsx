@@ -77,7 +77,7 @@ const AuthScreen: React.FC = () => {
       } catch (err) {
         // ignore navigation errors in unusual setups
       }
-    } catch (err: any) {
+    } catch (err) {
       Alert.alert('Login Failed', err?.message || 'Invalid credentials.');
     } finally {
       setLoading(false);
@@ -103,7 +103,7 @@ const AuthScreen: React.FC = () => {
       } catch (err) {
         // ignore
       }
-    } catch (err: any) {
+    } catch (err) {
       Alert.alert('Registration Failed', err?.message || 'Unable to create account.');
     } finally {
       setLoading(false);
@@ -117,7 +117,7 @@ const AuthScreen: React.FC = () => {
     try {
       await sendPasswordReset(email);
       Alert.alert('Email Sent', 'Check your inbox for password reset instructions.');
-    } catch (err: any) {
+    } catch (err) {
       Alert.alert('Error', err?.message || 'Failed to send reset email.');
     } finally {
       setLoading(false);
@@ -140,7 +140,7 @@ const AuthScreen: React.FC = () => {
       } catch (err) {
         // ignore
       }
-    } catch (err: any) {
+    } catch (err) {
       Alert.alert(`${provider === 'google' ? 'Google' : 'GitHub'} Sign-in Failed`, err?.message);
     } finally {
       setSocialLoading(false);

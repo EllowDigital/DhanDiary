@@ -273,37 +273,44 @@ export const setPasswordForCurrentUser = async (newPassword: string) => {
   if (!user) throw new Error('No authenticated user');
   if (!user.email) throw new Error('User has no email');
 
-  // Try instance method first
-  try {
-    if (typeof user.updatePassword === 'function') {
+  // Try instance method first and handle recent-login requirement explicitly
+  if (typeof user.updatePassword === 'function') {
+    try {
       await user.updatePassword(newPassword);
       return;
-    }
-
-    // Modular API fallback
-    if (firebaseAuth.updatePassword) {
-      const { getAuth, updatePassword } = firebaseAuth;
-      const currentUser = getAuth && getAuth().currentUser;
-      if (currentUser) {
-        await updatePassword(currentUser, newPassword);
-        return;
-      }
-    }
-  } catch (e) {
-    // If update failed due to requiring recent login, try reauth via provider
-    if (e && (e.code === 'auth/requires-recent-login' || e.code === 'auth/requires-recent-login')) {
-      try {
+    } catch (err) {
+      if (err && (err.code === 'auth/requires-recent-login' || err.code === 'auth/requires-recent-login')) {
         await reauthenticateWithGoogle();
         const refreshed = authInstance.currentUser;
         if (refreshed && typeof refreshed.updatePassword === 'function') {
           await refreshed.updatePassword(newPassword);
           return;
         }
-      } catch (reauthErr) {
-        throw reauthErr;
+      }
+      throw err;
+    }
+  }
+
+  // Modular API fallback
+  if (firebaseAuth.updatePassword) {
+    const { getAuth, updatePassword } = firebaseAuth;
+    const currentUser = getAuth && getAuth().currentUser;
+    if (currentUser) {
+      try {
+        await updatePassword(currentUser, newPassword);
+        return;
+      } catch (err) {
+        if (err && (err.code === 'auth/requires-recent-login' || err.code === 'auth/requires-recent-login')) {
+          await reauthenticateWithGoogle();
+          const refreshed = authInstance.currentUser;
+          if (refreshed && typeof refreshed.updatePassword === 'function') {
+            await refreshed.updatePassword(newPassword);
+            return;
+          }
+        }
+        throw err;
       }
     }
-    throw e;
   }
 
   throw new Error('Password update not supported on this platform');
@@ -497,7 +504,7 @@ export const startGoogleSignIn = async (intent: 'signIn' | 'link' = 'signIn') =>
         const res = await signInWithCredential(getAuth(), cred);
         user = res.user || (getAuth && getAuth().currentUser);
       }
-    } catch (err: any) {
+    } catch (err) {
       // Surface account-exists-with-different-credential with helpful payload
       if (err && err.code === 'auth/account-exists-with-different-credential') {
         const email = err?.customData?.email || raw?.user?.email || raw?.email || null;

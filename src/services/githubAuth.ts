@@ -100,7 +100,7 @@ export async function signInWithGithub() {
 
     // If Firebase not available, return raw token so callers can handle it.
     return { success: true, raw: { accessToken } };
-  } catch (err: any) {
+  } catch (err) {
     const msg = err?.message || String(err);
     const wrapped = new Error(`GitHub sign-in failed: ${msg}`);
     (wrapped as any).original = err;

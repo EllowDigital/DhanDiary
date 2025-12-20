@@ -292,7 +292,7 @@ const StatsScreen = () => {
           Animated.spring(slideAnim, { toValue: 0, damping: 12, useNativeDriver: true }),
         ]).start();
       }
-    } catch (e: any) {
+    } catch (e) {
       if (e.message !== 'Aborted') console.warn('Analysis Error:', e);
     } finally {
       if (abortControllerRef.current === controller) setComputing(false);

@@ -174,7 +174,7 @@ class AnalyticsCore {
         if (cents > this.maxOut) this.maxOut = cents;
         this.bucketMap.set(bucketKey, (this.bucketMap.get(bucketKey) || 0n) + cents);
       }
-    } catch (err: any) {
+    } catch (err) {
       this.skipped++;
       if (this.errors.length < 20)
         this.errors.push(`ID ${e.local_id || 'unknown'}: ${err.message}`);

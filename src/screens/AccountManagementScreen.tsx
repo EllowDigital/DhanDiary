@@ -162,7 +162,7 @@ const AccountManagementScreen = () => {
       await retry(() => updateProfileDetails({ name: username }), 3, 250);
       showToast('Name updated successfully');
       toggleCard('');
-    } catch (err: any) {
+    } catch (err) {
       Alert.alert('Error', err?.message);
     } finally {
       setSavingUsername(false);
@@ -175,7 +175,7 @@ const AccountManagementScreen = () => {
       await retry(() => updateProfileDetails({ email }), 3, 250);
       showToast('Email updated successfully');
       toggleCard('');
-    } catch (err: any) {
+    } catch (err) {
       // If Firebase requires recent login, instruct user to reauthenticate
       if (err?.code === 'auth/requires-recent-login' || err?.code === 'auth/requires-recent-login') {
         Alert.alert(
@@ -211,8 +211,8 @@ const AccountManagementScreen = () => {
         setNewPass('');
         setConfirmPass('');
         toggleCard('');
-      } catch (err: any) {
-        Alert.alert('Error', err?.message || 'Update failed');
+      } catch (err) {
+          Alert.alert('Error', err?.message || 'Update failed');
       } finally {
         setSavingPasswordState(false);
       }
@@ -231,7 +231,7 @@ const AccountManagementScreen = () => {
       setNewPass('');
       setConfirmPass('');
       toggleCard('');
-    } catch (err: any) {
+    } catch (err) {
       // If reauthentication is required, instruct user
       if (err?.code === 'auth/requires-recent-login') {
         Alert.alert(

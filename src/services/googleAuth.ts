@@ -88,7 +88,7 @@ export const signInWithGoogle = async (opts?: { firebaseSignIn?: boolean }) => {
     try {
       signInResult = await withTimeout(GoogleSignin.signInSilently(), 8000);
       console.debug('googleAuth: silent signIn result', signInResult);
-    } catch (silentErr: any) {
+    } catch (silentErr) {
       console.debug(
         'googleAuth: silent sign-in threw, falling back to interactive sign-in',
         silentErr?.message || silentErr
@@ -109,7 +109,7 @@ export const signInWithGoogle = async (opts?: { firebaseSignIn?: boolean }) => {
         console.debug('googleAuth: performing interactive signIn');
         // Wrap interactive sign-in with timeout to avoid long hangs on some devices/emulators
         signInResult = await withTimeout(GoogleSignin.signIn(), 15000);
-      } catch (interactiveErr: any) {
+      } catch (interactiveErr) {
         console.debug(
           'googleAuth: interactive sign-in failed',
           interactiveErr?.message || interactiveErr
@@ -240,7 +240,7 @@ export const signInWithGoogle = async (opts?: { firebaseSignIn?: boolean }) => {
 
     // If we reached here without signing in, return credential + raw result
     return { success: true, credential: credentialForCaller, data: signInResult };
-  } catch (err: any) {
+  } catch (err) {
     console.error('googleAuth: signIn error', {
       message: err?.message,
       code: err?.code,

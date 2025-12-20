@@ -160,7 +160,7 @@ const RegisterScreen = () => {
       await registerWithEmail(name.trim(), email.trim(), password);
       showToast('Account created!');
       // Navigation is usually handled by auth state listener
-    } catch (err: any) {
+    } catch (err) {
       // Handle email already in use that is registered via social provider
       const code = err?.code || null;
       if (code === 'auth/email-already-in-use' || code === 'userService/email-conflict' || code === 'userService/email-conflict') {
@@ -185,7 +185,7 @@ const RegisterScreen = () => {
                       } else {
                         await authMod2.startGithubSignIn('signIn');
                       }
-                    } catch (e: any) {
+                    } catch (e) {
                       Alert.alert('Sign-in Failed', (e && e.message) || 'Unable to sign in with provider.');
                     } finally {
                       setSocialLoading(false);
@@ -199,7 +199,7 @@ const RegisterScreen = () => {
                       const authMod3: any = await import('../services/auth');
                       await authMod3.sendPasswordReset(email.trim());
                       showToast('Password reset sent');
-                    } catch (e: any) {
+                    } catch (e) {
                       Alert.alert('Reset Failed', (e && e.message) || 'Unable to send reset email right now.');
                     }
                   },
@@ -239,7 +239,7 @@ const RegisterScreen = () => {
     try {
       const mod = await import('../services/auth');
       await mod.startGithubSignIn('signIn');
-    } catch (err: any) {
+    } catch (err) {
       Alert.alert('GitHub Sign-up Failed', readProviderError(err, 'Unable to reach GitHub.'));
     } finally {
       setSocialLoading(false);
@@ -392,7 +392,7 @@ const RegisterScreen = () => {
                       await mod.startGoogleSignIn('signIn');
                       showToast('Welcome!');
                       (navigation.getParent() as any)?.replace('Main');
-                    } catch (err: any) {
+                    } catch (err) {
                       if (
                         err?.message &&
                         typeof err.message === 'string' &&
