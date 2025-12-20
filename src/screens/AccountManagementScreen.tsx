@@ -240,8 +240,8 @@ const AccountManagementScreen = () => {
         showToast('Password changed successfully');
       } else {
         // Set Password (for OAuth users)
-        await user.update({
-          password: newPass
+        await user.updatePassword({
+          newPassword: newPass
         });
         showToast('Password set successfully!');
       }
@@ -558,6 +558,35 @@ const styles = StyleSheet.create({
   },
   heroEmail: {
     fontSize: 14,
+    color: colors.muted,
+  },
+  authMethod: {
+    fontSize: 12,
+    color: colors.primary,
+    fontWeight: '600',
+    marginTop: 6,
+    backgroundColor: '#EEF2FF',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+
+  /* SECURITY TOGGLE */
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  switchLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 2,
+  },
+  switchDesc: {
+    fontSize: 13,
     color: colors.muted,
   },
 

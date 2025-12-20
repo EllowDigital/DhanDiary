@@ -12,16 +12,61 @@ import {
 import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-navigation/drawer';
 import { Text } from '@rneui/themed';
 import { CommonActions } from '@react-navigation/native';
-import { useAuth } from '@clerk/clerk-expo';
+import { useAuth, useUser } from '@clerk/clerk-expo';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 
-// ...
+import { colors, spacing } from '../utils/design';
+import { logout } from '../services/auth';
+import appConfig from '../../app.json';
+
+const BRAND_ICON = require('../../assets/adaptive-icon.png');
 
 const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const { signOut } = useAuth();
+  const { user } = useUser();
 
-  // ...
+  // Animations
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+
+  // Staggered list animations
+  const listAnims = useMemo(() =>
+    props.state.routes.map(() => new Animated.Value(0)),
+    [props.state.routes.length]
+  );
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic),
+      }),
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        useNativeDriver: true,
+        damping: 20,
+      }),
+      Animated.stagger(50, listAnims.map(anim =>
+        Animated.timing(anim, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+          easing: Easing.out(Easing.quad),
+        })
+      ))
+    ]).start();
+  }, []);
+
+  const handleNavigate = (routeName: string) => {
+    props.navigation.navigate(routeName);
+  };
+
+  const versionLabel = `v${appConfig.expo.version} (${appConfig.expo.android.versionCode})`;
 
   const handleLogout = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
@@ -80,7 +125,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
           <Image
             source={{ uri: user?.imageUrl }}
             style={styles.userAvatar}
-            defaultSource={require('../../assets/images/adaptive-icon.png')} // Fallback? Or just conditional
+            defaultSource={require('../../assets/adaptive-icon.png')} // Fallback? Or just conditional
           />
           <View style={styles.userInfo}>
             <Text style={styles.userName} numberOfLines={1}>{user?.fullName || 'Guest User'}</Text>
@@ -243,6 +288,35 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: 'rgba(0,0,0,0.05)',
     width: '100%',
+  },
+
+  /* USER HEADER */
+  userHeader: {
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  userAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#E2E8F0',
+    marginRight: 16,
+  },
+  userInfo: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  userName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 2,
+  },
+  userEmail: {
+    fontSize: 12,
+    color: colors.muted,
   },
 
   /* MENU */

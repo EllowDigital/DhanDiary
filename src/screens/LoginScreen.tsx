@@ -104,9 +104,8 @@ const LoginScreen = () => {
         // effectively without a fetch, but let's pass what we know.
         // Actually, we can get it from the session user later, 
         // but let's rely on the bridged info we have.
-        // Wait, `signIn.userData` isn't fully populated. 
-        // We'll use the email we have.
-        await handleSyncAndNavigate(completeSignIn.createdUserId!, email, 'User');
+        const uid = (completeSignIn as any).createdUserId;
+        await handleSyncAndNavigate(uid, email, 'User');
       } else {
         Alert.alert('Login Info', 'Further verification required. Please check your email.');
       }
@@ -142,7 +141,7 @@ const LoginScreen = () => {
         // We can use the return values from startFlow carefully.
         // If it was a sign up, `signUp` is populated. If sign in, `signIn`.
         const userObj = signIn || signUp;
-        const uid = userObj?.createdUserId || userObj?.userData?.id;
+        const uid = (userObj as any)?.createdUserId || (userObj as any)?.userData?.id;
         // OAuth might return email in a different spot depending on provider?
         // Let's assume the user is valid. 
         // A safer bet: The `syncbothWays` or `App.tsx` logic also handles checks, 
