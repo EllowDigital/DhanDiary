@@ -188,7 +188,7 @@ const CashOutList = () => {
   const { user } = useAuth();
 
   // Data Fetching
-  const { entries, deleteEntry, isLoading, refetch } = useEntries(user?.uid);
+  const { entries, deleteEntry, isLoading, refetch } = useEntries(user?.id);
   const showLoading = useDelayedLoading(Boolean(isLoading), 200);
 
   // Local State

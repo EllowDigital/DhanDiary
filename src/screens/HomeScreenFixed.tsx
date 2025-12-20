@@ -22,7 +22,7 @@ import FullScreenSpinner from '../components/FullScreenSpinner';
 import dayjs from 'dayjs';
 import Svg, { Defs, LinearGradient, Stop, Rect, Circle } from 'react-native-svg';
 import { LineChart, PieChart } from 'react-native-chart-kit';
-import { LocalEntry } from '../types/entries';
+import { LocalEntry } from '../db/entries';
 import { getIconForCategory } from '../constants/categories';
 
 // --- CRASH FIX: Safe LayoutAnimation Setup ---
@@ -221,7 +221,7 @@ const TransactionItem = React.memo(
 const HomeScreen = () => {
   const navigation = useNavigation<any>();
   const { user } = useAuth();
-  const { entries = [], isLoading } = useEntries(user?.uid);
+  const { entries = [], isLoading } = useEntries(user?.id);
   const { width } = useWindowDimensions();
 
   const PADDING = 20;
@@ -244,7 +244,7 @@ const HomeScreen = () => {
   const triggerLayoutAnimation = () => {
     try {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    } catch (e) {}
+    } catch (e) { }
   };
 
   const handleToggleChart = (type: any) => {

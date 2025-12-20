@@ -20,7 +20,7 @@ import { Input, Button } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 
 // Logic Imports
-import { updateProfileDetails, changePassword, deleteAccount, setPasswordForCurrentUser } from '../services/auth';
+import { updateProfile, changePassword, deleteAccount } from '../services/auth';
 import { retry } from '../utils/retry';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../context/ToastContext';
@@ -159,11 +159,11 @@ const AccountManagementScreen = () => {
     if (!username.trim()) return Alert.alert('Validation', 'Name cannot be empty');
     setSavingUsername(true);
     try {
-        await retry(() => updateProfileDetails({ name: username }), 3, 250);
-        showToast('Name updated successfully');
-        toggleCard('');
-      } catch (err) {
-        Alert.alert('Error', (err as any)?.message);
+      await retry(() => updateProfile({ name: username }), 3, 250);
+      showToast('Name updated successfully');
+      toggleCard('');
+    } catch (err) {
+      Alert.alert('Error', (err as any)?.message);
     } finally {
       setSavingUsername(false);
     }
@@ -172,85 +172,36 @@ const AccountManagementScreen = () => {
   const handleSaveEmail = useCallback(async () => {
     setSavingEmail(true);
     try {
-      await retry(() => updateProfileDetails({ email }), 3, 250);
+      await retry(() => updateProfile({ email }), 3, 250);
       showToast('Email updated successfully');
       toggleCard('');
     } catch (err) {
-      // If Firebase requires recent login, instruct user to reauthenticate
-      if ((err as any)?.code === 'auth/requires-recent-login' || (err as any)?.code === 'auth/requires-recent-login') {
-        Alert.alert(
-          'Reauthentication required',
-          'For security reasons you need to sign in again before changing your email. Please reauthenticate.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Reauthenticate', onPress: () => navigation.navigate('Auth') },
-          ]
-        );
-      } else {
-        Alert.alert('Error', (err as any)?.message);
-      }
+      Alert.alert('Error', (err as any)?.message || 'Failed to update email');
     } finally {
       setSavingEmail(false);
     }
-  }, [email, user]);
+  }, [email]);
 
   const handlePasswordSave = useCallback(async () => {
-    const hasPassword = Array.isArray(user?.providers) && user?.providers.includes('password');
-
-    // If user already has a password provider, require current password
-    if (hasPassword) {
-      if (!curPass || !newPass || !confirmPass)
-        return Alert.alert('Missing Fields', 'All fields required');
-      if (newPass !== confirmPass) return Alert.alert('Mismatch', 'New passwords do not match');
-      if (newPass.length < 8) return Alert.alert('Weak Password', 'Minimum 8 characters required');
-      setSavingPasswordState(true);
-      try {
-        await retry(() => changePassword(curPass, newPass), 3, 300);
-        showToast('Password changed successfully');
-        setCurPass('');
-        setNewPass('');
-        setConfirmPass('');
-        toggleCard('');
-          } catch (err) {
-            Alert.alert('Error', (err as any)?.message || 'Update failed');
-      } finally {
-        setSavingPasswordState(false);
-      }
-      return;
-    }
-
-    // OAuth-only user: allow setting a new password without current password
-    if (!newPass || !confirmPass) return Alert.alert('Missing Fields', 'Please enter and confirm a new password');
+    if (!curPass || !newPass || !confirmPass)
+      return Alert.alert('Missing Fields', 'All fields required');
     if (newPass !== confirmPass) return Alert.alert('Mismatch', 'New passwords do not match');
     if (newPass.length < 8) return Alert.alert('Weak Password', 'Minimum 8 characters required');
 
     setSavingPasswordState(true);
     try {
-      await retry(() => setPasswordForCurrentUser(newPass), 3, 300);
-      showToast('Password set successfully. You can now sign in using email and password.');
+      await retry(() => changePassword(curPass, newPass), 3, 300);
+      showToast('Password changed successfully');
+      setCurPass('');
       setNewPass('');
       setConfirmPass('');
       toggleCard('');
     } catch (err) {
-      // If reauthentication is required, instruct user
-      if ((err as any)?.code === 'auth/requires-recent-login') {
-        Alert.alert(
-          'Reauthentication required',
-          'Please sign in again to set a password.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Reauthenticate', onPress: () => navigation.navigate('Auth') },
-          ]
-        );
-      } else {
-        Alert.alert('Error', (err as any)?.message || 'Failed to set password');
-      }
+      Alert.alert('Error', (err as any)?.message || 'Update failed');
     } finally {
       setSavingPasswordState(false);
     }
-  }, [curPass, newPass, confirmPass, user]);
-
-  const hasPassword = Array.isArray(user?.providers) && user?.providers.includes('password');
+  }, [curPass, newPass, confirmPass]);
 
   const handleDelete = useCallback(async () => {
     Alert.alert('Delete Account?', 'This is permanent. All your data will be wiped.', [
@@ -265,18 +216,7 @@ const AccountManagementScreen = () => {
             showToast('Account deleted');
             navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
           } catch (err) {
-              if ((err as any)?.code === 'auth/requires-recent-login') {
-                Alert.alert(
-                  'Reauthentication required',
-                  'Please sign in again to delete your account.',
-                  [
-                    { text: 'Cancel', style: 'cancel' },
-                    { text: 'Reauthenticate', onPress: () => navigation.navigate('Auth') },
-                  ]
-                );
-              } else {
-                Alert.alert('Error', (err as any)?.message);
-              }
+            Alert.alert('Error', (err as any)?.message || 'Delete failed');
           } finally {
             setDeletingAccount(false);
           }
@@ -398,22 +338,20 @@ const AccountManagementScreen = () => {
                 isExpanded={activeCard === 'password'}
                 onToggle={() => toggleCard('password')}
               >
-                {hasPassword && (
-                  <CustomInput
-                    label="Current Password"
-                    secureTextEntry={!showCur}
-                    value={curPass}
-                    onChangeText={setCurPass}
-                    rightIcon={
-                      <MaterialIcon
-                        name={showCur ? 'visibility' : 'visibility-off'}
-                        size={20}
-                        color={colors.muted}
-                        onPress={() => setShowCur(!showCur)}
-                      />
-                    }
-                  />
-                )}
+                <CustomInput
+                  label="Current Password"
+                  secureTextEntry={!showCur}
+                  value={curPass}
+                  onChangeText={setCurPass}
+                  rightIcon={
+                    <MaterialIcon
+                      name={showCur ? 'visibility' : 'visibility-off'}
+                      size={20}
+                      color={colors.muted}
+                      onPress={() => setShowCur(!showCur)}
+                    />
+                  }
+                />
                 <CustomInput
                   label="New Password"
                   secureTextEntry={!showNew}
@@ -443,7 +381,7 @@ const AccountManagementScreen = () => {
                   }
                 />
                 <Button
-                  title={hasPassword ? 'Update Password' : 'Set Password'}
+                  title="Update Password"
                   loading={savingPasswordState}
                   onPress={handlePasswordSave}
                   buttonStyle={styles.primaryBtn}

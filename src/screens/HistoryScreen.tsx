@@ -294,7 +294,7 @@ const EditTransactionModal = React.memo(({ visible, entry, onClose, onSave }: an
 const HistoryScreen = () => {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { entries = [], isLoading, updateEntry, deleteEntry } = useEntries(user?.uid);
+  const { entries = [], isLoading, updateEntry, deleteEntry } = useEntries(user?.id);
   const { showToast } = useToast();
   const { width } = useWindowDimensions();
 

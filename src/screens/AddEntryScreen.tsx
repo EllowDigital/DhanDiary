@@ -65,7 +65,8 @@ const AddEntryScreen: React.FC = () => {
   const scrollRef = useRef<ScrollView>(null);
 
   const { user } = useAuth();
-  const { addEntry, entries, updateEntry } = useEntries(user?.uid);
+  // FIXED: user.uid -> user.id
+  const { addEntry, entries, updateEntry } = useEntries(user?.id);
   const { showToast } = useToast();
   const editingParamId = route?.params?.local_id;
   const initialType = route?.params?.type === 'in' ? 1 : 0;
@@ -143,7 +144,8 @@ const AddEntryScreen: React.FC = () => {
 
   // --- HANDLERS ---
   const handleSave = () => {
-    if (!user?.uid) {
+    // FIXED: user.uid -> user.id
+    if (!user?.id) {
       showToast('Please sign in to save entries.');
       return;
     }
