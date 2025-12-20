@@ -185,10 +185,6 @@ const LoginScreen = () => {
           navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
         }
       } else {
-        // flow cancelled or incomplete
-        setLoading(false);
-      }
-      } else {
         // Flow did not immediately create a session — let background hooks handle it,
         // but inform the user we started the flow.
         console.log('OAuth flow started but no immediate session; waiting for Clerk update');
