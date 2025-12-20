@@ -12,7 +12,7 @@ import StatsScreen from '../screens/StatsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import AccountManagementScreen from '../screens/AccountManagementScreen';
 import AboutScreen from '../screens/AboutScreen';
-// import ExportScreen from '../screens/ExportScreen';
+import ExportScreen from '../screens/ExportScreen';
 import PrivacyPolicyScreen from '../screens/PrivacyPolicyScreen';
 import TermsScreen from '../screens/TermsScreen';
 import EulaScreen from '../screens/EulaScreen';
@@ -178,7 +178,6 @@ const DrawerNavigator = () => {
         }}
       />
 
-      {/* 
       <Drawer.Screen
         name="Export"
         component={ExportScreen}
@@ -189,7 +188,6 @@ const DrawerNavigator = () => {
           ),
         }}
       />
-      */}
 
       {/* --- HIDDEN SCREENS (Navigable but not in menu) --- */}
       <Drawer.Screen

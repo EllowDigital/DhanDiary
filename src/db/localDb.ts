@@ -34,6 +34,7 @@ export const markEntryDeleted = entries.markEntryDeleted;
 export const markEntrySynced = entries.markEntrySynced;
 export const getEntryByLocalId = entries.getEntryByLocalId;
 export const getLocalByRemoteId = entries.getLocalByRemoteId;
+export const fetchEntriesGenerator = entries.fetchEntriesGenerator;
 export const upsertLocalFromRemote = entries.upsertLocalFromRemote;
 export const getUnsyncedEntries = async () => {
   const db = await sqlite.open();
@@ -86,13 +87,13 @@ export const wipeLocalDatabase = async () => {
   await clearAllData();
   try {
     await clearOfflineDbOwner();
-  } catch (e) {}
+  } catch (e) { }
   try {
     await sqlite.close();
-  } catch (e) {}
+  } catch (e) { }
   try {
     await sqlite.deleteDbFile();
-  } catch (e) {}
+  } catch (e) { }
   _init = null;
 };
 
@@ -179,7 +180,7 @@ export const flushFallbackLocalEntries = async () => {
       try {
         const { notifyEntriesChanged } = require('../utils/dbEvents');
         notifyEntriesChanged();
-      } catch (e) {}
+      } catch (e) { }
     return { processed };
   } catch (e) {
     return { processed: 0 };

@@ -23,10 +23,10 @@ import { colors } from '../utils/design'; // Ensure this path is correct
 import ScreenHeader from '../components/ScreenHeader'; // Ensure this path is correct
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import DailyTrendChart from '../components/charts/DailyTrendChart'; // Ensure this path is correct
-import { LocalEntry } from '../types/entries';
+import { LocalEntry } from '../db/entries';
 import asyncAggregator from '../utils/asyncAggregator'; // Ensure this path is correct
 import { aggregateWithPreferSummary } from '../services/aggregates';
-import { fetchEntriesGenerator } from '../services/localDb'; // Ensure this path is correct
+import { fetchEntriesGenerator } from '../db/localDb'; // Ensure this path is correct
 import { PieChart } from 'react-native-chart-kit';
 
 // Enable LayoutAnimation for Android
@@ -117,7 +117,7 @@ const CategoryRow = memo(({ item, currency }: { item: any; currency: string }) =
 const StatsScreen = () => {
   const { width } = useWindowDimensions();
   const { user, loading: authLoading } = useAuth();
-  const { entries: entriesRaw = [], isLoading } = useEntries(user?.uid);
+  const { entries: entriesRaw = [], isLoading } = useEntries(user?.id);
   const entries = entriesRaw as LocalEntry[];
 
   // --- REFS & ANIMATION ---
@@ -230,12 +230,12 @@ const StatsScreen = () => {
       let result;
       // Handle Massive Data (Trillion Scale Logic)
       // Prefer server-side precomputed summaries; fall back to streaming aggregation
-      if (user?.uid) {
-        result = await aggregateWithPreferSummary(user.uid, rangeStart, rangeEnd, {
+      if (user?.id) {
+        result = await aggregateWithPreferSummary(user.id, rangeStart, rangeEnd, {
           signal: controller.signal,
         });
       } else if (filter === 'All' || entries.length > 10000) {
-        const pages = fetchEntriesGenerator(user?.uid || '', 1000);
+        const pages = fetchEntriesGenerator(user?.id || '', 1000);
         result = await asyncAggregator.aggregateFromPages(pages, rangeStart, rangeEnd, {
           signal: controller.signal,
         });
