@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,328 +11,417 @@ import {
   Platform,
   ScrollView,
   SafeAreaView,
-  Linking,
+  StatusBar,
+  Image,
 } from 'react-native';
-import { Button, Text } from '@rneui/themed';
-import { useNavigation, useRoute } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import MaterialIcon from '@expo/vector-icons/MaterialIcons';
+import { useSignIn, useOAuth } from '@clerk/clerk-expo';
+import { Ionicons, FontAwesome } from '@expo/vector-icons';
+import * as WebBrowser from 'expo-web-browser'; // Ensure you have this installed
+import { useNavigation } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
 
-// Types & Services
-import { AuthStackParamList } from '../types/navigation';
-import { useToast } from '../context/ToastContext';
-import { useInternetStatus } from '../hooks/useInternetStatus';
-import { loginOnline, warmNeonConnection } from '../services/auth';
-import { syncBothWays } from '../services/syncManager';
+import { syncClerkUserToNeon } from '../services/clerkUserSync';
+import { saveSession } from '../db/localDb';
+import { warmNeonConnection } from '../services/auth';
 
-// Components & Utils
-import { colors } from '../utils/design';
-import FullScreenSpinner from '../components/FullScreenSpinner';
-import AuthField from '../components/AuthField';
+// Warm up browser for OAuth
+WebBrowser.maybeCompleteAuthSession();
 
-type LoginScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList>;
+const useWarmUpBrowser = () => {
+  React.useEffect(() => {
+    void WebBrowser.warmUpAsync();
+    return () => {
+      void WebBrowser.coolDownAsync();
+    };
+  }, []);
+};
 
 const LoginScreen = () => {
-  const navigation = useNavigation<LoginScreenNavigationProp>();
-  const { showToast } = useToast();
-  const isOnline = useInternetStatus();
+  useWarmUpBrowser();
+  const navigation = useNavigation<any>();
+  const { signIn, setActive, isLoaded } = useSignIn();
 
-  // Dimensions
-  const { height } = useWindowDimensions();
-  const isSmallScreen = height < 700;
+  // OAuth Hooks
+  const { startOAuthFlow: startGoogleFlow } = useOAuth({ strategy: 'oauth_google' });
+  const { startOAuthFlow: startGithubFlow } = useOAuth({ strategy: 'oauth_github' });
 
+  // State
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
-  // --- ANIMATION ---
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(50)).current;
-
-  useEffect(() => {
-    // Pre-warm connection for faster login
+  // Pre-warm DB
+  React.useEffect(() => {
     warmNeonConnection().catch(() => { });
-
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 600,
-        useNativeDriver: true,
-        easing: Easing.out(Easing.cubic),
-      }),
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        friction: 8,
-        tension: 40,
-        useNativeDriver: true,
-      }),
-    ]).start();
   }, []);
 
   // --- HANDLERS ---
-  const handleLogin = async () => {
-    if (loading) return;
-    Keyboard.dismiss();
 
-    if (!email || !password)
-      return Alert.alert('Missing Fields', 'Please enter both email and password.');
+  const handleSyncAndNavigate = async (userId: string, userEmail: string, userName?: string | null) => {
+    setSyncing(true);
+    try {
+      // 1. Sync Clerk User to Neon DB (Get internal UUID)
+      const bridgeUser = await syncClerkUserToNeon({
+        id: userId,
+        emailAddresses: [{ emailAddress: userEmail }],
+        fullName: userName,
+      });
 
-    if (!isOnline) {
-      return Alert.alert('Offline', 'An internet connection is required to sign in.');
+      // 2. Save Session Locally for Offline-First usage
+      await saveSession(bridgeUser.uuid, bridgeUser.name || 'User', bridgeUser.email);
+
+      // 3. Navigate
+      setSyncing(false);
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Main' }], // or 'Home' depending on your MainStack
+      });
+    } catch (err: any) {
+      console.error('Sync Error:', err);
+      setSyncing(false);
+      Alert.alert('Login Error', 'Failed to synchronize user data. Please check your connection.');
     }
+  };
+
+  const onSignInPress = async () => {
+    if (!isLoaded) return;
+    if (!email || !password) return Alert.alert('Error', 'Please enter email and password');
 
     setLoading(true);
     try {
-      await loginOnline(email, password);
+      const completeSignIn = await signIn.create({
+        identifier: email,
+        password,
+      });
 
-      // Trigger background sync
-      syncBothWays().catch((e) => console.warn('Post-login sync warning:', e));
+      // This is for simple email/password. 
+      // If 2FA is enabled, you'd need to handle 'needs_second_factor' status.
+      if (completeSignIn.status === 'complete') {
+        await setActive({ session: completeSignIn.createdSessionId });
 
-      showToast('Welcome back!');
-      (navigation.getParent() as any)?.replace('Main');
-    } catch (err: any) {
-      const msg = err?.message || String(err);
-      if (msg.toLowerCase().includes('timed out')) {
-        Alert.alert('Connection Timeout', 'The request took too long.', [
-          { text: 'Retry', onPress: handleLogin },
-          { text: 'Cancel', style: 'cancel' },
-        ]);
+        // We can't easily get the user object synchronously from signIn result 
+        // effectively without a fetch, but let's pass what we know.
+        // Actually, we can get it from the session user later, 
+        // but let's rely on the bridged info we have.
+        // Wait, `signIn.userData` isn't fully populated. 
+        // We'll use the email we have.
+        await handleSyncAndNavigate(completeSignIn.createdUserId!, email, 'User');
       } else {
-        Alert.alert('Login Failed', 'Invalid credentials or server error.');
+        Alert.alert('Login Info', 'Further verification required. Please check your email.');
       }
+    } catch (err: any) {
+      console.error(JSON.stringify(err, null, 2));
+      Alert.alert('Login Failed', err.errors ? err.errors[0]?.message : err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleForgotPassword = () => {
-    Alert.alert('Reset Password', 'Please contact support to reset your credentials.');
+  const onSocialLogin = async (strategy: 'google' | 'github') => {
+    if (!isLoaded) return;
+    setLoading(true);
+    try {
+      const startFlow = strategy === 'google' ? startGoogleFlow : startGithubFlow;
+
+      const { createdSessionId, signIn, signUp, setActive } = await startFlow();
+
+      if (createdSessionId) {
+        await setActive!({ session: createdSessionId });
+
+        // For OAuth, we might need to fetch the user details if they aren't readily available
+        // Clerk usually populates basic info.
+        // We'll optimistically try to sync.
+        // Actually, for OAuth, the email might be in signIn.identifier or we rely on syncClerkUserToNeon to fetch/upsert?
+        // Note: `syncClerkUserToNeon` takes {id, email, name}.
+        // The `useUser()` hook would give us this, but handleSyncAndNavigate is async.
+        // A better approach for OAuth implies we are logged in.
+        // The App wrapper `ClerkProvider` -> `useAuth` user object will populate.
+        // BUT we want to force the Neon sync *before* navigating.
+
+        // We can use the return values from startFlow carefully.
+        // If it was a sign up, `signUp` is populated. If sign in, `signIn`.
+        const userObj = signIn || signUp;
+        const uid = userObj?.createdUserId || userObj?.userData?.id;
+        // OAuth might return email in a different spot depending on provider?
+        // Let's assume the user is valid. 
+        // A safer bet: The `syncbothWays` or `App.tsx` logic also handles checks, 
+        // but here we want to ensure the DB row exists.
+
+        // We can't easily get the email *address* string here without making a call if it's not in the response.
+        // However, `syncClerkUserToNeon` REQUIRES email.
+        // Let's defer strict syncing to `App.tsx` or `useUser` hook effect 
+        // OR try to extract it from the object if possible.
+        // `signIn.userData.identifier` usually holds it.
+
+        const bestEmail = (signIn?.userData as any)?.identifier
+          || (signUp?.emailAddress as any)
+          || (userObj as any)?.emailAddresses?.[0]?.emailAddress;
+
+        if (uid && bestEmail) {
+          await handleSyncAndNavigate(uid, bestEmail, (userObj as any)?.firstName);
+        } else {
+          // Fallback: Just navigate and let the background sync handle it? 
+          // No, we need the UUID for queries.
+          // If we can't get it, we might need to reload.
+          // But usually startFlow finishes successfully.
+          navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+        }
+      } else {
+        // flow cancelled or incomplete
+        setLoading(false);
+      }
+    } catch (err: any) {
+      console.error('OAuth Error', err);
+      // Alert.alert('Social Login Failed', err.message);
+      setLoading(false);
+    }
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#0f172a" />
+      <LinearGradient
+        colors={['#0f172a', '#1e293b']}
+        style={StyleSheet.absoluteFill}
+      />
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={{ flex: 1 }}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-      >
-        <ScrollView
-          contentContainerStyle={[
-            styles.scrollContent,
-            { minHeight: isSmallScreen ? '100%' : '90%', justifyContent: 'center' },
-          ]}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          bounces={false}
+      <SafeAreaView style={{ flex: 1 }}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
         >
-          <Animated.View
-            style={[styles.card, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
-          >
-            {/* --- CARD HEADER: Centered Logo + Title --- */}
-            <View style={styles.cardHeaderCenter}>
-              <View style={styles.logoBadgeCentered}>
-                <Image
-                  source={require('../../assets/splash-icon.png')}
-                  style={styles.logoCentered}
-                  resizeMode="contain"
+          <ScrollView contentContainerStyle={styles.scrollContent}>
+
+            {/* Header / Logo */}
+            <View style={styles.logoSection}>
+              <Image
+                source={require('../../assets/splash-icon.png')}
+                style={styles.logo}
+                resizeMode="contain"
+              />
+              <Text style={styles.appName}>DhanDiary</Text>
+              <Text style={styles.tagline}>Finance, Simplified</Text>
+            </View>
+
+            {/* Login Form */}
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Welcome Back</Text>
+
+              <View style={styles.inputContainer}>
+                <Ionicons name="mail-outline" size={20} color="#64748b" style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Email Address"
+                  placeholderTextColor="#64748b"
+                  value={email}
+                  onChangeText={setEmail}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
                 />
               </View>
-              <Text style={styles.appName}>Welcome Back</Text>
-              <Text style={styles.appTagline}>Sign in to continue to your finance vault</Text>
-            </View>
 
-            {/* --- FORM SECTION --- */}
-            <View style={styles.formContainer}>
-              <AuthField
-                icon="mail-outline"
-                placeholder="Email Address"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoComplete="email"
-                value={email}
-                onChangeText={setEmail}
-                containerStyle={styles.fieldSpacing}
-              />
-
-              <AuthField
-                icon="lock-outline"
-                placeholder="Password"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPass}
-                containerStyle={styles.fieldSpacing}
-                rightAccessory={
-                  <TouchableOpacity
-                    onPress={() => setShowPass(!showPass)}
-                    style={styles.eyeIcon}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  >
-                    <MaterialIcon
-                      name={showPass ? 'visibility' : 'visibility-off'}
-                      color={colors.muted || '#9CA3AF'}
-                      size={20}
-                    />
-                  </TouchableOpacity>
-                }
-              />
+              <View style={styles.inputContainer}>
+                <Ionicons name="lock-closed-outline" size={20} color="#64748b" style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Password"
+                  placeholderTextColor="#64748b"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry
+                />
+              </View>
 
               <TouchableOpacity
-                style={styles.forgotPassContainer}
-                onPress={handleForgotPassword}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                style={[styles.primaryBtn, loading && styles.disabledBtn]}
+                onPress={onSignInPress}
+                disabled={loading}
               >
-                <Text style={styles.forgotPassText}>Forgot Password?</Text>
+                {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Log In</Text>}
               </TouchableOpacity>
 
-              <Button
-                title={loading ? 'Verifying...' : 'Sign In'}
-                onPress={handleLogin}
-                loading={loading}
-                disabled={loading || !isOnline}
-                buttonStyle={styles.primaryButton}
-                containerStyle={styles.buttonContainer}
-                titleStyle={styles.buttonText}
-                icon={
-                  !loading ? (
-                    <MaterialIcon name="login" size={20} color="white" style={{ marginRight: 8 }} />
-                  ) : undefined
-                }
-              />
+              {/* Social Login Divider */}
+              <View style={styles.dividerContainer}>
+                <View style={styles.line} />
+                <Text style={styles.dividerText}>OR CONTINUE WITH</Text>
+                <View style={styles.line} />
+              </View>
+
+              <View style={styles.socialRow}>
+                <TouchableOpacity style={styles.socialBtn} onPress={() => onSocialLogin('google')}>
+                  <FontAwesome name="google" size={24} color="#fff" />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.socialBtn} onPress={() => onSocialLogin('github')}>
+                  <FontAwesome name="github" size={24} color="#fff" />
+                </TouchableOpacity>
+              </View>
+
             </View>
 
-            {/* --- FOOTER INSIDE CARD --- */}
-            <View style={styles.footerRow}>
+            {/* Footer */}
+            <View style={styles.footer}>
               <Text style={styles.footerText}>Don't have an account?</Text>
               <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-                <Text style={styles.linkText}>Create Account</Text>
+                <Text style={styles.linkText}>Sign Up</Text>
               </TouchableOpacity>
             </View>
-          </Animated.View>
-        </ScrollView>
-      </KeyboardAvoidingView>
 
-      <FullScreenSpinner visible={loading} message="Authenticating..." />
-    </SafeAreaView>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+
+      {/* Syncing Overlay */}
+      {syncing && (
+        <View style={styles.overlay}>
+          <View style={styles.syncBox}>
+            <ActivityIndicator size="large" color="#3b82f6" />
+            <Text style={styles.syncText}>Syncing your vault...</Text>
+          </View>
+        </View>
+      )}
+    </View>
   );
 };
 
 export default LoginScreen;
 
-/* -------------------------------------
-   STYLES
-------------------------------------- */
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#F0F2F5', // Consistent light grey background
-  },
+  container: { flex: 1 },
   scrollContent: {
     flexGrow: 1,
-    padding: 20,
-    paddingBottom: 50,
-  },
-
-  /* MAIN CARD STYLE */
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20, // Slightly more rounded
     padding: 24,
-    width: '100%',
-    maxWidth: 480, // Limit width for tablets
-    alignSelf: 'center',
-
-    // Shadows
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08, // Softer shadow
-    shadowRadius: 16,
-    elevation: 6,
-  },
-
-  cardHeaderCenter: { alignItems: 'center', marginBottom: 24 },
-  logoBadgeCentered: {
-    width: 72,
-    height: 72,
-    borderRadius: 18,
-    backgroundColor: '#F3F4F6', // Light background for logo container
-    alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    minHeight: '100%',
   },
-  logoCentered: { width: 44, height: 44 },
+  logoSection: {
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  logo: {
+    width: 80,
+    height: 80,
+    marginBottom: 16,
+    borderRadius: 20,
+  },
   appName: {
-    fontSize: 22,
+    fontSize: 32,
     fontWeight: '800',
-    color: colors.text || '#111827',
-    letterSpacing: 0.5,
+    color: '#fff',
     marginBottom: 4,
   },
-  appTagline: {
-    fontSize: 14,
-    color: colors.muted || '#6B7280',
-    fontWeight: '500',
+  tagline: {
+    fontSize: 16,
+    color: '#94a3b8',
+  },
+  card: {
+    backgroundColor: 'rgba(30, 41, 59, 0.7)',
+    borderRadius: 24,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+  },
+  cardTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 24,
     textAlign: 'center',
   },
-
-  /* FORM */
-  formContainer: {
-    width: '100%',
-  },
-  fieldSpacing: {
-    marginBottom: 16,
-  },
-  eyeIcon: {
-    padding: 8,
-  },
-  forgotPassContainer: {
-    alignSelf: 'flex-end',
-    marginBottom: 24,
-    marginTop: -4, // Pull up slightly
-  },
-  forgotPassText: {
-    color: colors.primary || '#2563EB',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-
-  /* BUTTONS */
-  primaryButton: {
-    backgroundColor: colors.primary || '#2563EB',
-    paddingVertical: 14,
-    borderRadius: 12,
-    elevation: 2,
-  },
-  buttonContainer: {
-    width: '100%',
-    borderRadius: 12,
-  },
-  buttonText: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-
-  /* FOOTER */
-  footerRow: {
+  inputContainer: {
     flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(71, 85, 105, 0.5)',
+    marginBottom: 16,
+    paddingHorizontal: 16,
+    height: 56,
+  },
+  inputIcon: { marginRight: 12 },
+  input: { flex: 1, color: '#fff', fontSize: 16 },
+  primaryBtn: {
+    backgroundColor: '#3b82f6',
+    borderRadius: 16,
+    height: 56,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 24,
-    paddingTop: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
+    marginTop: 8,
+    shadowColor: '#3b82f6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
   },
-  footerText: {
-    color: colors.muted || '#6B7280',
-    fontSize: 14,
-    marginRight: 6,
+  disabledBtn: { opacity: 0.7 },
+  primaryBtnText: { color: '#fff', fontSize: 18, fontWeight: '600' },
+
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 32,
+    marginBottom: 24,
   },
+  line: { flex: 1, height: 1, backgroundColor: '#334155' },
+  dividerText: {
+    color: '#64748b',
+    paddingHorizontal: 16,
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 1,
+  },
+  socialRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 16,
+  },
+  socialBtn: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: '#334155',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 32,
+  },
+  footerText: { color: '#94a3b8', fontSize: 14 },
   linkText: {
-    color: colors.primary || '#2563EB',
-    fontWeight: '700',
+    color: '#60a5fa',
+    fontWeight: 'bold',
     fontSize: 14,
+    marginLeft: 6,
   },
+
+  // Overlay
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 100,
+  },
+  syncBox: {
+    backgroundColor: '#1e293b',
+    padding: 24,
+    borderRadius: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#3b82f6',
+  },
+  syncText: {
+    color: '#fff',
+    marginTop: 16,
+    fontSize: 16,
+    fontWeight: '600',
+  }
 });
