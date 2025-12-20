@@ -67,6 +67,35 @@ export const registerWithEmail = async (name: string, email: string, password: s
   } catch (e) {
     // ignore profile update errors
   }
+  // Ensure auth state and ID token have propagated before attempting Firestore writes.
+  // Firestore rules require request.auth.uid == uid; if the ID token isn't available
+  // yet the write will be rejected with permission-denied. We try to proactively
+  // refresh the token (getIdToken(true)) and wait briefly for the auth instance
+  // to report the current user.
+  try {
+    const waitForAuth = async (timeoutMs = 5000) => {
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        const current = authInstance.currentUser;
+        if (current && current.uid === (cred.user && cred.user.uid)) return current;
+        // small delay
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise((r) => setTimeout(r, 200));
+      }
+      return authInstance.currentUser;
+    };
+    const current = await waitForAuth(6000);
+    try {
+      if (current && typeof current.getIdToken === 'function') {
+        await current.getIdToken(true);
+      }
+    } catch (tokenErr) {
+      console.debug('auth.registerWithEmail: getIdToken refresh failed', tokenErr);
+    }
+  } catch (e) {
+    console.debug('auth.registerWithEmail: auth propagation wait failed', e);
+  }
+
   const userService = tryGetUserService();
   if (userService && typeof userService.syncUserToFirestore === 'function') {
     await userService.syncUserToFirestore(cred.user);

@@ -4,9 +4,13 @@ import { LocalEntry } from '../types/entries';
 
 export async function syncFirestoreToLocalOnce(userId: string) {
   if (!userId) return;
-  try {
-    console.info('[sync] starting Firestore -> local sync for', userId);
-    const local = await getEntries(userId);
+  const maxAttempts = 3;
+  let attempt = 0;
+  while (attempt < maxAttempts) {
+    attempt++;
+    try {
+      console.info('[sync] starting Firestore -> local sync for', userId, { attempt });
+      const local = await getEntries(userId);
     const existing = new Set(local.map((l) => l.local_id));
 
     // Prefer generator if available to avoid large memory spikes
@@ -48,8 +52,20 @@ export async function syncFirestoreToLocalOnce(userId: string) {
       added += 1;
     }
     console.info('[sync] fetched', remote.length, 'remote, added', added);
-  } catch (e) {
-    console.warn('syncFirestoreToLocalOnce failed', e);
+      return;
+    } catch (e: any) {
+      // If unauthenticated due to auth propagation, wait and retry
+      const code = e?.code || '';
+      const msg = String(e?.message || e || '');
+      console.warn('[sync] attempt failed', { attempt, code, message: msg });
+      if (attempt >= maxAttempts) {
+        console.warn('syncFirestoreToLocalOnce failed', e);
+        return;
+      }
+      // Backoff before retrying
+      await new Promise((r) => setTimeout(r, 500 * attempt));
+      continue;
+    }
   }
 }
 

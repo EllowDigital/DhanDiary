@@ -62,6 +62,46 @@ function entriesCollection(userId: string) {
   const fs = tryGetFirestore();
   if (!fs) throw new Error('Firestore not available');
   const firestore = fs.default ? fs.default() : fs();
+  // Ensure auth state is available and token propagated before performing
+  // Firestore operations. Rules require request.auth.uid == uid, so if the
+  // client hasn't yet attached an ID token the operation will be rejected.
+  try {
+    const authMod = tryGetAuth();
+    if (authMod) {
+      const authInstance = authMod.default ? authMod.default() : authMod();
+      const waitForAuth = async (timeoutMs = 6000) => {
+        const start = Date.now();
+        while (Date.now() - start < timeoutMs) {
+          const current = authInstance.currentUser;
+          if (current && current.uid === userId) return current;
+          // small delay
+          // eslint-disable-next-line no-await-in-loop
+          await new Promise((r) => setTimeout(r, 200));
+        }
+        return authInstance.currentUser;
+      };
+      const current = authInstance.currentUser && authInstance.currentUser.uid === userId ? authInstance.currentUser : await waitForAuth();
+      if (!current || current.uid !== userId) {
+        const err: any = new Error('localDb:unauthenticated');
+        err.code = 'localdb/unauthenticated';
+        err.message = 'No authenticated Firebase user matching uid; aborting Firestore access';
+        throw err;
+      }
+      try {
+        if (typeof current.getIdToken === 'function') {
+          // Force refresh token to ensure Firestore sees authenticated requests
+          await current.getIdToken(true).catch(() => {});
+        }
+      } catch (e) {
+        // ignore token refresh errors; we'll likely surface a permission error later
+      }
+    }
+  } catch (e) {
+    // If auth checks fail, let Firestore operation attempt and surface the proper error
+    // but log for diagnostics.
+    console.debug('entriesCollection: auth propagation check failed', e?.message || e);
+  }
+
   return firestore.collection('users').doc(userId).collection('entries');
 }
 
@@ -91,24 +131,30 @@ type Subscriber = (entries: LocalEntry[]) => void;
 const listeners = new Map<string, { ref: any; unsubscribe: any }>();
 
 export function subscribeEntries(userId: string, cb: Subscriber) {
-  const col = entriesCollection(userId);
-  // Smaller realtime window for performance
-  const ref = col.where('is_deleted', '==', false).orderBy('date', 'desc').limit(500);
-  const unsub = ref.onSnapshot(
-    (snap: any) => {
-      try {
-        const rows = snap.docs.map((d: any) => mapDocToEntry(d, userId));
-        cb(rows);
-      } catch (e) {
-        console.error('subscribeEntries: callback error', e?.message || e);
+  try {
+    const col = entriesCollection(userId);
+    // Smaller realtime window for performance
+    const ref = col.where('is_deleted', '==', false).orderBy('date', 'desc').limit(500);
+    const unsub = ref.onSnapshot(
+      (snap: any) => {
+        try {
+          const rows = snap.docs.map((d: any) => mapDocToEntry(d, userId));
+          cb(rows);
+        } catch (e) {
+          console.error('subscribeEntries: callback error', e?.message || e);
+        }
+      },
+      (err: any) => {
+        console.error('subscribeEntries: onSnapshot error', err?.message || err);
+        // Do not throw — caller's listener should decide how to recover.
       }
-    },
-    (err: any) => {
-      console.error('subscribeEntries: onSnapshot error', err?.message || err);
-      // Do not throw — caller's listener should decide how to recover.
-    }
-  );
-  listeners.set(userId, { ref, unsubscribe: unsub });
+    );
+    listeners.set(userId, { ref, unsubscribe: unsub });
+  } catch (e: any) {
+    console.error('subscribeEntries: failed to initialize listener', e?.message || e);
+    // Return a no-op unsubscribe so callers can call it safely
+    return () => {};
+  }
   // return unsubscribe
   return () => {
     try {
