@@ -247,8 +247,8 @@ const StatsScreen = () => {
 
       if (result && !controller.signal.aborted) {
         // Safe Number Parsing
-        const totalIn = Number(result.totalIn) / 100;
-        const totalOut = Number(result.totalOut) / 100;
+        const totalIn = Number(result.totalIn);
+        const totalOut = Number(result.totalOut);
         const savingsRate = totalIn > 0 ? ((totalIn - totalOut) / totalIn) * 100 : 0;
         const daysDiff = Math.max(1, rangeEnd.diff(rangeStart, 'day') + 1);
 

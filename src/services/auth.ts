@@ -47,7 +47,7 @@ export const warmNeonConnection = async (opts: { force?: boolean; timeoutMs?: nu
   if (!opts.force && now - lastNeonWarm < NEON_WARM_CACHE_MS && !neonWarmPromise) return true;
 
   if (!neonWarmPromise) {
-    const timeoutMs = opts.timeoutMs ?? 8000;
+    const timeoutMs = opts.timeoutMs ?? 15000;
     neonWarmPromise = withTimeout(query('SELECT 1'), timeoutMs)
       .then(() => {
         lastNeonWarm = Date.now();
