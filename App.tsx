@@ -50,6 +50,11 @@ import {
   startBackgroundFetch,
   stopBackgroundFetch,
 } from './src/services/syncManager';
+import { ClerkProvider } from '@clerk/clerk-expo';
+import tokenCache from './src/utils/tokenCache';
+
+const CLERK_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY || '';
+
 // Telemetry integrations removed
 const AppContent = () => {
   const { user, loading } = useAuth();
@@ -155,10 +160,10 @@ export default function App() {
     return () => {
       try {
         stopForegroundSyncScheduler();
-      } catch (e) {}
+      } catch (e) { }
       try {
         stopBackgroundFetch();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, [dbReady]);
 

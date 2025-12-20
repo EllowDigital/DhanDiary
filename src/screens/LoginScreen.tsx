@@ -1,18 +1,17 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
+  Text,
+  TextInput,
+  TouchableOpacity,
   StyleSheet,
+  ActivityIndicator,
   Alert,
-  Image,
   KeyboardAvoidingView,
   Platform,
-  TouchableOpacity,
-  Animated,
-  Easing,
   ScrollView,
-  StatusBar,
-  useWindowDimensions,
-  Keyboard,
+  SafeAreaView,
+  Linking,
 } from 'react-native';
 import { Button, Text } from '@rneui/themed';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -54,7 +53,7 @@ const LoginScreen = () => {
 
   useEffect(() => {
     // Pre-warm connection for faster login
-    warmNeonConnection().catch(() => {});
+    warmNeonConnection().catch(() => { });
 
     Animated.parallel([
       Animated.timing(fadeAnim, {

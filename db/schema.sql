@@ -18,8 +18,12 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     last_login TIMESTAMPTZ,
-    status TEXT DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'deleted'))
+    status TEXT DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'deleted')),
+    clerk_id TEXT UNIQUE -- Link to Clerk Authentication
 );
+
+-- Index for fast Clerk lookups
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_clerk_id ON users(clerk_id);
 
 -- 2. ENTRIES TABLE (cash_entries)
 -- Stores the actual transaction data
