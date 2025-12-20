@@ -1,7 +1,14 @@
+import 'fast-text-encoding';
 import 'react-native-get-random-values';
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { LogBox } from 'react-native';
+
+LogBox.ignoreLogs([
+  'setLayoutAnimationEnabledExperimental',
+  'Process ID',
+]);
 
 import SplashScreen from './src/screens/SplashScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
