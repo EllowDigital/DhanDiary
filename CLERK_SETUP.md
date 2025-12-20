@@ -23,6 +23,11 @@ This guide explains how to configure Clerk for Email/Password, Google, and GitHu
     ```
 4.  **Important:** Also add this variable to your `app.json` or `app.config.js` in the `extra` section if you use EAS Build, but `.env` handles local dev.
 
+5.  **Dependencies:** Ensure you have installed the required packages:
+    ```bash
+    npm install @clerk/clerk-expo expo-secure-store expo-linear-gradient expo-web-browser
+    ```
+
 ## 3. Configure Social Logins (Google & GitHub)
 
 ### Google

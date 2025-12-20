@@ -12,80 +12,16 @@ import {
 import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-navigation/drawer';
 import { Text } from '@rneui/themed';
 import { CommonActions } from '@react-navigation/native';
-import MaterialIcon from '@expo/vector-icons/MaterialIcons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuth } from '@clerk/clerk-expo';
 
-// Logic & Utils
-import { logout } from '../services/auth';
-import { colors, spacing } from '../utils/design';
-import appConfig from '../../app.json';
-
-let pkg: any = {};
-try {
-  pkg = require('../../package.json');
-} catch (e) {
-  pkg = {};
-}
-
-// Assets
-const BRAND_ICON = require('../../assets/splash-icon.png');
+// ...
 
 const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
+  const { signOut } = useAuth();
 
-  // --- ANIMATIONS ---
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(20)).current;
-  // Create animations for up to 10 menu items
-  const listAnims = useRef([...Array(10)].map(() => new Animated.Value(0))).current;
-
-  useEffect(() => {
-    // 1. Header Entrance
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 600,
-        useNativeDriver: true,
-        easing: Easing.out(Easing.cubic),
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 600,
-        useNativeDriver: true,
-        easing: Easing.out(Easing.cubic),
-      }),
-    ]).start();
-
-    // 2. Staggered Menu List
-    const staggerAnimations = listAnims.map((anim) =>
-      Animated.timing(anim, {
-        toValue: 1,
-        duration: 400,
-        useNativeDriver: true,
-        easing: Easing.out(Easing.back(1.5)),
-      })
-    );
-    Animated.stagger(40, staggerAnimations).start();
-  }, []);
-
-  const versionLabel = useMemo(() => {
-    const build = appConfig.expo.android?.versionCode ?? appConfig.expo.ios?.buildNumber;
-    return build ? `Version ${pkg.version} (${build})` : `Version ${pkg.version}`;
-  }, []);
-
-  const handleNavigate = (routeName: string) => {
-    if (routeName === 'HomeTabs') {
-      props.navigation.dispatch(
-        CommonActions.navigate({
-          name: 'HomeTabs',
-          params: { screen: 'Dashboard' },
-        })
-      );
-    } else {
-      props.navigation.navigate(routeName);
-    }
-  };
+  // ...
 
   const handleLogout = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
@@ -95,7 +31,8 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
         style: 'destructive',
         onPress: async () => {
           try {
-            await logout();
+            await signOut(); // Sign out from Clerk
+            await logout();  // Clear local DB
             props.navigation.closeDrawer();
             props.navigation.reset({
               index: 0,
