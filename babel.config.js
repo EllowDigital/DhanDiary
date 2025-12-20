@@ -4,6 +4,7 @@ module.exports = function (api) {
     presets: ['babel-preset-expo'],
     plugins: [
       'add-react-displayname',
+      'expo-router/babel',
       'react-native-reanimated/plugin', // <--- Must be last. No duplicates!
     ],
   };
