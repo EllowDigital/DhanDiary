@@ -33,8 +33,16 @@ module.exports = ({ config } = {}) => {
       EXPO_PUBLIC_API_URL:
         process.env.EXPO_PUBLIC_API_URL ?? baseConfig.extra?.EXPO_PUBLIC_API_URL ?? null,
 
-      // NOTE: Intentionally do NOT expose NEON_URL here. Neon DB connection
-      // strings are secrets and must only be used on backend servers or build scripts.
+      // NOTE: Intentionally do NOT expose NEON_URL by default. Neon DB
+      // connection strings are secrets and must only be used on backend
+      // servers or build scripts. For local/dev testing you may opt-in to
+      // expose NEON_URL to the app by setting `EXPO_ENABLE_NEON_CLIENT=1`
+      // in your environment (not recommended for production builds).
+      EXPO_ENABLE_NEON_CLIENT: process.env.EXPO_ENABLE_NEON_CLIENT ?? baseConfig.extra?.EXPO_ENABLE_NEON_CLIENT ?? '0',
+      NEON_URL:
+        (process.env.EXPO_ENABLE_NEON_CLIENT === '1'
+          ? process.env.NEON_URL
+          : null) || baseConfig.extra?.NEON_URL || null,
     },
   };
 };

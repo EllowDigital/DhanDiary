@@ -2,6 +2,7 @@
   "expo": {
     "owner": "ellowdigital",
     "name": "DhanDiary",
+    "scheme": "dhandiary",
     "slug": "dhandiary",
     "version": "1.2.2",
     "orientation": "portrait",
