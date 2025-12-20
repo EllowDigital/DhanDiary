@@ -26,7 +26,7 @@ import {
   deleteLocalEntry,
 } from '../db/entries';
 import { query } from '../api/neonClient';
-import vexoService from './vexo';
+
 const Q = (sql: string, params: any[] = []) => query(sql, params, { retries: 2, timeoutMs: 15000 });
 type SyncConflictEvent = {
   localId?: string;
@@ -57,7 +57,7 @@ const safeQ = async (sql: string, params: any[] = []) => {
   } catch (err) {
     try {
       console.error('Neon query failed', { sql, params, err });
-    } catch (e) {}
+    } catch (e) { }
     throw err;
   }
 };
@@ -206,7 +206,7 @@ export const syncPending = async () => {
             } catch (e) {
               try {
                 await queueLocalRemoteMapping(localId, String(r.id));
-              } catch (q) {}
+              } catch (q) { }
             }
           }
         }
@@ -261,7 +261,7 @@ export const syncPending = async () => {
             } catch (e) {
               try {
                 await queueLocalRemoteMapping(it.local_id, String(remoteId));
-              } catch (q) {}
+              } catch (q) { }
             }
           }
         } catch (e) {
@@ -316,7 +316,7 @@ export const syncPending = async () => {
                   r.updated_at
                 );
                 updated += 1;
-              } catch (e) {}
+              } catch (e) { }
             }
           }
         }
@@ -344,7 +344,7 @@ export const syncPending = async () => {
             try {
               await markEntrySynced(u.local_id, String(res[0].id), sv, res[0].updated_at);
               updated += 1;
-            } catch (e) {}
+            } catch (e) { }
           }
         } catch (e) {
           console.error('Failed to update remote entry', u.local_id, e);
@@ -401,7 +401,7 @@ const flushPendingProfileUpdates = async () => {
         const user = res[0];
         try {
           await saveSession(user.id, user.name || '', user.email);
-        } catch (e) {}
+        } catch (e) { }
         await markPendingProfileProcessed(p.id);
         processed += 1;
       }
@@ -457,11 +457,11 @@ export const pullRemote = async () => {
           let localForDeleted: any = null;
           try {
             localForDeleted = await getLocalByRemoteId(String(r.id));
-          } catch (e) {}
+          } catch (e) { }
           if (!localForDeleted && r.client_id) {
             try {
               localForDeleted = await getLocalByClientId(String(r.client_id));
-            } catch (e) {}
+            } catch (e) { }
           }
 
           // If local exists and still needs sync, treat local as intent-to-keep:
@@ -578,7 +578,7 @@ export const pullRemote = async () => {
                       : undefined,
                     pushedRow.updated_at
                   );
-                } catch (e) {}
+                } catch (e) { }
               }
               merged += 1;
               return true;
@@ -601,7 +601,7 @@ export const pullRemote = async () => {
                   typeof r.server_version === 'number' ? Number(r.server_version) : undefined,
                   r.updated_at
                 );
-              } catch (e) {}
+              } catch (e) { }
               merged += 1;
               continue;
             }
@@ -635,7 +635,7 @@ export const pullRemote = async () => {
                 try {
                   await markEntrySynced(local.local_id, String(newId), sv, upd[0].updated_at);
                   merged += 1;
-                } catch (e) {}
+                } catch (e) { }
               }
             } catch (err) {
               console.error(
@@ -778,11 +778,6 @@ export const syncBothWays = async () => {
   _syncInProgress = true;
   let result = { pushed: 0, updated: 0, deleted: 0, pulled: 0, merged: 0, total: 0 };
   try {
-    try {
-      if (vexoService.customEvent) {
-        vexoService.customEvent('sync_start', { when: new Date().toISOString() });
-      }
-    } catch (e) {}
     // ensure remote schema can accept our metadata
     await ensureRemoteSchema();
     // Flush any pending profile updates first
@@ -822,18 +817,7 @@ export const syncBothWays = async () => {
     }
 
     result = { pushed, updated, deleted, pulled, merged, total };
-    try {
-      if (vexoService.customEvent) {
-        vexoService.customEvent('sync_complete', {
-          pushed,
-          updated,
-          deleted,
-          pulled,
-          merged,
-          total,
-        });
-      }
-    } catch (e) {}
+
     return result;
   } finally {
     _syncInProgress = false;
@@ -845,12 +829,7 @@ export const syncBothWays = async () => {
         syncBothWays().catch((err) => console.error('Scheduled follow-up sync failed', err));
       }, 200);
     }
-    try {
-      // If the sync finished but recorded no activity, emit a small heartbeat
-      if (vexoService.customEvent) {
-        vexoService.customEvent('sync_ended', { when: new Date().toISOString() });
-      }
-    } catch (e) {}
+
   }
 };
 

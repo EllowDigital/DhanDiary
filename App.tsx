@@ -28,51 +28,7 @@ const AuthNavigator = () => (
 import { ToastProvider } from './src/context/ToastContext';
 import DrawerNavigator from './src/navigation/DrawerNavigator';
 
-// Development-only diagnostics (captures missing-key warnings with stack)
-import vexoService from './src/services/vexo';
-// Initialize Vexo at module load if a key is available (safe - wrapper handles missing native module)
-try {
-  // Prefer environment variable, then Expo config extra. Only require the
-  // native `vexo-analytics` package when running a non-DEV build so that
-  // requiring the package doesn't log native-module warnings in Expo Go.
-  const VEXO_KEY =
-    process.env.VEXO_API_KEY ||
-    (() => {
-      try {
-        const Constants = require('expo-constants');
-        return (
-          (Constants &&
-            Constants.expoConfig &&
-            Constants.expoConfig.extra &&
-            Constants.expoConfig.extra.VEXO_API_KEY) ||
-          null
-        );
-      } catch (e) {
-        return null;
-      }
-    })();
 
-  if (VEXO_KEY && !__DEV__) {
-    try {
-      // require only in non-DEV to avoid noisy runtime warnings when native
-      // modules are not linked (Expo Go).
-
-      const _vexo = require('vexo-analytics');
-      const vexo = _vexo && (_vexo.vexo || _vexo.default || _vexo);
-      if (vexo) {
-        try {
-          vexo(VEXO_KEY);
-        } catch (e) {
-          console.warn('Vexo init failed', e);
-        }
-      }
-    } catch (e) {
-      // package not installed or native module missing — silently ignore in DEV
-    }
-  }
-} catch (e) {
-  // ignore
-}
 if (__DEV__) {
   // require lazily so production bundles are unaffected
 
@@ -133,54 +89,9 @@ export default function App() {
     })();
   }, []);
 
-  // Identify device with Vexo when user logs in/out
-  React.useEffect(() => {
-    (async () => {
-      try {
-        await vexoService.identifyDevice(user?.id ?? null);
-      } catch (e) {
-        // ignore
-      }
-    })();
-  }, [user]);
 
-  // Initialize Vexo analytics only in non-DEV builds to avoid requiring native
-  // modules in Expo Go which would log warnings.
-  if (!__DEV__) {
-    try {
-      // Use dynamic require to avoid bundling/throwing during tests.
-      const _vexo = require('vexo-analytics');
-      const vexo = _vexo && (_vexo.vexo || _vexo.default || _vexo);
-      // Prefer environment variable, then Expo config extra.
-      const VEXO_KEY =
-        process.env.VEXO_API_KEY ||
-        (() => {
-          try {
-            const Constants = require('expo-constants');
-            return (
-              (Constants &&
-                Constants.expoConfig &&
-                Constants.expoConfig.extra &&
-                Constants.expoConfig.extra.VEXO_API_KEY) ||
-              null
-            );
-          } catch (e) {
-            return null;
-          }
-        })();
 
-      if (vexo && VEXO_KEY) {
-        try {
-          // vexo is a function exported directly by the package
-          vexo(VEXO_KEY);
-        } catch (e) {
-          console.warn('Vexo init failed', e);
-        }
-      }
-    } catch (e) {
-      // If package isn't installed or native code missing, skip initialization silently.
-    }
-  }
+
 
   React.useEffect(() => {
     // If an update was pending (we marked it before applying), clear the flag now
@@ -245,10 +156,10 @@ export default function App() {
     return () => {
       try {
         stopForegroundSyncScheduler();
-      } catch (e) {}
+      } catch (e) { }
       try {
         stopBackgroundFetch();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, [dbReady]);
 
