@@ -99,9 +99,8 @@ export const registerWithEmail = async (name: string, email: string, password: s
   const userService = tryGetUserService();
   if (userService && typeof userService.syncUserToFirestore === 'function') {
     await userService.syncUserToFirestore(cred.user);
-  } else if (userService && typeof userService.createOrUpdateUserFromAuth === 'function') {
-    // fallback
-    await userService.createOrUpdateUserFromAuth(cred.user);
+  } else {
+    console.debug('registerWithEmail: syncUserToFirestore not available');
   }
   return cred.user;
 };
@@ -121,8 +120,8 @@ export const loginWithEmail = async (email: string, password: string) => {
   const userService = tryGetUserService();
   if (userService && typeof userService.syncUserToFirestore === 'function') {
     await userService.syncUserToFirestore(cred.user || authInstance.currentUser);
-  } else if (userService && typeof userService.createOrUpdateUserFromAuth === 'function') {
-    await userService.createOrUpdateUserFromAuth(cred.user || authInstance.currentUser);
+  } else {
+    console.debug('loginWithEmail: syncUserToFirestore not available');
   }
   return cred.user || authInstance.currentUser;
 };
@@ -148,8 +147,10 @@ export const signInWithCredential = async (credential: any) => {
   if (typeof authInstance.signInWithCredential === 'function') {
     const res = await authInstance.signInWithCredential(credential);
     const userService = tryGetUserService();
-    if (userService && typeof userService.createOrUpdateUserFromAuth === 'function') {
-      await userService.createOrUpdateUserFromAuth(res.user || authInstance.currentUser);
+    if (userService && typeof userService.syncUserToFirestore === 'function') {
+      await userService.syncUserToFirestore(res.user || authInstance.currentUser);
+    } else {
+      console.debug('signInWithCredential: syncUserToFirestore not available');
     }
     return res;
   }
@@ -157,8 +158,10 @@ export const signInWithCredential = async (credential: any) => {
     const { getAuth, signInWithCredential } = firebaseAuth;
     const res = await signInWithCredential(getAuth(), credential);
     const userService = tryGetUserService();
-    if (userService && typeof userService.createOrUpdateUserFromAuth === 'function') {
-      await userService.createOrUpdateUserFromAuth(res.user || (getAuth && getAuth().currentUser));
+    if (userService && typeof userService.syncUserToFirestore === 'function') {
+      await userService.syncUserToFirestore(res.user || (getAuth && getAuth().currentUser));
+    } else {
+      console.debug('signInWithCredential(modular): syncUserToFirestore not available');
     }
     return res;
   }
@@ -193,9 +196,11 @@ export const updateProfileDetails = async (payload: { name?: string; email?: str
   if (updates.displayName && user.updateProfile) await user.updateProfile({ displayName: updates.displayName });
   if (updates.email && user.updateEmail) await user.updateEmail(updates.email);
   const userService = tryGetUserService();
-  if (userService && typeof userService.createOrUpdateUserFromAuth === 'function') {
-    await userService.createOrUpdateUserFromAuth(user);
-  }
+    if (userService && typeof userService.syncUserToFirestore === 'function') {
+      await userService.syncUserToFirestore(user);
+    } else {
+      console.debug('startGoogleSignIn: syncUserToFirestore not available');
+    }
   return { name: updates.displayName || user.displayName, email: updates.email || user.email };
 };
 
@@ -470,8 +475,8 @@ export const startGoogleSignIn = async (intent: 'signIn' | 'link' = 'signIn') =>
   const userService2: any = tryGetUserService();
   if (userService2 && typeof userService2.syncUserToFirestore === 'function') {
     await userService2.syncUserToFirestore(user);
-  } else if (userService2 && typeof userService2.createOrUpdateUserFromAuth === 'function') {
-    await userService2.createOrUpdateUserFromAuth(user);
+  } else {
+    console.debug('startGoogleSignIn: syncUserToFirestore not available');
   }
 
   return user;
