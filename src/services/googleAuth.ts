@@ -243,7 +243,7 @@ export const signInWithGoogle = async (opts?: { firebaseSignIn?: boolean }) => {
   } catch (err) {
     console.error('googleAuth: signIn error', {
       message: (err as any)?.message,
-      code: err?.code,
+      code: (err as any)?.code,
       stack: err?.stack,
       raw: err,
     });

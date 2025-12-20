@@ -159,11 +159,11 @@ const AccountManagementScreen = () => {
     if (!username.trim()) return Alert.alert('Validation', 'Name cannot be empty');
     setSavingUsername(true);
     try {
-      await retry(() => updateProfileDetails({ name: username }), 3, 250);
-      showToast('Name updated successfully');
-      toggleCard('');
-    } catch (err) {
-      Alert.alert('Error', err?.message);
+        await retry(() => updateProfileDetails({ name: username }), 3, 250);
+        showToast('Name updated successfully');
+        toggleCard('');
+      } catch (err) {
+        Alert.alert('Error', (err as any)?.message);
     } finally {
       setSavingUsername(false);
     }
