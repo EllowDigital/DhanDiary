@@ -111,10 +111,40 @@ export const loginWithEmail = async (email: string, password: string) => {
   if (!firebaseAuth) throw new Error('Firebase auth not available');
   const authInstance = firebaseAuth.default ? firebaseAuth.default() : firebaseAuth();
   let cred: any;
+  // Log available sign-in methods for this email to help diagnose credential issues
+  try {
+    if (authInstance && typeof authInstance.fetchSignInMethodsForEmail === 'function') {
+      try {
+        const methods = await authInstance.fetchSignInMethodsForEmail(email.trim());
+        console.debug('auth.loginWithEmail: sign-in methods for email', { email, methods });
+      } catch (mErr) {
+        console.debug('auth.loginWithEmail: fetchSignInMethodsForEmail failed', mErr?.message || mErr);
+      }
+    }
+  } catch (e) {}
   try {
     cred = await authInstance.signInWithEmailAndPassword(email.trim(), password);
   } catch (e: any) {
     console.error('auth.loginWithEmail: signIn error', e);
+    // If we receive auth/invalid-credential, attempt to determine whether this
+    // account actually has a password provider; if not, surface a clearer error.
+    const code = e?.code || e?.message || null;
+    if (code === 'auth/invalid-credential' || (typeof code === 'string' && code.includes('invalid-credential'))) {
+      try {
+        if (authInstance && typeof authInstance.fetchSignInMethodsForEmail === 'function') {
+          const methods = await authInstance.fetchSignInMethodsForEmail(email.trim());
+          // If there's no 'password' provider, inform the caller the account uses OAuth
+          if (!Array.isArray(methods) || !methods.includes('password')) {
+            const out: any = new Error('This account uses a social provider (Google/GitHub). Please sign in with that provider or set a password.');
+            out.code = 'auth/no-password-provider';
+            out.methods = methods;
+            throw out;
+          }
+        }
+      } catch (mErr) {
+        console.debug('auth.loginWithEmail: provider check failed', mErr?.message || mErr);
+      }
+    }
     throw e;
   }
   const userService = tryGetUserService();

@@ -97,8 +97,18 @@ function entriesCollection(userId: string) {
 export async function getEntries(userId: string): Promise<LocalEntry[]> {
   try {
     const col = entriesCollection(userId);
-    const snap = await col.where('is_deleted', '==', false).orderBy('date', 'desc').limit(1000).get();
-    return snap.docs.map((d: any) => mapDocToEntry(d, userId));
+    // Avoid composite-index requirement by filtering server-side and
+    // performing ordering client-side. For typical user datasets this
+    // is acceptable; it prevents the app crashing when a composite
+    // index is missing (Spark plan) and keeps security rules intact.
+    const snap = await col.where('is_deleted', '==', false).limit(1000).get();
+    const rows = snap.docs.map((d: any) => mapDocToEntry(d, userId));
+    rows.sort((a: any, b: any) => {
+      const ta = new Date(a.date || a.created_at).getTime() || 0;
+      const tb = new Date(b.date || b.created_at).getTime() || 0;
+      return tb - ta;
+    });
+    return rows;
   } catch (e) {
     // If the read failed, try a paged generator fallback which can succeed
     // in some environments or provide more useful logs for large datasets.
@@ -123,11 +133,19 @@ export function subscribeEntries(userId: string, cb: Subscriber) {
   try {
     const col = entriesCollection(userId);
     // Smaller realtime window for performance
-    const ref = col.where('is_deleted', '==', false).orderBy('date', 'desc').limit(500);
+    // Avoid ordering on server (composite index). We'll sort client-side
+    // after receiving the snapshot so missing composite indexes don't
+    // break listeners.
+    const ref = col.where('is_deleted', '==', false).limit(500);
     const unsub = ref.onSnapshot(
       (snap: any) => {
         try {
           const rows = snap.docs.map((d: any) => mapDocToEntry(d, userId));
+          rows.sort((a: any, b: any) => {
+            const ta = new Date(a.date || a.created_at).getTime() || 0;
+            const tb = new Date(b.date || b.created_at).getTime() || 0;
+            return tb - ta;
+          });
           cb(rows);
         } catch (e) {
           console.error('subscribeEntries: callback error', e?.message || e);
@@ -288,15 +306,18 @@ export default {
 // Generator for pagination
 export async function* fetchEntriesGenerator(userId: string, pageSize = 500) {
   const col = entriesCollection(userId);
-  let last: any = null;
-  while (true) {
-    let q = col.where('is_deleted', '==', false).orderBy('date', 'desc').limit(pageSize);
-    if (last) q = q.startAfter(last);
-    const snap = await q.get();
-    if (!snap || snap.docs.length === 0) break;
-    yield snap.docs.map((d: any) => mapDocToEntry(d, userId));
-    last = snap.docs[snap.docs.length - 1];
-    if (snap.docs.length < pageSize) break;
+  // Avoid server-side ordering to prevent composite-index requirements.
+  // We'll fetch matching docs and yield them in client-sorted pages.
+  const snap = await col.where('is_deleted', '==', false).get();
+  if (!snap || snap.docs.length === 0) return;
+  const all = snap.docs.map((d: any) => mapDocToEntry(d, userId));
+  all.sort((a: any, b: any) => {
+    const ta = new Date(a.date || a.created_at).getTime() || 0;
+    const tb = new Date(b.date || b.created_at).getTime() || 0;
+    return tb - ta;
+  });
+  for (let i = 0; i < all.length; i += pageSize) {
+    yield all.slice(i, i + pageSize);
   }
 }
 

@@ -105,12 +105,34 @@ export async function syncUserToFirestore(user: any) {
     if (authMod) {
       const authInstance = authMod.default ? authMod.default() : authMod();
       const current = authInstance.currentUser || user;
-      if (current && typeof current.getIdToken === 'function') {
-        try {
-          await current.getIdToken(true);
-        } catch (e) {
-          console.debug('syncUserToFirestore: getIdToken failed', e?.message || e);
+      // If the current auth user does not yet match the provided uid there
+      // may be a propagation delay (especially after OAuth linking). Wait
+      // briefly for the auth state to reflect the new uid and refresh the
+      // ID token to ensure Firestore rules see the authenticated caller.
+      const targetUid = user.uid;
+      const start = Date.now();
+      const timeoutMs = 6000;
+      while (Date.now() - start < timeoutMs) {
+        const nowCurrent = authInstance.currentUser;
+        if (nowCurrent && nowCurrent.uid === targetUid) {
+          try {
+            if (typeof nowCurrent.getIdToken === 'function') await nowCurrent.getIdToken(true);
+          } catch (e) {
+            console.debug('syncUserToFirestore: getIdToken failed', e?.message || e);
+          }
+          break;
         }
+        // If no matching current user yet, attempt a non-blocking token refresh
+        // on the provided user object as a best-effort, then wait a bit.
+        try {
+          if (user && typeof user.getIdToken === 'function') {
+            // don't await to avoid long blocking, but allow a small pause below
+            user.getIdToken(true).catch(() => {});
+          }
+        } catch (e) {}
+        // small delay
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise((r) => setTimeout(r, 250));
       }
     }
   } catch (e) {

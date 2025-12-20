@@ -137,6 +137,8 @@ const LoginScreen = () => {
         Alert.alert('Incorrect password');
       } else if (code === 'auth/user-not-found') {
         Alert.alert('No account found with this email');
+      } else if (code === 'auth/no-password-provider') {
+        Alert.alert('Account uses social sign-in', 'This email is registered via Google/GitHub. Use the social login button or set a password from account settings.');
       } else if ((err?.message || '').toLowerCase().includes('timed out')) {
         Alert.alert('Connection Timeout', 'The request took too long.', [
           { text: 'Retry', onPress: handleLogin },
