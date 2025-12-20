@@ -55,8 +55,8 @@ export async function syncFirestoreToLocalOnce(userId: string) {
       return;
     } catch (e) {
       // If unauthenticated due to auth propagation, wait and retry
-      const code = e?.code || '';
-      const msg = String(e?.message || e || '');
+      const code = (e as any)?.code || '';
+      const msg = String((e as any)?.message || e || '');
       console.warn('[sync] attempt failed', { attempt, code, message: msg });
       if (attempt >= maxAttempts) {
         console.warn('syncFirestoreToLocalOnce failed', e);

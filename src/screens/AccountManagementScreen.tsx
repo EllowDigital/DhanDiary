@@ -264,7 +264,7 @@ const AccountManagementScreen = () => {
             await retry(() => deleteAccount(), 3, 500);
             showToast('Account deleted');
             navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
-          } catch (err: any) {
+          } catch (err) {
               if (err?.code === 'auth/requires-recent-login') {
                 Alert.alert(
                   'Reauthentication required',

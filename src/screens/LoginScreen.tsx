@@ -136,7 +136,7 @@ const LoginScreen = () => {
         Alert.alert('No account found with this email');
       } else if (code === 'auth/no-password-provider') {
         Alert.alert('Account uses social sign-in', 'This email is registered via Google/GitHub. Use the social login button or set a password from account settings.');
-      } else if ((err?.message || '').toLowerCase().includes('timed out')) {
+      } else if (((err as any)?.message || '').toLowerCase().includes('timed out')) {
         Alert.alert('Connection Timeout', 'The request took too long.', [
           { text: 'Retry', onPress: handleLogin },
           { text: 'Cancel', style: 'cancel' },
@@ -158,7 +158,7 @@ const LoginScreen = () => {
       await sendPasswordReset(email);
       Alert.alert('Email Sent', 'Check your inbox for reset instructions.');
     } catch (err) {
-      const msg = err?.message || 'Unable to send reset email right now.';
+      const msg = (err as any)?.message || 'Unable to send reset email right now.';
       Alert.alert('Reset Failed', msg);
     } finally {
       setResettingPassword(false);

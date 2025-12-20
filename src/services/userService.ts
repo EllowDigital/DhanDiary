@@ -267,7 +267,7 @@ export async function syncUserToFirestore(user: any) {
     } catch (err) {
       console.debug('syncUserToFirestore: write failed', {
         attempt,
-        err: err?.message || err,
+        err: (err as any)?.message || err,
       });
       if (attempt === maxAttempts) throw err;
       await new Promise((r) => setTimeout(r, 400 * attempt));

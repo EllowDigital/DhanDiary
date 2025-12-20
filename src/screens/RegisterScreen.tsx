@@ -214,7 +214,7 @@ const RegisterScreen = () => {
           // fallthrough to generic error
         }
       }
-      const msg = err?.message || String(err);
+      const msg = (err as any)?.message || String(err);
       Alert.alert('Registration Failed', msg);
     } finally {
       setLoading(false);
@@ -394,9 +394,9 @@ const RegisterScreen = () => {
                       (navigation.getParent() as any)?.replace('Main');
                     } catch (err) {
                       if (
-                        err?.message &&
-                        typeof err.message === 'string' &&
-                        err.message.includes('native module not available')
+                        (err as any)?.message &&
+                        typeof (err as any).message === 'string' &&
+                        (err as any).message.includes('native module not available')
                       ) {
                         Alert.alert(
                           'Google Sign-In Unavailable',
@@ -404,9 +404,9 @@ const RegisterScreen = () => {
                         );
                         return;
                       }
-                      if (err && err.code === 'auth/account-exists-with-different-credential') {
-                        const prefill = err.email || undefined;
-                        (navigation as any).navigate('Login', { prefillEmail: prefill, pendingCredential: err.pendingCredential });
+                      if ((err as any) && (err as any).code === 'auth/account-exists-with-different-credential') {
+                        const prefill = (err as any).email || undefined;
+                        (navigation as any).navigate('Login', { prefillEmail: prefill, pendingCredential: (err as any).pendingCredential });
                         Alert.alert('This email already has an account', 'Please sign in with your password to link accounts.');
                         return;
                       }

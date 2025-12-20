@@ -118,7 +118,7 @@ export const loginWithEmail = async (email: string, password: string) => {
         const methods = await authInstance.fetchSignInMethodsForEmail(email.trim());
         console.debug('auth.loginWithEmail: sign-in methods for email', { email, methods });
       } catch (mErr) {
-        console.debug('auth.loginWithEmail: fetchSignInMethodsForEmail failed', mErr?.message || mErr);
+        console.debug('auth.loginWithEmail: fetchSignInMethodsForEmail failed', (mErr as any)?.message || mErr);
       }
     }
   } catch (e) {}
@@ -128,7 +128,7 @@ export const loginWithEmail = async (email: string, password: string) => {
     console.error('auth.loginWithEmail: signIn error', e);
     // If we receive auth/invalid-credential, attempt to determine whether this
     // account actually has a password provider; if not, surface a clearer error.
-    const code = e?.code || e?.message || null;
+    const code = (e as any)?.code || (e as any)?.message || null;
     if (code === 'auth/invalid-credential' || (typeof code === 'string' && code.includes('invalid-credential'))) {
       try {
         if (authInstance && typeof authInstance.fetchSignInMethodsForEmail === 'function') {
@@ -142,7 +142,7 @@ export const loginWithEmail = async (email: string, password: string) => {
           }
         }
       } catch (mErr) {
-        console.debug('auth.loginWithEmail: provider check failed', mErr?.message || mErr);
+        console.debug('auth.loginWithEmail: provider check failed', (mErr as any)?.message || mErr);
       }
     }
     throw e;
@@ -486,7 +486,7 @@ export const startGoogleSignIn = async (intent: 'signIn' | 'link' = 'signIn') =>
               }
             }
           } catch (checkErr) {
-            console.debug('startGoogleSignIn: provider pre-check failed', checkErr?.message || checkErr);
+            console.debug('startGoogleSignIn: provider pre-check failed', (checkErr as any)?.message || checkErr);
             // fall through and attempt sign-in below
           }
         }
@@ -506,8 +506,8 @@ export const startGoogleSignIn = async (intent: 'signIn' | 'link' = 'signIn') =>
       }
     } catch (err) {
       // Surface account-exists-with-different-credential with helpful payload
-      if (err && err.code === 'auth/account-exists-with-different-credential') {
-        const email = err?.customData?.email || raw?.user?.email || raw?.email || null;
+      if ((err as any) && (err as any).code === 'auth/account-exists-with-different-credential') {
+        const email = ((err as any)?.customData as any)?.email || raw?.user?.email || raw?.email || null;
         const pendingCredential = (() => {
           try {
             const firebaseAuth: any = authMod;

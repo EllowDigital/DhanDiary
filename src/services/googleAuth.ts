@@ -91,7 +91,7 @@ export const signInWithGoogle = async (opts?: { firebaseSignIn?: boolean }) => {
     } catch (silentErr) {
       console.debug(
         'googleAuth: silent sign-in threw, falling back to interactive sign-in',
-        silentErr?.message || silentErr
+        (silentErr as any)?.message || silentErr
       );
     }
 
@@ -112,7 +112,7 @@ export const signInWithGoogle = async (opts?: { firebaseSignIn?: boolean }) => {
       } catch (interactiveErr) {
         console.debug(
           'googleAuth: interactive sign-in failed',
-          interactiveErr?.message || interactiveErr
+          (interactiveErr as any)?.message || interactiveErr
         );
         if (interactiveErr) throw interactiveErr;
       }
@@ -242,14 +242,14 @@ export const signInWithGoogle = async (opts?: { firebaseSignIn?: boolean }) => {
     return { success: true, credential: credentialForCaller, data: signInResult };
   } catch (err) {
     console.error('googleAuth: signIn error', {
-      message: err?.message,
+      message: (err as any)?.message,
       code: err?.code,
       stack: err?.stack,
       raw: err,
     });
     // Rewrap known shapes to include code/message for UI
-    const code = err?.code || err?.statusCode || null;
-    const message = err?.message || String(err);
+    const code = (err as any)?.code || (err as any)?.statusCode || null;
+    const message = (err as any)?.message || String(err);
     const wrapped = new Error(`Google Sign-in failed${code ? ` (code=${code})` : ''}: ${message}`);
     // preserve original properties
     (wrapped as any).original = err;
