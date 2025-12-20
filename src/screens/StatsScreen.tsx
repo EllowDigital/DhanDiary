@@ -30,9 +30,11 @@ import { fetchEntriesGenerator } from '../db/localDb'; // Ensure this path is co
 import { PieChart } from 'react-native-chart-kit';
 
 // Enable LayoutAnimation for Android
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+try {
+  if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+  }
+} catch (e) { }
 
 // --- CONSTANTS ---
 const FILTERS = ['Day', 'Week', '7 Days', '30 Days', 'This Month', 'This Year', 'All'];

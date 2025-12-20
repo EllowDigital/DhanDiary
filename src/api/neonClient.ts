@@ -9,7 +9,7 @@ const pool = NEON_URL ? new Pool({ connectionString: NEON_URL }) : null;
 
 const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
-const defaultTimeout = 30000; // 30s default timeout per request
+const defaultTimeout = 60000; // 60s default timeout per request
 const NETINFO_CACHE_MS = 15000;
 const CIRCUIT_FUSE_MAX_MS = 15000;
 
@@ -91,7 +91,7 @@ export const warmNeonConnection = async () => {
   warmPromise = (async () => {
     try {
       const start = Date.now();
-      await withTimeout(pool.query('SELECT 1'), 15000);
+      await withTimeout(pool.query('SELECT 1'), 25000);
       recordSuccess(Date.now() - start);
     } catch (err) {
       recordFailure(err);
@@ -164,7 +164,11 @@ export const query = async (
             lastErr = new Error(msg);
             // Use normalizedError for further processing instead of reassigning the catch param
             normalizedError = lastErr;
+          } else if (eAny && eAny.message) {
+            // Ensure we don't treat a generic object with just message as 'unknown'
+            normalizedError = eAny;
           }
+
         } catch (e) {
           // fallthrough — keep original error
         }
