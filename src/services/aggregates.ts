@@ -2,9 +2,9 @@ import dayjs from 'dayjs';
 import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
 
 dayjs.extend(isSameOrBefore);
-import { getSummary } from './localDb';
+import { getSummary } from '../db/localDb';
 import asyncAggregator from '../utils/asyncAggregator';
-import { fetchEntriesGenerator } from './localDb';
+import { fetchEntriesGenerator } from '../db/localDb';
 import { StatResult } from '../utils/asyncAggregator';
 
 /**
