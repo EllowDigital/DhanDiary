@@ -211,7 +211,7 @@ export async function exportFromUser(
   const localDbMod: any = await import('../services/localDb');
   const fetchGen = localDbMod.fetchEntriesGenerator || (localDbMod.default && localDbMod.default.fetchEntriesGenerator);
   const gen = fetchGen ? fetchGen(userId, pageSize) : (async function* () {
-    if (false) yield undefined;
+    yield* [];
   })();
 
   const FS = await import('expo-file-system/legacy');
