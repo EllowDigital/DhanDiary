@@ -343,7 +343,13 @@ export const deleteAccount = async (currentPassword?: string) => {
   const userService = tryGetUserService();
   try {
     if (userService && typeof userService.deleteUserFromFirestore === 'function') {
-      await userService.deleteUserFromFirestore(user.uid).catch(() => {});
+      const deleted = await userService.deleteUserFromFirestore(user.uid).catch(() => false);
+      if (!deleted && userService && typeof userService.requestAccountDeletion === 'function') {
+        // Enqueue server-side deletion request when client-side deletion isn't permitted
+        try {
+          await userService.requestAccountDeletion(user.uid).catch(() => {});
+        } catch (e) {}
+      }
     }
   } catch (e) {
     // ignore firestore delete errors
