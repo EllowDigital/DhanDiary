@@ -186,10 +186,7 @@ const LoginScreen = () => {
         return;
       }
       if (e.code === 'auth/account-exists-with-different-credential') {
-        Alert.alert(
-          'Account already exists',
-          'You previously signed up using a different method.\n\nPlease sign in using your original method to securely link your accounts.'
-        );
+        Alert.alert('This email already has an account', 'Please sign in with your password to link accounts.');
       } else {
         Alert.alert(
           'GitHub Login Failed',

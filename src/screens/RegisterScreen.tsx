@@ -407,7 +407,7 @@ const RegisterScreen = () => {
                       if (err && err.code === 'auth/account-exists-with-different-credential') {
                         const prefill = err.email || undefined;
                         (navigation as any).navigate('Login', { prefillEmail: prefill, pendingCredential: err.pendingCredential });
-                        Alert.alert('Account exists', 'An account with this email exists. Sign in with your existing method to link Google.');
+                        Alert.alert('This email already has an account', 'Please sign in with your password to link accounts.');
                         return;
                       }
                       // Handle google statusCodes if available

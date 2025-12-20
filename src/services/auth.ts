@@ -333,9 +333,9 @@ export const reauthenticateWithGoogle = async () => {
 export const getAuthErrorMessage = (code: string | null | undefined) => {
   switch (code) {
     case 'auth/user-not-found':
-      return 'No account found with this email.';
+        return 'No account found with this email';
     case 'auth/wrong-password':
-      return 'Incorrect password.';
+        return 'Incorrect password';
     case 'auth/email-already-in-use':
       return 'This email is already registered.';
     case 'auth/weak-password':
@@ -343,7 +343,7 @@ export const getAuthErrorMessage = (code: string | null | undefined) => {
     case 'auth/invalid-email':
       return 'Invalid email address.';
     case 'auth/account-exists-with-different-credential':
-      return 'Account exists with another sign-in method.';
+      return 'Please sign in with your password to link accounts';
     case 'auth/requires-recent-login':
       return 'Please re-authenticate to complete this action.';
     default:
