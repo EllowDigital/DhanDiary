@@ -10,13 +10,15 @@ import {
   useWindowDimensions,
   StatusBar,
   Linking,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 
 // Logic
-import { logoutUser } from '../services/auth';
+import { logout } from '../services/auth';
+import { syncBothWays } from '../services/syncManager';
 import { useAuth } from '../hooks/useAuth';
 import { useNavigation } from '@react-navigation/native';
 import { useQueryClient } from '@tanstack/react-query';
@@ -47,6 +49,10 @@ const SettingsScreen = () => {
   // Animations
   const animValues = useRef([...Array(6)].map(() => new Animated.Value(0))).current;
 
+  // Sync state
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState('Just now');
+
   useEffect(() => {
     const animations = animValues.map((anim) =>
       Animated.timing(anim, {
@@ -72,6 +78,20 @@ const SettingsScreen = () => {
   });
 
   // Handlers
+  const handleManualSync = async () => {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    try {
+      await syncBothWays();
+      setLastSyncTime('Just now');
+      showToast('Sync completed successfully');
+    } catch (e) {
+      showToast('Sync failed. Please try again.');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const handleLogout = () => {
     Alert.alert('Sign Out', 'Are you sure you want to log out?', [
       { text: 'Cancel', style: 'cancel' },
@@ -79,7 +99,7 @@ const SettingsScreen = () => {
         text: 'Sign Out',
         style: 'destructive',
         onPress: async () => {
-          await logoutUser();
+          await logout();
           query.clear();
           showToast('Signed out successfully');
           navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
@@ -87,6 +107,7 @@ const SettingsScreen = () => {
       },
     ]);
   };
+
 
   const handleResetApp = () => {
     Alert.alert(
@@ -98,7 +119,7 @@ const SettingsScreen = () => {
           text: 'Reset Everything',
           style: 'destructive',
           onPress: async () => {
-            await logoutUser();
+            await logout();
             query.clear();
             showToast('App has been reset');
             navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
@@ -485,5 +506,22 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 16,
     opacity: 0.6,
+  },
+
+  /* SYNC BUTTON */
+  syncBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0284c7', // Sky blue
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginTop: 12,
+    gap: 8,
+  },
+  syncBtnText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 13,
   },
 });
