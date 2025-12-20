@@ -68,7 +68,38 @@ export const registerWithEmail = async (name: string, email: string, password: s
     }
   };
   try {
-    cred = await withTimeout(authInstance.createUserWithEmailAndPassword(email.trim(), password), 20000);
+    // Try native RN Firebase first with a timeout
+    try {
+      cred = await withTimeout(authInstance.createUserWithEmailAndPassword(email.trim(), password), 20000);
+    } catch (nativeErr) {
+      console.debug('auth.registerWithEmail: native createUser failed or timed out, attempting web SDK fallback', (nativeErr as any)?.message || nativeErr);
+      // Fallback: try firebase JS SDK (modular) if available (Expo web / non-native envs)
+      try {
+        // Only attempt the Web SDK fallback when a web Firebase app is configured
+        // in this build. Some local/trimmed builds intentionally remove Firebase
+        // configuration to avoid leaking keys; in that case we should not try
+        // the web fallback and instead surface the original error.
+        let allowWebFallback = false;
+        try {
+          const fbStub: any = require('../firebase');
+          allowWebFallback = !!fbStub && !!fbStub.hasWebFirebase;
+        } catch (ie) {
+          allowWebFallback = false;
+        }
+        if (!allowWebFallback) throw nativeErr;
+
+        const firebaseJs = require('firebase/auth');
+        if (firebaseJs && firebaseJs.getAuth && firebaseJs.createUserWithEmailAndPassword) {
+          const { getAuth, createUserWithEmailAndPassword } = firebaseJs;
+          cred = await withTimeout(createUserWithEmailAndPassword(getAuth(), email.trim(), password) as Promise<any>, 20000);
+        } else {
+          throw nativeErr;
+        }
+      } catch (webErr) {
+        console.error('auth.registerWithEmail: web SDK createUser fallback failed', (webErr as any)?.message || webErr);
+        throw nativeErr;
+      }
+    }
   } catch (e) {
     console.error('auth.registerWithEmail: createUser error', e);
     throw e;
