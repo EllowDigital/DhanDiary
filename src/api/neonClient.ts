@@ -37,7 +37,7 @@ const getHostFromUrl = (u: string | null) => {
   } catch (e) {
     // fallback: try to strip credentials
     try {
-      const noCred = u.split('@').pop();
+      const noCred = (u || '').split('@').pop();
       return noCred ? noCred.split('/')[0] : null;
     } catch (ee) {
       return null;
