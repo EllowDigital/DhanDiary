@@ -1,148 +1,146 @@
 import React, { useMemo } from 'react';
-import { StyleSheet, View } from 'react-native';
-import Svg, { Circle, Defs, LinearGradient, Path, Stop, Text as SvgText } from 'react-native-svg';
+import { View, StyleSheet, PixelRatio, Dimensions } from 'react-native';
+import { LineChart } from 'react-native-chart-kit';
+import { Text } from '@rneui/themed';
 import { colors } from '../../utils/design';
 
-type TrendPoint = {
+// --- PROPS ---
+interface TrendPoint {
   label: string;
   value: number;
-};
+}
 
-type Props = {
+interface Props {
   data: TrendPoint[];
-  width: number;
   height?: number;
+  width?: number;
+  currency?: string;
+}
+
+// --- UTILS ---
+const fontScale = (size: number) => size / PixelRatio.getFontScale();
+
+// Smart Formatter: Switches between Indian (L/Cr) and Int'l (K/M) based on currency
+const formatValue = (val: number, currency: string = 'INR') => {
+  const abs = Math.abs(val);
+  if (abs === 0) return '0';
+
+  if (currency === 'INR' || currency === '₹') {
+    if (abs >= 10000000) return `${(val / 10000000).toFixed(1)}Cr`;
+    if (abs >= 100000) return `${(val / 100000).toFixed(1)}L`;
+  } else {
+    // International Standard
+    if (abs >= 1000000000) return `${(val / 1000000000).toFixed(1)}B`;
+    if (abs >= 1000000) return `${(val / 1000000).toFixed(1)}M`;
+  }
+
+  if (abs >= 1000) return `${(val / 1000).toFixed(0)}k`;
+  return String(Math.round(val));
 };
 
-type ChartPoint = TrendPoint & {
-  x: number;
-  y: number;
-};
+const DailyTrendChart = ({ data, height = 220, width, currency = 'INR' }: Props) => {
+  const screenWidth = Dimensions.get('window').width;
+  const chartWidth = width || screenWidth - 32;
 
-const DailyTrendChart: React.FC<Props> = ({ data, width, height = 240 }) => {
-  const { linePath, areaPath, baselinePath, gridLines, points, labelPoints, peakValue } =
-    useMemo(() => {
-      const topPadding = 16;
-      const bottomPadding = 40;
-      const horizontalPadding = 28;
-      const drawableWidth = Math.max(1, width - horizontalPadding * 2);
-      const drawableHeight = Math.max(1, height - (topPadding + bottomPadding));
-      const values = data.map((d) => d.value);
-      const maxValue = Math.max(...values, 0);
-      const safeMax = maxValue === 0 ? 1 : maxValue;
-      const normalized = data.length - 1 || 1;
+  // 1. Prepare Data for Chart Kit
+  const chartData = useMemo(() => {
+    // Safety check for empty data
+    if (!data || data.length === 0) return { labels: [], datasets: [{ data: [0] }] };
 
-      const points: ChartPoint[] = data.map((item, index) => {
-        const x = horizontalPadding + (index / normalized) * drawableWidth;
-        const ratio = item.value / safeMax;
-        const y = topPadding + (1 - ratio) * drawableHeight;
-        return { ...item, x, y };
-      });
+    const labels = data.map((d) => d.label);
+    const values = data.map((d) => d.value);
 
-      const baselineY = topPadding + drawableHeight;
-      let linePath = '';
-      if (points.length > 0) {
-        linePath = `M ${points[0].x} ${points[0].y}`;
-        for (let i = 1; i < points.length; i++) {
-          linePath += ` L ${points[i].x} ${points[i].y}`;
-        }
-      }
+    return {
+      labels,
+      datasets: [
+        {
+          data: values,
+          color: (opacity = 1) => colors.primary || `rgba(99, 102, 241, ${opacity})`,
+          strokeWidth: 2,
+        },
+      ],
+    };
+  }, [data]);
 
-      const areaPath = points.length
-        ? `${linePath} L ${points[points.length - 1].x} ${baselineY} L ${points[0].x} ${baselineY} Z`
-        : '';
+  // 2. Smart X-Axis filtering
+  // Don't show every single date label if there are too many points.
+  // Show max 6 labels evenly distributed.
+  const hidePointsAtIndex = (index: number) => {
+    if (data.length <= 6) return false; // Show all if few
+    const step = Math.ceil(data.length / 5);
+    return index % step !== 0;
+  };
 
-      const baselinePath = `M ${horizontalPadding} ${baselineY} H ${horizontalPadding + drawableWidth}`;
-
-      const gridLines = [0.25, 0.5, 0.75].map((fraction) => ({
-        d: `M ${horizontalPadding} ${topPadding + fraction * drawableHeight} H ${
-          horizontalPadding + drawableWidth
-        }`,
-      }));
-
-      const labelTargets = Math.min(6, points.length);
-      const step = Math.max(1, Math.floor(points.length / labelTargets));
-      const labelPoints = points.filter(
-        (_, index) => index % step === 0 || index === points.length - 1
-      );
-
-      return {
-        linePath,
-        areaPath,
-        baselinePath,
-        gridLines,
-        points,
-        labelPoints,
-        peakValue: maxValue,
-      };
-    }, [data, height, width]);
-
-  if (!data.length) return null;
+  if (!data || data.length === 0) {
+    return (
+      <View style={[styles.container, { height, width: chartWidth }]}>
+        <Text style={styles.emptyText}>No trend data available</Text>
+      </View>
+    );
+  }
 
   return (
-    <View style={[styles.wrapper, { width, height }]}>
-      <Svg width={width} height={height}>
-        <Defs>
-          <LinearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0%" stopColor={colors.accentRed} stopOpacity={0.4} />
-            <Stop offset="100%" stopColor={colors.accentRed} stopOpacity={0.05} />
-          </LinearGradient>
-        </Defs>
-
-        {gridLines.map((line, index) => (
-          <Path
-            key={`grid-${index}`}
-            d={line.d}
-            stroke={colors.border}
-            strokeWidth={1}
-            strokeDasharray="4 6"
-          />
-        ))}
-
-        <Path d={baselinePath} stroke={colors.border} strokeWidth={1.5} />
-
-        <Path d={areaPath} fill="url(#trendGradient)" />
-        <Path
-          d={linePath}
-          stroke={colors.accentRed}
-          strokeWidth={3}
-          fill="none"
-          strokeLinejoin="round"
-          strokeLinecap="round"
-        />
-
-        {points.map((point, index) => (
-          <Circle
-            key={`point-${index}`}
-            cx={point.x}
-            cy={point.y}
-            r={point.value > 0 ? 4 : 3}
-            fill={point.value === peakValue && peakValue > 0 ? colors.accentRed : '#fff'}
-            stroke={colors.accentRed}
-            strokeWidth={2}
-          />
-        ))}
-
-        {labelPoints.map((point, index) => (
-          <SvgText
-            key={`label-${index}`}
-            x={point.x}
-            y={height - 12}
-            fontSize={11}
-            fill={colors.muted}
-            textAnchor="middle"
-          >
-            {point.label}
-          </SvgText>
-        ))}
-      </Svg>
+    <View style={styles.wrapper}>
+      <LineChart
+        data={chartData}
+        width={chartWidth}
+        height={height}
+        // 3. The Magic Prop for Short Values (1.2Cr, 50k)
+        formatYLabel={(yValue) => formatValue(Number(yValue), currency)}
+        // 4. Clean up X-Axis
+        formatXLabel={(label) => {
+          // If label is date (2024-01-01), show only DD or MMM
+          const parts = label.split('-');
+          if (parts.length === 3) return `${parts[2]}/${parts[1]}`; // DD/MM
+          return label;
+        }}
+        chartConfig={{
+          backgroundColor: '#ffffff',
+          backgroundGradientFrom: '#ffffff',
+          backgroundGradientTo: '#ffffff',
+          decimalPlaces: 0,
+          color: (opacity = 1) => `rgba(71, 85, 105, ${opacity})`, // Slate color
+          labelColor: (opacity = 1) => `rgba(100, 116, 139, ${opacity})`,
+          style: { borderRadius: 16 },
+          propsForDots: { r: '0' }, // Hide dots for cleaner look on large datasets
+          propsForBackgroundLines: { strokeDasharray: '4', stroke: '#E2E8F0' },
+        }}
+        bezier // Makes the line curved and smooth
+        withVerticalLines={false}
+        fromZero
+        hidePointsAtIndex={
+          data.length > 10
+            ? Array.from({ length: data.length }, (_, i) => i).filter(
+                (i) => i % Math.ceil(data.length / 5) !== 0
+              )
+            : []
+        }
+        style={{
+          marginVertical: 8,
+          borderRadius: 16,
+          paddingRight: 40, // Add padding for Y-Axis text (e.g. "1.5Cr")
+        }}
+      />
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   wrapper: {
-    justifyContent: 'flex-end',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  container: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+  },
+  emptyText: {
+    color: '#94A3B8',
+    fontStyle: 'italic',
+    fontSize: fontScale(12),
   },
 });
 

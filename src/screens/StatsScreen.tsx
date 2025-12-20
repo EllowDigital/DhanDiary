@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback, memo } from 'react';
 import {
   View,
   StyleSheet,
@@ -6,578 +6,723 @@ import {
   ActivityIndicator,
   Animated,
   LayoutAnimation,
-  Platform,
   Pressable,
   StatusBar,
-  UIManager,
   useWindowDimensions,
+  InteractionManager,
+  PixelRatio,
+  Platform,
+  UIManager,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
-import { useEntries } from '../hooks/useEntries';
-import { useAuth } from '../hooks/useAuth';
-import { subscribeEntries } from '../utils/dbEvents';
+import { useEntries } from '../hooks/useEntries'; // Ensure this path is correct
+import { useAuth } from '../hooks/useAuth'; // Ensure this path is correct
 import dayjs from 'dayjs';
-import { getStartDateForFilter, getDaysCountForFilter } from '../utils/stats';
-import { PieChart } from 'react-native-chart-kit';
-import { colors, spacing } from '../utils/design';
-import { ensureCategory } from '../constants/categories';
-import ScreenHeader from '../components/ScreenHeader';
+import { colors } from '../utils/design'; // Ensure this path is correct
+import ScreenHeader from '../components/ScreenHeader'; // Ensure this path is correct
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
-import DailyTrendChart from '../components/charts/DailyTrendChart';
+import DailyTrendChart from '../components/charts/DailyTrendChart'; // Ensure this path is correct
+import { LocalEntry } from '../types/entries';
+import asyncAggregator from '../utils/asyncAggregator'; // Ensure this path is correct
+import { aggregateWithPreferSummary } from '../services/aggregates';
+import { fetchEntriesGenerator } from '../services/localDb'; // Ensure this path is correct
+import { PieChart } from 'react-native-chart-kit';
 
-// --- ANIMATION CONFIG ---
+// Enable LayoutAnimation for Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-// --- COLOR UTILS ---
-const hexToRgb = (hex: string) => {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  return result
-    ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}`
-    : '0, 0, 0';
-};
-
-const FILTERS = ['7D', '30D', 'Month', 'Year'];
-
-// Chart Colors
+// --- CONSTANTS ---
+const FILTERS = ['Day', 'Week', '7 Days', '30 Days', 'This Month', 'This Year', 'All'];
 const PIE_COLORS = ['#FF6B6B', '#4ECDC4', '#FFD93D', '#6C5CE7', '#A8E6CF', '#FD79A8'];
-
-const chartConfig = {
-  backgroundColor: 'transparent',
-  backgroundGradientFrom: '#ffffff',
-  backgroundGradientTo: '#ffffff',
-  decimalPlaces: 0,
-  color: (opacity = 1) => `rgba(${hexToRgb(colors.primary || '#6200ee')}, ${opacity})`,
-  labelColor: (opacity = 1) => `rgba(0,0,0, ${opacity})`,
+const CHART_CONFIG = {
+  backgroundGradientFrom: '#1E2923',
+  backgroundGradientFromOpacity: 0,
+  backgroundGradientTo: '#08130D',
+  backgroundGradientToOpacity: 0.5,
+  color: (opacity = 1) => `rgba(26, 255, 146, ${opacity})`,
 };
 
-// --- TYPES ---
-interface PieDataPoint {
-  name: string;
-  population: number;
-  color: string;
-  legendFontColor: string;
-  legendFontSize: number;
-}
+// --- UTILS ---
+const fontScale = (size: number) => size / PixelRatio.getFontScale();
 
-interface TrendDataPoint {
-  label: string;
-  value: number;
-}
+const formatCompact = (val: number, currency: string = 'INR') => {
+  const abs = Math.abs(val);
+  if (abs === 0) return '0';
 
+  const prefix = currency === 'USD' ? '$' : '₹';
+
+  if (currency === 'INR' || currency === '₹') {
+    if (abs >= 10000000) return prefix + (val / 10000000).toFixed(2) + 'Cr';
+    if (abs >= 100000) return prefix + (val / 100000).toFixed(2) + 'L';
+  } else {
+    if (abs >= 1000000000) return prefix + (val / 1000000000).toFixed(2) + 'B';
+    if (abs >= 1000000) return prefix + (val / 1000000).toFixed(2) + 'M';
+  }
+
+  if (abs >= 1000) return prefix + (val / 1000).toFixed(1) + 'k';
+  return prefix + Math.round(val).toLocaleString();
+};
+
+// --- SUB-COMPONENTS (Memoized for Performance) ---
+
+const MetricCard = memo(
+  ({
+    title,
+    value,
+    icon,
+    colorBg,
+    colorIcon,
+    subTitle,
+    style,
+  }: {
+    title: string;
+    value: string;
+    icon: any;
+    colorBg: string;
+    colorIcon: string;
+    subTitle?: string;
+    style?: any;
+  }) => (
+    <View style={[styles.gridCard, style]}>
+      <View style={[styles.iconBox, { backgroundColor: colorBg }]}>
+        <MaterialIcon name={icon} size={20} color={colorIcon} />
+      </View>
+      <View style={{ flex: 1, alignItems: 'center' }}>
+        <Text style={styles.gridLabel}>{title}</Text>
+        <Text style={styles.gridValue} numberOfLines={1} adjustsFontSizeToFit>
+          {value}
+        </Text>
+        {subTitle && <Text style={styles.gridSubLabel}>{subTitle}</Text>}
+      </View>
+    </View>
+  )
+);
+
+const CategoryRow = memo(({ item, currency }: { item: any; currency: string }) => (
+  <View style={styles.catRow}>
+    <View style={styles.catLeft}>
+      <View style={[styles.catIndicator, { backgroundColor: item.color }]} />
+      <Text style={styles.catName} numberOfLines={1}>
+        {item.name}
+      </Text>
+    </View>
+    <Text style={styles.catVal}>{formatCompact(item.value, currency)}</Text>
+  </View>
+));
+
+// --- MAIN SCREEN ---
 const StatsScreen = () => {
-  const { width, height } = useWindowDimensions();
+  const { width } = useWindowDimensions();
   const { user, loading: authLoading } = useAuth();
-  const { entries = [], isLoading, refetch } = useEntries(user?.id);
+  const { entries: entriesRaw = [], isLoading } = useEntries(user?.uid);
+  const entries = entriesRaw as LocalEntry[];
 
-  // Animations
+  // --- REFS & ANIMATION ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(20)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  const [filter, setFilter] = useState('7D');
+  // --- STATE ---
+  const [filter, setFilter] = useState('7 Days');
+  const [activeMonthKey, setActiveMonthKey] = useState<string | null>(null);
+  const [activeYear, setActiveYear] = useState<number | null>(null);
+  const [computing, setComputing] = useState(false);
+  const [stats, setStats] = useState<any>(null);
 
-  // --- DATA LOADING ---
-  useEffect(() => {
-    const unsub = subscribeEntries(() => {
-      try {
-        refetch();
-      } catch (e) {}
-    });
-    Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
-      Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, damping: 20 }),
-    ]).start();
-    return () => unsub();
-  }, [refetch]);
+  // --- RESPONSIVE CALCS ---
+  const isTablet = width > 600;
+  const maxContentWidth = 600;
+  const containerStyle: any = { width: Math.min(width - 32, maxContentWidth), alignSelf: 'center' };
+  const donutSize = Math.min(width * 0.5, 220); // Responsive chart size
 
-  // --- RESPONSIVE LAYOUT CALCS ---
-  const isTablet = width > 700;
-  const isSmallPhone = width < 380;
+  // --- 1. DATA PREPARATION (Memoized) ---
+  const { availableMonths, availableYears } = useMemo(() => {
+    const monthMap = new Map();
+    const yearSet = new Set<number>();
 
-  const containerWidth = Math.min(760, width - 32);
-  const donutSize = isTablet ? 280 : Math.min(width * 0.55, 220);
-  const innerSize = Math.round(donutSize * 0.6);
-
-  // --- STATS LOGIC ---
-  const filteredEntries = useMemo(() => {
-    const startDate = getStartDateForFilter(filter);
-    return entries.filter((e: any) => {
+    entries.forEach((e) => {
       const d = dayjs(e.date || e.created_at);
-      return !d.isBefore(startDate);
-    });
-  }, [entries, filter]);
+      if (!d.isValid()) return;
 
-  // Totals
-  const stats = useMemo(() => {
-    return filteredEntries.reduce(
-      (acc: { totalIn: number; totalOut: number; net: number }, entry: any) => {
-        const amount = Number(entry.amount) || 0;
-        if (entry.type === 'in') acc.totalIn += amount;
-        else acc.totalOut += amount;
-        return acc;
-      },
-      { totalIn: 0, totalOut: 0, net: 0 }
-    );
-  }, [filteredEntries]);
-  stats.net = stats.totalIn - stats.totalOut;
-
-  // Ratios
-  const savingsRate = stats.totalIn > 0 ? Math.max(0, (stats.net / stats.totalIn) * 100) : 0;
-
-  const maxExpense = useMemo(() => {
-    const expenses = filteredEntries
-      .filter((e: any) => e.type === 'out')
-      .map((e: any) => Number(e.amount));
-    return expenses.length ? Math.max(...expenses) : 0;
-  }, [filteredEntries]);
-
-  const maxIncome = useMemo(() => {
-    const incomes = filteredEntries
-      .filter((e: any) => e.type === 'in')
-      .map((e: any) => Number(e.amount));
-    return incomes.length ? Math.max(...incomes) : 0;
-  }, [filteredEntries]);
-
-  // Chart Data
-  const dailyTrend = useMemo(() => {
-    const labels: string[] = [];
-    const values: number[] = []; // Explicitly typed as number[]
-    const indexByKey = new Map<string, number>();
-    const now = dayjs();
-    const startDate = getStartDateForFilter(filter, now);
-    const days = getDaysCountForFilter(filter, now);
-
-    for (let i = 0; i < days; i++) {
-      const d = startDate.add(i, 'day');
-      const key = d.format('YYYY-MM-DD');
-      labels.push(d.format(days > 15 ? 'DD' : 'ddd'));
-      values.push(0);
-      indexByKey.set(key, i);
-    }
-
-    filteredEntries.forEach((e: any) => {
-      if (e.type === 'out') {
-        const key = dayjs(e.date).format('YYYY-MM-DD');
-        const idx = indexByKey.get(key);
-        if (idx !== undefined) values[idx] += Number(e.amount);
+      const mKey = d.format('YYYY-MM');
+      if (!monthMap.has(mKey)) {
+        monthMap.set(mKey, { key: mKey, label: d.format('MMM YYYY'), date: d.startOf('month') });
       }
+      yearSet.add(d.year());
     });
 
-    return labels.map((l, i) => ({ label: l, value: values[i] }));
-  }, [filteredEntries, filter]);
+    const months = Array.from(monthMap.values()).sort(
+      (a, b) => b.date.valueOf() - a.date.valueOf()
+    );
+    const years = Array.from(yearSet).sort((a, b) => b - a);
 
-  // Donut Data
-  const pieData = useMemo<PieDataPoint[]>(() => {
-    // Added Record<string, number> to handle the accumulator index type error
-    const cats = filteredEntries
-      .filter((e: any) => e.type === 'out')
-      .reduce<Record<string, number>>((acc, e: any) => {
-        const c = ensureCategory(e.category);
-        acc[c] = (acc[c] || 0) + Number(e.amount);
-        return acc;
-      }, {});
+    return { availableMonths: months, availableYears: years };
+  }, [entries]);
 
-    return Object.entries(cats)
-      .map(([name, val], i) => ({
-        name,
-        population: val,
-        color: PIE_COLORS[i % PIE_COLORS.length],
-        legendFontColor: '#333',
-        legendFontSize: 12,
-      }))
-      .sort((a, b) => b.population - a.population);
-  }, [filteredEntries]);
+  // Sync Defaults
+  useEffect(() => {
+    if (availableMonths.length && !activeMonthKey) setActiveMonthKey(availableMonths[0].key);
+    if (availableYears.length && activeYear === null) setActiveYear(availableYears[0]);
+  }, [availableMonths, availableYears]);
 
-  const hasTrendData = dailyTrend.some((d) => d.value > 0);
-  const trendTotal = dailyTrend.reduce((a, b) => a + b.value, 0);
-  const activeDays = dailyTrend.filter((d) => d.value > 0).length;
-  const avgDaily = activeDays ? Math.round(trendTotal / activeDays) : 0;
+  // --- 2. DATE RANGE LOGIC ---
+  const { rangeStart, rangeEnd } = useMemo(() => {
+    const current = dayjs();
+    let start, end;
 
-  // Explicitly typed reduction to handle the null initial value
-  const peakDay = dailyTrend.reduce<TrendDataPoint | null>(
-    (a, b) => (!a || b.value > a.value ? b : a),
-    null
-  );
-
-  const handleFilterPress = (f: string) => {
-    if (f !== filter) {
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      setFilter(f);
+    switch (filter) {
+      case 'Day':
+        start = current.startOf('day');
+        end = current.endOf('day');
+        break;
+      case 'Week':
+        start = current.startOf('week');
+        end = current.endOf('week');
+        break;
+      case '7 Days':
+        start = current.subtract(6, 'day').startOf('day');
+        end = current.endOf('day');
+        break;
+      case '30 Days':
+        start = current.subtract(29, 'day').startOf('day');
+        end = current.endOf('day');
+        break;
+      case 'This Month': {
+        const m = dayjs(`${activeMonthKey || current.format('YYYY-MM')}-01`);
+        start = m.startOf('month');
+        end = m.endOf('month');
+        break;
+      }
+      case 'This Year': {
+        const y = current.year(activeYear || current.year());
+        start = y.startOf('year');
+        end = y.endOf('year');
+        break;
+      }
+      case 'All':
+        start = dayjs(0);
+        end = current.endOf('day');
+        break;
+      default:
+        start = current.subtract(6, 'day').startOf('day');
+        end = current.endOf('day');
     }
-  };
+    return { rangeStart: start, rangeEnd: end };
+  }, [filter, activeMonthKey, activeYear]);
 
-  if (isLoading || authLoading)
-    return <ActivityIndicator style={styles.centered} size="large" color={colors.primary} />;
+  // --- 3. ROBUST ANALYSIS ENGINE ---
+  const runAnalysis = useCallback(async () => {
+    // 1. Cancel previous runs
+    if (abortControllerRef.current) abortControllerRef.current.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    setComputing(true);
+    setStats(null); // Reset stats for skeleton loader effect
+
+    // 2. Wait for interactions/animations to finish
+    await new Promise((r) => InteractionManager.runAfterInteractions(() => r(null)));
+
+    try {
+      let result;
+      // Handle Massive Data (Trillion Scale Logic)
+      // Prefer server-side precomputed summaries; fall back to streaming aggregation
+      if (user?.uid) {
+        result = await aggregateWithPreferSummary(user.uid, rangeStart, rangeEnd, {
+          signal: controller.signal,
+        });
+      } else if (filter === 'All' || entries.length > 10000) {
+        const pages = fetchEntriesGenerator(user?.uid || '', 1000);
+        result = await asyncAggregator.aggregateFromPages(pages, rangeStart, rangeEnd, {
+          signal: controller.signal,
+        });
+      } else {
+        result = await asyncAggregator.aggregateForRange(entries, rangeStart, rangeEnd, {
+          signal: controller.signal,
+        });
+      }
+
+      if (result && !controller.signal.aborted) {
+        // Safe Number Parsing
+        const totalIn = Number(result.totalIn) / 100;
+        const totalOut = Number(result.totalOut) / 100;
+        const savingsRate = totalIn > 0 ? ((totalIn - totalOut) / totalIn) * 100 : 0;
+        const daysDiff = Math.max(1, rangeEnd.diff(rangeStart, 'day') + 1);
+
+        // --- ANDROID CRASH PROTECTION: PIE CHART ---
+        // Android SVG cannot handle too many paths. Limit to Top 4 + Others.
+        let pieDataSafe = result.pieData || [];
+        if (pieDataSafe.length > 4) {
+          const top4 = pieDataSafe.slice(0, 4);
+          const othersValue = pieDataSafe
+            .slice(4)
+            .reduce((acc: number, curr: any) => acc + curr.value, 0);
+          if (othersValue > 0) top4.push({ name: 'Others', value: othersValue, count: 0 });
+          pieDataSafe = top4;
+        }
+
+        const pieDataColored = pieDataSafe.map((p: any, i: number) => ({
+          ...p,
+          population: p.value,
+          color: p.name === 'Others' ? '#94A3B8' : PIE_COLORS[i % PIE_COLORS.length],
+          legendFontColor: '#64748B',
+          legendFontSize: 11,
+        }));
+
+        const finalStats = {
+          ...result,
+          totalIn,
+          totalOut,
+          net: totalIn - totalOut,
+          avgPerDay: totalOut / daysDiff,
+          savingsRate: Math.max(0, savingsRate),
+          pieData: pieDataColored,
+          currency: result.currency || 'INR',
+        };
+
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        setStats(finalStats);
+
+        // Run Entry Animation
+        Animated.parallel([
+          Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+          Animated.spring(slideAnim, { toValue: 0, damping: 12, useNativeDriver: true }),
+        ]).start();
+      }
+    } catch (e) {
+      if ((e as any)?.message !== 'Aborted') console.warn('Analysis Error:', e);
+    } finally {
+      if (abortControllerRef.current === controller) setComputing(false);
+    }
+  }, [filter, rangeStart, rangeEnd, entries, user]);
+
+  useEffect(() => {
+    runAnalysis();
+  }, [runAnalysis]);
+
+  // --- RENDER HELPERS ---
+  const currencySymbol = stats?.currency === 'USD' ? '$' : '₹';
+
+  if (isLoading || authLoading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Loading finances...</Text>
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F7F9FC" />
+      <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
 
-      {/* HEADER */}
-      <View style={[styles.headerContainer, { width: containerWidth }]}>
+      <View style={[styles.headerWrapper, containerStyle]}>
         <ScreenHeader
           title="Analytics"
           subtitle="Financial health overview"
-          showScrollHint={false}
           useSafeAreaPadding={false}
         />
       </View>
 
       <ScrollView
         style={styles.container}
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: Math.max(120, height * 0.15) },
-        ]}
+        contentContainerStyle={[styles.scrollContent]}
         showsVerticalScrollIndicator={false}
       >
         <Animated.View
           style={{
             opacity: fadeAnim,
             transform: [{ translateY: slideAnim }],
-            width: containerWidth,
-            alignSelf: 'center',
+            ...containerStyle,
           }}
         >
-          {/* 1. FILTER TABS */}
-          <View style={styles.segmentControl}>
-            {FILTERS.map((f) => {
-              const isActive = filter === f;
-              return (
-                <Pressable
-                  key={f}
-                  style={[styles.segmentBtn, isActive && styles.segmentBtnActive]}
-                  onPress={() => handleFilterPress(f)}
-                >
-                  <Text style={[styles.segmentText, isActive && styles.segmentTextActive]}>
-                    {f}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          {/* 2. NET BALANCE CARD */}
-          <View style={styles.card}>
-            <View style={styles.rowBetween}>
-              <Text style={styles.labelMuted}>NET BALANCE</Text>
-              <View
-                style={[styles.badge, { backgroundColor: stats.net >= 0 ? '#E8F5E9' : '#FFEBEE' }]}
-              >
-                <MaterialIcon
-                  name={stats.net >= 0 ? 'trending-up' : 'trending-down'}
-                  size={16}
-                  color={stats.net >= 0 ? '#2E7D32' : '#C62828'}
-                />
-                <Text style={[styles.badgeText, { color: stats.net >= 0 ? '#2E7D32' : '#C62828' }]}>
-                  {stats.net >= 0 ? 'Surplus' : 'Deficit'}
-                </Text>
-              </View>
-            </View>
-
-            <Text
-              style={[styles.bigValue, { color: stats.net >= 0 ? '#2E7D32' : '#C62828' }]}
-              adjustsFontSizeToFit
-              numberOfLines={1}
-            >
-              {stats.net >= 0 ? '+' : ''}₹{Math.abs(stats.net).toLocaleString()}
-            </Text>
-
-            <View style={styles.divider} />
-
-            <View style={styles.rowBetween}>
-              <View>
-                <Text style={styles.labelMutedSmall}>Income</Text>
-                <Text style={styles.subValueGreen}>₹{stats.totalIn.toLocaleString()}</Text>
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={styles.labelMutedSmall}>Expense</Text>
-                <Text style={styles.subValueRed}>₹{stats.totalOut.toLocaleString()}</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* 3. RESPONSIVE GRID */}
-          <View style={styles.gridContainer}>
-            <View style={[styles.gridCard, isSmallPhone && styles.gridCardFull]}>
-              <View style={[styles.iconBox, { backgroundColor: '#E3F2FD' }]}>
-                <MaterialIcon name="savings" size={24} color="#1976D2" />
-              </View>
-              <View style={styles.gridContent}>
-                <Text style={styles.gridValue}>{savingsRate.toFixed(0)}%</Text>
-                <Text style={styles.gridLabel} numberOfLines={1}>
-                  Savings Rate
-                </Text>
-              </View>
-            </View>
-
-            <View style={[styles.gridCard, isSmallPhone && styles.gridCardFull]}>
-              <View style={[styles.iconBox, { backgroundColor: '#E8F5E9' }]}>
-                <MaterialIcon name="arrow-upward" size={24} color="#2E7D32" />
-              </View>
-              <View style={styles.gridContent}>
-                <Text style={styles.gridValue} adjustsFontSizeToFit numberOfLines={1}>
-                  ₹{maxIncome > 10000 ? (maxIncome / 1000).toFixed(1) + 'k' : maxIncome}
-                </Text>
-                <Text style={styles.gridLabel} numberOfLines={1}>
-                  Max Income
-                </Text>
-              </View>
-            </View>
-
-            <View style={[styles.gridCard, isSmallPhone && styles.gridCardFull]}>
-              <View style={[styles.iconBox, { backgroundColor: '#FFEBEE' }]}>
-                <MaterialIcon name="arrow-downward" size={24} color="#C62828" />
-              </View>
-              <View style={styles.gridContent}>
-                <Text style={styles.gridValue} adjustsFontSizeToFit numberOfLines={1}>
-                  ₹{maxExpense > 10000 ? (maxExpense / 1000).toFixed(1) + 'k' : maxExpense}
-                </Text>
-                <Text style={styles.gridLabel} numberOfLines={1}>
-                  Max Expense
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          {/* 4. TREND CHART */}
-          <View style={styles.card}>
-            <View style={styles.rowBetween}>
-              <View>
-                <Text style={styles.cardTitle}>Daily Trend</Text>
-                <Text style={styles.cardSubtitle}>7 Dec - 13 Dec 2025</Text>
-              </View>
-              <MaterialIcon name="bar-chart" size={24} color="#90A4AE" />
-            </View>
-
-            <View style={[styles.rowBetween, { marginTop: 20, marginBottom: 10 }]}>
-              <View>
-                <Text style={styles.labelMutedSmall}>DAILY AVG</Text>
-                <Text style={styles.chartStatValue}>₹{avgDaily}</Text>
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={styles.labelMutedSmall}>PEAK DAY</Text>
-                <Text style={styles.chartStatValue}>₹{peakDay ? peakDay.value : 0}</Text>
-              </View>
-            </View>
-
+          {/* --- 1. FILTERS --- */}
+          <View style={styles.filterSection}>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingRight: 20 }}
+              contentContainerStyle={styles.tabScroll}
             >
-              {hasTrendData ? (
-                <DailyTrendChart
-                  data={dailyTrend}
-                  width={Math.max(containerWidth - 40, dailyTrend.length * 50)}
-                />
-              ) : (
-                <View style={styles.emptyChart}>
-                  <Text style={styles.emptyText}>No spending data for this period</Text>
-                </View>
-              )}
-            </ScrollView>
-          </View>
-
-          {/* 5. DONUT */}
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Expense Breakdown</Text>
-            {pieData.length > 0 ? (
-              <View style={{ alignItems: 'center', marginTop: 20 }}>
-                <View style={{ width: donutSize, height: donutSize }}>
-                  <PieChart
-                    data={pieData}
-                    width={donutSize}
-                    height={donutSize}
-                    chartConfig={chartConfig}
-                    accessor="population"
-                    backgroundColor="transparent"
-                    // FIX: paddingLeft requires string
-                    paddingLeft={String(donutSize / 4)}
-                    hasLegend={false}
-                    absolute={false}
-                  />
-                  <View
-                    style={[
-                      styles.donutHole,
-                      {
-                        width: innerSize,
-                        height: innerSize,
-                        borderRadius: innerSize / 2,
-                        top: (donutSize - innerSize) / 2,
-                        left: (donutSize - innerSize) / 2,
-                      },
-                    ]}
+              <View style={styles.tabContainer}>
+                {FILTERS.map((f) => (
+                  <Pressable
+                    key={f}
+                    style={[styles.tab, filter === f && styles.tabActive]}
+                    onPress={() => setFilter(f)}
                   >
-                    <Text style={styles.holeValue} adjustsFontSizeToFit numberOfLines={1}>
-                      ₹
-                      {stats.totalOut > 999
-                        ? (stats.totalOut / 1000).toFixed(1) + 'k'
-                        : stats.totalOut}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.legendContainer}>
-                  {pieData.slice(0, 4).map((item, i) => (
-                    <View key={i} style={styles.legendItem}>
-                      <View style={[styles.dot, { backgroundColor: item.color }]} />
-                      <Text style={styles.legendText}>{item.name}</Text>
-                      {/* FIX: Explicitly typed 'item' now has population */}
-                      <Text style={styles.legendNum}>
-                        {Math.round((item.population / stats.totalOut) * 100)}%
-                      </Text>
-                    </View>
-                  ))}
-                </View>
+                    <Text style={[styles.tabText, filter === f && styles.tabTextActive]}>{f}</Text>
+                  </Pressable>
+                ))}
               </View>
-            ) : (
-              <Text style={[styles.emptyText, { textAlign: 'center', padding: 20 }]}>
-                No expenses
-              </Text>
+            </ScrollView>
+
+            {/* Sub-filters for Month/Year */}
+            {(filter === 'This Month' || filter === 'This Year') && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.subFilterScroll}
+              >
+                {(filter === 'This Month' ? availableMonths : availableYears).map((item: any) => {
+                  const isActive =
+                    filter === 'This Month' ? activeMonthKey === item.key : activeYear === item;
+                  return (
+                    <Pressable
+                      key={item.key || item}
+                      style={[styles.chip, isActive && styles.chipActive]}
+                      onPress={() =>
+                        filter === 'This Month' ? setActiveMonthKey(item.key) : setActiveYear(item)
+                      }
+                    >
+                      <Text style={[styles.chipText, isActive && styles.chipTextActive]}>
+                        {filter === 'This Month' ? item.label : item}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            )}
+
+            {computing && (
+              <ActivityIndicator size="small" color={colors.primary} style={styles.loader} />
             )}
           </View>
+
+          {/* --- 2. NET BALANCE CARD --- */}
+          {!stats ? (
+            <View style={[styles.card, { height: 200, justifyContent: 'center' }]}>
+              <ActivityIndicator color={colors.primary} />
+            </View>
+          ) : (
+            <View style={styles.card}>
+              <View style={styles.rowBetween}>
+                <Text style={styles.cardLabel}>NET BALANCE</Text>
+                <View
+                  style={[
+                    styles.badge,
+                    { backgroundColor: stats.net >= 0 ? '#DCFCE7' : '#FEE2E2' },
+                  ]}
+                >
+                  <Text
+                    style={[styles.badgeText, { color: stats.net >= 0 ? '#166534' : '#991B1B' }]}
+                  >
+                    {stats.net >= 0 ? 'Surplus' : 'Deficit'}
+                  </Text>
+                </View>
+              </View>
+
+              <Text style={[styles.mainBalance, { color: stats.net >= 0 ? '#059669' : '#DC2626' }]}>
+                {stats.net >= 0 ? '+' : ''}
+                {formatCompact(stats.net, stats.currency)}
+              </Text>
+
+              <View style={styles.balanceRow}>
+                <View>
+                  <Text style={styles.subLabel}>INCOME</Text>
+                  <Text style={styles.incomeValue}>
+                    {formatCompact(stats.totalIn, stats.currency)}
+                  </Text>
+                </View>
+                <View style={styles.vertDivider} />
+                <View>
+                  <Text style={styles.subLabel}>EXPENSE</Text>
+                  <Text style={styles.expenseValue}>
+                    {formatCompact(stats.totalOut, stats.currency)}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* --- 3. KEY METRICS GRID --- */}
+          {stats && (
+            <View style={styles.gridContainer}>
+              <MetricCard
+                title="MAX IN"
+                value={formatCompact(stats.maxIncome || 0, stats.currency)}
+                icon="trending-up"
+                colorBg="#DBEAFE"
+                colorIcon="#1E40AF"
+                style={{ flex: 1 }}
+              />
+              <MetricCard
+                title="MAX OUT"
+                value={formatCompact(stats.maxExpense || 0, stats.currency)}
+                icon="trending-down"
+                colorBg="#FEE2E2"
+                colorIcon="#991B1B"
+                style={{ flex: 1 }}
+              />
+              <MetricCard
+                title="SAVINGS"
+                value={`${Math.round(stats.savingsRate)}%`}
+                icon="savings"
+                colorBg="#F0FDF4"
+                colorIcon="#166534"
+                style={{ flex: 1 }}
+              />
+            </View>
+          )}
+
+          {/* --- 4. PERFORMANCE GRID --- */}
+          {stats && (
+            <View style={styles.gridContainer}>
+              <MetricCard
+                title="AVG / DAY"
+                value={formatCompact(stats.avgPerDay || 0, stats.currency)}
+                icon="speed"
+                colorBg="#FFF7ED"
+                colorIcon="#EA580C"
+                style={{ flex: 1 }}
+              />
+              <MetricCard
+                title="TXNS"
+                value={stats.count || '0'}
+                icon="receipt"
+                colorBg="#F3F4F6"
+                colorIcon="#4B5563"
+                style={{ flex: 1 }}
+              />
+            </View>
+          )}
+
+          {/* --- 5. CHARTS --- */}
+          {stats && (
+            <>
+              {/* Spending Trend */}
+              <View style={styles.card}>
+                <Text style={styles.sectionTitle}>Spending Trend</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  {stats.dailyTrend?.length > 0 ? (
+                    <DailyTrendChart
+                      data={stats.dailyTrend}
+                      width={Math.max(width - 70, stats.dailyTrend.length * 40)}
+                      currency={currencySymbol}
+                    />
+                  ) : (
+                    <View style={styles.emptyState}>
+                      <Text style={styles.emptyText}>No transactions in this period</Text>
+                    </View>
+                  )}
+                </ScrollView>
+              </View>
+
+              {/* Distribution & Top Expenses */}
+              <View style={styles.dualChartContainer}>
+                {/* Donut Chart */}
+                <View style={styles.card}>
+                  <Text style={styles.sectionTitle}>Distribution</Text>
+                  {stats.pieData?.length > 0 ? (
+                    <View style={styles.chartWrapper}>
+                      <PieChart
+                        data={stats.pieData}
+                        width={donutSize + 60} // Add padding for labels
+                        height={donutSize}
+                        chartConfig={CHART_CONFIG}
+                        accessor="population"
+                        backgroundColor="transparent"
+                        paddingLeft="15"
+                        hasLegend={false}
+                        center={[donutSize / 4, 0]}
+                        absolute
+                      />
+                      {/* Responsive Hole Overlay */}
+                      <View
+                        style={[
+                          styles.donutHole,
+                          {
+                            width: donutSize * 0.6,
+                            height: donutSize * 0.6,
+                            borderRadius: (donutSize * 0.6) / 2,
+                            left: donutSize / 4 + donutSize * 0.2 + 15, // Mathematical centering for react-native-chart-kit weirdness
+                          },
+                        ]}
+                      >
+                        <Text style={styles.holeLabel}>TOTAL</Text>
+                        <Text style={styles.holeValue} numberOfLines={1} adjustsFontSizeToFit>
+                          {formatCompact(stats.totalOut, stats.currency)}
+                        </Text>
+                      </View>
+                    </View>
+                  ) : (
+                    <View style={styles.emptyState}>
+                      <Text style={styles.emptyText}>No data</Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Categories List */}
+                <View style={styles.card}>
+                  <Text style={styles.sectionTitle}>Top Expenses</Text>
+                  <View style={{ marginTop: 10 }}>
+                    {stats.pieData?.length > 0 ? (
+                      stats.pieData.map((cat: any) => (
+                        <CategoryRow key={cat.name} item={cat} currency={stats.currency} />
+                      ))
+                    ) : (
+                      <View style={styles.emptyState}>
+                        <Text style={styles.emptyText}>No categories found</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              </View>
+            </>
+          )}
+
+          <View style={{ height: 40 }} />
         </Animated.View>
       </ScrollView>
     </SafeAreaView>
   );
 };
 
-export default StatsScreen;
-
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#F7F9FC',
-  },
+  safeArea: { flex: 1, backgroundColor: '#F8FAFC' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  headerContainer: { alignSelf: 'center', marginBottom: 10, paddingHorizontal: 4 },
-  container: { flex: 1 },
-  scrollContent: { paddingTop: 10, paddingHorizontal: 16 },
+  loadingText: { marginTop: 10, color: '#94A3B8', fontWeight: '600' },
 
-  // --- FILTER ---
-  segmentControl: {
+  headerWrapper: { marginBottom: 10, paddingHorizontal: 4 },
+  container: { flex: 1 },
+  scrollContent: { paddingBottom: 100, paddingTop: 8 },
+
+  // --- FILTERS ---
+  filterSection: { marginBottom: 16 },
+  tabScroll: { paddingHorizontal: 16, paddingBottom: 8 },
+  tabContainer: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderRadius: 12,
+    backgroundColor: '#FFF',
+    borderRadius: 20,
     padding: 4,
-    marginBottom: 16,
-    elevation: 1,
+    elevation: 2,
+    shadowColor: '#000',
     shadowOpacity: 0.05,
+    shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
   },
-  segmentBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 8 },
-  segmentBtnActive: { backgroundColor: '#3D5AFE' },
-  segmentText: { color: '#90A4AE', fontWeight: '600', fontSize: 13 },
-  segmentTextActive: { color: '#fff' },
+  tab: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 16 },
+  tabActive: { backgroundColor: colors.primary },
+  tabText: { color: '#64748B', fontWeight: '700', fontSize: fontScale(12) },
+  tabTextActive: { color: '#FFF' },
+
+  subFilterScroll: { paddingHorizontal: 16, marginTop: 8 },
+  chip: {
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 20,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    marginRight: 8,
+    backgroundColor: '#FFF',
+  },
+  chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  chipText: { fontSize: fontScale(12), fontWeight: '600', color: '#64748B' },
+  chipTextActive: { color: '#FFF' },
+  loader: { marginTop: 10, alignSelf: 'center' },
 
   // --- CARDS ---
   card: {
-    backgroundColor: '#fff',
+    backgroundColor: '#FFF',
     borderRadius: 24,
     padding: 20,
     marginBottom: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
+    // Robust Shadows
+    elevation: 3,
+    shadowColor: '#64748B',
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 8,
-    elevation: 2,
   },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  divider: { height: 1, backgroundColor: '#F0F0F0', marginVertical: 16 },
-
-  // --- TYPOGRAPHY ---
-  labelMuted: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#90A4AE',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  labelMutedSmall: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#90A4AE',
-    textTransform: 'uppercase',
-    marginBottom: 4,
+  cardLabel: { fontSize: fontScale(11), fontWeight: '800', color: '#94A3B8', letterSpacing: 1 },
+  mainBalance: {
+    fontSize: fontScale(32),
+    fontWeight: '900',
+    marginVertical: 12,
+    letterSpacing: -1,
   },
 
-  badge: {
+  balanceRow: {
     flexDirection: 'row',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    alignItems: 'center',
-    gap: 4,
-  },
-  badgeText: { fontSize: 12, fontWeight: '700' },
-
-  bigValue: { fontSize: 32, fontWeight: '800', marginTop: 8 },
-  subValueGreen: { fontSize: 18, fontWeight: '700', color: '#2E7D32' },
-  subValueRed: { fontSize: 18, fontWeight: '700', color: '#C62828' },
-
-  cardTitle: { fontSize: 18, fontWeight: '700', color: '#263238' },
-  cardSubtitle: { fontSize: 12, color: '#90A4AE', marginTop: 2 },
-  chartStatValue: { fontSize: 16, fontWeight: '700', color: '#263238' },
-
-  // --- SMART GRID ---
-  gridContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 16,
     justifyContent: 'space-between',
+    marginTop: 8,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
   },
+  vertDivider: { width: 1, backgroundColor: '#F1F5F9', height: '100%' },
+  subLabel: { fontSize: fontScale(10), fontWeight: '700', color: '#94A3B8', marginBottom: 4 },
+  incomeValue: { fontSize: fontScale(18), fontWeight: '800', color: '#10B981' },
+  expenseValue: { fontSize: fontScale(18), fontWeight: '800', color: '#EF4444' },
+
+  badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  badgeText: { fontSize: fontScale(10), fontWeight: '800', textTransform: 'uppercase' },
+
+  // --- GRIDS ---
+  gridContainer: { flexDirection: 'row', gap: 12, marginBottom: 16 }, // Modern 'gap' works on newer RN, falls back gracefully usually
   gridCard: {
-    flex: 1,
-    minWidth: '30%',
-    backgroundColor: '#fff',
+    backgroundColor: '#FFF',
     borderRadius: 20,
     padding: 16,
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    shadowColor: '#000',
-    shadowOpacity: 0.03,
-    shadowRadius: 4,
+    justifyContent: 'center',
     elevation: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
   },
-  gridCardFull: { minWidth: '48%' },
   iconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: 8,
   },
-  gridContent: { flex: 1 },
-  gridValue: { fontSize: 16, fontWeight: '700', color: '#263238' },
-  gridLabel: { fontSize: 11, color: '#90A4AE', marginTop: 2 },
+  gridLabel: {
+    fontSize: fontScale(10),
+    color: '#94A3B8',
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  gridValue: { fontSize: fontScale(14), fontWeight: '900', color: '#1E293B', marginTop: 2 },
+  gridSubLabel: { fontSize: fontScale(9), color: '#64748B', marginTop: 2 },
 
-  // --- CHART HELPERS ---
-  emptyChart: { height: 150, justifyContent: 'center', alignItems: 'center' },
-  emptyText: { color: '#B0BEC5', fontStyle: 'italic' },
-
+  // --- CHARTS & CATS ---
+  sectionTitle: { fontSize: fontScale(16), fontWeight: '800', color: '#1E293B', marginBottom: 12 },
+  dualChartContainer: { gap: 16 }, // Will stack vertically
+  chartWrapper: { alignItems: 'center', justifyContent: 'center', position: 'relative' },
   donutHole: {
     position: 'absolute',
-    backgroundColor: '#fff',
+    backgroundColor: '#FFF',
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 2,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 5,
   },
-  holeValue: { fontSize: 20, fontWeight: '800', color: '#263238' },
+  holeLabel: { fontSize: fontScale(9), fontWeight: '800', color: '#94A3B8' },
+  holeValue: { fontSize: fontScale(16), fontWeight: '900', color: '#1E293B' },
 
-  legendContainer: {
+  catRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 16,
-    marginTop: 16,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F8FAFC',
   },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  dot: { width: 10, height: 10, borderRadius: 5 },
-  legendText: { fontSize: 12, color: '#546E7A', fontWeight: '500' },
-  legendNum: { fontSize: 12, color: '#263238', fontWeight: '700' },
+  catLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, paddingRight: 10 },
+  catIndicator: { width: 10, height: 10, borderRadius: 5, marginRight: 12 },
+  catName: { fontSize: fontScale(14), color: '#475569', fontWeight: '600' },
+  catVal: { fontSize: fontScale(14), fontWeight: '800', color: '#1E293B' },
+
+  emptyState: { padding: 30, alignItems: 'center', justifyContent: 'center' },
+  emptyText: { color: '#CBD5E1', fontStyle: 'italic', fontSize: fontScale(13) },
 });
+
+export default StatsScreen;

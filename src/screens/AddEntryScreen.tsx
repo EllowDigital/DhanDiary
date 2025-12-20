@@ -13,9 +13,9 @@ import {
   StatusBar,
   TextInput,
   LayoutAnimation,
-  UIManager,
   Keyboard,
   TouchableWithoutFeedback,
+  UIManager,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Text } from '@rneui/themed';
@@ -23,6 +23,7 @@ import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useEntries } from '../hooks/useEntries';
+import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../context/ToastContext';
 import runInBackground from '../utils/background';
 import CategoryPickerModal from '../components/CategoryPickerModal';
@@ -32,27 +33,26 @@ import { ALLOWED_CATEGORIES, DEFAULT_CATEGORY, ensureCategory } from '../constan
 import ScreenHeader from '../components/ScreenHeader';
 import dayjs from 'dayjs';
 
-// Enable LayoutAnimation for Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const typeConfigs = [
   {
     value: 'out',
     label: 'Expense',
-    color: colors.accentRed,
-    bg: '#FEF2F2', // Light Red
+    color: colors.accentRed, // #EF4444
+    bg: '#FEF2F2',
     border: '#FECACA',
     icon: 'arrow-outward',
   },
   {
     value: 'in',
     label: 'Income',
-    color: colors.accentGreen,
-    bg: '#ECFDF5', // Light Green
+    color: colors.accentGreen, // #10B981
+    bg: '#ECFDF5',
     border: '#A7F3D0',
     icon: 'arrow-downward',
   },
@@ -64,15 +64,17 @@ const AddEntryScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
 
-  const { addEntry, entries, updateEntry } = useEntries();
+  const { user } = useAuth();
+  const { addEntry, entries, updateEntry } = useEntries(user?.uid);
   const { showToast } = useToast();
   const editingParamId = route?.params?.local_id;
+  const initialType = route?.params?.type === 'in' ? 1 : 0;
 
   // --- STATE ---
   const [editingLocalId, setEditingLocalId] = useState<string | null>(null);
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
-  const [typeIndex, setTypeIndex] = useState(0); // 0: Out, 1: In
+  const [typeIndex, setTypeIndex] = useState(initialType);
   const [category, setCategory] = useState(DEFAULT_CATEGORY);
   const [date, setDate] = useState<Date>(new Date());
 
@@ -83,11 +85,11 @@ const AddEntryScreen: React.FC = () => {
   // --- ANIMATIONS ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
-  const colorAnim = useRef(new Animated.Value(0)).current; // 0 -> 1
+  const colorAnim = useRef(new Animated.Value(initialType)).current;
 
   const activeType = typeConfigs[typeIndex];
 
-  // Interpolate Colors based on Type (Red <-> Green)
+  // Colors Interpolation
   const themeColor = colorAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [colors.accentRed, colors.accentGreen],
@@ -95,7 +97,7 @@ const AddEntryScreen: React.FC = () => {
 
   const themeBg = colorAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ['#FEF2F2', '#ECFDF5'], // Light Red -> Light Green
+    outputRange: ['#FEF2F2', '#ECFDF5'],
   });
 
   const themeBorder = colorAnim.interpolate({
@@ -104,7 +106,6 @@ const AddEntryScreen: React.FC = () => {
   });
 
   useEffect(() => {
-    // Entrance Animation
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -112,21 +113,16 @@ const AddEntryScreen: React.FC = () => {
         useNativeDriver: true,
         easing: Easing.out(Easing.cubic),
       }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 500,
-        useNativeDriver: true,
-        easing: Easing.out(Easing.back(1.5)),
-      }),
+      Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true }),
     ]).start();
   }, []);
 
-  // Theme Transition Effect
+  // Animate Color Change
   useEffect(() => {
     Animated.timing(colorAnim, {
       toValue: typeIndex,
       duration: 300,
-      useNativeDriver: false,
+      useNativeDriver: false, // Color interp requires false
     }).start();
   }, [typeIndex]);
 
@@ -147,7 +143,11 @@ const AddEntryScreen: React.FC = () => {
 
   // --- HANDLERS ---
   const handleSave = () => {
-    // Basic Validation
+    if (!user?.uid) {
+      showToast('Please sign in to save entries.');
+      return;
+    }
+
     const parsed = parseFloat(amount.replace(/,/g, ''));
     if (!amount.trim() || isNaN(parsed) || parsed <= 0) {
       Alert.alert('Invalid Amount', 'Please enter a value greater than 0.');
@@ -181,15 +181,13 @@ const AddEntryScreen: React.FC = () => {
     });
   };
 
-  const handleInputFocus = () => {
-    // Scroll to bottom to ensure keyboard doesn't hide input
-    setTimeout(() => {
-      scrollRef.current?.scrollToEnd({ animated: true });
-    }, 200);
+  const handleDateChange = (event: any, selectedDate?: Date) => {
+    setShowDatePicker(false);
+    if (selectedDate) setDate(selectedDate);
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
 
       <ScreenHeader
@@ -202,8 +200,7 @@ const AddEntryScreen: React.FC = () => {
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        // Android needs explicit offset sometimes depending on statusbar/header
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         <View style={styles.contentWrapper}>
           <ScrollView
@@ -213,7 +210,7 @@ const AddEntryScreen: React.FC = () => {
             keyboardShouldPersistTaps="handled"
           >
             <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-              {/* 1. TYPE SEGMENTED CONTROL */}
+              {/* 1. TYPE TOGGLE */}
               <View style={styles.toggleWrapper}>
                 <View style={styles.toggleContainer}>
                   {typeConfigs.map((cfg, idx) => {
@@ -246,7 +243,7 @@ const AddEntryScreen: React.FC = () => {
                 </View>
               </View>
 
-              {/* 2. AMOUNT INPUT CARD */}
+              {/* 2. AMOUNT CARD */}
               <Animated.View
                 style={[styles.amountCard, { backgroundColor: themeBg, borderColor: themeBorder }]}
               >
@@ -269,7 +266,6 @@ const AddEntryScreen: React.FC = () => {
 
               {/* 3. DETAILS GRID */}
               <View style={styles.gridContainer}>
-                {/* Category Picker */}
                 <Pressable style={styles.gridCard} onPress={() => setCategoryModalVisible(true)}>
                   <View style={styles.gridIconBg}>
                     <MaterialIcon name="category" size={22} color={colors.primary} />
@@ -283,7 +279,6 @@ const AddEntryScreen: React.FC = () => {
                   <MaterialIcon name="chevron-right" size={24} color={colors.border} />
                 </Pressable>
 
-                {/* Date Picker */}
                 <Pressable style={styles.gridCard} onPress={() => setShowDatePicker(true)}>
                   <View style={[styles.gridIconBg, { backgroundColor: '#eff6ff' }]}>
                     <MaterialIcon name="event" size={22} color={colors.accentBlue} />
@@ -307,7 +302,6 @@ const AddEntryScreen: React.FC = () => {
                     placeholderTextColor={colors.muted}
                     multiline
                     style={styles.noteInput}
-                    onFocus={handleInputFocus}
                   />
                   <MaterialIcon
                     name="edit"
@@ -346,7 +340,7 @@ const AddEntryScreen: React.FC = () => {
             </Animated.View>
           </ScrollView>
 
-          {/* FLOATING FOOTER - Outside ScrollView for Stickiness */}
+          {/* FOOTER */}
           <View style={[styles.footerContainer, { paddingBottom: Platform.OS === 'ios' ? 0 : 20 }]}>
             <Button
               title={editingLocalId ? 'Update Transaction' : 'Save Transaction'}
@@ -376,10 +370,7 @@ const AddEntryScreen: React.FC = () => {
           value={date}
           mode="date"
           display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-          onChange={(e, d) => {
-            setShowDatePicker(false);
-            if (d) setDate(d);
-          }}
+          onChange={handleDateChange}
         />
       )}
     </SafeAreaView>
@@ -389,26 +380,12 @@ const AddEntryScreen: React.FC = () => {
 export default AddEntryScreen;
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  contentWrapper: {
-    flex: 1,
-    // This allows the footer to sit at the bottom of the visible area
-    justifyContent: 'space-between',
-  },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 40, // Extra padding so content isn't hidden behind footer
-  },
+  safeArea: { flex: 1, backgroundColor: colors.background },
+  contentWrapper: { flex: 1, justifyContent: 'space-between' },
+  scrollContent: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 40 },
 
   /* TOGGLE */
-  toggleWrapper: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
+  toggleWrapper: { alignItems: 'center', marginBottom: 20 },
   toggleContainer: {
     flexDirection: 'row',
     backgroundColor: colors.surfaceMuted,
@@ -434,11 +411,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  toggleText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.muted,
-  },
+  toggleText: { fontSize: 14, fontWeight: '600', color: colors.muted },
 
   /* AMOUNT CARD */
   amountCard: {
@@ -448,36 +421,13 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     marginBottom: 24,
   },
-  inputLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 1,
-    marginBottom: 8,
-    opacity: 0.8,
-  },
-  amountInputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  currencySymbol: {
-    fontSize: 32,
-    fontWeight: '700',
-    marginRight: 4,
-  },
-  amountInput: {
-    fontSize: 42,
-    fontWeight: '800',
-    minWidth: 100,
-    textAlign: 'center',
-    padding: 0,
-  },
+  inputLabel: { fontSize: 12, fontWeight: '700', letterSpacing: 1, marginBottom: 8, opacity: 0.8 },
+  amountInputRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  currencySymbol: { fontSize: 32, fontWeight: '700', marginRight: 4 },
+  amountInput: { fontSize: 42, fontWeight: '800', minWidth: 100, textAlign: 'center', padding: 0 },
 
   /* GRID */
-  gridContainer: {
-    gap: 12,
-    marginBottom: 24,
-  },
+  gridContainer: { gap: 12, marginBottom: 24 },
   gridCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -496,21 +446,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  gridLabel: {
-    fontSize: 12,
-    color: colors.muted,
-    marginBottom: 2,
-  },
-  gridValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-  },
+  gridLabel: { fontSize: 12, color: colors.muted, marginBottom: 2 },
+  gridValue: { fontSize: 16, fontWeight: '600', color: colors.text },
 
   /* NOTE INPUT */
-  noteSection: {
-    marginBottom: 24,
-  },
+  noteSection: { marginBottom: 24 },
   sectionTitle: {
     fontSize: 14,
     fontWeight: '700',
@@ -536,17 +476,10 @@ const styles = StyleSheet.create({
     paddingTop: 0,
     height: '100%',
   },
-  noteIcon: {
-    marginTop: 2,
-    marginLeft: 8,
-  },
+  noteIcon: { marginTop: 2, marginLeft: 8 },
 
   /* CHIPS */
-  chipScroll: {
-    paddingRight: 20,
-    gap: 10,
-    paddingBottom: 20,
-  },
+  chipScroll: { paddingRight: 20, gap: 10, paddingBottom: 20 },
   chip: {
     paddingHorizontal: 16,
     paddingVertical: 10,
@@ -555,11 +488,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  chipText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.text,
-  },
+  chipText: { fontSize: 13, fontWeight: '600', color: colors.text },
 
   /* FOOTER */
   footerContainer: {

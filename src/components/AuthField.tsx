@@ -47,15 +47,16 @@ export default AuthField;
 const styles = StyleSheet.create({
   wrapper: {
     width: '100%',
-    marginTop: spacing(1.5),
+    marginTop: spacing(1),
   },
   field: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surfaceMuted,
-    borderRadius: 14,
+    borderRadius: 12,
     paddingHorizontal: spacing(1.5),
-    paddingVertical: spacing(1.25),
+    paddingVertical: 12,
+    minHeight: 52,
     borderWidth: 1,
     borderColor: colors.border,
   },
@@ -69,6 +70,8 @@ const styles = StyleSheet.create({
     marginLeft: spacing(1),
     flexDirection: 'row',
     alignItems: 'center',
+    height: '100%',
+    justifyContent: 'center',
   },
   error: {
     marginTop: spacing(0.5),

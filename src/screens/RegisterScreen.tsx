@@ -17,28 +17,43 @@ import {
   UIManager,
 } from 'react-native';
 import { Button, Text } from '@rneui/themed';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
+import FontAwesome from '@expo/vector-icons/FontAwesome';
 
 // Types & Services
 import { AuthStackParamList } from '../types/navigation';
-import { registerOnline, warmNeonConnection } from '../services/auth';
 import { useToast } from '../context/ToastContext';
 import { useInternetStatus } from '../hooks/useInternetStatus';
+import { registerWithEmail } from '../services/auth';
+import { SHOW_GITHUB_LOGIN, SHOW_GOOGLE_LOGIN } from '../config/featureFlags';
+import FirebaseAuth from '../components/firebase-auth/FirebaseAuth';
 
 // Components & Utils
-import { colors, spacing, shadows } from '../utils/design';
+import { colors } from '../utils/design';
 import FullScreenSpinner from '../components/FullScreenSpinner';
 import AuthField from '../components/AuthField';
 
-// Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
 type RegisterScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList>;
+
+const readProviderError = (error: unknown, fallback: string) => {
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = (error as any).message;
+    if (typeof message === 'string' && message.trim().length) {
+      return message;
+    }
+  }
+  if (typeof error === 'string' && error.trim().length) {
+    return error;
+  }
+  return fallback;
+};
 
 const RegisterScreen = () => {
   const navigation = useNavigation<RegisterScreenNavigationProp>();
@@ -55,7 +70,7 @@ const RegisterScreen = () => {
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [warming, setWarming] = useState(false);
+  const [socialLoading, setSocialLoading] = useState(false);
 
   // Validation State
   const [emailError, setEmailError] = useState<string | null>(null);
@@ -70,7 +85,7 @@ const RegisterScreen = () => {
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 500,
+        duration: 600,
         useNativeDriver: true,
         easing: Easing.out(Easing.cubic),
       }),
@@ -94,28 +109,7 @@ const RegisterScreen = () => {
   };
   const passStrength = getPasswordStrength(password);
 
-  const warmRemote = useCallback(
-    async (force = false) => {
-      if (!isOnline) return false;
-      // Animate the appearance of the warming banner
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      setWarming(true);
-      try {
-        const ok = await warmNeonConnection({ force });
-        return ok;
-      } finally {
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-        setWarming(false);
-      }
-    },
-    [isOnline]
-  );
-
-  useFocusEffect(
-    useCallback(() => {
-      warmRemote(false).catch(() => { });
-    }, [warmRemote])
-  );
+  const showGithub = SHOW_GITHUB_LOGIN;
 
   // Optimized Handlers
   const handleEmailChange = useCallback(
@@ -131,7 +125,6 @@ const RegisterScreen = () => {
 
   const handlePasswordChange = useCallback(
     (text: string) => {
-      // Smoothly animate the strength meter appearing/changing
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setPassword(text);
       if (passwordError) setPasswordError(null);
@@ -139,10 +132,9 @@ const RegisterScreen = () => {
     [passwordError]
   );
 
-  const handleRegister = useCallback(async () => {
-    if (loading || warming) return;
-    if (!isOnline)
-      return Alert.alert('Offline', 'Internet connection required to create an account.');
+  const performRegister = useCallback(async () => {
+    if (loading || socialLoading) return;
+    if (!isOnline) return Alert.alert('Offline', 'Internet connection required.');
 
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setEmailError(null);
@@ -165,27 +157,100 @@ const RegisterScreen = () => {
 
     setLoading(true);
     try {
-      await registerOnline(name, email, password);
+      await registerWithEmail(name.trim(), email.trim(), password);
       showToast('Account created!');
-      (navigation.getParent() as any)?.replace('Main');
-    } catch (err: any) {
-      const msg = err?.message || String(err);
-      if (msg.includes('timed out')) {
-        Alert.alert('Timeout', 'Server took too long to respond. Try again?');
-      } else {
-        Alert.alert('Registration Failed', msg);
+      // Navigation is usually handled by auth state listener
+    } catch (err) {
+      // Handle email already in use that is registered via social provider
+      const code = (err as any)?.code || null;
+      if (code === 'auth/email-already-in-use' || code === 'userService/email-conflict' || code === 'userService/email-conflict') {
+        try {
+          const authMod: any = await import('../services/auth');
+          const methods: string[] = await authMod.fetchSignInMethodsForEmail(email.trim());
+          const provider = (methods && methods.length && methods[0]) || null;
+          if (provider && (provider.includes('google') || provider.includes('github') || provider.includes('github.com') || provider.includes('google.com'))) {
+            // Block signup and offer actions per spec
+            Alert.alert(
+              'This email already has an account',
+              'Please sign in with your password to link accounts.',
+              [
+                {
+                  text: provider.includes('google') || provider.includes('google.com') ? 'Continue with Google' : 'Continue with GitHub',
+                  onPress: async () => {
+                    try {
+                      setSocialLoading(true);
+                      const authMod2: any = await import('../services/auth');
+                      if (provider.includes('google') || provider.includes('google.com')) {
+                        await authMod2.startGoogleSignIn('signIn');
+                      } else {
+                        await authMod2.startGithubSignIn('signIn');
+                      }
+                    } catch (e) {
+                      Alert.alert('Sign-in Failed', (e as any)?.message || 'Unable to sign in with provider.');
+                    } finally {
+                      setSocialLoading(false);
+                    }
+                  },
+                },
+                {
+                  text: 'Reset password',
+                  onPress: async () => {
+                    try {
+                      const authMod3: any = await import('../services/auth');
+                      await authMod3.sendPasswordReset(email.trim());
+                      showToast('Password reset sent');
+                    } catch (e) {
+                      Alert.alert('Reset Failed', (e as any)?.message || 'Unable to send reset email right now.');
+                    }
+                  },
+                },
+                { text: 'OK', style: 'cancel' },
+              ],
+              { cancelable: true }
+            );
+            return;
+          }
+        } catch (inner) {
+          // fallthrough to generic error
+        }
       }
+      const msg = (err as any)?.message || String(err);
+      Alert.alert('Registration Failed', msg);
     } finally {
       setLoading(false);
     }
-  }, [loading, warming, isOnline, name, email, password, warmRemote, navigation, showToast]);
+  }, [loading, socialLoading, isOnline, name, email, password, showToast]);
 
-  const handleOpenTerms = useCallback(() => navigation.navigate('Terms'), [navigation]);
-  const handleOpenPrivacy = useCallback(() => navigation.navigate('PrivacyPolicy'), [navigation]);
+  const handleRegister = useCallback(() => {
+    Alert.alert(
+      'Create Account',
+      'By continuing, you agree to our Terms and Privacy Policy.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Agree & Create', onPress: performRegister },
+      ],
+      { cancelable: true }
+    );
+  }, [performRegister]);
+
+  const handleGithubSignup = async () => {
+    if (!showGithub) return;
+    setSocialLoading(true);
+    try {
+      const mod = await import('../services/auth');
+      await mod.startGithubSignIn('signIn');
+    } catch (err) {
+      Alert.alert('GitHub Sign-up Failed', readProviderError(err, 'Unable to reach GitHub.'));
+    } finally {
+      setSocialLoading(false);
+    }
+  };
+
+  const spinnerVisible = loading || socialLoading;
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background || '#F0F2F5'} />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -195,48 +260,26 @@ const RegisterScreen = () => {
         <ScrollView
           contentContainerStyle={[
             styles.scrollContent,
-            { minHeight: isSmallScreen ? '100%' : '90%', justifyContent: 'center' },
+            { minHeight: isSmallScreen ? '100%' : '90%' },
           ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
-          bounces={false}
         >
           <Animated.View
             style={[styles.card, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
           >
-            {/* --- HEADER ROW (Logo Left | Text Right) --- */}
-            <View style={styles.brandHeader}>
-              <View style={styles.logoContainer}>
+            {/* --- HEADER --- */}
+            <View style={styles.cardHeaderCenter}>
+              <View style={styles.logoBadgeCentered}>
                 <Image
                   source={require('../../assets/splash-icon.png')}
-                  style={styles.logo}
+                  style={styles.logoCentered}
                   resizeMode="contain"
+                  defaultSource={{ uri: 'https://via.placeholder.com/60' }}
                 />
               </View>
-              <View style={styles.brandTexts}>
-                <Text style={styles.appName}>Join DhanDiary</Text>
-                <Text style={styles.appTagline}>Start your journey today</Text>
-              </View>
-            </View>
-
-            {/* DIVIDER */}
-            <View style={styles.divider} />
-
-            {/* --- TRUST BADGES (Pill Style) --- */}
-            <View style={styles.trustRow}>
-              <View style={styles.trustBadge}>
-                <MaterialIcon
-                  name="verified-user"
-                  size={12}
-                  color={colors.accentGreen || 'green'}
-                />
-                <Text style={styles.trustText}>Free Forever</Text>
-              </View>
-              <View style={styles.verticalDivider} />
-              <View style={styles.trustBadge}>
-                <MaterialIcon name="lock" size={12} color={colors.primary} />
-                <Text style={styles.trustText}>Encrypted</Text>
-              </View>
+              <Text style={styles.appName}>Create Account</Text>
+              <Text style={styles.appTagline}>Join DhanDiary today</Text>
             </View>
 
             {/* --- FORM --- */}
@@ -289,10 +332,12 @@ const RegisterScreen = () => {
                           backgroundColor:
                             passStrength >= 1
                               ? passStrength >= 2
-                                ? colors.accentGreen || '#4CAF50'
-                                : colors.accentOrange || '#FF9800'
-                              : colors.accentRed || '#F44336',
-                          flex: passStrength,
+                                ? passStrength >= 3
+                                  ? '#4CAF50'
+                                  : '#FF9800'
+                                : '#F44336'
+                              : '#E0E0E0',
+                          flex: passStrength || 0.1,
                         },
                       ]}
                     />
@@ -315,19 +360,11 @@ const RegisterScreen = () => {
                 </View>
               )}
 
-              {/* WARMING UP BANNER */}
-              {warming && (
-                <View style={styles.warmingBanner}>
-                  <MaterialIcon name="bolt" size={16} color={colors.accentOrange || '#FF9800'} />
-                  <Text style={styles.warmingText}>Secure server is waking up...</Text>
-                </View>
-              )}
-
               <Button
                 title={loading ? 'Creating...' : 'Create Account'}
                 onPress={handleRegister}
                 loading={loading}
-                disabled={loading || !isOnline}
+                disabled={loading || socialLoading || !isOnline}
                 buttonStyle={styles.primaryButton}
                 containerStyle={styles.buttonContainer}
                 titleStyle={styles.buttonText}
@@ -343,15 +380,73 @@ const RegisterScreen = () => {
                 }
               />
 
-              {/* TERMS TEXT */}
+              {(showGithub || SHOW_GOOGLE_LOGIN) && (
+                <FirebaseAuth
+                  showGoogle={SHOW_GOOGLE_LOGIN}
+                  showGithub={showGithub}
+                  socialLoading={socialLoading}
+                  onGooglePress={async () => {
+                    setSocialLoading(true);
+                    try {
+                      const mod = await import('../services/auth');
+                      await mod.startGoogleSignIn('signIn');
+                      showToast('Welcome!');
+                      (navigation.getParent() as any)?.replace('Main');
+                    } catch (err) {
+                      if (
+                        (err as any)?.message &&
+                        typeof (err as any).message === 'string' &&
+                        (err as any).message.includes('native module not available')
+                      ) {
+                        Alert.alert(
+                          'Google Sign-In Unavailable',
+                          'Google Sign-In native module is not available in this build. Use a development build / dev-client or run a native build (prebuild) so native modules are linked.'
+                        );
+                        return;
+                      }
+                      if ((err as any) && (err as any).code === 'auth/account-exists-with-different-credential') {
+                        const prefill = (err as any).email || undefined;
+                        (navigation as any).navigate('Login', { prefillEmail: prefill, pendingCredential: (err as any).pendingCredential });
+                        Alert.alert('This email already has an account', 'Please sign in with your password to link accounts.');
+                        return;
+                      }
+                      // Handle google statusCodes if available
+                      try {
+                        const googleMod: any = require('@react-native-google-signin/google-signin');
+                        const { statusCodes } = googleMod;
+                        if ((err as any) && (err as any).code) {
+                            if ((err as any).code === statusCodes?.IN_PROGRESS) {
+                            Alert.alert('Sign-in in progress', 'A sign-in operation is already in progress.');
+                            return;
+                          }
+                            if ((err as any).code === statusCodes?.PLAY_SERVICES_NOT_AVAILABLE) {
+                            Alert.alert('Play Services', 'Google Play Services not available or outdated.');
+                            return;
+                          }
+                        }
+                      } catch (e) {
+                        // ignore
+                      }
+                      Alert.alert('Google Sign-up Failed', readProviderError(err, 'Unable to reach Google.'));
+                    } finally {
+                      setSocialLoading(false);
+                    }
+                  }}
+                  onGithubPress={handleGithubSignup}
+                />
+              )}
+
               <View style={styles.termsContainer}>
                 <Text style={styles.termsText}>
-                  By signing up, you agree to our{' '}
-                  <Text style={styles.termsLink} onPress={handleOpenTerms}>
+                  By joining, you agree to our{' '}
+                  <Text style={styles.termsLink} onPress={() => navigation.navigate('Terms')}>
                     Terms
                   </Text>{' '}
-                  and{' '}
-                  <Text style={styles.termsLink} onPress={handleOpenPrivacy}>
+                  &{' '}
+                  <Text
+                    style={styles.termsLink}
+                    onPress={() => navigation.navigate('PrivacyPolicy')}
+                  >
                     Privacy Policy
                   </Text>
                   .
@@ -359,7 +454,7 @@ const RegisterScreen = () => {
               </View>
             </View>
 
-            {/* --- FOOTER INSIDE CARD --- */}
+            {/* --- FOOTER --- */}
             <View style={styles.footerRow}>
               <Text style={styles.footerText}>Already have an account?</Text>
               <TouchableOpacity onPress={() => navigation.navigate('Login')}>
@@ -367,143 +462,60 @@ const RegisterScreen = () => {
               </TouchableOpacity>
             </View>
           </Animated.View>
-
-          {/* SECURITY BADGE */}
-          <View style={styles.securityBadge}>
-            <MaterialIcon name="security" size={14} color={colors.muted || '#999'} />
-            <Text style={styles.securityText}>Secured by DhanDiary</Text>
-          </View>
         </ScrollView>
       </KeyboardAvoidingView>
 
-      <FullScreenSpinner visible={loading} message="Creating your vault..." />
+      <FullScreenSpinner
+        visible={spinnerVisible}
+        message={loading ? 'Creating account...' : socialLoading ? 'Signing you in...' : 'Creating account...'}
+      />
     </SafeAreaView>
   );
 };
 
 export default RegisterScreen;
 
-/* -----------------------------
-   STYLES
------------------------------ */
+/* STYLES */
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#F0F2F5',
-  },
-  scrollContent: {
-    flexGrow: 1,
-    padding: 20,
-    paddingBottom: 50,
-  },
+  safeArea: { flex: 1, backgroundColor: '#F0F2F5' },
+  scrollContent: { flexGrow: 1, padding: 20, justifyContent: 'center' },
 
-  /* MAIN CARD */
   card: {
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
     padding: 24,
     width: '100%',
-    maxWidth: 450,
+    maxWidth: 480,
     alignSelf: 'center',
-
-    // Shadows
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 12,
     elevation: 5,
   },
 
   /* HEADER */
-  brandHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  // --- UPDATED LOGO CONTAINER (Clean, No Border) ---
-  logoContainer: {
-    width: 56,
-    height: 56,
+  cardHeaderCenter: { alignItems: 'center', marginBottom: 20 },
+  logoBadgeCentered: {
+    width: 64,
+    height: 64,
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12, // Adjusted margin for transparent look
-    // Removed borderWidth, borderColor, backgroundColor
+    marginBottom: 12,
   },
-  logo: {
-    width: 56, // Full fill
-    height: 56,
-  },
-  brandTexts: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  appName: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: colors.text,
-    letterSpacing: 0.5,
-    marginBottom: 2,
-  },
-  appTagline: {
-    fontSize: 14,
-    color: colors.muted || '#666',
-    fontWeight: '500',
-  },
-
-  divider: {
-    height: 1,
-    backgroundColor: '#F0F0F0',
-    width: '100%',
-    marginBottom: 20,
-  },
-
-  /* TRUST PILLS */
-  trustRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 50,
-    alignSelf: 'center',
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: '#E9ECEF',
-  },
-  trustBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  verticalDivider: {
-    width: 1,
-    height: 12,
-    backgroundColor: '#DDE2E5',
-    marginHorizontal: 12,
-  },
-  trustText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: colors.subtleText || '#555',
-  },
+  logoCentered: { width: 40, height: 40 },
+  appName: { fontSize: 22, fontWeight: '800', color: colors.text || '#111827', marginBottom: 4 },
+  appTagline: { fontSize: 14, color: colors.muted || '#6B7280', fontWeight: '500' },
 
   /* FORM */
-  formContainer: {
-    width: '100%',
-  },
-  fieldSpacing: {
-    marginBottom: 16,
-  },
-  eyeIcon: {
-    padding: 8,
-  },
+  formContainer: { width: '100%' },
+  fieldSpacing: { marginBottom: 16 },
+  eyeIcon: { padding: 8 },
 
   /* STRENGTH METER */
-  strengthWrapper: {
-    marginTop: 4,
-    marginBottom: 16,
-  },
+  strengthWrapper: { marginTop: 4, marginBottom: 16 },
   strengthContainer: {
     flexDirection: 'row',
     height: 4,
@@ -511,102 +523,53 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     gap: 4,
   },
-  strengthBar: {
-    height: '100%',
-    borderRadius: 2,
-  },
-  strengthText: {
-    fontSize: 11,
-    color: colors.muted || '#888',
-    marginTop: 6,
-    textAlign: 'right',
-  },
-
-  /* WARMING BANNER */
-  warmingBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    backgroundColor: '#FFF3E0', // Light Orange bg
-    borderRadius: 8,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#FFE0B2',
-  },
-  warmingText: {
-    fontSize: 12,
-    color: '#E65100', // Darker Orange text
-    fontWeight: '600',
-  },
+  strengthBar: { height: '100%', borderRadius: 2 },
+  strengthText: { fontSize: 11, color: colors.muted || '#888', marginTop: 6, textAlign: 'right' },
 
   /* BUTTONS */
   primaryButton: {
-    backgroundColor: colors.primary,
-    paddingVertical: 14,
+    backgroundColor: colors.primary || '#2563EB',
+    paddingVertical: 12,
     borderRadius: 12,
   },
-  buttonContainer: {
-    width: '100%',
-    borderRadius: 12,
-    marginTop: 8,
+  buttonContainer: { marginTop: 8, borderRadius: 12 },
+  buttonText: { fontSize: 16, fontWeight: '700' },
+
+  /* SOCIAL */
+  socialWrapper: { marginTop: 24 },
+  socialDivider: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  socialLine: { flex: 1, height: 1, backgroundColor: '#E5E7EB' },
+  socialText: {
+    marginHorizontal: 12,
+    fontSize: 12,
+    color: '#9CA3AF',
+    fontWeight: '600',
+    textTransform: 'uppercase',
   },
-  buttonText: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
+  socialButton: { borderRadius: 10, borderColor: '#E5E7EB', paddingVertical: 12, borderWidth: 1 },
+  socialButtonText: { color: colors.text || '#111827', fontWeight: '600' },
+  socialButtonContainer: { width: '100%' },
 
   /* TERMS */
-  termsContainer: {
-    marginTop: 16,
-    paddingHorizontal: 4,
-  },
+  termsContainer: { marginTop: 16, paddingHorizontal: 4 },
   termsText: {
     fontSize: 12,
-    color: colors.muted || '#888',
+    color: colors.muted || '#6B7280',
     textAlign: 'center',
     lineHeight: 18,
   },
-  termsLink: {
-    color: colors.primary,
-    fontWeight: '700',
-  },
+  termsLink: { color: colors.primary || '#2563EB', fontWeight: '700' },
 
   /* FOOTER */
   footerRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 20,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#F5F5F5',
-  },
-  footerText: {
-    color: colors.muted || '#888',
-    fontSize: 14,
-    marginRight: 6,
-  },
-  linkText: {
-    color: colors.primary,
-    fontWeight: '700',
-    fontSize: 14,
-  },
-
-  /* BADGE OUTSIDE CARD */
-  securityBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
     marginTop: 24,
-    gap: 6,
-    opacity: 0.6,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
   },
-  securityText: {
-    fontSize: 12,
-    color: colors.muted || '#999',
-    fontWeight: '500',
-  },
+  footerText: { color: '#6B7280', fontSize: 14, marginRight: 6 },
+  linkText: { color: colors.primary || '#2563EB', fontWeight: '700', fontSize: 14 },
 });

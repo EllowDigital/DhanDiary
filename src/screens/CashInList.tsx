@@ -8,16 +8,15 @@ import {
   Animated,
   Easing,
   StatusBar,
-  Platform,
   LayoutAnimation,
-  UIManager,
   Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, Button } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
+import { getIconForCategory } from '../constants/categories';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
-import { Swipeable } from 'react-native-gesture-handler'; // IMPORT SWIPEABLE
+import { Swipeable } from 'react-native-gesture-handler';
 
 // Custom Hooks & Components
 import { useEntries } from '../hooks/useEntries';
@@ -35,11 +34,6 @@ import {
 } from '../utils/entryFilters';
 import { colors } from '../utils/design';
 import dayjs from 'dayjs';
-
-// Enable LayoutAnimation
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 // --- CONSTANTS ---
 const TIME_FILTERS = [
@@ -166,7 +160,7 @@ const SwipeableIncomeItem = React.memo(({ item, onEdit, onDelete }: any) => {
     >
       <View style={styles.compactRow}>
         <View style={[styles.compactIcon, { backgroundColor: '#ecfdf5' }]}>
-          <MaterialIcon name="arrow-downward" size={18} color="#15803d" />
+          <MaterialIcon name={getIconForCategory(item.category) as any} size={18} color="#15803d" />
         </View>
         <View style={styles.compactContent}>
           <View style={styles.compactHeader}>
@@ -194,7 +188,7 @@ const CashInList = () => {
   const { user } = useAuth();
 
   // Data Fetching
-  const { entries, deleteEntry, isLoading, refetch } = useEntries(user?.id);
+  const { entries, deleteEntry, isLoading, refetch } = useEntries(user?.uid);
   const showLoading = useDelayedLoading(Boolean(isLoading), 200);
 
   // Local State

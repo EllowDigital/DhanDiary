@@ -15,60 +15,84 @@ import {
   Keyboard,
 } from 'react-native';
 import { Button, Text } from '@rneui/themed';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
+import FontAwesome from '@expo/vector-icons/FontAwesome';
+import FirebaseAuth from '../components/firebase-auth/FirebaseAuth';
 
 // Types & Services
 import { AuthStackParamList } from '../types/navigation';
-import { loginOnline, warmNeonConnection } from '../services/auth';
-import { syncBothWays } from '../services/syncManager';
 import { useToast } from '../context/ToastContext';
 import { useInternetStatus } from '../hooks/useInternetStatus';
+import { loginWithEmail, sendPasswordReset, getAuthErrorMessage } from '../services/auth';
+import { SHOW_GOOGLE_LOGIN, SHOW_GITHUB_LOGIN } from '../config/featureFlags';
 
 // Components & Utils
-import { colors, spacing, shadows } from '../utils/design';
+import { colors } from '../utils/design';
 import FullScreenSpinner from '../components/FullScreenSpinner';
 import AuthField from '../components/AuthField';
 
 type LoginScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList>;
 
+const getProviderErrorMessage = (error: unknown, fallback: string) => {
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = (error as any).message;
+    if (typeof message === 'string' && message.trim().length) {
+      return message;
+    }
+  }
+  if (typeof error === 'string' && error.trim().length) {
+    return error;
+  }
+  return fallback;
+};
+
 const LoginScreen = () => {
   const navigation = useNavigation<LoginScreenNavigationProp>();
+  const route: any = useRoute();
   const { showToast } = useToast();
   const isOnline = useInternetStatus();
 
   // Dimensions
   const { height } = useWindowDimensions();
-  // If screen is short (like older Androids), we reduce padding
   const isSmallScreen = height < 700;
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [resettingPassword, setResettingPassword] = useState(false);
+  const [socialLoading, setSocialLoading] = useState(false);
+
+  // Show GitHub button when feature flag enabled, even in development builds.
+  const showGithub = SHOW_GITHUB_LOGIN;
+  const showGoogle = SHOW_GOOGLE_LOGIN;
 
   // --- ANIMATION ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.95)).current;
+  const slideAnim = useRef(new Animated.Value(50)).current;
 
   useEffect(() => {
-    // Pre-warm connection
-    warmNeonConnection().catch(() => { });
-  }, []);
-
-  useEffect(() => {
+    // Prefill email if navigated here after social conflict
+    try {
+      const pre = route?.params?.prefillEmail;
+      if (pre && typeof pre === 'string') setEmail(pre);
+    } catch (err) {
+      // ignore
+    }
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
         duration: 600,
         useNativeDriver: true,
-        easing: Easing.out(Easing.quad),
+        easing: Easing.out(Easing.cubic),
       }),
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        friction: 7,
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        friction: 8,
+        tension: 40,
         useNativeDriver: true,
       }),
     ]).start();
@@ -88,28 +112,134 @@ const LoginScreen = () => {
 
     setLoading(true);
     try {
-      await loginOnline(email, password);
-      syncBothWays().catch((e) => console.warn('Post-login sync warning:', e));
+      const pending: any = (route as any)?.params?.pendingCredential;
+      if (pending) {
+        // If there's a pending OAuth credential, use the specialized linking
+        // helper which signs in the existing email user, links the pending
+        // credential, and then calls `syncUserToFirestore` afterwards.
+        const authMod: any = await import('../services/auth');
+        await authMod.linkPendingCredentialWithPassword(email, password, pending);
+        showToast('Account linked successfully');
+      } else {
+        // Normal email/password sign-in (no pending credential)
+        await loginWithEmail(email, password);
+      }
       showToast('Welcome back!');
+      // Navigation is typically handled by auth state listener in App.tsx
+      // But explicit replace is safe if auth state updates slowly
       (navigation.getParent() as any)?.replace('Main');
-    } catch (err: any) {
-      const msg = err?.message || String(err);
-      if (msg.toLowerCase().includes('timed out')) {
+    } catch (err) {
+      const code = (err as any)?.code || null;
+      if (code === 'auth/wrong-password') {
+        Alert.alert('Incorrect password');
+      } else if (code === 'auth/user-not-found') {
+        Alert.alert('No account found with this email');
+      } else if (code === 'auth/no-password-provider') {
+        Alert.alert('Account uses social sign-in', 'This email is registered via Google/GitHub. Use the social login button or set a password from account settings.');
+      } else if (((err as any)?.message || '').toLowerCase().includes('timed out')) {
         Alert.alert('Connection Timeout', 'The request took too long.', [
           { text: 'Retry', onPress: handleLogin },
           { text: 'Cancel', style: 'cancel' },
         ]);
       } else {
-        Alert.alert('Login Failed', 'Invalid credentials or server error.');
+        Alert.alert('Login Failed', getAuthErrorMessage(code));
       }
     } finally {
       setLoading(false);
     }
   };
 
-  const handleForgotPassword = () => {
-    Alert.alert('Reset Password', 'Please contact support to reset your credentials.');
+  const handleForgotPassword = async () => {
+    if (!email) {
+      return Alert.alert('Enter Email', 'Add your account email above so we can send reset steps.');
+    }
+    setResettingPassword(true);
+    try {
+      await sendPasswordReset(email);
+      Alert.alert('Email Sent', 'Check your inbox for reset instructions.');
+    } catch (err) {
+      const msg = (err as any)?.message || 'Unable to send reset email right now.';
+      Alert.alert('Reset Failed', msg);
+    } finally {
+      setResettingPassword(false);
+    }
   };
+
+  const handleGithubLogin = async () => {
+    if (!showGithub) return;
+    setSocialLoading(true);
+    try {
+      const mod = await import('../services/auth');
+      await mod.startGithubSignIn('signIn');
+    } catch (err) {
+      const e: any = err || {};
+      if (
+        e?.message &&
+        typeof e.message === 'string' &&
+        e.message.includes('native module not available')
+      ) {
+        Alert.alert(
+          'Google Sign-In Unavailable',
+          'Google Sign-In native module is not available in this build. Use a development build / dev-client or run a native build (prebuild) so native modules are linked.'
+        );
+        return;
+      }
+      if (e.code === 'auth/account-exists-with-different-credential') {
+        Alert.alert('This email already has an account', 'Please sign in with your password to link accounts.');
+      } else {
+        Alert.alert(
+          'GitHub Login Failed',
+          getProviderErrorMessage(err, 'Unable to connect to GitHub right now.')
+        );
+      }
+    } finally {
+      setSocialLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setSocialLoading(true);
+    try {
+      const mod = await import('../services/auth');
+      await mod.startGoogleSignIn('signIn');
+      showToast('Welcome!');
+      (navigation.getParent() as any)?.replace('Main');
+    } catch (err) {
+      const e: any = err || {};
+      // Try to read statusCodes if available
+      // If account exists with different credential, redirect user to Login to enter password and link
+      if (e && e.code === 'auth/account-exists-with-different-credential') {
+        const prefill = e.email || undefined;
+        (navigation as any).navigate('Login', { prefillEmail: prefill, pendingCredential: e.pendingCredential });
+        Alert.alert('This email already has an account', 'Please sign in with your password to link accounts.');
+        return;
+      }
+
+      try {
+        const googleMod: any = require('@react-native-google-signin/google-signin');
+        const { statusCodes } = googleMod;
+        if (e && e.code) {
+          if (e.code === statusCodes?.IN_PROGRESS) {
+            Alert.alert('Sign-in in progress', 'A sign-in operation is already in progress.');
+            return;
+          }
+          if (e.code === statusCodes?.PLAY_SERVICES_NOT_AVAILABLE) {
+            Alert.alert('Play Services', 'Google Play Services not available or outdated.');
+            return;
+          }
+        }
+      } catch (err2) {
+        // ignore module load errors
+      }
+
+      Alert.alert('Google Login Failed', getProviderErrorMessage(err, 'Unable to sign in with Google.'));
+    } finally {
+      setSocialLoading(false);
+    }
+  };
+
+  const spinnerVisible = loading || socialLoading;
+  const spinnerMessage = 'Signing you in...';
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -130,38 +260,21 @@ const LoginScreen = () => {
           bounces={false}
         >
           <Animated.View
-            style={[styles.card, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}
+            style={[styles.card, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
           >
-            {/* --- HEADER ROW (Logo Left | Text Right) --- */}
-            <View style={styles.brandHeader}>
-              <View style={styles.logoContainer}>
+            {/* --- CARD HEADER: Centered Logo + Title --- */}
+            <View style={styles.cardHeaderCenter}>
+              <View style={styles.logoBadgeCentered}>
                 <Image
                   source={require('../../assets/splash-icon.png')}
-                  style={styles.logo}
+                  style={styles.logoCentered}
                   resizeMode="contain"
+                  defaultSource={{ uri: 'https://via.placeholder.com/60' }}
                 />
               </View>
-              <View style={styles.brandTexts}>
-                <Text style={styles.appName}>DhanDiary</Text>
-                <Text style={styles.appTagline}>Sign in to continue</Text>
-              </View>
+              <Text style={styles.appName}>Welcome Back</Text>
+              <Text style={styles.appTagline}>Sign in to continue to your finance vault</Text>
             </View>
-
-            {/* TRUST BADGES */}
-            <View style={styles.trustRow}>
-              <View style={styles.trustBadge}>
-                <MaterialIcon name="lock" size={14} color={colors.primary} />
-                <Text style={styles.trustText}>Encrypted</Text>
-              </View>
-              <View style={styles.dividerVertical} />
-              <View style={styles.trustBadge}>
-                <MaterialIcon name="cloud-sync" size={14} color={colors.accentGreen || '#4CAF50'} />
-                <Text style={styles.trustText}>Cloud Sync</Text>
-              </View>
-            </View>
-
-            {/* DIVIDER */}
-            <View style={styles.divider} />
 
             {/* --- FORM SECTION --- */}
             <View style={styles.formContainer}>
@@ -182,12 +295,17 @@ const LoginScreen = () => {
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPass}
+                containerStyle={styles.fieldSpacing}
                 rightAccessory={
-                  <TouchableOpacity onPress={() => setShowPass(!showPass)} style={styles.eyeIcon}>
+                  <TouchableOpacity
+                    onPress={() => setShowPass(!showPass)}
+                    style={styles.eyeIcon}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
                     <MaterialIcon
                       name={showPass ? 'visibility' : 'visibility-off'}
-                      color={colors.muted || '#999'}
-                      size={22}
+                      color={colors.muted || '#9CA3AF'}
+                      size={20}
                     />
                   </TouchableOpacity>
                 }
@@ -197,15 +315,18 @@ const LoginScreen = () => {
                 style={styles.forgotPassContainer}
                 onPress={handleForgotPassword}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                disabled={resettingPassword}
               >
-                {/* <Text style={styles.forgotPassText}>Forgot Password?</Text> */}
+                <Text style={styles.forgotPassText}>
+                  {resettingPassword ? 'Sending reset link...' : 'Forgot Password?'}
+                </Text>
               </TouchableOpacity>
 
               <Button
                 title={loading ? 'Verifying...' : 'Sign In'}
                 onPress={handleLogin}
                 loading={loading}
-                disabled={loading || !isOnline}
+                disabled={loading || socialLoading || !isOnline}
                 buttonStyle={styles.primaryButton}
                 containerStyle={styles.buttonContainer}
                 titleStyle={styles.buttonText}
@@ -215,26 +336,30 @@ const LoginScreen = () => {
                   ) : undefined
                 }
               />
+
+              {(showGithub || showGoogle) && (
+                <FirebaseAuth
+                  showGoogle={showGoogle}
+                  showGithub={showGithub}
+                  socialLoading={socialLoading}
+                  onGooglePress={handleGoogleLogin}
+                  onGithubPress={handleGithubLogin}
+                />
+              )}
             </View>
 
             {/* --- FOOTER INSIDE CARD --- */}
             <View style={styles.footerRow}>
-              <Text style={styles.footerText}>New here?</Text>
+              <Text style={styles.footerText}>Don't have an account?</Text>
               <TouchableOpacity onPress={() => navigation.navigate('Register')}>
                 <Text style={styles.linkText}>Create Account</Text>
               </TouchableOpacity>
             </View>
           </Animated.View>
-
-          {/* SECURITY BADGE (Outside card, at bottom) */}
-          <View style={styles.securityBadge}>
-            <MaterialIcon name="security" size={14} color={colors.muted || '#999'} />
-            <Text style={styles.securityText}>Secured by DhanDiary</Text>
-          </View>
         </ScrollView>
       </KeyboardAvoidingView>
 
-      <FullScreenSpinner visible={loading} message="Authenticating..." />
+      <FullScreenSpinner visible={spinnerVisible} message={spinnerMessage} />
     </SafeAreaView>
   );
 };
@@ -247,103 +372,54 @@ export default LoginScreen;
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#F0F2F5', // Light grey background for the whole screen
+    backgroundColor: '#F0F2F5', // Consistent light grey background
   },
   scrollContent: {
     flexGrow: 1,
     padding: 20,
-    paddingBottom: 50, // Extra space at bottom for scrolling
+    paddingBottom: 50,
   },
 
   /* MAIN CARD STYLE */
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: 20, // Slightly more rounded
     padding: 24,
     width: '100%',
-    maxWidth: 450, // Limits width on tablets
+    maxWidth: 480, // Limit width for tablets
     alignSelf: 'center',
 
-    // Smooth shadow
+    // Shadows
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
+    shadowOpacity: 0.08, // Softer shadow
+    shadowRadius: 16,
+    elevation: 6,
   },
 
-  /* HEADER ROW: LOGO + TEXT */
-  brandHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  // --- UPDATED LOGO CONTAINER (No Border, Transparent) ---
-  logoContainer: {
-    width: 56,
-    height: 56,
+  cardHeaderCenter: { alignItems: 'center', marginBottom: 24 },
+  logoBadgeCentered: {
+    width: 72,
+    height: 72,
+    borderRadius: 18,
+    backgroundColor: '#F3F4F6', // Light background for logo container
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
-    // Removed borderWidth, borderColor, and backgroundColor
+    marginBottom: 16,
   },
-  logo: {
-    width: 56, // Full size of container
-    height: 56,
-  },
-  brandTexts: {
-    flex: 1,
-    justifyContent: 'center',
-  },
+  logoCentered: { width: 44, height: 44 },
   appName: {
     fontSize: 22,
     fontWeight: '800',
-    color: colors.text,
+    color: colors.text || '#111827',
     letterSpacing: 0.5,
-    marginBottom: 2,
+    marginBottom: 4,
   },
   appTagline: {
     fontSize: 14,
-    color: colors.muted || '#666',
+    color: colors.muted || '#6B7280',
     fontWeight: '500',
-  },
-
-  /* TRUST BADGES */
-  trustRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 50,
-    alignSelf: 'center',
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#E9ECEF',
-  },
-  trustBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  dividerVertical: {
-    width: 1,
-    height: 12,
-    backgroundColor: '#DDE2E5',
-    marginHorizontal: 12,
-  },
-  trustText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: colors.subtleText || '#555',
-  },
-
-  divider: {
-    height: 1,
-    backgroundColor: '#F0F0F0',
-    width: '100%',
-    marginBottom: 24,
+    textAlign: 'center',
   },
 
   /* FORM */
@@ -359,19 +435,62 @@ const styles = StyleSheet.create({
   forgotPassContainer: {
     alignSelf: 'flex-end',
     marginBottom: 24,
-    marginTop: 4,
+    marginTop: -4, // Pull up slightly
   },
   forgotPassText: {
-    color: colors.primary,
+    color: colors.primary || '#2563EB',
     fontSize: 13,
     fontWeight: '600',
   },
 
+  /* SOCIAL BUTTONS */
+  socialWrapper: {
+    marginTop: 24,
+  },
+  socialDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  socialLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E5E7EB',
+  },
+  socialText: {
+    marginHorizontal: 12,
+    fontSize: 12,
+    color: colors.muted || '#9CA3AF',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    fontWeight: '600',
+  },
+  socialButtonsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  socialButton: {
+    borderRadius: 12,
+    borderColor: '#E5E7EB',
+    borderWidth: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  socialButtonText: {
+    color: colors.text || '#111827',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  socialButtonContainer: {
+    flex: 1,
+  },
+
   /* BUTTONS */
   primaryButton: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primary || '#2563EB',
     paddingVertical: 14,
     borderRadius: 12,
+    elevation: 2,
   },
   buttonContainer: {
     width: '100%',
@@ -388,33 +507,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 24,
-    paddingTop: 16,
+    paddingTop: 20,
     borderTopWidth: 1,
-    borderTopColor: '#F5F5F5',
+    borderTopColor: '#F3F4F6',
   },
   footerText: {
-    color: colors.muted || '#888',
+    color: colors.muted || '#6B7280',
     fontSize: 14,
     marginRight: 6,
   },
   linkText: {
-    color: colors.primary,
+    color: colors.primary || '#2563EB',
     fontWeight: '700',
     fontSize: 14,
-  },
-
-  /* BOTTOM BADGE */
-  securityBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 24,
-    gap: 6,
-    opacity: 0.6,
-  },
-  securityText: {
-    fontSize: 12,
-    color: colors.muted || '#999',
-    fontWeight: '500',
   },
 });
