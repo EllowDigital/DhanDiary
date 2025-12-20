@@ -106,10 +106,10 @@ const RegisterScreen = ({ navigation }: any) => {
   };
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0f172a" />
+    <View style={[styles.container, { backgroundColor: '#fff' }]}>
+      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
       <LinearGradient
-        colors={['#0f172a', '#1e293b']}
+        colors={['#ffffff', '#f8fafc']}
         style={StyleSheet.absoluteFill}
       />
 
@@ -266,49 +266,51 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#fff',
+    color: '#0f172a',
   },
   card: {
-    backgroundColor: 'rgba(30, 41, 59, 0.7)',
-    borderRadius: 24,
-    padding: 24,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 18,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: 'rgba(15, 23, 42, 0.04)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 2,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
-    borderRadius: 16,
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(71, 85, 105, 0.5)',
-    marginBottom: 16,
-    paddingHorizontal: 16,
-    height: 56,
+    borderColor: 'rgba(15, 23, 42, 0.06)',
+    marginBottom: 12,
+    paddingHorizontal: 12,
+    height: 52,
   },
   inputIcon: {
     marginRight: 12,
   },
   input: {
     flex: 1,
-    color: '#fff',
+    color: '#0f172a',
     fontSize: 16,
   },
   primaryBtn: {
-    backgroundColor: '#3b82f6',
-    borderRadius: 16,
-    height: 56,
+    backgroundColor: '#2563eb',
+    borderRadius: 12,
+    height: 52,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 8,
-    shadowColor: '#3b82f6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
+    shadowColor: '#2563eb',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 2,
   },
   disabledBtn: {
     opacity: 0.7,
@@ -333,14 +335,14 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(59, 130, 246, 0.4)',
   },
   verifyTitle: {
-    color: '#fff',
+    color: '#0f172a',
     fontSize: 24,
     fontWeight: 'bold',
     textAlign: 'center',
     marginBottom: 8,
   },
   verifyDesc: {
-    color: '#94a3b8',
+    color: '#64748b',
     fontSize: 16,
     textAlign: 'center',
     marginBottom: 24,
@@ -352,7 +354,7 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   linkText: {
-    color: '#60a5fa',
+    color: '#2563eb',
     fontWeight: '600',
     fontSize: 16,
   },
@@ -366,17 +368,17 @@ const styles = StyleSheet.create({
     zIndex: 100,
   },
   syncBox: {
-    backgroundColor: '#1e293b',
-    padding: 24,
-    borderRadius: 16,
+    backgroundColor: '#fff',
+    padding: 18,
+    borderRadius: 12,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#3b82f6',
+    borderColor: 'rgba(37,99,235,0.08)',
   },
   syncText: {
-    color: '#fff',
-    marginTop: 16,
-    fontSize: 16,
+    color: '#0f172a',
+    marginTop: 12,
+    fontSize: 15,
     fontWeight: '600',
   }
 });

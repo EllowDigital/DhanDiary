@@ -178,10 +178,10 @@ const LoginScreen = () => {
   };
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0f172a" />
+    <View style={[styles.container, { backgroundColor: '#fff' }]}>
+      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
       <LinearGradient
-        colors={['#0f172a', '#1e293b']}
+        colors={['#ffffff', '#f8fafc']}
         style={StyleSheet.absoluteFill}
       />
 
@@ -306,23 +306,24 @@ const styles = StyleSheet.create({
   appName: {
     fontSize: 32,
     fontWeight: '800',
-    color: '#fff',
+    color: '#0f172a',
     marginBottom: 4,
   },
   tagline: {
     fontSize: 16,
-    color: '#94a3b8',
+    color: '#64748b',
   },
   card: {
-    backgroundColor: 'rgba(30, 41, 59, 0.7)',
-    borderRadius: 24,
-    padding: 24,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 18,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: 'rgba(15, 23, 42, 0.04)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 2,
   },
   cardTitle: {
     fontSize: 20,
@@ -334,30 +335,31 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
-    borderRadius: 16,
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(71, 85, 105, 0.5)',
-    marginBottom: 16,
-    paddingHorizontal: 16,
-    height: 56,
+    borderColor: 'rgba(15, 23, 42, 0.06)',
+    marginBottom: 12,
+    paddingHorizontal: 12,
+    height: 52,
   },
   inputIcon: { marginRight: 12 },
-  input: { flex: 1, color: '#fff', fontSize: 16 },
+  input: { flex: 1, color: '#0f172a', fontSize: 16 },
   primaryBtn: {
-    backgroundColor: '#3b82f6',
-    borderRadius: 16,
-    height: 56,
+    backgroundColor: '#2563eb',
+    borderRadius: 12,
+    height: 52,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 8,
-    shadowColor: '#3b82f6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
+    shadowColor: '#2563eb',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 2,
   },
   disabledBtn: { opacity: 0.7 },
-  primaryBtnText: { color: '#fff', fontSize: 18, fontWeight: '600' },
+  primaryBtnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 
   dividerContainer: {
     flexDirection: 'row',
@@ -365,10 +367,10 @@ const styles = StyleSheet.create({
     marginTop: 32,
     marginBottom: 24,
   },
-  line: { flex: 1, height: 1, backgroundColor: '#334155' },
+  line: { flex: 1, height: 1, backgroundColor: '#e6eef8' },
   dividerText: {
-    color: '#64748b',
-    paddingHorizontal: 16,
+    color: '#94a3b8',
+    paddingHorizontal: 12,
     fontSize: 12,
     fontWeight: '600',
     letterSpacing: 1,
@@ -379,24 +381,24 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   socialBtn: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: '#334155',
+    width: 52,
+    height: 52,
+    borderRadius: 12,
+    backgroundColor: '#fff',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: 'rgba(15,23,42,0.06)',
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
     marginTop: 32,
   },
-  footerText: { color: '#94a3b8', fontSize: 14 },
+  footerText: { color: '#64748b', fontSize: 14 },
   linkText: {
-    color: '#60a5fa',
-    fontWeight: 'bold',
+    color: '#2563eb',
+    fontWeight: '600',
     fontSize: 14,
     marginLeft: 6,
   },

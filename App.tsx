@@ -52,8 +52,14 @@ import {
 } from './src/services/syncManager';
 import { ClerkProvider } from '@clerk/clerk-expo';
 import tokenCache from './src/utils/tokenCache';
+import Constants from 'expo-constants';
 
-const CLERK_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY || '';
+// Prefer values injected via `app.config.js` / `app.json` (Constants.expoConfig.extra)
+// Fall back to process.env for node-based tooling.
+const CLERK_PUBLISHABLE_KEY =
+  ((Constants?.expoConfig?.extra as any)?.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY as string) ||
+  process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ||
+  '';
 
 import { BiometricAuth } from './src/components/BiometricAuth';
 
