@@ -33,9 +33,11 @@ import { ALLOWED_CATEGORIES, DEFAULT_CATEGORY, ensureCategory } from '../constan
 import ScreenHeader from '../components/ScreenHeader';
 import dayjs from 'dayjs';
 
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+try {
+  if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+  }
+} catch (e) { }
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 

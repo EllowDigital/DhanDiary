@@ -11,6 +11,7 @@ import {
   Platform,
   UIManager,
   PixelRatio,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
@@ -491,7 +492,14 @@ const HomeScreen = () => {
     <View style={styles.main}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-        <FullScreenSpinner visible={isLoading} />
+        {/* Non-blocking loader */}
+        {isLoading && (
+          <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+            <View style={{ flex: 1, alignItems: 'center', paddingTop: 100 }}>
+              <ActivityIndicator size="large" color={colors.primary} />
+            </View>
+          </View>
+        )}
 
         <FlatList
           data={recentEntries}
