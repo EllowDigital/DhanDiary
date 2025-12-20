@@ -21,15 +21,12 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
 
 // Types & Services
 import { AuthStackParamList } from '../types/navigation';
 import { useToast } from '../context/ToastContext';
 import { useInternetStatus } from '../hooks/useInternetStatus';
-import { registerWithEmail } from '../services/auth';
-import { SHOW_GITHUB_LOGIN, SHOW_GOOGLE_LOGIN } from '../config/featureFlags';
-import FirebaseAuth from '../components/firebase-auth/FirebaseAuth';
+import { registerOnline } from '../services/auth';
 
 // Components & Utils
 import { colors } from '../utils/design';
@@ -41,19 +38,6 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 }
 
 type RegisterScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList>;
-
-const readProviderError = (error: unknown, fallback: string) => {
-  if (error && typeof error === 'object' && 'message' in error) {
-    const message = (error as any).message;
-    if (typeof message === 'string' && message.trim().length) {
-      return message;
-    }
-  }
-  if (typeof error === 'string' && error.trim().length) {
-    return error;
-  }
-  return fallback;
-};
 
 const RegisterScreen = () => {
   const navigation = useNavigation<RegisterScreenNavigationProp>();
@@ -70,7 +54,6 @@ const RegisterScreen = () => {
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [socialLoading, setSocialLoading] = useState(false);
 
   // Validation State
   const [emailError, setEmailError] = useState<string | null>(null);
@@ -109,8 +92,6 @@ const RegisterScreen = () => {
   };
   const passStrength = getPasswordStrength(password);
 
-  const showGithub = SHOW_GITHUB_LOGIN;
-
   // Optimized Handlers
   const handleEmailChange = useCallback(
     (text: string) => {
@@ -133,7 +114,7 @@ const RegisterScreen = () => {
   );
 
   const performRegister = useCallback(async () => {
-    if (loading || socialLoading) return;
+    if (loading) return;
     if (!isOnline) return Alert.alert('Offline', 'Internet connection required.');
 
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -157,69 +138,22 @@ const RegisterScreen = () => {
 
     setLoading(true);
     try {
-      await registerWithEmail(name.trim(), email.trim(), password);
+      await registerOnline(name.trim(), email.trim(), password);
       showToast('Account created!');
-      // Navigation is usually handled by auth state listener
-    } catch (err) {
-      // Handle email already in use that is registered via social provider
-      const code = (err as any)?.code || null;
-      if (code === 'auth/email-already-in-use' || code === 'userService/email-conflict' || code === 'userService/email-conflict') {
-        try {
-          const authMod: any = await import('../services/auth');
-          const methods: string[] = await authMod.fetchSignInMethodsForEmail(email.trim());
-          const provider = (methods && methods.length && methods[0]) || null;
-          if (provider && (provider.includes('google') || provider.includes('github') || provider.includes('github.com') || provider.includes('google.com'))) {
-            // Block signup and offer actions per spec
-            Alert.alert(
-              'This email already has an account',
-              'Please sign in with your password to link accounts.',
-              [
-                {
-                  text: provider.includes('google') || provider.includes('google.com') ? 'Continue with Google' : 'Continue with GitHub',
-                  onPress: async () => {
-                    try {
-                      setSocialLoading(true);
-                      const authMod2: any = await import('../services/auth');
-                      if (provider.includes('google') || provider.includes('google.com')) {
-                        await authMod2.startGoogleSignIn('signIn');
-                      } else {
-                        await authMod2.startGithubSignIn('signIn');
-                      }
-                    } catch (e) {
-                      Alert.alert('Sign-in Failed', (e as any)?.message || 'Unable to sign in with provider.');
-                    } finally {
-                      setSocialLoading(false);
-                    }
-                  },
-                },
-                {
-                  text: 'Reset password',
-                  onPress: async () => {
-                    try {
-                      const authMod3: any = await import('../services/auth');
-                      await authMod3.sendPasswordReset(email.trim());
-                      showToast('Password reset sent');
-                    } catch (e) {
-                      Alert.alert('Reset Failed', (e as any)?.message || 'Unable to send reset email right now.');
-                    }
-                  },
-                },
-                { text: 'OK', style: 'cancel' },
-              ],
-              { cancelable: true }
-            );
-            return;
-          }
-        } catch (inner) {
-          // fallthrough to generic error
-        }
+      // Navigation is usually handled by auth state listener or manual replace if auth state logic is missing in App.tsx for this flow
+      // Assuming App.tsx listens to session changes, but let's be safe as per LoginScreen
+      (navigation.getParent() as any)?.replace('Main');
+    } catch (err: any) {
+      const msg = err?.message || String(err);
+      if (msg.includes('already exists')) {
+        Alert.alert('Registration Failed', 'An account with this email already exists.');
+      } else {
+        Alert.alert('Registration Failed', msg);
       }
-      const msg = (err as any)?.message || String(err);
-      Alert.alert('Registration Failed', msg);
     } finally {
       setLoading(false);
     }
-  }, [loading, socialLoading, isOnline, name, email, password, showToast]);
+  }, [loading, isOnline, name, email, password, showToast, navigation]);
 
   const handleRegister = useCallback(() => {
     Alert.alert(
@@ -233,24 +167,9 @@ const RegisterScreen = () => {
     );
   }, [performRegister]);
 
-  const handleGithubSignup = async () => {
-    if (!showGithub) return;
-    setSocialLoading(true);
-    try {
-      const mod = await import('../services/auth');
-      await mod.startGithubSignIn('signIn');
-    } catch (err) {
-      Alert.alert('GitHub Sign-up Failed', readProviderError(err, 'Unable to reach GitHub.'));
-    } finally {
-      setSocialLoading(false);
-    }
-  };
-
-  const spinnerVisible = loading || socialLoading;
-
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.background || '#F0F2F5'} />
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background || '#F0F0F0'} />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -275,7 +194,6 @@ const RegisterScreen = () => {
                   source={require('../../assets/splash-icon.png')}
                   style={styles.logoCentered}
                   resizeMode="contain"
-                  defaultSource={{ uri: 'https://via.placeholder.com/60' }}
                 />
               </View>
               <Text style={styles.appName}>Create Account</Text>
@@ -364,7 +282,7 @@ const RegisterScreen = () => {
                 title={loading ? 'Creating...' : 'Create Account'}
                 onPress={handleRegister}
                 loading={loading}
-                disabled={loading || socialLoading || !isOnline}
+                disabled={loading || !isOnline}
                 buttonStyle={styles.primaryButton}
                 containerStyle={styles.buttonContainer}
                 titleStyle={styles.buttonText}
@@ -379,62 +297,6 @@ const RegisterScreen = () => {
                   ) : undefined
                 }
               />
-
-              {(showGithub || SHOW_GOOGLE_LOGIN) && (
-                <FirebaseAuth
-                  showGoogle={SHOW_GOOGLE_LOGIN}
-                  showGithub={showGithub}
-                  socialLoading={socialLoading}
-                  onGooglePress={async () => {
-                    setSocialLoading(true);
-                    try {
-                      const mod = await import('../services/auth');
-                      await mod.startGoogleSignIn('signIn');
-                      showToast('Welcome!');
-                      (navigation.getParent() as any)?.replace('Main');
-                    } catch (err) {
-                      if (
-                        (err as any)?.message &&
-                        typeof (err as any).message === 'string' &&
-                        (err as any).message.includes('native module not available')
-                      ) {
-                        Alert.alert(
-                          'Google Sign-In Unavailable',
-                          'Google Sign-In native module is not available in this build. Use a development build / dev-client or run a native build (prebuild) so native modules are linked.'
-                        );
-                        return;
-                      }
-                      if ((err as any) && (err as any).code === 'auth/account-exists-with-different-credential') {
-                        const prefill = (err as any).email || undefined;
-                        (navigation as any).navigate('Login', { prefillEmail: prefill, pendingCredential: (err as any).pendingCredential });
-                        Alert.alert('This email already has an account', 'Please sign in with your password to link accounts.');
-                        return;
-                      }
-                      // Handle google statusCodes if available
-                      try {
-                        const googleMod: any = require('@react-native-google-signin/google-signin');
-                        const { statusCodes } = googleMod;
-                        if ((err as any) && (err as any).code) {
-                            if ((err as any).code === statusCodes?.IN_PROGRESS) {
-                            Alert.alert('Sign-in in progress', 'A sign-in operation is already in progress.');
-                            return;
-                          }
-                            if ((err as any).code === statusCodes?.PLAY_SERVICES_NOT_AVAILABLE) {
-                            Alert.alert('Play Services', 'Google Play Services not available or outdated.');
-                            return;
-                          }
-                        }
-                      } catch (e) {
-                        // ignore
-                      }
-                      Alert.alert('Google Sign-up Failed', readProviderError(err, 'Unable to reach Google.'));
-                    } finally {
-                      setSocialLoading(false);
-                    }
-                  }}
-                  onGithubPress={handleGithubSignup}
-                />
-              )}
 
               <View style={styles.termsContainer}>
                 <Text style={styles.termsText}>
@@ -466,8 +328,8 @@ const RegisterScreen = () => {
       </KeyboardAvoidingView>
 
       <FullScreenSpinner
-        visible={spinnerVisible}
-        message={loading ? 'Creating account...' : socialLoading ? 'Signing you in...' : 'Creating account...'}
+        visible={loading}
+        message="Creating account..."
       />
     </SafeAreaView>
   );
@@ -534,21 +396,6 @@ const styles = StyleSheet.create({
   },
   buttonContainer: { marginTop: 8, borderRadius: 12 },
   buttonText: { fontSize: 16, fontWeight: '700' },
-
-  /* SOCIAL */
-  socialWrapper: { marginTop: 24 },
-  socialDivider: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-  socialLine: { flex: 1, height: 1, backgroundColor: '#E5E7EB' },
-  socialText: {
-    marginHorizontal: 12,
-    fontSize: 12,
-    color: '#9CA3AF',
-    fontWeight: '600',
-    textTransform: 'uppercase',
-  },
-  socialButton: { borderRadius: 10, borderColor: '#E5E7EB', paddingVertical: 12, borderWidth: 1 },
-  socialButtonText: { color: colors.text || '#111827', fontWeight: '600' },
-  socialButtonContainer: { width: '100%' },
 
   /* TERMS */
   termsContainer: { marginTop: 16, paddingHorizontal: 4 },

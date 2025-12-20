@@ -19,15 +19,13 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
-import FirebaseAuth from '../components/firebase-auth/FirebaseAuth';
 
 // Types & Services
 import { AuthStackParamList } from '../types/navigation';
 import { useToast } from '../context/ToastContext';
 import { useInternetStatus } from '../hooks/useInternetStatus';
-import { loginWithEmail, sendPasswordReset, getAuthErrorMessage } from '../services/auth';
-import { SHOW_GOOGLE_LOGIN, SHOW_GITHUB_LOGIN } from '../config/featureFlags';
+import { loginOnline, warmNeonConnection } from '../services/auth';
+import { syncBothWays } from '../services/syncManager';
 
 // Components & Utils
 import { colors } from '../utils/design';
@@ -36,22 +34,8 @@ import AuthField from '../components/AuthField';
 
 type LoginScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList>;
 
-const getProviderErrorMessage = (error: unknown, fallback: string) => {
-  if (error && typeof error === 'object' && 'message' in error) {
-    const message = (error as any).message;
-    if (typeof message === 'string' && message.trim().length) {
-      return message;
-    }
-  }
-  if (typeof error === 'string' && error.trim().length) {
-    return error;
-  }
-  return fallback;
-};
-
 const LoginScreen = () => {
   const navigation = useNavigation<LoginScreenNavigationProp>();
-  const route: any = useRoute();
   const { showToast } = useToast();
   const isOnline = useInternetStatus();
 
@@ -63,25 +47,15 @@ const LoginScreen = () => {
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [resettingPassword, setResettingPassword] = useState(false);
-  const [socialLoading, setSocialLoading] = useState(false);
-
-  // Show GitHub button when feature flag enabled, even in development builds.
-  const showGithub = SHOW_GITHUB_LOGIN;
-  const showGoogle = SHOW_GOOGLE_LOGIN;
 
   // --- ANIMATION ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
 
   useEffect(() => {
-    // Prefill email if navigated here after social conflict
-    try {
-      const pre = route?.params?.prefillEmail;
-      if (pre && typeof pre === 'string') setEmail(pre);
-    } catch (err) {
-      // ignore
-    }
+    // Pre-warm connection for faster login
+    warmNeonConnection().catch(() => { });
+
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -112,134 +86,31 @@ const LoginScreen = () => {
 
     setLoading(true);
     try {
-      const pending: any = (route as any)?.params?.pendingCredential;
-      if (pending) {
-        // If there's a pending OAuth credential, use the specialized linking
-        // helper which signs in the existing email user, links the pending
-        // credential, and then calls `syncUserToFirestore` afterwards.
-        const authMod: any = await import('../services/auth');
-        await authMod.linkPendingCredentialWithPassword(email, password, pending);
-        showToast('Account linked successfully');
-      } else {
-        // Normal email/password sign-in (no pending credential)
-        await loginWithEmail(email, password);
-      }
+      await loginOnline(email, password);
+
+      // Trigger background sync
+      syncBothWays().catch((e) => console.warn('Post-login sync warning:', e));
+
       showToast('Welcome back!');
-      // Navigation is typically handled by auth state listener in App.tsx
-      // But explicit replace is safe if auth state updates slowly
       (navigation.getParent() as any)?.replace('Main');
-    } catch (err) {
-      const code = (err as any)?.code || null;
-      if (code === 'auth/wrong-password') {
-        Alert.alert('Incorrect password');
-      } else if (code === 'auth/user-not-found') {
-        Alert.alert('No account found with this email');
-      } else if (code === 'auth/no-password-provider') {
-        Alert.alert('Account uses social sign-in', 'This email is registered via Google/GitHub. Use the social login button or set a password from account settings.');
-      } else if (((err as any)?.message || '').toLowerCase().includes('timed out')) {
+    } catch (err: any) {
+      const msg = err?.message || String(err);
+      if (msg.toLowerCase().includes('timed out')) {
         Alert.alert('Connection Timeout', 'The request took too long.', [
           { text: 'Retry', onPress: handleLogin },
           { text: 'Cancel', style: 'cancel' },
         ]);
       } else {
-        Alert.alert('Login Failed', getAuthErrorMessage(code));
+        Alert.alert('Login Failed', 'Invalid credentials or server error.');
       }
     } finally {
       setLoading(false);
     }
   };
 
-  const handleForgotPassword = async () => {
-    if (!email) {
-      return Alert.alert('Enter Email', 'Add your account email above so we can send reset steps.');
-    }
-    setResettingPassword(true);
-    try {
-      await sendPasswordReset(email);
-      Alert.alert('Email Sent', 'Check your inbox for reset instructions.');
-    } catch (err) {
-      const msg = (err as any)?.message || 'Unable to send reset email right now.';
-      Alert.alert('Reset Failed', msg);
-    } finally {
-      setResettingPassword(false);
-    }
+  const handleForgotPassword = () => {
+    Alert.alert('Reset Password', 'Please contact support to reset your credentials.');
   };
-
-  const handleGithubLogin = async () => {
-    if (!showGithub) return;
-    setSocialLoading(true);
-    try {
-      const mod = await import('../services/auth');
-      await mod.startGithubSignIn('signIn');
-    } catch (err) {
-      const e: any = err || {};
-      if (
-        e?.message &&
-        typeof e.message === 'string' &&
-        e.message.includes('native module not available')
-      ) {
-        Alert.alert(
-          'Google Sign-In Unavailable',
-          'Google Sign-In native module is not available in this build. Use a development build / dev-client or run a native build (prebuild) so native modules are linked.'
-        );
-        return;
-      }
-      if (e.code === 'auth/account-exists-with-different-credential') {
-        Alert.alert('This email already has an account', 'Please sign in with your password to link accounts.');
-      } else {
-        Alert.alert(
-          'GitHub Login Failed',
-          getProviderErrorMessage(err, 'Unable to connect to GitHub right now.')
-        );
-      }
-    } finally {
-      setSocialLoading(false);
-    }
-  };
-
-  const handleGoogleLogin = async () => {
-    setSocialLoading(true);
-    try {
-      const mod = await import('../services/auth');
-      await mod.startGoogleSignIn('signIn');
-      showToast('Welcome!');
-      (navigation.getParent() as any)?.replace('Main');
-    } catch (err) {
-      const e: any = err || {};
-      // Try to read statusCodes if available
-      // If account exists with different credential, redirect user to Login to enter password and link
-      if (e && e.code === 'auth/account-exists-with-different-credential') {
-        const prefill = e.email || undefined;
-        (navigation as any).navigate('Login', { prefillEmail: prefill, pendingCredential: e.pendingCredential });
-        Alert.alert('This email already has an account', 'Please sign in with your password to link accounts.');
-        return;
-      }
-
-      try {
-        const googleMod: any = require('@react-native-google-signin/google-signin');
-        const { statusCodes } = googleMod;
-        if (e && e.code) {
-          if (e.code === statusCodes?.IN_PROGRESS) {
-            Alert.alert('Sign-in in progress', 'A sign-in operation is already in progress.');
-            return;
-          }
-          if (e.code === statusCodes?.PLAY_SERVICES_NOT_AVAILABLE) {
-            Alert.alert('Play Services', 'Google Play Services not available or outdated.');
-            return;
-          }
-        }
-      } catch (err2) {
-        // ignore module load errors
-      }
-
-      Alert.alert('Google Login Failed', getProviderErrorMessage(err, 'Unable to sign in with Google.'));
-    } finally {
-      setSocialLoading(false);
-    }
-  };
-
-  const spinnerVisible = loading || socialLoading;
-  const spinnerMessage = 'Signing you in...';
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -269,7 +140,6 @@ const LoginScreen = () => {
                   source={require('../../assets/splash-icon.png')}
                   style={styles.logoCentered}
                   resizeMode="contain"
-                  defaultSource={{ uri: 'https://via.placeholder.com/60' }}
                 />
               </View>
               <Text style={styles.appName}>Welcome Back</Text>
@@ -315,18 +185,15 @@ const LoginScreen = () => {
                 style={styles.forgotPassContainer}
                 onPress={handleForgotPassword}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                disabled={resettingPassword}
               >
-                <Text style={styles.forgotPassText}>
-                  {resettingPassword ? 'Sending reset link...' : 'Forgot Password?'}
-                </Text>
+                <Text style={styles.forgotPassText}>Forgot Password?</Text>
               </TouchableOpacity>
 
               <Button
                 title={loading ? 'Verifying...' : 'Sign In'}
                 onPress={handleLogin}
                 loading={loading}
-                disabled={loading || socialLoading || !isOnline}
+                disabled={loading || !isOnline}
                 buttonStyle={styles.primaryButton}
                 containerStyle={styles.buttonContainer}
                 titleStyle={styles.buttonText}
@@ -336,16 +203,6 @@ const LoginScreen = () => {
                   ) : undefined
                 }
               />
-
-              {(showGithub || showGoogle) && (
-                <FirebaseAuth
-                  showGoogle={showGoogle}
-                  showGithub={showGithub}
-                  socialLoading={socialLoading}
-                  onGooglePress={handleGoogleLogin}
-                  onGithubPress={handleGithubLogin}
-                />
-              )}
             </View>
 
             {/* --- FOOTER INSIDE CARD --- */}
@@ -359,7 +216,7 @@ const LoginScreen = () => {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      <FullScreenSpinner visible={spinnerVisible} message={spinnerMessage} />
+      <FullScreenSpinner visible={loading} message="Authenticating..." />
     </SafeAreaView>
   );
 };
@@ -441,48 +298,6 @@ const styles = StyleSheet.create({
     color: colors.primary || '#2563EB',
     fontSize: 13,
     fontWeight: '600',
-  },
-
-  /* SOCIAL BUTTONS */
-  socialWrapper: {
-    marginTop: 24,
-  },
-  socialDivider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  socialLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#E5E7EB',
-  },
-  socialText: {
-    marginHorizontal: 12,
-    fontSize: 12,
-    color: colors.muted || '#9CA3AF',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    fontWeight: '600',
-  },
-  socialButtonsRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  socialButton: {
-    borderRadius: 12,
-    borderColor: '#E5E7EB',
-    borderWidth: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-  },
-  socialButtonText: {
-    color: colors.text || '#111827',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  socialButtonContainer: {
-    flex: 1,
   },
 
   /* BUTTONS */
