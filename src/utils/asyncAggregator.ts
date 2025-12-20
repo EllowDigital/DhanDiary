@@ -1,5 +1,5 @@
 import dayjs from 'dayjs';
-import { LocalEntry } from '../types/entries';
+import { LocalEntry } from '../db/entries';
 
 // --- CONFIGURATION ---
 const BATCH_SIZE = 4000; // Increased batch size for modern phones

@@ -327,10 +327,7 @@ const RegisterScreen = () => {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      <FullScreenSpinner
-        visible={loading}
-        message="Creating account..."
-      />
+      <FullScreenSpinner visible={loading} message="Creating account..." />
     </SafeAreaView>
   );
 };

@@ -37,7 +37,7 @@ try {
   if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
     UIManager.setLayoutAnimationEnabledExperimental(true);
   }
-} catch (e) { }
+} catch (e) {}
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 

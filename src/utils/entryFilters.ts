@@ -1,4 +1,4 @@
-import { LocalEntry } from '../types/entries';
+import { LocalEntry } from '../db/entries';
 import { ensureCategory, FALLBACK_CATEGORY } from '../constants/categories';
 
 export type EntryTimeframe = 'all' | '7d' | '30d';

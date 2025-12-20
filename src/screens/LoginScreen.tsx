@@ -54,7 +54,7 @@ const LoginScreen = () => {
 
   useEffect(() => {
     // Pre-warm connection for faster login
-    warmNeonConnection().catch(() => { });
+    warmNeonConnection().catch(() => {});
 
     Animated.parallel([
       Animated.timing(fadeAnim, {

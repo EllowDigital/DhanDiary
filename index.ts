@@ -1,9 +1,9 @@
-// Polyfill TextEncoder/TextDecoder for NeonDB (SCRAM-SASL auth)
+/* eslint-disable no-undef */
 // Polyfill TextEncoder/TextDecoder for NeonDB (SCRAM-SASL auth)
 const TextEncodingPolyfill = require('text-encoding');
 Object.assign(global, {
-    TextEncoder: TextEncodingPolyfill.TextEncoder,
-    TextDecoder: TextEncodingPolyfill.TextDecoder,
+  TextEncoder: TextEncodingPolyfill.TextEncoder,
+  TextDecoder: TextEncodingPolyfill.TextDecoder,
 });
 
 // Polyfill crypto.getRandomValues

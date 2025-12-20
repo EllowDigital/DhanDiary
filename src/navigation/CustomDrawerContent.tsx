@@ -16,7 +16,7 @@ import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Logic & Utils
-import { logoutUser } from '../services/auth';
+import { logout } from '../services/auth';
 import { colors, spacing } from '../utils/design';
 import appConfig from '../../app.json';
 
@@ -95,7 +95,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
         style: 'destructive',
         onPress: async () => {
           try {
-            await logoutUser();
+            await logout();
             props.navigation.closeDrawer();
             props.navigation.reset({
               index: 0,

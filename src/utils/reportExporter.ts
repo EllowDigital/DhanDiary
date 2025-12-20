@@ -1,61 +1,66 @@
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
+const { documentDirectory, writeAsStringAsync, EncodingType } = FileSystem as any;
 import dayjs from 'dayjs';
 
 // Types
 type Format = 'pdf' | 'csv' | 'json';
 interface ExportOptions {
-    title: string;
-    periodLabel: string;
-    groupBy?: 'none' | 'category';
+  title: string;
+  periodLabel: string;
+  groupBy?: 'none' | 'category';
 }
 
-export const exportToFile = async (format: Format, data: any[], options: ExportOptions): Promise<string | null> => {
-    if (format === 'pdf') {
-        return await generatePdf(data, options);
-    }
-    if (format === 'csv') {
-        return await generateCsv(data, options);
-    }
-    if (format === 'json') {
-        return await generateJson(data, options);
-    }
-    return null;
+export const exportToFile = async (
+  format: Format,
+  data: any[],
+  options: ExportOptions
+): Promise<string | null> => {
+  if (format === 'pdf') {
+    return await generatePdf(data, options);
+  }
+  if (format === 'csv') {
+    return await generateCsv(data, options);
+  }
+  if (format === 'json') {
+    return await generateJson(data, options);
+  }
+  return null;
 };
 
 export const shareFile = async (filePath: string) => {
-    if (!(await Sharing.isAvailableAsync())) {
-        throw new Error('Sharing is not available on this device');
-    }
-    await Sharing.shareAsync(filePath);
+  if (!(await Sharing.isAvailableAsync())) {
+    throw new Error('Sharing is not available on this device');
+  }
+  await Sharing.shareAsync(filePath);
 };
 
 // --- PDF GENERATOR ---
 const generatePdf = async (data: any[], options: ExportOptions): Promise<string> => {
-    const { title, periodLabel, groupBy } = options;
+  const { title, periodLabel, groupBy } = options;
 
-    let contentHtml = '';
-    let totalIncome = 0;
-    let totalExpense = 0;
+  let contentHtml = '';
+  let totalIncome = 0;
+  let totalExpense = 0;
 
-    if (groupBy === 'category') {
-        const grouped: Record<string, { in: number; out: number; items: any[] }> = {};
+  if (groupBy === 'category') {
+    const grouped: Record<string, { in: number; out: number; items: any[] }> = {};
 
-        data.forEach(item => {
-            const cat = item.category || 'Uncategorized';
-            if (!grouped[cat]) grouped[cat] = { in: 0, out: 0, items: [] };
-            grouped[cat].items.push(item);
-            if (item.type === 'in') {
-                grouped[cat].in += Number(item.amount);
-                totalIncome += Number(item.amount);
-            } else {
-                grouped[cat].out += Number(item.amount);
-                totalExpense += Number(item.amount);
-            }
-        });
+    data.forEach((item) => {
+      const cat = item.category || 'Uncategorized';
+      if (!grouped[cat]) grouped[cat] = { in: 0, out: 0, items: [] };
+      grouped[cat].items.push(item);
+      if (item.type === 'in') {
+        grouped[cat].in += Number(item.amount);
+        totalIncome += Number(item.amount);
+      } else {
+        grouped[cat].out += Number(item.amount);
+        totalExpense += Number(item.amount);
+      }
+    });
 
-        contentHtml += `
+    contentHtml += `
         <div style="margin-bottom: 20px;">
              <h3>Summary by Category</h3>
              <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
@@ -65,27 +70,31 @@ const generatePdf = async (data: any[], options: ExportOptions): Promise<string>
                     <th style="padding: 8px; text-align: right; color: #991B1B;">Expense</th>
                     <th style="padding: 8px; text-align: right;">Net</th>
                 </tr>
-                ${Object.keys(grouped).map(cat => `
+                ${Object.keys(grouped)
+                  .map(
+                    (cat) => `
                     <tr style="border-bottom: 1px solid #e2e8f0;">
                         <td style="padding: 8px; font-weight: 600;">${cat}</td>
                         <td style="padding: 8px; text-align: right; color: #166534;">${grouped[cat].in > 0 ? formatMoney(grouped[cat].in) : '-'}</td>
                         <td style="padding: 8px; text-align: right; color: #991B1B;">${grouped[cat].out > 0 ? formatMoney(grouped[cat].out) : '-'}</td>
                         <td style="padding: 8px; text-align: right; font-weight: bold;">${formatMoney(grouped[cat].in - grouped[cat].out)}</td>
                     </tr>
-                `).join('')}
+                `
+                  )
+                  .join('')}
              </table>
         </div>
       `;
-    } else {
-        // Linear list calculation
-        data.forEach(item => {
-            if (item.type === 'in') totalIncome += Number(item.amount);
-            else totalExpense += Number(item.amount);
-        });
-    }
+  } else {
+    // Linear list calculation
+    data.forEach((item) => {
+      if (item.type === 'in') totalIncome += Number(item.amount);
+      else totalExpense += Number(item.amount);
+    });
+  }
 
-    // Transaction Table
-    contentHtml += `
+  // Transaction Table
+  contentHtml += `
      <h3>Transactions</h3>
      <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
         <tr style="background-color: #f1f5f9; text-align: left;">
@@ -94,7 +103,9 @@ const generatePdf = async (data: any[], options: ExportOptions): Promise<string>
             <th style="padding: 6px;">Note</th>
             <th style="padding: 6px; text-align: right;">Amount</th>
         </tr>
-        ${data.map((item, idx) => `
+        ${data
+          .map(
+            (item, idx) => `
             <tr style="border-bottom: 1px solid #e2e8f0; background-color: ${idx % 2 === 0 ? '#fff' : '#f8fafc'};">
                 <td style="padding: 6px;">${dayjs(item.date).format('DD MMM YYYY')}</td>
                 <td style="padding: 6px;">${item.category}</td>
@@ -103,11 +114,13 @@ const generatePdf = async (data: any[], options: ExportOptions): Promise<string>
                     ${item.type === 'in' ? '+' : '-'} ${formatMoney(item.amount, item.currency)}
                 </td>
             </tr>
-        `).join('')}
+        `
+          )
+          .join('')}
      </table>
   `;
 
-    const html = `
+  const html = `
     <html>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
@@ -146,37 +159,51 @@ const generatePdf = async (data: any[], options: ExportOptions): Promise<string>
     </html>
   `;
 
-    const { uri } = await Print.printToFileAsync({ html, base64: false });
-    return uri;
+  const { uri } = await Print.printToFileAsync({ html, base64: false });
+  return uri;
 };
 
 // --- CSV GENERATOR ---
 const generateCsv = async (data: any[], options: ExportOptions): Promise<string> => {
-    const header = 'Date,Type,Category,Amount,Currency,Note,CreatedAt\n';
-    const rows = data.map(i => {
-        const cleanNote = (i.note || '').replace(/,/g, ' '); // remove commas to prevent csv break
-        return `${dayjs(i.date).format('YYYY-MM-DD')},${i.type},${i.category},${i.amount},${i.currency || 'INR'},${cleanNote},${i.created_at}`;
-    }).join('\n');
+  const header = 'Date,Type,Category,Amount,Currency,Note,CreatedAt\n';
+  const rows = data
+    .map((i) => {
+      const cleanNote = (i.note || '').replace(/,/g, ' '); // remove commas to prevent csv break
+      return `${dayjs(i.date).format('YYYY-MM-DD')},${i.type},${i.category},${i.amount},${i.currency || 'INR'},${cleanNote},${i.created_at}`;
+    })
+    .join('\n');
 
-    const csvContent = header + rows;
-    const fileName = `${options.title.replace(/\s/g, '_')}.csv`;
-    const path = `${FileSystem.documentDirectory}${fileName}`;
-    await FileSystem.writeAsStringAsync(path, csvContent, { encoding: FileSystem.EncodingType.UTF8 });
-    return path;
+  const csvContent = header + rows;
+  const fileName = `${options.title.replace(/\s/g, '_')}.csv`;
+  const path = `${documentDirectory}${fileName}`;
+  await writeAsStringAsync(path, csvContent, { encoding: EncodingType.UTF8 });
+  return path;
 };
 
 // --- JSON GENERATOR ---
 const generateJson = async (data: any[], options: ExportOptions): Promise<string> => {
-    const jsonContent = JSON.stringify({
-        meta: { title: options.title, period: options.periodLabel, generated: new Date().toISOString() },
-        data
-    }, null, 2);
-    const fileName = `${options.title.replace(/\s/g, '_')}.json`;
-    const path = `${FileSystem.documentDirectory}${fileName}`;
-    await FileSystem.writeAsStringAsync(path, jsonContent, { encoding: FileSystem.EncodingType.UTF8 });
-    return path;
+  const jsonContent = JSON.stringify(
+    {
+      meta: {
+        title: options.title,
+        period: options.periodLabel,
+        generated: new Date().toISOString(),
+      },
+      data,
+    },
+    null,
+    2
+  );
+  const fileName = `${options.title.replace(/\s/g, '_')}.json`;
+  const path = `${documentDirectory}${fileName}`;
+  await writeAsStringAsync(path, jsonContent, { encoding: EncodingType.UTF8 });
+  return path;
 };
 
 const formatMoney = (amount: number, currency = 'INR') => {
-    return new Intl.NumberFormat('en-IN', { style: 'currency', currency, minimumFractionDigits: 0 }).format(amount);
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 0,
+  }).format(amount);
 };

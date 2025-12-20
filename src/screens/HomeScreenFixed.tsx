@@ -245,7 +245,7 @@ const HomeScreen = () => {
   const triggerLayoutAnimation = () => {
     try {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    } catch (e) { }
+    } catch (e) {}
   };
 
   const handleToggleChart = (type: any) => {

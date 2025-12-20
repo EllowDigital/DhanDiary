@@ -70,7 +70,7 @@ const normalizeDate = (v?: any) => {
     ];
     const dj = dayjs(s, formats, true);
     if (dj.isValid()) return dj.toISOString();
-  } catch (e) { }
+  } catch (e) {}
   return null;
 };
 
@@ -150,7 +150,7 @@ export const addLocalEntry = async (entry: Omit<LocalEntry, 'is_synced' | 'is_de
   );
   try {
     notifyEntriesChanged();
-  } catch (e) { }
+  } catch (e) {}
 };
 
 export const updateLocalEntry = async (
@@ -188,7 +188,7 @@ export const updateLocalEntry = async (
   );
   try {
     notifyEntriesChanged();
-  } catch (e) { }
+  } catch (e) {}
 };
 
 export const markEntryDeleted = async (localId: string) => {
@@ -200,7 +200,7 @@ export const markEntryDeleted = async (localId: string) => {
   );
   try {
     notifyEntriesChanged();
-  } catch (e) { }
+  } catch (e) {}
 };
 
 export const markEntrySynced = async (
@@ -237,7 +237,7 @@ export const markEntrySynced = async (
   ]);
   try {
     notifyEntriesChanged();
-  } catch (e) { }
+  } catch (e) {}
 };
 
 export const deleteLocalEntry = async (localId: string) => {
@@ -245,7 +245,7 @@ export const deleteLocalEntry = async (localId: string) => {
   await db.run('DELETE FROM local_entries WHERE local_id = ?', [localId]);
   try {
     notifyEntriesChanged();
-  } catch (e) { }
+  } catch (e) {}
 };
 
 export const getEntryByLocalId = async (localId: string) => {
@@ -296,7 +296,7 @@ export const upsertLocalFromRemote = async (remote: any) => {
           remote.id,
           remote.created_at
         );
-      } catch (e) { }
+      } catch (e) {}
     }
     await db.run(
       `UPDATE local_entries SET user_id = ?, type = ?, amount = ?, category = ?, note = ?, currency = ?, server_version = ?, created_at = ?, updated_at = ?, is_synced = 1, is_deleted = ?, date = ? WHERE local_id = ?`,
@@ -317,7 +317,7 @@ export const upsertLocalFromRemote = async (remote: any) => {
     );
     try {
       notifyEntriesChanged();
-    } catch (e) { }
+    } catch (e) {}
     return existing.local_id;
   }
   const localId =
@@ -338,15 +338,15 @@ export const upsertLocalFromRemote = async (remote: any) => {
       typeof remote.server_version === 'number' ? remote.server_version : 0,
       normalizeDate(remote.created_at) || remote.created_at || now,
       normalizeDate(remote.updated_at) ||
-      normalizeDate(remote.created_at) ||
-      remote.updated_at ||
-      now,
+        normalizeDate(remote.created_at) ||
+        remote.updated_at ||
+        now,
       remote.deleted ? 1 : 0,
     ]
   );
   try {
     notifyEntriesChanged();
-  } catch (e) { }
+  } catch (e) {}
   return localId;
 };
 
@@ -359,7 +359,7 @@ export const markLocalDeletedByRemoteId = async (remoteId: string) => {
   );
   try {
     notifyEntriesChanged();
-  } catch (e) { }
+  } catch (e) {}
 };
 
 export const getLocalByClientId = async (clientId: string) => {

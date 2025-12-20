@@ -3,10 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { LogBox } from 'react-native';
 
-LogBox.ignoreLogs([
-  'setLayoutAnimationEnabledExperimental',
-  'Process ID',
-]);
+LogBox.ignoreLogs(['setLayoutAnimationEnabledExperimental', 'Process ID']);
 
 import SplashScreen from './src/screens/SplashScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
@@ -33,7 +30,6 @@ const AuthNavigator = () => (
 
 import { ToastProvider } from './src/context/ToastContext';
 import DrawerNavigator from './src/navigation/DrawerNavigator';
-
 
 if (__DEV__) {
   // require lazily so production bundles are unaffected
@@ -95,10 +91,6 @@ export default function App() {
       }
     })();
   }, []);
-
-
-
-
 
   React.useEffect(() => {
     // If an update was pending (we marked it before applying), clear the flag now
@@ -163,10 +155,10 @@ export default function App() {
     return () => {
       try {
         stopForegroundSyncScheduler();
-      } catch (e) { }
+      } catch (e) {}
       try {
         stopBackgroundFetch();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, [dbReady]);
 

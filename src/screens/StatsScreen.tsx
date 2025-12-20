@@ -34,7 +34,7 @@ try {
   if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
     UIManager.setLayoutAnimationEnabledExperimental(true);
   }
-} catch (e) { }
+} catch (e) {}
 
 // --- CONSTANTS ---
 const FILTERS = ['Day', 'Week', '7 Days', '30 Days', 'This Month', 'This Year', 'All'];

@@ -88,13 +88,13 @@ export const wipeLocalDatabase = async () => {
   await clearAllData();
   try {
     await clearOfflineDbOwner();
-  } catch (e) { }
+  } catch (e) {}
   try {
     await sqlite.close();
-  } catch (e) { }
+  } catch (e) {}
   try {
     await sqlite.deleteDbFile();
-  } catch (e) { }
+  } catch (e) {}
   _init = null;
 };
 
@@ -181,7 +181,7 @@ export const flushFallbackLocalEntries = async () => {
       try {
         const { notifyEntriesChanged } = require('../utils/dbEvents');
         notifyEntriesChanged();
-      } catch (e) { }
+      } catch (e) {}
     return { processed };
   } catch (e) {
     return { processed: 0 };

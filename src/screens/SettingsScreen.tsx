@@ -108,7 +108,6 @@ const SettingsScreen = () => {
     ]);
   };
 
-
   const handleResetApp = () => {
     Alert.alert(
       'Reset Application?',

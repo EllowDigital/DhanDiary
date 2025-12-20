@@ -168,7 +168,6 @@ export const query = async (
             // Ensure we don't treat a generic object with just message as 'unknown'
             normalizedError = eAny;
           }
-
         } catch (e) {
           // fallthrough — keep original error
         }
