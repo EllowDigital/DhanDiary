@@ -1,76 +1,48 @@
 {
   "expo": {
-    "owner": "ellowdigital",
     "name": "DhanDiary",
-    "slug": "dhandiary",
-    "scheme": "dhandiary",
-    "platforms": ["android", "ios"],
-    "version": "2.0.0",
+    "slug": "DhanDiary",
+    "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "jsEngine": "hermes",
-    "userInterfaceStyle": "light",
+    "icon": "./assets/images/icon.png",
+    "scheme": "dhandiary",
+    "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "ios": {
-      "supportsTablet": true,
-      "buildNumber": "200"
+      "supportsTablet": true
     },
     "android": {
-      "package": "com.ellowdigital.dhandiary",
-      "googleServicesFile": "./google-services.json",
-      "versionCode": 200,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      }
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "backgroundImage": "./assets/images/android-icon-background.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-      "expo-updates",
-      "expo-font",
+      "expo-router",
       [
-        "expo-build-properties",
+        "expo-splash-screen",
         {
-          "android": {
-            "enableHermes": true,
-            "ndk": {
-              "debugSymbolLevel": "NONE"
-            },
-            "abiFilters": ["arm64-v8a"],
-            "minSdkVersion": 24
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff",
+          "dark": {
+            "backgroundColor": "#000000"
           }
         }
-      ],
-      "@react-native-google-signin/google-signin"
+      ]
     ],
-    "updates": {
-      "enabled": true,
-      "checkAutomatically": "ON_LOAD",
-      "fallbackToCacheTimeout": 0,
-      "url": "https://u.expo.dev/77c33e0a-8d3a-4f5b-afcf-72967c9af0bf"
-    },
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
-    "extra": {
-      "eas": {
-        "projectId": "77c33e0a-8d3a-4f5b-afcf-72967c9af0bf"
-      },
-      "firebase": {
-        "apiKey": "AIzaSyB98yGMNX0C_AuuuAFA_TWQvhkP_736dnU",
-        "authDomain": "dhandiary-25043.firebaseapp.com",
-        "projectId": "dhandiary-25043",
-        "storageBucket": "dhandiary-25043.firebasestorage.app",
-        "messagingSenderId": "560282913610",
-        "appId": "1:560282913610:android:de863313eacd017b600fb3"
-      }
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
     }
   }
 }
