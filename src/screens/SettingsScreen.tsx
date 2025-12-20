@@ -185,9 +185,24 @@ const SettingsScreen = () => {
                   </View>
                   <View style={styles.statItem}>
                     <Text style={styles.statLabel}>Last Sync</Text>
-                    <Text style={styles.statValue}>Just now</Text>
+                    <Text style={styles.statValue}>{lastSyncTime}</Text>
                   </View>
                 </View>
+
+                <TouchableOpacity
+                  style={styles.syncBtn}
+                  onPress={handleManualSync}
+                  disabled={isSyncing}
+                >
+                  {isSyncing ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <>
+                      <MaterialIcon name="sync" size={16} color="#fff" />
+                      <Text style={styles.syncBtnText}>Sync Now</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
               </View>
             </Animated.View>
 
