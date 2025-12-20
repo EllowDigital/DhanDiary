@@ -112,20 +112,17 @@ const LoginScreen = () => {
 
     setLoading(true);
     try {
-      await loginWithEmail(email, password);
-      // If we were navigated here with a pending OAuth credential, link it now
-      try {
-        const pending: any = (route as any)?.params?.pendingCredential;
-        if (pending) {
-          const authMod: any = await import('../services/auth');
-          await authMod.linkPendingCredentialWithPassword(email, password, pending);
-          showToast('Account linked successfully');
-        }
-      } catch (linkErr) {
-        // linking failed - allow normal login but surface a toast
-        try {
-          showToast('Account linking failed.');
-        } catch (e) {}
+      const pending: any = (route as any)?.params?.pendingCredential;
+      if (pending) {
+        // If there's a pending OAuth credential, use the specialized linking
+        // helper which signs in the existing email user, links the pending
+        // credential, and then calls `syncUserToFirestore` afterwards.
+        const authMod: any = await import('../services/auth');
+        await authMod.linkPendingCredentialWithPassword(email, password, pending);
+        showToast('Account linked successfully');
+      } else {
+        // Normal email/password sign-in (no pending credential)
+        await loginWithEmail(email, password);
       }
       showToast('Welcome back!');
       // Navigation is typically handled by auth state listener in App.tsx
