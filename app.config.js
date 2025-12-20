@@ -44,6 +44,9 @@ module.exports = (ctx) => {
     extra: {
       ...(baseConfig.extra || {}),
       NEON_URL: process.env.NEON_URL || (baseConfig.extra && baseConfig.extra.NEON_URL) || null,
+      EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY:
+        process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY || (baseConfig.extra && baseConfig.extra.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY) || null,
+      EXPO_PUBLIC_API_URL: process.env.EXPO_PUBLIC_API_URL || (baseConfig.extra && baseConfig.extra.EXPO_PUBLIC_API_URL) || null,
     },
   };
 };
