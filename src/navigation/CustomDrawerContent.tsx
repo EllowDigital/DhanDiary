@@ -75,7 +75,20 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
           <View style={styles.headerDivider} />
         </Animated.View>
 
-        {/* --- MENU ITEMS --- */}
+        {/* --- USER PROFILE --- */}
+        <View style={styles.userHeader}>
+          <Image
+            source={{ uri: user?.imageUrl }}
+            style={styles.userAvatar}
+            defaultSource={require('../../assets/images/adaptive-icon.png')} // Fallback? Or just conditional
+          />
+          <View style={styles.userInfo}>
+            <Text style={styles.userName} numberOfLines={1}>{user?.fullName || 'Guest User'}</Text>
+            <Text style={styles.userEmail} numberOfLines={1}>{user?.primaryEmailAddress?.emailAddress || ''}</Text>
+          </View>
+        </View>
+
+        <View style={styles.headerDivider} />
         <View style={styles.menuContainer}>
           <Text style={styles.sectionLabel}>Navigation</Text>
 

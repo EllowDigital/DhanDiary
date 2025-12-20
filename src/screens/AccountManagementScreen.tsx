@@ -14,12 +14,15 @@ import {
   Keyboard,
   LayoutAnimation,
   UIManager,
+  Switch, // Added Switch
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Input, Button } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useUser } from '@clerk/clerk-expo';
 import { useNavigation } from '@react-navigation/native';
+import * as SecureStore from 'expo-secure-store'; // Added
+import * as LocalAuthentication from 'expo-local-authentication'; // Added
 
 // Logic Imports
 import { useAuth as useOfflineAuth } from '../hooks/useAuth'; // renaming to avoid confusion if needed, though we use Clerk mostly
@@ -135,6 +138,10 @@ const AccountManagementScreen = () => {
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
+  // Biometric State
+  const [biometricsEnabled, setBiometricsEnabled] = useState(false);
+  const [hasBiometricHardware, setHasBiometricHardware] = useState(false);
+
   // Users from OAuth might not have a password.
   // Clerk provides `user.passwordEnabled` boolean.
   const hasPassword = user?.passwordEnabled;
@@ -152,11 +159,36 @@ const AccountManagementScreen = () => {
       duration: 600,
       useNativeDriver: true,
     }).start();
+
+    // Check Biometrics on mount
+    checkBiometrics();
   }, []);
 
   useEffect(() => {
     if (user && user.fullName) setUsername(user.fullName);
   }, [user]);
+
+  const checkBiometrics = async () => {
+    const hasHw = await LocalAuthentication.hasHardwareAsync();
+    const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+    setHasBiometricHardware(hasHw && isEnrolled);
+
+    if (hasHw) {
+      const enabled = await SecureStore.getItemAsync('BIOMETRIC_ENABLED');
+      setBiometricsEnabled(enabled === 'true');
+    }
+  };
+
+  const toggleBiometrics = async (val: boolean) => {
+    if (val) {
+      const result = await LocalAuthentication.authenticateAsync({ promptMessage: 'Confirm Identity' });
+      if (!result.success) return;
+    }
+    setBiometricsEnabled(val);
+    await SecureStore.setItemAsync('BIOMETRIC_ENABLED', String(val));
+    if (!val) await SecureStore.deleteItemAsync('BIOMETRIC_ENABLED');
+    showToast(val ? 'App Lock Enabled' : 'App Lock Disabled');
+  };
 
   const toggleCard = (id: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -391,7 +423,29 @@ const AccountManagementScreen = () => {
                 />
               </ExpandableCard>
 
-              {/* 3. DELETE SECTION */}
+              {/* 3. APP SECURITY (BIOMETRICS) */}
+              {hasBiometricHardware && (
+                <ExpandableCard
+                  item={{ id: 'app_security', title: 'App Lock', description: 'Biometric security', icon: 'shield', bgColor: '#E0E7FF', iconColor: colors.primary }}
+                  isExpanded={activeCard === 'app_security'}
+                  onToggle={() => toggleCard('app_security')}
+                >
+                  <View style={styles.switchRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.switchLabel}>Biometric Unlock</Text>
+                      <Text style={styles.switchDesc}>Require FaceID/TouchID to open app</Text>
+                    </View>
+                    <Switch
+                      value={biometricsEnabled}
+                      onValueChange={toggleBiometrics}
+                      trackColor={{ false: '#E2E8F0', true: colors.primary }}
+                      thumbColor={'#fff'}
+                    />
+                  </View>
+                </ExpandableCard>
+              )}
+
+              {/* 4. DELETE SECTION */}
               <ExpandableCard
                 item={{
                   id: 'delete',
