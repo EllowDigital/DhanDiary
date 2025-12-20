@@ -392,7 +392,16 @@ export async function* fetchEntriesGenerator(userId: string, pageSize: number = 
   }
 }
 
+// ...existing code...
+export const getSummary = async (period: 'daily' | 'monthly', key: string) => {
+  // This is a placeholder as the original function was referenced but not defined in localDb.
+  // In a real app, this would query a summaries table.
+  // For now, we return null to mimic no cached summary, forcing aggregation.
+  return null;
+};
+
 export default {
+  // ...existing code...
   getEntries,
   addLocalEntry,
   updateLocalEntry,

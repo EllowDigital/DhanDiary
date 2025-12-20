@@ -116,12 +116,7 @@ const SplashScreen = () => {
       const startTime = Date.now();
       // Run checks in parallel with minimum timer
       const [user, onboardingCompleted] = await Promise.all([
-        new Promise<any | null>((resolve) => {
-          const unsubscribe = onAuthStateChanged((u: any) => {
-            unsubscribe();
-            resolve(u);
-          });
-        }),
+        getSession(),
         hasCompletedOnboarding(),
         new Promise((resolve) => setTimeout(resolve, MIN_SPLASH_TIME_MS)), // Ensure min display time
       ]);

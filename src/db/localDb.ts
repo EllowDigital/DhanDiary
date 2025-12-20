@@ -35,6 +35,7 @@ export const markEntrySynced = entries.markEntrySynced;
 export const getEntryByLocalId = entries.getEntryByLocalId;
 export const getLocalByRemoteId = entries.getLocalByRemoteId;
 export const fetchEntriesGenerator = entries.fetchEntriesGenerator;
+export const getSummary = entries.getSummary;
 export const upsertLocalFromRemote = entries.upsertLocalFromRemote;
 export const getUnsyncedEntries = async () => {
   const db = await sqlite.open();
