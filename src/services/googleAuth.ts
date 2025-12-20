@@ -53,7 +53,7 @@ export const configureGoogleSignIn = () => {
   }
 };
 
-export const signInWithGoogle = async () => {
+export const signInWithGoogle = async (opts?: { firebaseSignIn?: boolean }) => {
   try {
     // Ensure native module is present before requiring library
     try {
@@ -136,6 +136,25 @@ export const signInWithGoogle = async () => {
       );
     }
 
+    // Build credential object that callers can use to sign in with Firebase
+    const credentialForCaller = (() => {
+      try {
+        const firebaseAuth: any = require('@react-native-firebase/auth');
+        const GoogleAuthProvider =
+          firebaseAuth.GoogleAuthProvider || firebaseAuth.default?.GoogleAuthProvider || null;
+        if (GoogleAuthProvider && typeof GoogleAuthProvider.credential === 'function') {
+          return GoogleAuthProvider.credential(idToken, accessToken);
+        }
+      } catch (e) {}
+      // Fallback shape usable by callers (modular helper will recreate credential)
+      return { providerId: 'google.com', token: idToken, accessToken };
+    })();
+
+    // If caller requested raw tokens only, return credential and raw response
+    if (opts && opts.firebaseSignIn === false) {
+      return { credential: credentialForCaller, raw: signInResult };
+    }
+
     // If Firebase auth native module is available, sign in with credential
     try {
       const firebaseAuth: any = require('@react-native-firebase/auth');
@@ -150,7 +169,7 @@ export const signInWithGoogle = async () => {
           (firebaseAuth.auth && firebaseAuth.auth.GoogleAuthProvider);
         let credential: any = null;
         if (GoogleAuthProvider && typeof GoogleAuthProvider.credential === 'function') {
-          credential = GoogleAuthProvider.credential(idToken);
+          credential = GoogleAuthProvider.credential(idToken, accessToken);
         }
         if (credential && authInstance && typeof authInstance.signInWithCredential === 'function') {
           console.debug('googleAuth: signing in to firebase (classic api) with credential');
@@ -219,7 +238,8 @@ export const signInWithGoogle = async () => {
       // If firebase auth not available, fall back to returning raw google result
     }
 
-    return { success: true, data: signInResult };
+    // If we reached here without signing in, return credential + raw result
+    return { success: true, credential: credentialForCaller, data: signInResult };
   } catch (err: any) {
     console.error('googleAuth: signIn error', {
       message: err?.message,

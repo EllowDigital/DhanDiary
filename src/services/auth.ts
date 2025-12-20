@@ -423,9 +423,11 @@ export const startGoogleSignIn = async (intent: 'signIn' | 'link' = 'signIn') =>
   if (!authMod) throw new Error('Firebase auth not available');
 
   // Get raw sign-in result from Google helper. It may already have performed
-  // Firebase sign-in (returning firebaseResult), or only contain raw tokens.
-  const signResult = await googleMod.signInWithGoogle();
-  const { firebaseResult, credential: returnedCredential, raw } = signResult as any;
+  // Request raw tokens first (do not auto sign into Firebase). We'll pre-check
+  // sign-in methods for the returned email and only complete the Firebase
+  // sign-in if safe to do so.
+  const signResult = await googleMod.signInWithGoogle({ firebaseSignIn: false });
+  const { firebaseResult, credential: returnedCredential, credential: credentialForCaller, raw } = signResult as any;
   const authInstance = authMod.default ? authMod.default() : authMod();
 
   // If firebaseResult was returned, use that user. Otherwise try signing in here.
@@ -443,8 +445,39 @@ export const startGoogleSignIn = async (intent: 'signIn' | 'link' = 'signIn') =>
           firebaseAuth.GoogleAuthProvider || firebaseAuth.default?.GoogleAuthProvider || authInst.GoogleAuthProvider;
         let cred: any = null;
         if (GoogleAuthProvider && typeof GoogleAuthProvider.credential === 'function') {
-          cred = GoogleAuthProvider.credential(idToken, accessToken);
+            cred = GoogleAuthProvider.credential(idToken, accessToken);
         }
+        // Before performing Firebase sign-in, attempt to pre-check existing providers
+        // for this email. If the email already has a password provider, we should
+        // send the user to the Login+linking UI instead of triggering Firebase's
+        // account-exists-with-different-credential error.
+        const emailFromGoogle = raw?.user?.email ?? raw?.email ?? null;
+        if (emailFromGoogle) {
+          try {
+            const authModForCheck: any = tryGetFirebaseAuth();
+            if (authModForCheck) {
+              const authInstForCheck = authModForCheck.default ? authModForCheck.default() : authModForCheck();
+              if (typeof authInstForCheck.fetchSignInMethodsForEmail === 'function') {
+                const methods = await authInstForCheck.fetchSignInMethodsForEmail(emailFromGoogle);
+                console.debug('startGoogleSignIn: sign-in methods for email', { email: emailFromGoogle, methods });
+                if (Array.isArray(methods) && methods.includes('password')) {
+                  // Redirect to Login screen to allow user to sign in with password
+                  // and then link the pending credential.
+                  const pendingCredential = cred || credentialForCaller || { providerId: 'google.com', token: idToken, accessToken };
+                  const out: any = new Error('auth/account-exists-with-different-credential');
+                  out.code = 'auth/account-exists-with-different-credential';
+                  out.email = emailFromGoogle;
+                  out.pendingCredential = pendingCredential;
+                  throw out;
+                }
+              }
+            }
+          } catch (checkErr) {
+            console.debug('startGoogleSignIn: provider pre-check failed', checkErr?.message || checkErr);
+            // fall through and attempt sign-in below
+          }
+        }
+
         if (cred && typeof authInst.signInWithCredential === 'function') {
           const res = await authInst.signInWithCredential(cred);
           user = res.user || authInst.currentUser;

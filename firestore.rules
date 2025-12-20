@@ -24,13 +24,16 @@ service cloud.firestore {
                     // basic sanity: role must be 'user' (server may set other roles)
                     && (request.resource.data.role == 'user' || !('role' in request.resource.data));
 
-      // Updates allowed only by owner. Prevent writing sensitive fields like
-      // plaintext passwords from the client. We require these fields to be
-      // absent or null in the update payload.
+      // Updates allowed only by owner.
+      // - Allow merge updates where `uid` is not present, or if present it must
+      //   match existing uid (prevents UID mutation).
+      // - Prevent clients from writing sensitive password fields.
+      // - Prevent client-side role changes.
       allow update: if isOwner(uid)
-            && request.resource.data.uid == uid
-            && request.resource.data.password == null
-            && request.resource.data.passwordHash == null;
+            && (!('uid' in request.resource.data) || request.resource.data.uid == resource.data.uid)
+            && !('password' in request.resource.data)
+            && !('passwordHash' in request.resource.data)
+            && (!('role' in request.resource.data) || request.resource.data.role == resource.data.role);
 
       // Never allow client deletes (prevent accidental or malicious removal)
       allow delete: if false;
@@ -41,7 +44,8 @@ service cloud.firestore {
         allow create: if isOwner(uid)
                       && request.resource.data.user_id == uid
                       && request.resource.data.is_deleted == false;
-        allow update: if isOwner(uid) && request.resource.data.user_id == uid;
+        // Allow updates only if user_id is unchanged (or not present in merge updates)
+        allow update: if isOwner(uid) && (!('user_id' in request.resource.data) || request.resource.data.user_id == resource.data.user_id);
         allow delete: if false;
       }
     }
