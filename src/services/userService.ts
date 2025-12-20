@@ -106,34 +106,55 @@ export async function createOrUpdateUserFromAuth(user: any) {
     }
   }
 
-  // Safe create/update using transaction to avoid races.
-  await firestore.runTransaction(async (tx: any) => {
-    const snap = await tx.get(docRef);
-    const nowVal = FieldValue ? FieldValue.serverTimestamp() : new Date();
-    if (!snap.exists) {
-      tx.set(
-        docRef,
-        { ...payload, createdAt: nowVal, lastLoginAt: nowVal },
-        { merge: true }
-      );
-    } else {
-      // Merge updates and update lastLoginAt. Preserve and merge providerData arrays.
-      const existing = snap.data() || {};
-      const existingProviders: any[] = Array.isArray(existing.providerData) ? existing.providerData : [];
-      const incomingProviders: any[] = Array.isArray(payload.providerData) ? payload.providerData : [];
-      // Merge by providerId+uid key
-      const map = new Map<string, any>();
-      const keyFor = (p: any) => `${p.providerId || ''}::${p.uid || ''}`;
-      for (const p of existingProviders) map.set(keyFor(p), p);
-      for (const p of incomingProviders) map.set(keyFor(p), p);
-      const mergedProviders = Array.from(map.values());
-      tx.set(
-        docRef,
-        { ...payload, providerData: mergedProviders, lastLoginAt: nowVal },
-        { merge: true }
-      );
+  // Safe create/update using transaction to avoid races. Retry a few times if
+  // Firestore complains about unauthenticated requests due to token propagation
+  // delays (this can happen on Spark / free plans during client startup).
+  const maxAttempts = 3;
+  let attempt = 0;
+  while (attempt < maxAttempts) {
+    attempt++;
+    try {
+      await firestore.runTransaction(async (tx: any) => {
+        const snap = await tx.get(docRef);
+        const nowVal = FieldValue ? FieldValue.serverTimestamp() : new Date();
+        if (!snap.exists) {
+          tx.set(
+            docRef,
+            { ...payload, createdAt: nowVal, lastLoginAt: nowVal },
+            { merge: true }
+          );
+        } else {
+          // Merge updates and update lastLoginAt. Preserve and merge providerData arrays.
+          const existing = snap.data() || {};
+          const existingProviders: any[] = Array.isArray(existing.providerData) ? existing.providerData : [];
+          const incomingProviders: any[] = Array.isArray(payload.providerData) ? payload.providerData : [];
+          // Merge by providerId+uid key
+          const map = new Map<string, any>();
+          const keyFor = (p: any) => `${p.providerId || ''}::${p.uid || ''}`;
+          for (const p of existingProviders) map.set(keyFor(p), p);
+          for (const p of incomingProviders) map.set(keyFor(p), p);
+          const mergedProviders = Array.from(map.values());
+          tx.set(
+            docRef,
+            { ...payload, providerData: mergedProviders, lastLoginAt: nowVal },
+            { merge: true }
+          );
+        }
+      });
+      // success
+      break;
+    } catch (e: any) {
+      const code = e?.code || '';
+      if ((code && code.includes('unauthenticated')) || (String(e?.message || '').toLowerCase().includes('permission'))) {
+        // If last attempt, rethrow
+        if (attempt >= maxAttempts) throw e;
+        // small backoff and retry
+        await new Promise((r) => setTimeout(r, 300 * attempt));
+        continue;
+      }
+      throw e;
     }
-  });
+  }
 
   return docRef;
 

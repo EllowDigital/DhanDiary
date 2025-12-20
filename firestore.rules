@@ -25,10 +25,12 @@ service cloud.firestore {
                     && (request.resource.data.role == 'user' || !('role' in request.resource.data));
 
       // Updates allowed only by owner. Prevent writing sensitive fields like
-      // plaintext passwords from the client.
+      // plaintext passwords from the client. We require these fields to be
+      // absent or null in the update payload.
       allow update: if isOwner(uid)
-                    && request.resource.data.uid == uid
-                    && !request.resource.data.keys().hasAny(['password','passwordHash']);
+            && request.resource.data.uid == uid
+            && request.resource.data.password == null
+            && request.resource.data.passwordHash == null;
 
       // Never allow client deletes (prevent accidental or malicious removal)
       allow delete: if false;
