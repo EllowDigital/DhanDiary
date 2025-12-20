@@ -34,7 +34,7 @@ function generateId() {
   });
 }
 
-function mapDocToEntry(doc: any, userId: string) {
+    } catch (e) {
   const data = doc.data();
   return {
     local_id: doc.id,
@@ -116,7 +116,7 @@ async function ensureAuthReady(userId: string, timeoutMs = 6000) {
           authInstance.currentUser.getIdToken(true).catch(() => {});
         }
       } catch (e) {}
-      // small delay
+          console.error('subscribeEntries: background listener creation failed', e?.message || e);
       // eslint-disable-next-line no-await-in-loop
       await new Promise((r) => setTimeout(r, 250));
     }
@@ -214,7 +214,7 @@ export function subscribeEntries(userId: string, cb: Subscriber) {
           } catch (e) {}
           listeners.delete(userId);
         };
-      } catch (e: any) {
+      } catch (e) {
         // If immediate listener creation failed (likely unauthenticated), schedule
         // a background attempt to wait for auth and then create the listener.
         console.debug('subscribeEntries: initial listener failed, scheduling retry', e?.message || e);

@@ -53,7 +53,7 @@ export async function syncFirestoreToLocalOnce(userId: string) {
     }
     console.info('[sync] fetched', remote.length, 'remote, added', added);
       return;
-    } catch (e: any) {
+    } catch (e) {
       // If unauthenticated due to auth propagation, wait and retry
       const code = e?.code || '';
       const msg = String(e?.message || e || '');
