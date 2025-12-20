@@ -209,7 +209,10 @@ export async function exportFromUser(
   if (!userId) throw new Error('userId required for export');
 
   const localDbMod: any = await import('../services/localDb');
-  const gen = (localDbMod.fetchEntriesGenerator || localDbMod.default?.fetchEntriesGenerator)(userId, pageSize);
+  const fetchGen = localDbMod.fetchEntriesGenerator || (localDbMod.default && localDbMod.default.fetchEntriesGenerator);
+  const gen = fetchGen ? fetchGen(userId, pageSize) : (async function* () {
+    if (false) yield undefined;
+  })();
 
   const FS = await import('expo-file-system/legacy');
   const enc = (FS as any).EncodingType?.UTF8;

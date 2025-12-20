@@ -53,6 +53,21 @@ export const configureGoogleSignIn = () => {
   }
 };
 
+export const isGoogleConfigured = (): boolean => {
+  try {
+    // If native module present, consider configured
+    const { NativeModules } = require('react-native');
+    if (NativeModules && NativeModules.RNGoogleSignin) return true;
+  } catch (e) {}
+  // Otherwise, check whether a web client id is provided for Expo/web flows
+  try {
+    const web = getWebClientId();
+    return !!web;
+  } catch (e) {
+    return false;
+  }
+};
+
 export const signInWithGoogle = async (opts?: { firebaseSignIn?: boolean }) => {
   try {
     // Ensure native module is present before requiring library

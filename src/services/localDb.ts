@@ -112,7 +112,6 @@ export async function* fetchEntriesGenerator(userId: string, pageSize = 500) {
     const col = entriesCollection(userId);
     let query: any = col.where('is_deleted', '==', false).orderBy('updated_at', 'desc').limit(pageSize);
     let last: any = null;
-    // eslint-disable-next-line no-constant-condition
     while (true) {
       let snap: any;
       if (last) {

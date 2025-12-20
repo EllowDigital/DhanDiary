@@ -22,6 +22,22 @@ const FirebaseAuth: React.FC<Props> = ({
 }) => {
   if (!showGoogle && !showGithub) return null;
 
+  // Feature-detect provider availability so we can disable buttons with helpful messages
+  let googleAvailable = true;
+  let githubAvailable = true;
+  try {
+    const googleMod: any = require('../../services/googleAuth');
+    googleAvailable = typeof googleMod.isGoogleConfigured === 'function' ? googleMod.isGoogleConfigured() : true;
+  } catch (e) {
+    googleAvailable = false;
+  }
+  try {
+    const gh: any = require('../../services/githubAuth');
+    githubAvailable = typeof gh.isGithubConfigured === 'function' ? gh.isGithubConfigured() : true;
+  } catch (e) {
+    githubAvailable = false;
+  }
+
   return (
     <View style={styles.socialWrapper}>
       <View style={styles.socialDivider}>
@@ -33,7 +49,23 @@ const FirebaseAuth: React.FC<Props> = ({
       <View style={styles.buttonsRow}>
         {showGoogle && (
           <View style={styles.buttonContainer}>
-            <GoogleAuth onPress={onGooglePress} disabled={!!socialLoading} />
+            <GoogleAuth
+              onPress={() => {
+                if (!googleAvailable) {
+                  // Show helpful message
+                  try {
+                    const { Alert } = require('react-native');
+                    Alert.alert(
+                      'Google Sign-In Unavailable',
+                      'Google Sign-In is not configured for this build. Use a dev-client/native build or set the Google Web client id in app config.'
+                    );
+                  } catch (e) {}
+                  return;
+                }
+                if (onGooglePress) onGooglePress();
+              }}
+              disabled={!!socialLoading || !googleAvailable}
+            />
           </View>
         )}
 
@@ -50,8 +82,20 @@ const FirebaseAuth: React.FC<Props> = ({
                 />
               }
               title="GitHub"
-              onPress={onGithubPress}
-              disabled={!!socialLoading}
+              onPress={() => {
+                if (!githubAvailable) {
+                  try {
+                    const { Alert } = require('react-native');
+                    Alert.alert(
+                      'GitHub Sign-In Unavailable',
+                      'GitHub Sign-In is not configured in this build. Provide EXPO_PUBLIC_GITHUB_CLIENT_ID in app config or configure a server-side exchange.'
+                    );
+                  } catch (e) {}
+                  return;
+                }
+                if (onGithubPress) onGithubPress();
+              }}
+              disabled={!!socialLoading || !githubAvailable}
               buttonStyle={styles.socialButton}
               titleStyle={styles.socialButtonText}
               containerStyle={{ flex: 1 }}
