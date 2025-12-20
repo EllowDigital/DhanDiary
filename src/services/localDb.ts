@@ -94,8 +94,41 @@ function entriesCollection(userId: string) {
   return firestore.collection('users').doc(userId).collection('entries');
 }
 
+async function ensureAuthReady(userId: string, timeoutMs = 6000) {
+  try {
+    const authMod = tryGetAuth();
+    if (!authMod) return true;
+    const authInstance = authMod.default ? authMod.default() : authMod();
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const current = authInstance.currentUser;
+      if (current && current.uid === userId) {
+        try {
+          if (typeof current.getIdToken === 'function') await current.getIdToken(true);
+        } catch (e) {
+          // ignore token refresh errors
+        }
+        return true;
+      }
+      // best-effort refresh on provided user object
+      try {
+        if (authInstance && authInstance.currentUser && typeof authInstance.currentUser.getIdToken === 'function') {
+          authInstance.currentUser.getIdToken(true).catch(() => {});
+        }
+      } catch (e) {}
+      // small delay
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    return false;
+  } catch (e) {
+    return false;
+  }
+}
+
 export async function getEntries(userId: string): Promise<LocalEntry[]> {
   try {
+    await ensureAuthReady(userId);
     const col = entriesCollection(userId);
     // Avoid composite-index requirement by filtering server-side and
     // performing ordering client-side. For typical user datasets this
@@ -152,43 +185,89 @@ export function subscribeEntries(userId: string, cb: Subscriber) {
         }
       },
       (err: any) => {
-        console.error('subscribeEntries: onSnapshot error', err?.message || err);
-        // Do not throw — caller's listener should decide how to recover.
+        // Fast-path: try to create listener immediately
+        const col = entriesCollection(userId);
+        const ref = col.where('is_deleted', '==', false).limit(500);
+        const unsub = ref.onSnapshot(
+          (snap: any) => {
+            try {
+              const rows = snap.docs.map((d: any) => mapDocToEntry(d, userId));
+              rows.sort((a: any, b: any) => {
+                const ta = new Date(a.date || a.created_at).getTime() || 0;
+                const tb = new Date(b.date || b.created_at).getTime() || 0;
+                return tb - ta;
+              });
+              cb(rows);
+            } catch (e) {
+              console.error('subscribeEntries: callback error', e?.message || e);
+            }
+          },
+          (err: any) => {
+            console.error('subscribeEntries: onSnapshot error', err?.message || err);
+          }
+        );
+        listeners.set(userId, { ref, unsubscribe: unsub });
+        return () => {
+          try {
+            const l = listeners.get(userId);
+            if (l && typeof l.unsubscribe === 'function') l.unsubscribe();
+          } catch (e) {}
+          listeners.delete(userId);
+        };
+      } catch (e: any) {
+        // If immediate listener creation failed (likely unauthenticated), schedule
+        // a background attempt to wait for auth and then create the listener.
+        console.debug('subscribeEntries: initial listener failed, scheduling retry', e?.message || e);
+        let cancelled = false;
+        (async () => {
+          const ok = await ensureAuthReady(userId);
+          if (cancelled) return;
+          if (!ok) {
+            console.error('subscribeEntries: auth not ready; listener not created');
+            return;
+          }
+          try {
+            const col = entriesCollection(userId);
+            const ref = col.where('is_deleted', '==', false).limit(500);
+            const unsub = ref.onSnapshot(
+              (snap: any) => {
+                try {
+                  const rows = snap.docs.map((d: any) => mapDocToEntry(d, userId));
+                  rows.sort((a: any, b: any) => {
+                    const ta = new Date(a.date || a.created_at).getTime() || 0;
+                    const tb = new Date(b.date || b.created_at).getTime() || 0;
+                    return tb - ta;
+                  });
+                  cb(rows);
+                } catch (e) {
+                  console.error('subscribeEntries: callback error', e?.message || e);
+                }
+              },
+              (err: any) => console.error('subscribeEntries: onSnapshot error', err?.message || err)
+            );
+            listeners.set(userId, { ref, unsubscribe: unsub });
+          } catch (e2) {
+            console.error('subscribeEntries: background listener creation failed', e2?.message || e2);
+          }
+        })();
+        // Return unsubscribe that cancels scheduled attempt and cleans up any listener created
+        return () => {
+          cancelled = true;
+          try {
+            const l = listeners.get(userId);
+            if (l && typeof l.unsubscribe === 'function') l.unsubscribe();
+          } catch (e) {}
+          listeners.delete(userId);
+        };
       }
-    );
-    listeners.set(userId, { ref, unsubscribe: unsub });
-  } catch (e: any) {
-    console.error('subscribeEntries: failed to initialize listener', e?.message || e);
-    // Return a no-op unsubscribe so callers can call it safely
-    return () => {};
-  }
-  // return unsubscribe
-  return () => {
-    try {
-      const l = listeners.get(userId);
-      if (l && typeof l.unsubscribe === 'function') l.unsubscribe();
-    } catch (e) {}
-    listeners.delete(userId);
-  };
-}
-
-export async function createEntry(userId: string, input: EntryInput): Promise<LocalEntry> {
-  const id = input.local_id || generateId();
-  const deviceId = await getDeviceId();
-  const now = new Date().toISOString();
-  const payload = {
-    amount: Number(input.amount) || 0,
-    category: input.category || null,
-    note: input.note ?? null,
-    type: input.type === 'in' ? 'in' : 'out',
-    currency: input.currency || 'INR',
-    date: toIso(input.date),
     created_at: now,
     updated_at: now,
     device_id: deviceId,
     is_deleted: false,
     sync_status: 'SYNCED',
   };
+  // Ensure auth state and token are propagated before attempting writes
+  await ensureAuthReady(userId);
   const col = entriesCollection(userId);
   // Retry a couple times for transient network / quota issues
   const maxAttempts = 3;
@@ -204,9 +283,19 @@ export async function createEntry(userId: string, input: EntryInput): Promise<Lo
       // If non-transient error (permission etc) abort early
       const msg = String(e?.message || e || 'unknown');
       if (msg.includes('permission') || msg.includes('PERMISSION_DENIED') || msg.includes('missing or insufficient permissions')) {
-        const out: any = new Error('Failed to save entry due to Firestore permissions. ' + msg);
-        out.original = e;
-        throw out;
+        // Attempt to refresh token and wait once before giving up
+        try {
+          await ensureAuthReady(userId, 3000);
+        } catch (ie) {}
+        // If this was the last attempt, fail with descriptive error
+        if (attempt >= maxAttempts) {
+          const out: any = new Error('Failed to save entry due to Firestore permissions. ' + msg);
+          out.original = e;
+          throw out;
+        }
+        // small backoff then retry
+        await new Promise((res) => setTimeout(res, 300 * attempt));
+        continue;
       }
       // small backoff
       await new Promise((res) => setTimeout(res, 200 * attempt));
