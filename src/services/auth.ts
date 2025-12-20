@@ -79,7 +79,6 @@ export const registerWithEmail = async (name: string, email: string, password: s
         const current = authInstance.currentUser;
         if (current && current.uid === (cred.user && cred.user.uid)) return current;
         // small delay
-        // eslint-disable-next-line no-await-in-loop
         await new Promise((r) => setTimeout(r, 200));
       }
       return authInstance.currentUser;
@@ -279,7 +278,7 @@ export const setPasswordForCurrentUser = async (newPassword: string) => {
       await user.updatePassword(newPassword);
       return;
     } catch (err) {
-      if (err && (err.code === 'auth/requires-recent-login' || err.code === 'auth/requires-recent-login')) {
+      if ((err as any) && ((err as any).code === 'auth/requires-recent-login' || (err as any).code === 'auth/requires-recent-login')) {
         await reauthenticateWithGoogle();
         const refreshed = authInstance.currentUser;
         if (refreshed && typeof refreshed.updatePassword === 'function') {
@@ -300,7 +299,7 @@ export const setPasswordForCurrentUser = async (newPassword: string) => {
         await updatePassword(currentUser, newPassword);
         return;
       } catch (err) {
-        if (err && (err.code === 'auth/requires-recent-login' || err.code === 'auth/requires-recent-login')) {
+        if ((err as any) && ((err as any).code === 'auth/requires-recent-login' || (err as any).code === 'auth/requires-recent-login')) {
           await reauthenticateWithGoogle();
           const refreshed = authInstance.currentUser;
           if (refreshed && typeof refreshed.updatePassword === 'function') {

@@ -52,7 +52,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         } catch (e) {
           // Don't change auth status; surface error for UI if needed
-          if (mounted) setError(e?.message || String(e));
+          if (mounted) setError((e as any)?.message || String(e));
         }
       })();
     });

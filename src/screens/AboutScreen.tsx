@@ -105,7 +105,7 @@ const AboutScreen: React.FC = () => {
         Alert.alert('Up to Date', 'You are running the latest version of DhanDiary.');
       }
     } catch (err) {
-      Alert.alert('Check Failed', err.message || 'Unable to check for updates.');
+      Alert.alert('Check Failed', (err as any)?.message || 'Unable to check for updates.');
     } finally {
       setChecking(false);
     }
@@ -118,7 +118,7 @@ const AboutScreen: React.FC = () => {
       await Updates.fetchUpdateAsync();
       await Updates.reloadAsync();
     } catch (err) {
-      Alert.alert('Update Failed', err.message);
+      Alert.alert('Update Failed', (err as any)?.message);
       const newCount = failureCount + 1;
       setFailureCount(newCount);
       AsyncStorage.setItem('UPDATE_FAIL_COUNT', String(newCount));

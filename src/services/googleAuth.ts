@@ -244,7 +244,7 @@ export const signInWithGoogle = async (opts?: { firebaseSignIn?: boolean }) => {
     console.error('googleAuth: signIn error', {
       message: (err as any)?.message,
       code: (err as any)?.code,
-      stack: err?.stack,
+      stack: (err as any)?.stack,
       raw: err,
     });
     // Rewrap known shapes to include code/message for UI

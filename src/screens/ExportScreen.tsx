@@ -202,7 +202,7 @@ const ExportScreen = () => {
         if (filePath) await shareFile(filePath);
         else throw new Error('Could not generate file path.');
       } catch (error) {
-        Alert.alert('Export Failed', error.message || 'An unknown error occurred.');
+        Alert.alert('Export Failed', (error as any)?.message || 'An unknown error occurred.');
       } finally {
         setExporting(false);
       }

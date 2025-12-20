@@ -98,10 +98,105 @@ async function ensureAuthReady(userId: string, timeoutMs = 6000) {
       } catch {}
       return true;
     }
-    // eslint-disable-next-line no-await-in-loop
     await new Promise((r) => setTimeout(r, 250));
   }
   return false;
+}
+
+/* ---------------------- PAGED STREAMS ---------------------- */
+
+export async function* fetchEntriesGenerator(userId: string, pageSize = 500) {
+  if (!userId) return;
+  await ensureAuthReady(userId);
+  try {
+    const col = entriesCollection(userId);
+    let query: any = col.where('is_deleted', '==', false).orderBy('updated_at', 'desc').limit(pageSize);
+    let last: any = null;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      let snap: any;
+      if (last) {
+        snap = await query.startAfter(last).get();
+      } else {
+        snap = await query.get();
+      }
+      const rows = (snap.docs || []).map((d: any) => mapDocToEntry(d, userId)).filter(Boolean as any);
+      if (!rows || rows.length === 0) break;
+      yield rows;
+      if (!snap.docs || snap.docs.length < pageSize) break;
+      last = snap.docs[snap.docs.length - 1];
+    }
+  } catch (e) {
+    console.error('fetchEntriesGenerator failed', e);
+    return;
+  }
+}
+
+/* ---------------------- SUMMARIES ---------------------- */
+
+export async function getSummary(period: string, key: string) {
+  try {
+    const authMod: any = tryGetAuth();
+    const fsMod: any = tryGetFirestore();
+    if (!fsMod) return null;
+    const authInst = authMod ? (authMod.default ? authMod.default() : authMod()) : null;
+    const uid = authInst && authInst.currentUser ? authInst.currentUser.uid : null;
+    if (!uid) return null;
+    const firestore = fsMod.default ? fsMod.default() : fsMod();
+    const docRef = firestore.collection('users').doc(uid).collection('summaries').doc(`${period}_${key}`);
+    const snap = await docRef.get();
+    if (!snap || (typeof snap.exists === 'boolean' && !snap.exists)) return null;
+    return typeof snap.data === 'function' ? snap.data() : snap;
+  } catch (e) {
+    console.debug('getSummary failed', e);
+    return null;
+  }
+}
+
+/* ---------------------- LOCKS ---------------------- */
+
+const _locks = new Map<string, number>();
+
+export async function isUserLocked(userId: string) {
+  try {
+    if (!userId) return false;
+    // Try persistent storage when available
+    try {
+      const AsyncStorage = require('@react-native-async-storage/async-storage');
+      const v = await AsyncStorage.getItem(`localdb:lock:${userId}`);
+      return !!v;
+    } catch (e) {
+      return _locks.has(userId);
+    }
+  } catch (e) {
+    return false;
+  }
+}
+
+export async function lockUser(userId: string) {
+  try {
+    if (!userId) return;
+    try {
+      const AsyncStorage = require('@react-native-async-storage/async-storage');
+      await AsyncStorage.setItem(`localdb:lock:${userId}`, String(Date.now()));
+      return;
+    } catch (e) {
+      _locks.set(userId, Date.now());
+    }
+  } catch (e) {}
+}
+
+export async function unlockUser(userId: string) {
+  try {
+    if (!userId) return;
+    try {
+      const AsyncStorage = require('@react-native-async-storage/async-storage');
+      await AsyncStorage.removeItem(`localdb:lock:${userId}`);
+      return;
+    } catch (e) {
+      _locks.delete(userId);
+    }
+  } catch (e) {}
 }
 
 /* ------------------------------------------------------------------ */
