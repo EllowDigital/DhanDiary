@@ -184,6 +184,7 @@ export const query = async (
         msg.includes('network') ||
         msg.includes('offline') ||
         msg.includes('socket') ||
+        msg.includes('websocket') ||
         msg.includes('econnreset') ||
         msg.includes('enotfound');
 
