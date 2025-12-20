@@ -177,7 +177,7 @@ const AccountManagementScreen = () => {
       toggleCard('');
     } catch (err) {
       // If Firebase requires recent login, instruct user to reauthenticate
-      if (err?.code === 'auth/requires-recent-login' || err?.code === 'auth/requires-recent-login') {
+      if ((err as any)?.code === 'auth/requires-recent-login' || (err as any)?.code === 'auth/requires-recent-login') {
         Alert.alert(
           'Reauthentication required',
           'For security reasons you need to sign in again before changing your email. Please reauthenticate.',
@@ -187,7 +187,7 @@ const AccountManagementScreen = () => {
           ]
         );
       } else {
-        Alert.alert('Error', err?.message);
+        Alert.alert('Error', (err as any)?.message);
       }
     } finally {
       setSavingEmail(false);
@@ -211,8 +211,8 @@ const AccountManagementScreen = () => {
         setNewPass('');
         setConfirmPass('');
         toggleCard('');
-      } catch (err) {
-          Alert.alert('Error', err?.message || 'Update failed');
+          } catch (err) {
+            Alert.alert('Error', (err as any)?.message || 'Update failed');
       } finally {
         setSavingPasswordState(false);
       }
@@ -233,7 +233,7 @@ const AccountManagementScreen = () => {
       toggleCard('');
     } catch (err) {
       // If reauthentication is required, instruct user
-      if (err?.code === 'auth/requires-recent-login') {
+      if ((err as any)?.code === 'auth/requires-recent-login') {
         Alert.alert(
           'Reauthentication required',
           'Please sign in again to set a password.',
@@ -243,7 +243,7 @@ const AccountManagementScreen = () => {
           ]
         );
       } else {
-        Alert.alert('Error', err?.message || 'Failed to set password');
+        Alert.alert('Error', (err as any)?.message || 'Failed to set password');
       }
     } finally {
       setSavingPasswordState(false);
@@ -265,7 +265,7 @@ const AccountManagementScreen = () => {
             showToast('Account deleted');
             navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
           } catch (err) {
-              if (err?.code === 'auth/requires-recent-login') {
+              if ((err as any)?.code === 'auth/requires-recent-login') {
                 Alert.alert(
                   'Reauthentication required',
                   'Please sign in again to delete your account.',
@@ -275,7 +275,7 @@ const AccountManagementScreen = () => {
                   ]
                 );
               } else {
-                Alert.alert('Error', err?.message);
+                Alert.alert('Error', (err as any)?.message);
               }
           } finally {
             setDeletingAccount(false);

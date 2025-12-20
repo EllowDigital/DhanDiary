@@ -129,7 +129,7 @@ const LoginScreen = () => {
       // But explicit replace is safe if auth state updates slowly
       (navigation.getParent() as any)?.replace('Main');
     } catch (err) {
-      const code = err?.code || null;
+      const code = (err as any)?.code || null;
       if (code === 'auth/wrong-password') {
         Alert.alert('Incorrect password');
       } else if (code === 'auth/user-not-found') {

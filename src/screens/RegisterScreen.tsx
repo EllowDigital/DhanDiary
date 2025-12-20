@@ -162,7 +162,7 @@ const RegisterScreen = () => {
       // Navigation is usually handled by auth state listener
     } catch (err) {
       // Handle email already in use that is registered via social provider
-      const code = err?.code || null;
+      const code = (err as any)?.code || null;
       if (code === 'auth/email-already-in-use' || code === 'userService/email-conflict' || code === 'userService/email-conflict') {
         try {
           const authMod: any = await import('../services/auth');
@@ -414,12 +414,12 @@ const RegisterScreen = () => {
                       try {
                         const googleMod: any = require('@react-native-google-signin/google-signin');
                         const { statusCodes } = googleMod;
-                        if (err && err.code) {
-                          if (err.code === statusCodes?.IN_PROGRESS) {
+                        if ((err as any) && (err as any).code) {
+                            if ((err as any).code === statusCodes?.IN_PROGRESS) {
                             Alert.alert('Sign-in in progress', 'A sign-in operation is already in progress.');
                             return;
                           }
-                          if (err.code === statusCodes?.PLAY_SERVICES_NOT_AVAILABLE) {
+                            if ((err as any).code === statusCodes?.PLAY_SERVICES_NOT_AVAILABLE) {
                             Alert.alert('Play Services', 'Google Play Services not available or outdated.');
                             return;
                           }
