@@ -28,7 +28,6 @@ import { useToast } from '../context/ToastContext';
 import { useInternetStatus } from '../hooks/useInternetStatus';
 import { loginWithEmail, sendPasswordReset, getAuthErrorMessage } from '../services/auth';
 import { SHOW_GOOGLE_LOGIN, SHOW_GITHUB_LOGIN } from '../config/featureFlags';
-import { isGithubConfigured } from '../services/githubAuth';
 
 // Components & Utils
 import { colors } from '../utils/design';
@@ -67,7 +66,8 @@ const LoginScreen = () => {
   const [resettingPassword, setResettingPassword] = useState(false);
   const [socialLoading, setSocialLoading] = useState(false);
 
-  const showGithub = SHOW_GITHUB_LOGIN && isGithubConfigured();
+  // Show GitHub button when feature flag enabled, even in development builds.
+  const showGithub = SHOW_GITHUB_LOGIN;
   const showGoogle = SHOW_GOOGLE_LOGIN;
 
   // --- ANIMATION ---
