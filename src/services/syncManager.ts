@@ -707,6 +707,13 @@ export const pullRemote = async () => {
 
 const ensureRemoteSchema = async () => {
   await initDb();
+  // If NEON_URL is not provided to the app (we intentionally removed it from app.config.js),
+  // skip remote schema verification to avoid attempts to contact Neon from the client.
+  const NEON_URL = (Constants?.expoConfig?.extra as any)?.NEON_URL || process.env.NEON_URL || null;
+  if (!NEON_URL) {
+    console.warn('ensureRemoteSchema: NEON_URL not configured; skipping remote schema verification');
+    return;
+  }
   try {
     const col = await query(
       `SELECT column_name FROM information_schema.columns WHERE table_name = 'cash_entries' AND column_name = 'need_sync' LIMIT 1`,

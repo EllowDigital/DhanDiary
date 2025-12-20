@@ -32,15 +32,21 @@ const open = async (): Promise<DB> => {
     }
 
     const run = (sql: string, params: any[] = []) =>
-      new Promise<void>((resolve, reject) => {
+      new Promise<void>(async (resolve, reject) => {
         try {
           if (raw.runAsync) {
-            raw
-              .runAsync(sql, params)
-              .then(() => resolve())
-              .catch(reject);
-            return;
+            try {
+              // Some expo-sqlite implementations accept (sql, params)
+              // while others expect a prepared statement object. Try the simple call
+              // first and fall back to a classic transaction if it fails.
+              await raw.runAsync(sql, params);
+              resolve();
+              return;
+            } catch (e) {
+              // fall through to transaction fallback
+            }
           }
+
           raw.transaction((tx: any) => {
             tx.executeSql(
               sql,
@@ -55,12 +61,18 @@ const open = async (): Promise<DB> => {
       });
 
     const all = <T = any>(sql: string, params: any[] = []) =>
-      new Promise<T[]>((resolve, reject) => {
+      new Promise<T[]>(async (resolve, reject) => {
         try {
           if (raw.getAllAsync) {
-            raw.getAllAsync(sql, params).then(resolve).catch(reject);
-            return;
+            try {
+              const res = await raw.getAllAsync(sql, params);
+              resolve(res as T[]);
+              return;
+            } catch (e) {
+              // fall through to transaction fallback
+            }
           }
+
           raw.transaction((tx: any) => {
             tx.executeSql(
               sql,
