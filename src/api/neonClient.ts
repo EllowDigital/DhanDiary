@@ -1,11 +1,12 @@
-import { Pool } from '@neondatabase/serverless';
+import { neon } from '@neondatabase/serverless';
 import Constants from 'expo-constants';
 import NetInfo from '@react-native-community/netinfo';
 
 // Read NEON_URL from Expo config (app.config.js) -> Constants.expoConfig?.extra
 const NEON_URL = (Constants?.expoConfig?.extra as any)?.NEON_URL || process.env.NEON_URL || null;
 
-const pool = NEON_URL ? new Pool({ connectionString: NEON_URL }) : null;
+// Use stateless HTTP client
+const sql = NEON_URL ? neon(NEON_URL) : null;
 
 const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
@@ -77,7 +78,7 @@ export type NeonHealthSnapshot = {
 };
 
 export const getNeonHealth = (): NeonHealthSnapshot => ({
-  isConfigured: !!pool,
+  isConfigured: !!sql,
   lastHealthyAt,
   lastLatencyMs,
   lastErrorMessage,
@@ -85,13 +86,13 @@ export const getNeonHealth = (): NeonHealthSnapshot => ({
 });
 
 export const warmNeonConnection = async () => {
-  if (!pool) return;
+  if (!sql) return;
   if (warmPromise) return warmPromise;
 
   warmPromise = (async () => {
     try {
       const start = Date.now();
-      await withTimeout(pool.query('SELECT 1'), 25000);
+      await withTimeout(sql('SELECT 1' as any), 25000);
       recordSuccess(Date.now() - start);
     } catch (err) {
       recordFailure(err);
@@ -109,13 +110,14 @@ export const warmNeonConnection = async () => {
  * Robust query wrapper with retries/backoff and timeout.
  * - Retries on transient network errors up to `retries` times.
  * - Applies a per-request timeout.
+ * - Uses HTTP driver (stateless) via `neon` package.
  */
 export const query = async (
   text: string,
   params: any[] = [],
   opts?: { retries?: number; timeoutMs?: number }
-) => {
-  if (!pool) {
+): Promise<any[]> => {
+  if (!sql) {
     throw new Error('Neon requires internet + NEON_URL');
   }
 
@@ -131,7 +133,6 @@ export const query = async (
     throw offlineError;
   }
 
-  // Treat timeouts as transient and increase retries by default to handle brief network hiccups
   const { retries = 3, timeoutMs = defaultTimeout } = opts || {};
 
   let attempt = 0;
@@ -139,83 +140,47 @@ export const query = async (
   while (attempt <= retries) {
     try {
       const start = Date.now();
-      const result = await withTimeout(pool.query(text, params), timeoutMs);
+      // Execute query via HTTP driver
+      // Use .query() for parameterized execution as per latest SDK
+      const result: any = await withTimeout((sql as any).query(text, params), timeoutMs);
       recordSuccess(Date.now() - start);
-      return result.rows;
+      // Check if result has .rows (pg-compatible) or is array (neon-native)
+      return Array.isArray(result) ? result : (result.rows || []);
     } catch (error) {
       lastErr = error;
       recordFailure(error);
-      // Normalize potential Event-like errors (e.g. WebSocket error events from the pool)
-      // Some environments surface low-level WS errors as Event objects which are not
-      // instanceof Error. Inspect and convert to a readable Error so our transient
-      // detection and logging behave predictably.
-      let normalizedError: any = error;
-      if (error && typeof error === 'object' && !(error instanceof Error)) {
-        try {
-          const eAny: any = error;
-          // If it looks like a WebSocket event, construct a short message
-          if (eAny && eAny.type && eAny.target && eAny.target.readyState !== undefined) {
-            const ready = eAny.target.readyState;
-            const url = eAny.target.url || '<socket>';
-            const msg = `WebSocket event type=${String(eAny.type)} readyState=${String(
-              ready
-            )} url=${String(url)}`;
-            // replace lastErr with an Error wrapper for consistent downstream handling
-            lastErr = new Error(msg);
-            // Use normalizedError for further processing instead of reassigning the catch param
-            normalizedError = lastErr;
-          } else if (eAny && eAny.message) {
-            // Ensure we don't treat a generic object with just message as 'unknown'
-            normalizedError = eAny;
-          }
-        } catch (e) {
-          // fallthrough — keep original error
-        }
-      }
-      // Determine if the error looks transient (network / timeout / connection reset)
+
       const msg = String(
-        ((normalizedError as any) && ((normalizedError as any).message || normalizedError)) || ''
+        ((error as any) && ((error as any).message || error)) || ''
       ).toLowerCase();
+
       const isTransient =
         msg.includes('timeout') ||
-        msg.includes('ec timed out') ||
+        msg.includes('timed out') ||
         msg.includes('connection') ||
         msg.includes('network') ||
         msg.includes('offline') ||
         msg.includes('socket') ||
         msg.includes('websocket') ||
         msg.includes('econnreset') ||
-        msg.includes('enotfound');
+        msg.includes('enotfound') ||
+        msg.includes('fetch'); // fetch errors
 
-      // Treat our explicit 'Request timed out' as transient too
-      if (msg.includes('request timed out')) {
-        // mark as transient
-      }
-
-      // Avoid noisy logs for unique-constraint collisions (handled by callers)
-      try {
-        const e: any = normalizedError;
-        const code = e && e.code ? String(e.code) : '';
-        const msgFull = String(e && e.message ? e.message : '');
-        if (
-          code === '23505' ||
-          msgFull.toLowerCase().includes('duplicate key') ||
-          msgFull.includes('idx_cash_entries_client_id')
-        ) {
-          console.warn('Neon Query duplicate key (suppressed):', msgFull);
-          throw error;
-        }
-      } catch (e) {
-        // ignore logging failure
+      // Unique violations are permanent
+      if (
+        (error as any)?.code === '23505' ||
+        msg.includes('duplicate key') ||
+        msg.includes('unique constraint')
+      ) {
+        console.warn('Neon Query duplicate key (suppressed):', msg);
+        throw error;
       }
 
       if (!isTransient) {
-        // not transient — log and rethrow immediately
-        console.error('Neon Query Error (permanent):', normalizedError);
-        throw normalizedError;
+        console.error('Neon Query Error (permanent):', error);
+        throw error;
       }
 
-      // transient — retry with exponential backoff
       attempt += 1;
       const backoff = Math.min(2000 * attempt, 8000);
       bumpCircuit(attempt);
@@ -228,7 +193,6 @@ export const query = async (
     }
   }
 
-  // all retries exhausted
   console.error('Neon Query failed after retries:', lastErr);
   throw lastErr;
 };

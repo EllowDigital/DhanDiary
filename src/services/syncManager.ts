@@ -57,7 +57,7 @@ const safeQ = async (sql: string, params: any[] = []) => {
   } catch (err) {
     try {
       console.error('Neon query failed', { sql, params, err });
-    } catch (e) {}
+    } catch (e) { }
     throw err;
   }
 };
@@ -79,22 +79,8 @@ const emitSyncConflict = (event: SyncConflictEvent) => {
   });
 };
 
-// Run a callback inside a remote transaction. Rolls back on error.
-const runRemoteTransaction = async (fn: () => Promise<any>) => {
-  await safeQ('BEGIN');
-  try {
-    const r = await fn();
-    await safeQ('COMMIT');
-    return r;
-  } catch (err) {
-    try {
-      await safeQ('ROLLBACK');
-    } catch (e) {
-      console.warn('Failed to rollback transaction', e);
-    }
-    throw err;
-  }
-};
+// Remote transactions removed for HTTP-based driver compatibility
+// const runRemoteTransaction = ...
 
 export const syncPending = async () => {
   await initDb();
@@ -122,7 +108,7 @@ export const syncPending = async () => {
   if (remoteDeletionEntries.length > 0) {
     const remoteIds = remoteDeletionEntries.map((e) => String(e.remote_id));
     try {
-      await runRemoteTransaction(async () => {
+      await (async () => {
         // Soft-delete remotely so other devices can observe deletions via the `deleted` flag.
         const delRes = await safeQ(
           'UPDATE cash_entries SET deleted = true, updated_at = NOW(), need_sync = false WHERE id = ANY($1::uuid[]) RETURNING id',
@@ -131,7 +117,7 @@ export const syncPending = async () => {
         deleted += (delRes && delRes.length) || remoteIds.length;
         remoteDeletionEntries.forEach((entry) => localsToDelete.add(entry.local_id));
         return delRes;
-      });
+      })();
     } catch (err) {
       console.error('Failed to batch delete remote rows, falling back to per-row', err);
       for (const entry of remoteDeletionEntries) {
@@ -168,7 +154,7 @@ export const syncPending = async () => {
   // Batch inserts (wrap in transaction to avoid partial insert state on failure)
   if (inserts.length > 0) {
     try {
-      await runRemoteTransaction(async () => {
+      await (async () => {
         const values: any[] = [];
         const placeholders: string[] = [];
         let idx = 1;
@@ -207,12 +193,12 @@ export const syncPending = async () => {
             } catch (e) {
               try {
                 await queueLocalRemoteMapping(localId, String(r.id));
-              } catch (q) {}
+              } catch (q) { }
             }
           }
         }
         return res;
-      });
+      })();
     } catch (err: any) {
       // If batch insert fails due to constraint issues or other, fall back to per-row resilient insert
       console.warn('Batch insert failed; falling back to per-row inserts', err);
@@ -263,7 +249,7 @@ export const syncPending = async () => {
             } catch (e) {
               try {
                 await queueLocalRemoteMapping(it.local_id, String(remoteId));
-              } catch (q) {}
+              } catch (q) { }
             }
           }
         } catch (e) {
@@ -302,7 +288,7 @@ export const syncPending = async () => {
 
     // Batch updates (wrapped in transaction to keep consistency)
     try {
-      await runRemoteTransaction(async () => {
+      await (async () => {
         const updRes = await safeQ(updateSql, vals);
         if (updRes && updRes.length) {
           const remoteToLocal: Record<string, string> = {};
@@ -320,12 +306,12 @@ export const syncPending = async () => {
                   r.updated_at
                 );
                 updated += 1;
-              } catch (e) {}
+              } catch (e) { }
             }
           }
         }
         return updRes;
-      });
+      })();
     } catch (err) {
       console.warn('Batch update failed; falling back to per-row updates', err);
       for (const u of updates) {
@@ -349,7 +335,7 @@ export const syncPending = async () => {
             try {
               await markEntrySynced(u.local_id, String(res[0].id), sv, res[0].updated_at);
               updated += 1;
-            } catch (e) {}
+            } catch (e) { }
           }
         } catch (e) {
           console.error('Failed to update remote entry', u.local_id, e);
@@ -406,7 +392,7 @@ const flushPendingProfileUpdates = async () => {
         const user = res[0];
         try {
           await saveSession(user.id, user.name || '', user.email);
-        } catch (e) {}
+        } catch (e) { }
         await markPendingProfileProcessed(p.id);
         processed += 1;
       }
@@ -462,11 +448,11 @@ export const pullRemote = async () => {
           let localForDeleted: any = null;
           try {
             localForDeleted = await getLocalByRemoteId(String(r.id));
-          } catch (e) {}
+          } catch (e) { }
           if (!localForDeleted && r.client_id) {
             try {
               localForDeleted = await getLocalByClientId(String(r.client_id));
-            } catch (e) {}
+            } catch (e) { }
           }
 
           // If local exists and still needs sync, treat local as intent-to-keep:
@@ -587,7 +573,7 @@ export const pullRemote = async () => {
                       : undefined,
                     pushedRow.updated_at
                   );
-                } catch (e) {}
+                } catch (e) { }
               }
               merged += 1;
               return true;
@@ -610,7 +596,7 @@ export const pullRemote = async () => {
                   typeof r.server_version === 'number' ? Number(r.server_version) : undefined,
                   r.updated_at
                 );
-              } catch (e) {}
+              } catch (e) { }
               merged += 1;
               continue;
             }
@@ -645,7 +631,7 @@ export const pullRemote = async () => {
                 try {
                   await markEntrySynced(local.local_id, String(newId), sv, upd[0].updated_at);
                   merged += 1;
-                } catch (e) {}
+                } catch (e) { }
               }
             } catch (err) {
               console.error(
