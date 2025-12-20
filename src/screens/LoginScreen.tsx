@@ -22,7 +22,7 @@ import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 
 // Types & Services
 import { AuthStackParamList } from '../types/navigation';
-import { loginOnline } from '../services/auth';
+import { loginOnline, warmNeonConnection } from '../services/auth';
 import { syncBothWays } from '../services/syncManager';
 import { useToast } from '../context/ToastContext';
 import { useInternetStatus } from '../hooks/useInternetStatus';
@@ -52,6 +52,11 @@ const LoginScreen = () => {
   // --- ANIMATION ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.95)).current;
+
+  useEffect(() => {
+    // Pre-warm connection
+    warmNeonConnection().catch(() => { });
+  }, []);
 
   useEffect(() => {
     Animated.parallel([

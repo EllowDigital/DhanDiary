@@ -99,18 +99,15 @@ const prepareOfflineWorkspace = async (userId: string) => {
   }
 
   if (!hasExisting) {
-    try {
-      const { syncBothWays } = require('./syncManager');
-      await syncBothWays();
-    } catch (e) {
-      console.warn('Initial sync after login failed', e);
-    }
+    // Run sync in background so we don't block login/signup
+    const { syncBothWays } = require('./syncManager');
+    syncBothWays().catch((e: any) => {
+      console.warn('Background initial sync after login failed', e);
+    });
   }
 };
 
 export const registerOnline = async (name: string, email: string, password: string) => {
-  const salt = await bcrypt.genSalt(10);
-  const hash = await bcrypt.hash(password, salt);
   // If NEON_URL is not configured, skip remote registration and create a local session for dev/test
   const NEON_URL = resolveNeonUrl();
   if (!NEON_URL) {
@@ -125,37 +122,42 @@ export const registerOnline = async (name: string, email: string, password: stri
   const online = await isOnline();
   if (!online) throw new Error('Online required for registration');
 
-  // Prime Neon so the actual registration query isn't blocked by cold starts
-  await warmNeonConnection({ force: true }).catch(() => {});
+  // Start hashing in parallel with other checks if possible, but here we need it for query
+  const salt = await bcrypt.genSalt(10);
+  const hash = await bcrypt.hash(password, salt);
 
-  // Check if user exists
-  const existing = await query('SELECT id FROM users WHERE email = $1', [email]);
-  if (existing.length > 0) {
-    throw new Error('User already exists');
+  try {
+    // Attempt insert directly. If email exists, it will throw a unique constraint violation.
+    const result = await withTimeout(
+      query(
+        'INSERT INTO users (name, email, password_hash) VALUES ($1, $2, $3) RETURNING id, name, email',
+        [name, email, hash]
+      ),
+      20000
+    );
+
+    const user = result[0];
+    await saveSession(user.id, user.name || '', user.email);
+    // await offline workspace setup but sync is now backgrounded
+    await prepareOfflineWorkspace(user.id);
+    return user;
+  } catch (err: any) {
+    // Check for unique constraint violation
+    if (
+      err?.code === '23505' ||
+      (err?.message && err.message.includes('unique constraint') && err.message.includes('email'))
+    ) {
+      throw new Error('User already exists');
+    }
+    throw err;
   }
-
-  // use timeout wrapper for remote queries to fail fast if network is slow
-  const result = await withTimeout(
-    query(
-      'INSERT INTO users (name, email, password_hash) VALUES ($1, $2, $3) RETURNING id, name, email',
-      [name, email, hash]
-    ),
-    20000
-  );
-
-  const user = result[0];
-  // saveSession expects (id, name, email)
-  await saveSession(user.id, user.name || '', user.email);
-  await prepareOfflineWorkspace(user.id);
-  return user;
 };
 
 export const loginOnline = async (email: string, password: string) => {
   const online = await isOnline();
   if (!online) throw new Error('Online required for login');
 
-  await warmNeonConnection({ force: true }).catch(() => {});
-
+  // Removed explicit warming to save a round trip. The main query will warm if needed.
   // fail fast on slow responses
   const result = await withTimeout(query('SELECT * FROM users WHERE email = $1', [email]), 20000);
   if (result.length === 0) {
@@ -168,6 +170,7 @@ export const loginOnline = async (email: string, password: string) => {
     throw new Error('Invalid password');
   }
   await saveSession(user.id, user.name || '', user.email);
+  await prepareOfflineWorkspace(user.id);
   return user;
 };
 

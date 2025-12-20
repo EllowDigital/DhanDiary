@@ -113,7 +113,7 @@ const RegisterScreen = () => {
 
   useFocusEffect(
     useCallback(() => {
-      warmRemote(false).catch(() => {});
+      warmRemote(false).catch(() => { });
     }, [warmRemote])
   );
 
@@ -165,7 +165,6 @@ const RegisterScreen = () => {
 
     setLoading(true);
     try {
-      await warmRemote(true);
       await registerOnline(name, email, password);
       showToast('Account created!');
       (navigation.getParent() as any)?.replace('Main');
@@ -328,7 +327,7 @@ const RegisterScreen = () => {
                 title={loading ? 'Creating...' : 'Create Account'}
                 onPress={handleRegister}
                 loading={loading}
-                disabled={loading || warming || !isOnline}
+                disabled={loading || !isOnline}
                 buttonStyle={styles.primaryButton}
                 containerStyle={styles.buttonContainer}
                 titleStyle={styles.buttonText}

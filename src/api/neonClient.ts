@@ -10,7 +10,7 @@ const pool = NEON_URL ? new Pool({ connectionString: NEON_URL }) : null;
 const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
 const defaultTimeout = 20000; // 20s default timeout per request
-const NETINFO_CACHE_MS = 4000;
+const NETINFO_CACHE_MS = 15000;
 const CIRCUIT_FUSE_MAX_MS = 15000;
 
 const withTimeout = <T>(p: Promise<T>, ms = defaultTimeout): Promise<T> =>
