@@ -28,6 +28,23 @@ let cachedNetInfoAt = 0;
 let cachedIsConnected: boolean | null = null;
 let warmPromise: Promise<void> | null = null;
 
+const getHostFromUrl = (u: string | null) => {
+  try {
+    if (!u) return null;
+    // Try to parse as URL; if it contains credentials, mask them
+    const parsed = new URL(u);
+    return parsed.hostname;
+  } catch (e) {
+    // fallback: try to strip credentials
+    try {
+      const noCred = u.split('@').pop();
+      return noCred ? noCred.split('/')[0] : null;
+    } catch (ee) {
+      return null;
+    }
+  }
+};
+
 const recordSuccess = (latencyMs: number) => {
   lastHealthyAt = Date.now();
   lastLatencyMs = latencyMs;
@@ -92,7 +109,9 @@ export const warmNeonConnection = async () => {
   warmPromise = (async () => {
     try {
       const start = Date.now();
-      await withTimeout(sql('SELECT 1' as any), 25000);
+      // Use the HTTP client's query method consistently to avoid SDK surface differences
+      const runner = (sql as any).query || (sql as any);
+      await withTimeout(runner('SELECT 1', []), 25000);
       recordSuccess(Date.now() - start);
     } catch (err) {
       recordFailure(err);
@@ -142,7 +161,8 @@ export const query = async (
       const start = Date.now();
       // Execute query via HTTP driver
       // Use .query() for parameterized execution as per latest SDK
-      const result: any = await withTimeout((sql as any).query(text, params), timeoutMs);
+      const runner = (sql as any).query || (sql as any);
+      const result: any = await withTimeout(runner(text, params), timeoutMs);
       recordSuccess(Date.now() - start);
       // Check if result has .rows (pg-compatible) or is array (neon-native)
       return Array.isArray(result) ? result : (result.rows || []);
@@ -184,8 +204,9 @@ export const query = async (
       attempt += 1;
       const backoff = Math.min(2000 * attempt, 8000);
       bumpCircuit(attempt);
+      const host = getHostFromUrl(NEON_URL as any);
       console.warn(
-        `Neon Query transient error, retrying attempt ${attempt}/${retries} after ${backoff}ms`,
+        `Neon Query transient error (${host || 'host unknown'}), retrying attempt ${attempt}/${retries} after ${backoff}ms`,
         error
       );
       if (attempt > retries) break;
