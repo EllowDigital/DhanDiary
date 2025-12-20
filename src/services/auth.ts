@@ -54,8 +54,21 @@ export const registerWithEmail = async (name: string, email: string, password: s
   if (!firebaseAuth) throw new Error('Firebase auth not available');
   const authInstance = firebaseAuth.default ? firebaseAuth.default() : firebaseAuth();
   let cred: any;
+  const withTimeout = async <T>(p: Promise<T>, ms = 15000): Promise<T> => {
+    let timer: any;
+    try {
+      return await Promise.race([
+        p,
+        new Promise<T>((_, reject) => {
+          timer = setTimeout(() => reject(new Error('Operation timed out')), ms);
+        }),
+      ] as any);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  };
   try {
-    cred = await authInstance.createUserWithEmailAndPassword(email.trim(), password);
+    cred = await withTimeout(authInstance.createUserWithEmailAndPassword(email.trim(), password), 20000);
   } catch (e) {
     console.error('auth.registerWithEmail: createUser error', e);
     throw e;
@@ -97,7 +110,13 @@ export const registerWithEmail = async (name: string, email: string, password: s
 
   const userService = tryGetUserService();
   if (userService && typeof userService.syncUserToFirestore === 'function') {
-    await userService.syncUserToFirestore(cred.user);
+    try {
+      // Don't allow the user creation flow to hang if backend sync is slow/unavailable
+      await withTimeout(userService.syncUserToFirestore(cred.user), 8000);
+    } catch (syncErr) {
+      console.debug('registerWithEmail: syncUserToFirestore failed or timed out', (syncErr as any)?.message || syncErr);
+      // do not throw — registration succeeded locally; surface warning but continue
+    }
   } else {
     console.debug('registerWithEmail: syncUserToFirestore not available');
   }
