@@ -161,6 +161,59 @@ const RegisterScreen = () => {
       showToast('Account created!');
       // Navigation is usually handled by auth state listener
     } catch (err: any) {
+      // Handle email already in use that is registered via social provider
+      const code = err?.code || null;
+      if (code === 'auth/email-already-in-use' || code === 'userService/email-conflict' || code === 'userService/email-conflict') {
+        try {
+          const authMod: any = await import('../services/auth');
+          const methods: string[] = await authMod.fetchSignInMethodsForEmail(email.trim());
+          const provider = (methods && methods.length && methods[0]) || null;
+          if (provider && (provider.includes('google') || provider.includes('github') || provider.includes('github.com') || provider.includes('google.com'))) {
+            // Block signup and offer actions per spec
+            Alert.alert(
+              'This email already has an account',
+              'Please sign in with your password to link accounts.',
+              [
+                {
+                  text: provider.includes('google') || provider.includes('google.com') ? 'Continue with Google' : 'Continue with GitHub',
+                  onPress: async () => {
+                    try {
+                      setSocialLoading(true);
+                      const authMod2: any = await import('../services/auth');
+                      if (provider.includes('google') || provider.includes('google.com')) {
+                        await authMod2.startGoogleSignIn('signIn');
+                      } else {
+                        await authMod2.startGithubSignIn('signIn');
+                      }
+                    } catch (e: any) {
+                      Alert.alert('Sign-in Failed', (e && e.message) || 'Unable to sign in with provider.');
+                    } finally {
+                      setSocialLoading(false);
+                    }
+                  },
+                },
+                {
+                  text: 'Reset password',
+                  onPress: async () => {
+                    try {
+                      const authMod3: any = await import('../services/auth');
+                      await authMod3.sendPasswordReset(email.trim());
+                      showToast('Password reset sent');
+                    } catch (e: any) {
+                      Alert.alert('Reset Failed', (e && e.message) || 'Unable to send reset email right now.');
+                    }
+                  },
+                },
+                { text: 'OK', style: 'cancel' },
+              ],
+              { cancelable: true }
+            );
+            return;
+          }
+        } catch (inner) {
+          // fallthrough to generic error
+        }
+      }
       const msg = err?.message || String(err);
       Alert.alert('Registration Failed', msg);
     } finally {
@@ -414,7 +467,7 @@ const RegisterScreen = () => {
 
       <FullScreenSpinner
         visible={spinnerVisible}
-        message={loading ? 'Creating account...' : 'Connecting...'}
+        message={loading ? 'Creating account...' : socialLoading ? 'Signing you in...' : 'Creating account...'}
       />
     </SafeAreaView>
   );

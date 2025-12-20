@@ -26,7 +26,7 @@ import FirebaseAuth from '../components/firebase-auth/FirebaseAuth';
 import { AuthStackParamList } from '../types/navigation';
 import { useToast } from '../context/ToastContext';
 import { useInternetStatus } from '../hooks/useInternetStatus';
-import { loginWithEmail, sendPasswordReset } from '../services/auth';
+import { loginWithEmail, sendPasswordReset, getAuthErrorMessage } from '../services/auth';
 import { SHOW_GOOGLE_LOGIN, SHOW_GITHUB_LOGIN } from '../config/featureFlags';
 import { isGithubConfigured } from '../services/githubAuth';
 
@@ -119,12 +119,12 @@ const LoginScreen = () => {
         if (pending) {
           const authMod: any = await import('../services/auth');
           await authMod.linkPendingCredentialWithPassword(email, password, pending);
+          showToast('Account linked successfully');
         }
       } catch (linkErr) {
         // linking failed - allow normal login but surface a toast
-          try {
-          const msg = (linkErr as any)?.message || 'Linking failed';
-          showToast('Account linked failed.');
+        try {
+          showToast('Account linking failed.');
         } catch (e) {}
       }
       showToast('Welcome back!');
@@ -132,14 +132,18 @@ const LoginScreen = () => {
       // But explicit replace is safe if auth state updates slowly
       (navigation.getParent() as any)?.replace('Main');
     } catch (err: any) {
-      const msg = err?.message || String(err);
-      if (msg.toLowerCase().includes('timed out')) {
+      const code = err?.code || null;
+      if (code === 'auth/wrong-password') {
+        Alert.alert('Incorrect password');
+      } else if (code === 'auth/user-not-found') {
+        Alert.alert('No account found with this email');
+      } else if ((err?.message || '').toLowerCase().includes('timed out')) {
         Alert.alert('Connection Timeout', 'The request took too long.', [
           { text: 'Retry', onPress: handleLogin },
           { text: 'Cancel', style: 'cancel' },
         ]);
       } else {
-        Alert.alert('Login Failed', 'Invalid credentials or server error.');
+        Alert.alert('Login Failed', getAuthErrorMessage(code));
       }
     } finally {
       setLoading(false);
@@ -211,7 +215,7 @@ const LoginScreen = () => {
       if (e && e.code === 'auth/account-exists-with-different-credential') {
         const prefill = e.email || undefined;
         (navigation as any).navigate('Login', { prefillEmail: prefill, pendingCredential: e.pendingCredential });
-        Alert.alert('Account exists', 'An account with this email exists. Sign in with your existing method to link Google.');
+        Alert.alert('This email already has an account', 'Please sign in with your password to link accounts.');
         return;
       }
 
@@ -239,11 +243,7 @@ const LoginScreen = () => {
   };
 
   const spinnerVisible = loading || socialLoading;
-  const spinnerMessage = loading
-    ? 'Authenticating...'
-    : socialLoading
-      ? 'Contacting provider...'
-      : 'Authenticating...';
+  const spinnerMessage = 'Signing you in...';
 
   return (
     <SafeAreaView style={styles.safeArea}>
