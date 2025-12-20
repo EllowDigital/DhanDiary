@@ -17,6 +17,8 @@
     "format": "prettier --write .",
     "lint": "eslint ./ --ext .js,.jsx,.ts,.tsx",
     "lint:fix": "eslint ./ --ext .js,.jsx,.ts,.tsx --fix"
+    ,
+    "build:android:release-local": "powershell -ExecutionPolicy Bypass -File ./scripts/build-android-release.ps1"
   },
   "dependencies": {
     "@clerk/clerk-expo": "^2.19.14",
