@@ -32,19 +32,24 @@ const open = async (): Promise<DB> => {
     }
 
     const run = (sql: string, params: any[] = []) =>
-      new Promise<void>(async (resolve, reject) => {
+      new Promise<void>((resolve, reject) => {
         try {
           if (raw.runAsync) {
-            try {
-              // Some expo-sqlite implementations accept (sql, params)
-              // while others expect a prepared statement object. Try the simple call
-              // first and fall back to a classic transaction if it fails.
-              await raw.runAsync(sql, params);
-              resolve();
-              return;
-            } catch (e) {
-              // fall through to transaction fallback
-            }
+            raw
+              .runAsync(sql, params)
+              .then(() => resolve())
+              .catch(() => {
+                // fall back to transaction when runAsync fails
+                raw.transaction((tx: any) => {
+                  tx.executeSql(
+                    sql,
+                    params,
+                    () => resolve(),
+                    (_: any, err: any) => reject(err)
+                  );
+                }, reject);
+              });
+            return;
           }
 
           raw.transaction((tx: any) => {
@@ -61,16 +66,28 @@ const open = async (): Promise<DB> => {
       });
 
     const all = <T = any>(sql: string, params: any[] = []) =>
-      new Promise<T[]>(async (resolve, reject) => {
+      new Promise<T[]>((resolve, reject) => {
         try {
           if (raw.getAllAsync) {
-            try {
-              const res = await raw.getAllAsync(sql, params);
-              resolve(res as T[]);
-              return;
-            } catch (e) {
-              // fall through to transaction fallback
-            }
+            raw
+              .getAllAsync(sql, params)
+              .then((res: any) => resolve(res as T[]))
+              .catch(() => {
+                // fall back to transaction
+                raw.transaction((tx: any) => {
+                  tx.executeSql(
+                    sql,
+                    params,
+                    (_tx: any, res: any) => {
+                      const out: any[] = [];
+                      for (let i = 0; i < res.rows.length; i++) out.push(res.rows.item(i));
+                      resolve(out as T[]);
+                    },
+                    (_: any, err: any) => reject(err)
+                  );
+                }, reject);
+              });
+            return;
           }
 
           raw.transaction((tx: any) => {
