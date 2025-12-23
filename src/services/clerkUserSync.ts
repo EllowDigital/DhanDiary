@@ -62,21 +62,68 @@ export const syncClerkUserToNeon = async (clerkUser: {
 
         // 3. Create New User
         console.log(`[Bridge] Creating new user for ${email}`);
-        const newUser = await query(
-            `INSERT INTO users (email, clerk_id, name, password_hash, status) 
-         VALUES ($1, $2, $3, 'clerk_managed', 'active') 
-         RETURNING id, email, name, clerk_id`,
-            [email, clerkUser.id, clerkUser.fullName || 'User']
-        );
+        try {
+            const newUser = await query(
+                `INSERT INTO users (email, clerk_id, name, password_hash, status) 
+             VALUES ($1, $2, $3, 'clerk_managed', 'active') 
+             RETURNING id, email, name, clerk_id`,
+                [email, clerkUser.id, clerkUser.fullName || 'User']
+            );
+            const created = newUser[0];
+            return {
+                uuid: created.id,
+                clerk_id: created.clerk_id,
+                email: created.email,
+                name: created.name,
+                server_version: 0,
+            };
+        } catch (err: any) {
+            // If Neon is unreachable or the query failed, attempt a final recovery
+            // by looking up the user by email. If that fails, fall back to a local session.
+            console.warn('[Bridge] Neon query failed, attempting recovery by email', err?.message || err);
+            try {
+                const existing = await query('SELECT * FROM users WHERE email = $1 LIMIT 1', [email]);
+                if (existing && existing.length > 0) {
+                    const u = existing[0];
+                    return {
+                        uuid: u.id,
+                        clerk_id: u.clerk_id,
+                        email: u.email,
+                        name: u.name,
+                        server_version: 0,
+                    };
+                }
+            } catch (e) {
+                // ignore and fall back
+            }
 
-        const created = newUser[0];
-        return {
-            uuid: created.id,
-            clerk_id: created.clerk_id,
-            email: created.email,
-            name: created.name,
-            server_version: 0
-        };
+            const localId = uuidv4();
+            try {
+                await saveSession(localId, clerkUser.fullName || 'User', email);
+            } catch (e) {
+                console.warn('[Bridge] Failed to save local session fallback', e);
+            }
+            return {
+                uuid: localId,
+                clerk_id: clerkUser.id,
+                email,
+                name: clerkUser.fullName || null,
+                server_version: 0,
+            };
+        }
+                        uuid: u.id,
+                        clerk_id: u.clerk_id,
+                        email: u.email,
+                        name: u.name,
+                        server_version: 0,
+                    };
+                }
+            } catch (e) {
+                // fall through to fallback below
+            }
+            // rethrow to be handled by outer catch below
+            throw insertErr;
+        }
     } catch (err: any) {
         // If Neon is unreachable or the query failed, fall back to a local session so signup isn't blocked.
         console.warn('[Bridge] Neon unavailable, falling back to local session', err?.message || err);

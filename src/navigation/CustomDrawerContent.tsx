@@ -101,37 +101,35 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
         }}
         showsVerticalScrollIndicator={false}
       >
-        {/* --- BRAND HEADER --- */}
+        {/* --- USER PROFILE (moved to top, brand removed) --- */}
         <Animated.View
           style={[
             styles.headerContainer,
             { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
           ]}
         >
-          <View style={styles.brandRow}>
-            <View style={styles.logoContainer}>
-              <Image source={BRAND_ICON} style={styles.logoImage} resizeMode="contain" />
+          <View style={styles.userHeader}>
+            <Image
+              source={user?.imageUrl ? { uri: user.imageUrl } : require('../../assets/adaptive-icon.png')}
+              style={styles.userAvatar}
+            />
+            <View style={styles.userInfo}>
+              <Text style={styles.userName} numberOfLines={1}>
+                {user?.fullName || user?.full_name || 'Guest User'}
+              </Text>
+              <Text style={styles.userEmail} numberOfLines={1}>
+                {user?.primaryEmailAddress?.emailAddress || user?.email || ''}
+              </Text>
             </View>
-            <View style={styles.brandTextContainer}>
-              <Text style={styles.brandTitle}>DhanDiary</Text>
-              <Text style={styles.brandSubtitle}>Personal Finance</Text>
-            </View>
+            <TouchableOpacity
+              style={styles.editButton}
+              onPress={() => props.navigation.navigate('Account')}
+            >
+              <MaterialIcon name="edit" size={20} color={colors.primary} />
+            </TouchableOpacity>
           </View>
           <View style={styles.headerDivider} />
         </Animated.View>
-
-        {/* --- USER PROFILE --- */}
-        <View style={styles.userHeader}>
-          <Image
-            source={{ uri: user?.imageUrl }}
-            style={styles.userAvatar}
-            defaultSource={require('../../assets/adaptive-icon.png')} // Fallback? Or just conditional
-          />
-          <View style={styles.userInfo}>
-            <Text style={styles.userName} numberOfLines={1}>{user?.fullName || 'Guest User'}</Text>
-            <Text style={styles.userEmail} numberOfLines={1}>{user?.primaryEmailAddress?.emailAddress || ''}</Text>
-          </View>
-        </View>
 
         <View style={styles.headerDivider} />
         <View style={styles.menuContainer}>
