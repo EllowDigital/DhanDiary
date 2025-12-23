@@ -42,10 +42,12 @@ const useWarmUpBrowser = () => {
 const usePrintAuthRedirects = () => {
   React.useEffect(() => {
     try {
-      const proxyUri = AuthSession.makeRedirectUri({ useProxy: true });
+      // Provide projectNameForProxy matching app owner/slug to enable Expo AuthSession proxy
+      const projectForProxy = '@ellowdigital/dhandiary';
+      const proxyUri = AuthSession.makeRedirectUri({ useProxy: true, projectNameForProxy: projectForProxy });
       const nativeUri = AuthSession.makeRedirectUri({ useProxy: false });
       const getUri = AuthSession.getRedirectUrl();
-      console.log('[AuthRedirects] makeRedirectUri(useProxy:true)=', proxyUri);
+      console.log('[AuthRedirects] makeRedirectUri(useProxy:true, project)=', proxyUri);
       console.log('[AuthRedirects] makeRedirectUri(useProxy:false)=', nativeUri);
       console.log('[AuthRedirects] getRedirectUrl()=', getUri);
     } catch (e) {
