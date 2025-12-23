@@ -192,13 +192,13 @@ function AppWithDb() {
           const { init } = require('./src/db/localDb');
           await init();
           console.log('[App] background DB init complete');
-        } catch (e) {
+          } catch (e) {
           console.error('[App] background DB init failed', e);
-          setDbInitError(String(e?.message || e));
+          setDbInitError(String((e as any)?.message || String(e)));
         }
       })();
     } catch (e: any) {
-      setDbInitError(String(e?.message || 'Unknown DB Error'));
+      setDbInitError(String((e as any)?.message || 'Unknown DB Error'));
       setDbReady(false);
     }
   }, []);

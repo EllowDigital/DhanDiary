@@ -575,14 +575,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#E2E8F0',
     marginRight: 16,
     alignItems: 'center',
-    headerAvatarImage: {
-      width: 140,
-      height: 28,
-      borderRadius: 8,
-      overflow: 'hidden',
-    },
     borderWidth: 1,
     borderColor: '#BFDBFE',
+  },
+  headerAvatarImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    overflow: 'hidden',
+    marginRight: 12,
   },
   avatarInitial: { fontSize: fontScale(18), fontWeight: '700', color: colors.primary },
 

@@ -125,7 +125,7 @@ const SplashScreen = () => {
           try {
             return await Promise.race([getSession(), timeout(3000)]);
           } catch (e) {
-            console.warn('[Splash] getSession timed out or failed', e?.message || e);
+            console.warn('[Splash] getSession timed out or failed', (e as any)?.message || String(e));
             return null;
           }
         };
@@ -134,18 +134,18 @@ const SplashScreen = () => {
           try {
             return await Promise.race([hasCompletedOnboarding(), timeout(2000)]);
           } catch (e) {
-            console.warn('[Splash] hasCompletedOnboarding timed out or failed', e?.message || e);
+            console.warn('[Splash] hasCompletedOnboarding timed out or failed', (e as any)?.message || String(e));
             return false;
           }
         };
 
-        const res = await Promise.all([
+        const res: any = await Promise.all([
           safeGetSession(),
           safeHasCompletedOnboarding(),
           new Promise((resolve) => setTimeout(resolve, MIN_SPLASH_TIME_MS)), // Ensure min display time
         ]);
         user = res[0];
-        onboardingCompleted = res[1];
+        onboardingCompleted = Boolean(res[1]);
         console.log(
           '[Splash] init results user=',
           !!user,

@@ -44,7 +44,7 @@ const usePrintAuthRedirects = () => {
     try {
       // For standalone / dev-client builds we MUST use a native scheme.
       // Compute the native redirect URI using our app scheme.
-      const nativeUri = AuthSession.makeRedirectUri({ useProxy: false, scheme: 'dhandiary' });
+      const nativeUri = AuthSession.makeRedirectUri(({ scheme: 'dhandiary' } as any));
       const getUri = AuthSession.getRedirectUrl();
       console.log('[AuthRedirects] makeRedirectUri(native, scheme=dhandiary)=', nativeUri);
       console.log('[AuthRedirects] getRedirectUrl()=', getUri);
@@ -163,7 +163,7 @@ const LoginScreen = () => {
       ] as any);
       console.log('[Login] bridge sync completed', resolvedBridgeUser?.uuid || '<no-uuid>');
     } catch (e) {
-      console.warn('[Login] bridge sync failed or timed out', e?.message || e);
+      console.warn('[Login] bridge sync failed or timed out', (e as any)?.message || String(e));
       resolvedBridgeUser = null;
     }
 
@@ -210,7 +210,7 @@ const LoginScreen = () => {
         syncBothWays(),
         new Promise((_, rej) => setTimeout(() => rej(new Error('Initial sync timed out')), 4000)),
       ]).catch((e) => {
-        console.warn('[Login] initial sync failed or timed out', e?.message || e);
+        console.warn('[Login] initial sync failed or timed out', (e as any)?.message || String(e));
       });
     } catch (e) {
       console.warn('[Login] failed to start initial sync', e);

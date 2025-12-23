@@ -152,10 +152,10 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
             />
             <View style={styles.userInfo}>
               <Text style={styles.userName} numberOfLines={1}>
-                {user?.fullName || user?.full_name || 'Guest User'}
+                {user?.fullName || 'Guest User'}
               </Text>
               <Text style={styles.userEmail} numberOfLines={1}>
-                {user?.primaryEmailAddress?.emailAddress || user?.email || ''}
+                {user?.primaryEmailAddress?.emailAddress || ''}
               </Text>
             </View>
             <TouchableOpacity
@@ -352,6 +352,11 @@ const styles = StyleSheet.create({
   userEmail: {
     fontSize: 12,
     color: colors.muted,
+  },
+
+  editButton: {
+    padding: 8,
+    marginLeft: 8,
   },
 
   /* MENU */
