@@ -28,6 +28,7 @@ import { ToastProvider } from './src/context/ToastContext';
 import DrawerNavigator from './src/navigation/DrawerNavigator';
 import { useOfflineSync } from './src/hooks/useOfflineSync';
 import { useAuth } from './src/hooks/useAuth';
+import { checkNeonConnection } from './src/api/neonClient';
 import { BiometricAuth } from './src/components/BiometricAuth';
 import tokenCache from './src/utils/tokenCache';
 
@@ -75,6 +76,17 @@ const AppContent = () => {
   // Provide user id to offline sync so it only runs when a user is present
   useOfflineSync(user?.id);
 
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const ok = await checkNeonConnection();
+        console.log('[App] Neon connection ok:', ok);
+      } catch (e) {
+        console.warn('[App] Neon connection check failed', e);
+      }
+    })();
+  }, []);
+
   return (
     <>
       <BiometricAuth />
@@ -106,17 +118,7 @@ export default function App() {
         await AsyncStorage.removeItem('PENDING_UPDATE');
       }
 
-      // 2. Run Migrations (Best Effort)
-      try {
-        const migrations = require('./src/db/migrations').default;
-        if (migrations && typeof migrations.runMigrations === 'function') {
-          await migrations.runMigrations();
-        }
-      } catch (e) {
-        console.warn('Migration failed (non-fatal):', e);
-      }
-
-      // 3. Open DB early so UI can render while migrations run in background.
+      // 2. Open DB early so UI can render while migrations run in background.
       try {
         const sqlite = require('./src/db/sqlite').default;
         // try open with a short timeout to avoid blocking UI startup

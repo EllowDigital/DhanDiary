@@ -115,11 +115,20 @@ const SplashScreen = () => {
     const init = async () => {
       const startTime = Date.now();
       // Run checks in parallel with minimum timer
-      const [user, onboardingCompleted] = await Promise.all([
-        getSession(),
-        hasCompletedOnboarding(),
-        new Promise((resolve) => setTimeout(resolve, MIN_SPLASH_TIME_MS)), // Ensure min display time
-      ]);
+      let user = null;
+      let onboardingCompleted = false;
+      try {
+        const res = await Promise.all([
+          getSession(),
+          hasCompletedOnboarding(),
+          new Promise((resolve) => setTimeout(resolve, MIN_SPLASH_TIME_MS)), // Ensure min display time
+        ]);
+        user = res[0];
+        onboardingCompleted = res[1];
+        console.log('[Splash] init results user=', !!user, 'onboardingCompleted=', onboardingCompleted);
+      } catch (e) {
+        console.warn('[Splash] init error', e);
+      }
 
       if (!mounted) return;
 

@@ -125,6 +125,16 @@ export const warmNeonConnection = async () => {
   return warmPromise;
 };
 
+// Additional helper for debugging: attempt a quick health check and return boolean
+export const checkNeonConnection = async (timeoutMs = 10000): Promise<boolean> => {
+  try {
+    await Promise.race([warmNeonConnection(), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), timeoutMs))]);
+    return true;
+  } catch (e) {
+    return false;
+  }
+};
+
 /**
  * Robust query wrapper with retries/backoff and timeout.
  * - Retries on transient network errors up to `retries` times.
