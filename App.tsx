@@ -116,38 +116,33 @@ export default function App() {
         console.warn('Migration failed (non-fatal):', e);
       }
 
-      // 3. Initialize DB Connection
-      const { init } = require('./src/db/localDb');
-      let attempts = 0;
-      const maxAttempts = 3;
-
-      const timedInit = async () => {
-        const start = Date.now();
-        return await Promise.race([
-          init(),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('DB init timeout')), 10000)
-          ),
+      // 3. Open DB early so UI can render while migrations run in background.
+      try {
+        const sqlite = require('./src/db/sqlite').default;
+        // try open with a short timeout to avoid blocking UI startup
+        await Promise.race([
+          sqlite.open(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('sqlite open timeout')), 8000)),
         ]);
-      };
-
-      while (attempts < maxAttempts) {
-        try {
-          await timedInit();
-          setDbReady(true);
-          setDbInitError(null);
-          return; // Success
-        } catch (e: any) {
-          attempts += 1;
-          console.error(`DB Init Error attempt ${attempts}`, e);
-
-          if (attempts >= maxAttempts) {
-            throw new Error(e?.message || 'DB init failed after retries');
-          }
-          // Wait 1s before retry
-          await new Promise((res) => setTimeout(res, 1000));
-        }
+        // mark DB as ready for UI purposes; migrations/init will continue in background
+        setDbReady(true);
+        setDbInitError(null);
+      } catch (e) {
+        console.warn('Early sqlite.open failed (will retry in background):', e);
       }
+
+      // Kick off migrations and localDb.init in background; don't block UI.
+      (async () => {
+        try {
+          const { init } = require('./src/db/localDb');
+          await init();
+          console.log('[App] background DB init complete');
+        } catch (e) {
+          console.error('[App] background DB init failed', e);
+          // surface error to user if UI still in loading state
+          setDbInitError(String(e?.message || e));
+        }
+      })();
     } catch (e: any) {
       setDbInitError(String(e?.message || 'Unknown DB Error'));
       setDbReady(false);
