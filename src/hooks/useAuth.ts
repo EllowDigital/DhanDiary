@@ -91,7 +91,6 @@ export const useAuth = () => {
           try {
             image = cUser.imageUrl || cUser.profileImageUrl || null;
           } catch (e) {}
-          } catch (e) {}
 
           const name = (cUser.fullName as string) || (cUser.full_name as string) || '';
           if (id) {
