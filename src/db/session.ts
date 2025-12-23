@@ -1,5 +1,6 @@
 import sqlite from './sqlite';
 import { notifySessionChanged } from '../utils/sessionEvents';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import migrations from './migrations';
 
@@ -23,6 +24,39 @@ export const getSession = async (): Promise<Session> => {
   } catch (e: any) {
     // If the table doesn't exist yet, attempt to run migrations and retry once.
     const msg = String(e && e.message ? e.message : e);
+    // If sqlite isn't ready or table missing, try fallback in AsyncStorage so app can continue
+    try {
+      const fallbackRaw = await AsyncStorage.getItem('FALLBACK_SESSION');
+      if (fallbackRaw) {
+        try {
+          const parsed = JSON.parse(fallbackRaw);
+          // Try to migrate fallback into sqlite in background
+          (async () => {
+            try {
+              await ensureMigrations();
+              const db = await sqlite.open();
+              const now = new Date().toISOString();
+              await db.run(
+                'INSERT OR REPLACE INTO local_users (id, name, email, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+                [parsed.id, parsed.name || null, parsed.email || null, now, now]
+              );
+              // clear fallback once migrated
+              await AsyncStorage.removeItem('FALLBACK_SESSION');
+              try {
+                notifySessionChanged();
+              } catch (e) {}
+            } catch (e) {}
+          })();
+
+          return { id: parsed.id, name: parsed.name, email: parsed.email };
+        } catch (e) {
+          // ignore parse errors
+        }
+      }
+    } catch (e) {
+      // ignore AsyncStorage failures
+    }
+
     if (msg.toLowerCase().includes('no such table') || msg.toLowerCase().includes('no such')) {
       await ensureMigrations();
       try {
@@ -52,9 +86,10 @@ export const saveSession = async (id: string, name: string, email: string) => {
     } catch (e) {}
   } catch (e: any) {
     const msg = String(e && e.message ? e.message : e);
+    // If sqlite table doesn't exist or sqlite unavailable, store fallback in AsyncStorage
     if (msg.toLowerCase().includes('no such table') || msg.toLowerCase().includes('no such')) {
-      await ensureMigrations();
       try {
+        await ensureMigrations();
         const db = await sqlite.open();
         const now = new Date().toISOString();
         await db.run(
@@ -64,8 +99,18 @@ export const saveSession = async (id: string, name: string, email: string) => {
         try {
           notifySessionChanged();
         } catch (e) {}
+        return;
       } catch (e2) {
-        // give up
+        // fallback to AsyncStorage
+        try {
+          await AsyncStorage.setItem('FALLBACK_SESSION', JSON.stringify({ id, name, email }));
+          try {
+            notifySessionChanged();
+          } catch (e3) {}
+        } catch (e3) {
+          // give up
+        }
+        return;
       }
     }
   }

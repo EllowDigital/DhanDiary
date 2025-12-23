@@ -23,6 +23,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 import { syncClerkUserToNeon } from '../services/clerkUserSync';
 import { saveSession } from '../db/localDb';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { warmNeonConnection } from '../services/auth';
 
 // Warm up browser for OAuth
@@ -102,7 +103,13 @@ const LoginScreen = () => {
           await handleSyncAndNavigate(id, email, (clerkUser as any).fullName || null);
         } else {
           console.warn('[LoginScreen] Clerk session exists but missing id/email, navigating to Main');
-          navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+          const rootNav: any = (navigation as any).getParent ? (navigation as any).getParent() : null;
+          try {
+            // Use navigate so React Navigation resolves the correct parent navigator
+            navigation.navigate('Main' as any);
+          } catch (e) {
+            console.warn('[LoginScreen] navigation.navigate(Main) failed', e);
+          }
         }
       } catch (e) {
         console.warn('[LoginScreen] error handling existing Clerk session', e);
@@ -113,75 +120,65 @@ const LoginScreen = () => {
   // --- HANDLERS ---
 
   const handleSyncAndNavigate = async (userId: string, userEmail: string, userName?: string | null) => {
-    let navigated = false;
+    // Fire-and-forget sync: don't block the UI. Save locally immediately and navigate.
+    console.log('[Login] initiating background bridge sync for', userEmail);
     setSyncing(true);
-    try {
-      console.log('[Login] starting bridge sync for', userEmail);
-      // 1. Sync Clerk User to Neon DB (Get internal UUID)
-      const syncPromise = (async () => {
+
+    // Start background sync without awaiting to avoid locking the UI.
+    (async () => {
+      try {
         const bridgeUser = await syncClerkUserToNeon({
           id: userId,
           emailAddresses: [{ emailAddress: userEmail }],
           fullName: userName,
         });
-
-        // 2. Save Session Locally for Offline-First usage
         try {
           await saveSession(bridgeUser.uuid, bridgeUser.name || 'User', bridgeUser.email);
-          console.log('[Login] saved session for', bridgeUser.email);
+          console.log('[Login][bg] saved session for', bridgeUser.email);
         } catch (e) {
-          console.warn('[Login] failed saving session after bridge sync', e);
+          console.warn('[Login][bg] failed saving session after bridge sync', e);
         }
-
-        return bridgeUser;
-      })();
-
-      const timeoutMs = 10000;
-      let bridgeUser: any = null;
-      try {
-        bridgeUser = await Promise.race([
-          syncPromise,
-          new Promise<any>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
-        ]);
       } catch (e) {
-        console.warn('[Login] bridge sync rejected', e);
-        bridgeUser = null;
+        console.warn('[Login][bg] bridge sync failed, will keep local-only session', e);
       }
+    })();
 
-      if (!bridgeUser) {
-        console.warn('[Login] sync timed out or failed — falling back to local-only session');
+    // Best-effort local save immediately, don't block navigation
+    try {
+      const fallbackId = userId || `local-${Date.now()}`;
+      // Save to sqlite but with a short timeout so we don't block if migrations are running
+      const savePromise = saveSession(fallbackId, userName || 'User', userEmail);
+      const saved = await Promise.race([
+        savePromise.then(() => true),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 1500)),
+      ]);
+      if (saved) {
+        console.log('[Login] immediate local session saved', fallbackId);
+      } else {
+        // Fallback: persist to AsyncStorage so app can continue and later migrate into sqlite
         try {
-          const fallbackId = userId || `local-${Date.now()}`;
-          await saveSession(fallbackId, userName || 'User', userEmail);
-          console.log('[Login] fallback local session saved', fallbackId);
+          await AsyncStorage.setItem(
+            'FALLBACK_SESSION',
+            JSON.stringify({ id: fallbackId, name: userName || 'User', email: userEmail })
+          );
+          console.log('[Login] saved fallback session to AsyncStorage', fallbackId);
         } catch (e) {
-          console.warn('[Login] fallback saveSession failed', e);
+          console.warn('[Login] saving fallback session to AsyncStorage failed', e);
         }
       }
+    } catch (e) {
+      console.warn('[Login] immediate saveSession failed', e);
+    }
 
-      // navigate to main app screen
-      try {
-        console.log('[Login] navigating to Main');
-        navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
-        navigated = true;
-      } catch (e) {
-        console.warn('[Login] navigation.reset failed', e);
-      }
-    } catch (err: any) {
-      console.error('Sync Error:', err);
-      Alert.alert('Login Error', 'Failed to synchronize user data. Continuing in offline mode.');
-    } finally {
-      try {
-        setSyncing(false);
-      } catch (e) {}
-      if (!navigated) {
-        // last resort navigation to avoid locking UI
-        try {
-          navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
-        } catch (e) {
-          console.warn('[Login] final navigation attempt failed', e);
-        }
-      }
+    // Hide overlay and navigate immediately
+    try {
+      setSyncing(false);
+    } catch (e) {}
+    try {
+      console.log('[Login] navigating to Main (immediate)');
+      navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+    } catch (e) {
+      console.warn('[Login] navigation.reset failed (immediate)', e);
     }
   };
 
@@ -313,7 +310,12 @@ const LoginScreen = () => {
           await handleSyncAndNavigate(uid, bestEmail, (userObj as any)?.firstName || null);
         } else {
           console.warn('OAuth flow returned incomplete user data, uid=', uid, 'email=', bestEmail);
-          navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
+          const rootNav: any = (navigation as any).getParent ? (navigation as any).getParent() : null;
+          try {
+            navigation.navigate('Auth' as any);
+          } catch (e) {
+            console.warn('[LoginScreen] navigation.navigate(Auth) failed', e);
+          }
         }
       } else {
         // Flow did not immediately create a session — let background hooks handle it,

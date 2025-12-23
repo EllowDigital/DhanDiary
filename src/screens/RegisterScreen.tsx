@@ -89,10 +89,11 @@ const RegisterScreen = ({ navigation }: any) => {
         await saveSession(bridgeUser.uuid, bridgeUser.name || 'User', bridgeUser.email);
 
         setSyncing(false);
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'Home' }],
-        });
+        try {
+          navigation.navigate('Main' as any);
+        } catch (e) {
+          console.warn('[Register] navigation.navigate(Main) failed', e);
+        }
       } else {
         // Verification failed or needs more steps
         Alert.alert('Verification Failed', 'Please check the code and try again.');
