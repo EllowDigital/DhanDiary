@@ -113,10 +113,11 @@ const LoginScreen = () => {
   // --- HANDLERS ---
 
   const handleSyncAndNavigate = async (userId: string, userEmail: string, userName?: string | null) => {
+    let navigated = false;
     setSyncing(true);
     try {
+      console.log('[Login] starting bridge sync for', userEmail);
       // 1. Sync Clerk User to Neon DB (Get internal UUID)
-      // Run sync with a timeout so the UI doesn't block indefinitely if Neon is slow/unreachable
       const syncPromise = (async () => {
         const bridgeUser = await syncClerkUserToNeon({
           id: userId,
@@ -127,6 +128,7 @@ const LoginScreen = () => {
         // 2. Save Session Locally for Offline-First usage
         try {
           await saveSession(bridgeUser.uuid, bridgeUser.name || 'User', bridgeUser.email);
+          console.log('[Login] saved session for', bridgeUser.email);
         } catch (e) {
           console.warn('[Login] failed saving session after bridge sync', e);
         }
@@ -135,30 +137,51 @@ const LoginScreen = () => {
       })();
 
       const timeoutMs = 10000;
-      const bridgeUser = await Promise.race([
-        syncPromise,
-        new Promise<any>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
-      ]);
+      let bridgeUser: any = null;
+      try {
+        bridgeUser = await Promise.race([
+          syncPromise,
+          new Promise<any>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
+        ]);
+      } catch (e) {
+        console.warn('[Login] bridge sync rejected', e);
+        bridgeUser = null;
+      }
 
       if (!bridgeUser) {
         console.warn('[Login] sync timed out or failed — falling back to local-only session');
-        // Ensure at least a local session exists so the app can continue
         try {
-          // create a best-effort local session id
           const fallbackId = userId || `local-${Date.now()}`;
           await saveSession(fallbackId, userName || 'User', userEmail);
+          console.log('[Login] fallback local session saved', fallbackId);
         } catch (e) {
           console.warn('[Login] fallback saveSession failed', e);
         }
       }
 
-      // 3. Navigate regardless of sync outcome
-      setSyncing(false);
-      navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+      // navigate to main app screen
+      try {
+        console.log('[Login] navigating to Main');
+        navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+        navigated = true;
+      } catch (e) {
+        console.warn('[Login] navigation.reset failed', e);
+      }
     } catch (err: any) {
       console.error('Sync Error:', err);
-      setSyncing(false);
       Alert.alert('Login Error', 'Failed to synchronize user data. Continuing in offline mode.');
+    } finally {
+      try {
+        setSyncing(false);
+      } catch (e) {}
+      if (!navigated) {
+        // last resort navigation to avoid locking UI
+        try {
+          navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+        } catch (e) {
+          console.warn('[Login] final navigation attempt failed', e);
+        }
+      }
     }
   };
 
