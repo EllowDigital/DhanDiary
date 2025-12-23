@@ -125,11 +125,19 @@ const LoginScreen = () => {
       const startFlow = strategy === 'google' ? startGoogleFlow : startGithubFlow;
       console.log('Starting OAuth flow for', strategy);
 
-      const flowResult: any = await startFlow();
+      let flowResult: any = null;
+      try {
+        flowResult = await startFlow();
+      } catch (e) {
+        console.error('startFlow threw', e);
+        if (e && (e as any).stack) console.error((e as any).stack);
+        // Surface a clearer error to the UI while keeping the original thrown for upstream handling
+        throw e;
+      }
       console.log('OAuth startFlow result:', flowResult);
 
       // If Clerk returns a URL, open it in the browser (fallback)
-      if (flowResult && flowResult.url) {
+      if (flowResult && typeof flowResult.url === 'string') {
         try {
           await WebBrowser.openBrowserAsync(flowResult.url);
         } catch (e) {
@@ -158,8 +166,8 @@ const LoginScreen = () => {
 
         // We can use the return values from startFlow carefully.
         // If it was a sign up, `signUp` is populated. If sign in, `signIn`.
-        const userObj = signIn || signUp;
-        const uid = (userObj as any)?.createdUserId || (userObj as any)?.userData?.id;
+        const userObj = signIn || signUp || {};
+        const uid = (userObj as any)?.createdUserId || (userObj as any)?.userData?.id || null;
         // OAuth might return email in a different spot depending on provider?
         // Let's assume the user is valid. 
         // A safer bet: The `syncbothWays` or `App.tsx` logic also handles checks, 
@@ -171,18 +179,26 @@ const LoginScreen = () => {
         // OR try to extract it from the object if possible.
         // `signIn.userData.identifier` usually holds it.
 
-        const bestEmail = (signIn?.userData as any)?.identifier
-          || (signUp?.emailAddress as any)
-          || (userObj as any)?.emailAddresses?.[0]?.emailAddress;
+        // Try multiple places for an email value safely
+        let bestEmail: string | null = null;
+        try {
+          if (signIn && (signIn as any).userData && (signIn as any).userData.identifier) {
+            bestEmail = (signIn as any).userData.identifier;
+          } else if (signUp && (signUp as any).emailAddress) {
+            bestEmail = (signUp as any).emailAddress;
+          } else if ((userObj as any).emailAddresses && (userObj as any).emailAddresses.length) {
+            bestEmail = (userObj as any).emailAddresses[0]?.emailAddress || null;
+          }
+        } catch (e) {
+          console.warn('Error extracting email from OAuth result', e);
+          bestEmail = null;
+        }
 
         if (uid && bestEmail) {
-          await handleSyncAndNavigate(uid, bestEmail, (userObj as any)?.firstName);
+          await handleSyncAndNavigate(uid, bestEmail, (userObj as any)?.firstName || null);
         } else {
-          // Fallback: Just navigate and let the background sync handle it? 
-          // No, we need the UUID for queries.
-          // If we can't get it, we might need to reload.
-          // But usually startFlow finishes successfully.
-          navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+          console.warn('OAuth flow returned incomplete user data, uid=', uid, 'email=', bestEmail);
+          navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
         }
       } else {
         // Flow did not immediately create a session — let background hooks handle it,
@@ -192,7 +208,8 @@ const LoginScreen = () => {
       }
     } catch (err: any) {
       console.error('OAuth Error', err);
-      Alert.alert('Social Login Failed', err?.message || 'Unexpected error during social login');
+      const msg = (err && (err.message || (typeof err === 'string' ? err : null))) || String(err) || 'Unexpected error during social login';
+      Alert.alert('Social Login Failed', msg);
       setLoading(false);
     }
   };
