@@ -230,7 +230,10 @@ const LoginScreen = () => {
           return;
         }
 
-        flowResult = await startFlow();
+        // Explicitly provide a redirect URL using the app's scheme to avoid
+        // reliance on auto-computed proxy/native redirect URIs which can be null
+        // in some Expo Go / development setups.
+        flowResult = await startFlow({ redirectUrl: 'dhandiary://oauth-native-callback' });
       } catch (e: any) {
         console.error('startFlow threw', e);
         if (e && (e as any).stack) console.error((e as any).stack);

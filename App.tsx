@@ -11,7 +11,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ClerkProvider } from '@clerk/clerk-expo';
+import { ClerkProvider, useAuth as useClerkAuth } from '@clerk/clerk-expo';
 import Constants from 'expo-constants';
 
 // --- Local Imports ---
@@ -152,8 +152,8 @@ const AppContent = () => {
   );
 };
 
-// --- Main App Component ---
-export default function App() {
+// --- App that initializes DB and app services (runs after Clerk loaded) ---
+function AppWithDb() {
   const [dbReady, setDbReady] = useState(false);
   const [dbInitError, setDbInitError] = useState<string | null>(null);
   
@@ -162,28 +162,23 @@ export default function App() {
   // --- Database Initialization Logic ---
   const initializeDatabase = useCallback(async () => {
     try {
-      // 1. Clear pending updates if necessary
       const pending = await AsyncStorage.getItem('PENDING_UPDATE');
       if (pending) {
         await AsyncStorage.removeItem('PENDING_UPDATE');
       }
 
-      // 2. Open DB early so UI can render while migrations run in background.
       try {
         const sqlite = require('./src/db/sqlite').default;
-        // try open with a short timeout to avoid blocking UI startup
         await Promise.race([
           sqlite.open(),
           new Promise((_, reject) => setTimeout(() => reject(new Error('sqlite open timeout')), 8000)),
         ]);
-        // mark DB as ready for UI purposes; migrations/init will continue in background
         setDbReady(true);
         setDbInitError(null);
       } catch (e) {
         console.warn('Early sqlite.open failed (will retry in background):', e);
       }
 
-      // Kick off migrations and localDb.init in background; don't block UI.
       (async () => {
         try {
           const { init } = require('./src/db/localDb');
@@ -191,7 +186,6 @@ export default function App() {
           console.log('[App] background DB init complete');
         } catch (e) {
           console.error('[App] background DB init failed', e);
-          // surface error to user if UI still in loading state
           setDbInitError(String(e?.message || e));
         }
       })();
@@ -200,8 +194,6 @@ export default function App() {
       setDbReady(false);
     }
   }, []);
-
-  // --- Effects ---
 
   // 1. Initial Config Logging
   useEffect(() => {
@@ -222,12 +214,12 @@ export default function App() {
     }
   }, []);
 
-  // 2. Run Init on Mount
+  // Run DB init on mount
   useEffect(() => {
     initializeDatabase();
   }, [initializeDatabase]);
 
-  // 3. Start Schedulers when DB is Ready
+  // Start schedulers when DB is ready
   useEffect(() => {
     if (!dbReady) return;
 
@@ -253,9 +245,6 @@ export default function App() {
     };
   }, [dbReady]);
 
-  // --- Render Handling ---
-
-  // 1. Error State
   if (!dbReady && dbInitError) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
@@ -272,7 +261,6 @@ export default function App() {
     );
   }
 
-  // 2. Loading State (While DB is initializing)
   if (!dbReady) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
@@ -282,16 +270,35 @@ export default function App() {
     );
   }
 
-  // 3. Main App
+  return (
+    <SafeAreaProvider>
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
+          <AppContent />
+        </ToastProvider>
+      </QueryClientProvider>
+    </SafeAreaProvider>
+  );
+}
+
+// --- Bootstrap: wait for Clerk SDK to load session state before initializing DB ---
+function AppBootstrap() {
+  const { isLoaded } = useClerkAuth();
+
+  // Wait until Clerk SDK resolves session state. Render nothing (or a splash)
+  // while Clerk is initializing so we don't assume logged-out before Clerk is ready.
+  if (!isLoaded) {
+    return null;
+  }
+
+  return <AppWithDb />;
+}
+
+// Top-level App: provide Clerk then bootstrap rest of app
+export default function App() {
   return (
     <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY} tokenCache={tokenCache}>
-      <SafeAreaProvider>
-        <QueryClientProvider client={queryClient}>
-          <ToastProvider>
-            <AppContent />
-          </ToastProvider>
-        </QueryClientProvider>
-      </SafeAreaProvider>
+      <AppBootstrap />
     </ClerkProvider>
   );
 }
