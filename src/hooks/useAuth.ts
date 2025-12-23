@@ -10,7 +10,6 @@ let useClerkAuth: any = null;
 try {
   // Require at runtime to avoid breaking builds where Clerk isn't configured
   // and to keep this hook resilient in different environments.
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const clerk = require('@clerk/clerk-expo');
   useClerkUser = clerk.useUser;
   useClerkAuth = clerk.useAuth;
