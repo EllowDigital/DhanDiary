@@ -98,11 +98,15 @@ export const runMigrations = async () => {
     currentVersion = 0;
   }
 
+  console.log('[migrations] currentVersion=', currentVersion);
   const pending = migrations.filter((m) => m.id > currentVersion).sort((a, b) => a.id - b.id);
+  console.log('[migrations] pending ids=', pending.map((p) => p.id));
   for (const m of pending) {
+    console.log('[migrations] applying', m.id);
     await m.up(db);
     // record version
     await db.run('INSERT OR REPLACE INTO schema_version (version) VALUES (?)', [m.id]);
+    console.log('[migrations] applied', m.id);
   }
 };
 

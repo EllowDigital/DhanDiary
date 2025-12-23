@@ -11,12 +11,19 @@ import { clearOfflineDbOwner } from './offlineOwner';
 let _init: Promise<void> | null = null;
 
 export const init = async () => {
-  if (_init) return _init;
+  if (_init) {
+    console.log('[localDb] init called - returning existing promise');
+    return _init;
+  }
+
+  console.log('[localDb] init starting');
   _init = (async () => {
     // open DB (sqlite module sets WAL)
-    await sqlite.open();
+    const db = await sqlite.open();
+    console.log('[localDb] sqlite.open returned', !!db);
     // run migrations
     await migrations.runMigrations();
+    console.log('[localDb] migrations complete');
   })();
   return _init;
 };

@@ -15,9 +15,13 @@ let DB_INSTANCE: Promise<DB> | null = null;
 let LAST_DB: DB | null = null;
 
 const open = async (): Promise<DB> => {
-  if (DB_INSTANCE) return DB_INSTANCE;
+  if (DB_INSTANCE) {
+    console.log('[sqlite] returning cached DB_INSTANCE');
+    return DB_INSTANCE;
+  }
 
   DB_INSTANCE = (async () => {
+    console.log('[sqlite] opening database', DB_NAME);
     let raw: any;
     // Different expo-sqlite versions expose openDatabase or openDatabaseSync/openDatabaseAsync.
     if ((SQLite as any).openDatabaseAsync) {
@@ -122,11 +126,13 @@ const open = async (): Promise<DB> => {
     // enable WAL for better concurrency; best-effort
     try {
       await db.exec('PRAGMA journal_mode = WAL');
+      console.log('[sqlite] WAL enabled');
     } catch (e) {
-      /* ignore */
+      console.warn('[sqlite] WAL not available', e);
     }
 
     LAST_DB = db;
+    console.log('[sqlite] open complete');
     return db;
   })();
 
@@ -138,6 +144,7 @@ const close = async () => {
     const db = LAST_DB || (DB_INSTANCE ? await DB_INSTANCE : null);
     if (!db || !db.raw) return;
     const raw = db.raw;
+    console.log('[sqlite] closing DB');
     if (typeof raw.closeAsync === 'function') {
       await raw.closeAsync();
     } else if (typeof raw.close === 'function') {
@@ -166,6 +173,8 @@ const deleteDbFile = async () => {
   await close();
   const baseDir = resolveSqliteDir();
   if (!baseDir) return;
+
+  console.log('[sqlite] deleting DB files in', baseDir);
 
   const suffixes = ['', '-wal', '-shm'];
   for (const suffix of suffixes) {
