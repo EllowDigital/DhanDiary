@@ -10,45 +10,41 @@
     "jsEngine": "hermes",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-
     "ios": {
-      "supportsTablet": true,
+      "bundleIdentifier": "com.ellowdigital.dhandiary",
       "buildNumber": "122",
-      "bundleIdentifier": "com.ellowdigital.dhandiary"
+      "supportsTablet": true
     },
-
     "android": {
       "package": "com.ellowdigital.dhandiary",
       "versionCode": 122,
-
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
       "intentFilters": [
         {
           "action": "VIEW",
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ],
           "data": [
             {
               "scheme": "dhandiary"
             }
-          ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          ]
         }
-      ],
-
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      }
+      ]
     },
-
     "web": {
       "favicon": "./assets/favicon.png"
     },
-
     "plugins": [
       "expo-updates",
       "expo-sqlite",
@@ -57,7 +53,7 @@
       [
         "expo-local-authentication",
         {
-          "faceIDPermission": "Allow DhanDiary to use FaceID to secure your data."
+          "faceIDPermission": "Allow DhanDiary to use Face ID to secure your data."
         }
       ],
       [
@@ -66,26 +62,25 @@
           "android": {
             "enableHermes": true,
             "minSdkVersion": 24,
+            "abiFilters": [
+              "arm64-v8a"
+            ],
             "ndk": {
               "debugSymbolLevel": "NONE"
-            },
-            "abiFilters": ["arm64-v8a"]
+            }
           }
         }
       ]
     ],
-
     "updates": {
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0,
       "url": "https://u.expo.dev/77c33e0a-8d3a-4f5b-afcf-72967c9af0bf"
     },
-
     "runtimeVersion": {
       "policy": "appVersion"
     },
-
     "extra": {
       "eas": {
         "projectId": "77c33e0a-8d3a-4f5b-afcf-72967c9af0bf"
