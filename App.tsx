@@ -29,6 +29,9 @@ import DrawerNavigator from './src/navigation/DrawerNavigator';
 import { useOfflineSync } from './src/hooks/useOfflineSync';
 import { useAuth } from './src/hooks/useAuth';
 import { checkNeonConnection } from './src/api/neonClient';
+import { useUser } from '@clerk/clerk-expo';
+import { syncClerkUserToNeon } from './src/services/clerkUserSync';
+import { saveSession as saveLocalSession } from './src/db/localDb';
 import { BiometricAuth } from './src/components/BiometricAuth';
 import tokenCache from './src/utils/tokenCache';
 
@@ -72,10 +75,13 @@ const MainNavigator = () => <DrawerNavigator />;
 // --- Inner App Content (Authenticated Logic) ---
 const AppContent = () => {
   const { user } = useAuth();
-  
+  // Clerk user (when signed in via Clerk SDK)
+  const { user: clerkUser, isLoaded: clerkLoaded } = useUser();
+
   // Provide user id to offline sync so it only runs when a user is present
   useOfflineSync(user?.id);
 
+  // Warm Neon connection and log health (non-blocking)
   React.useEffect(() => {
     (async () => {
       try {
@@ -86,6 +92,50 @@ const AppContent = () => {
       }
     })();
   }, []);
+
+  // When Clerk user becomes available, ensure they are synced to Neon and local session saved.
+  React.useEffect(() => {
+    if (!clerkLoaded || !clerkUser) return;
+
+    (async () => {
+      try {
+        const id = (clerkUser as any).id || (clerkUser as any).userId || null;
+        // Gather email addresses in the shapes Clerk may expose
+        let emails: Array<{ emailAddress: string }> = [];
+        try {
+          if ((clerkUser as any).primaryEmailAddress && (clerkUser as any).primaryEmailAddress.emailAddress) {
+            emails = [{ emailAddress: (clerkUser as any).primaryEmailAddress.emailAddress }];
+          } else if ((clerkUser as any).emailAddresses && (clerkUser as any).emailAddresses.length) {
+            emails = (clerkUser as any).emailAddresses.map((e: any) => ({ emailAddress: e.emailAddress }));
+          }
+        } catch (e) {
+          // leave emails empty
+        }
+
+        if (!id) {
+          console.warn('[App] clerk user missing id, skipping sync');
+          return;
+        }
+
+        // Call bridge to ensure Neon has the user and save session locally.
+        try {
+          const bridgeUser = await syncClerkUserToNeon({ id, emailAddresses: emails, fullName: (clerkUser as any).fullName || null });
+          if (bridgeUser && bridgeUser.uuid) {
+            try {
+              await saveLocalSession(bridgeUser.uuid, bridgeUser.name || 'User', bridgeUser.email);
+              console.log('[App] saved local session for', bridgeUser.email);
+            } catch (e) {
+              console.warn('[App] failed to save local session', e);
+            }
+          }
+        } catch (e) {
+          console.warn('[App] syncClerkUserToNeon failed', e);
+        }
+      } catch (e) {
+        console.warn('[App] clerk sync effect error', e);
+      }
+    })();
+  }, [clerkLoaded, clerkUser]);
 
   return (
     <>

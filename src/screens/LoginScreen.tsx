@@ -14,9 +14,10 @@ import {
   StatusBar,
   Image,
 } from 'react-native';
-import { useSignIn, useOAuth } from '@clerk/clerk-expo';
+import { useSignIn, useOAuth, useUser, useAuth } from '@clerk/clerk-expo';
 import { Ionicons, FontAwesome } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser'; // Ensure you have this installed
+import * as AuthSession from 'expo-auth-session';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -36,14 +37,35 @@ const useWarmUpBrowser = () => {
   }, []);
 };
 
+// Print redirect URIs for debugging so you can copy them into GitHub/Clerk
+const usePrintAuthRedirects = () => {
+  React.useEffect(() => {
+    try {
+      const proxyUri = AuthSession.makeRedirectUri({ useProxy: true });
+      const nativeUri = AuthSession.makeRedirectUri({ useProxy: false });
+      const getUri = AuthSession.getRedirectUrl();
+      console.log('[AuthRedirects] makeRedirectUri(useProxy:true)=', proxyUri);
+      console.log('[AuthRedirects] makeRedirectUri(useProxy:false)=', nativeUri);
+      console.log('[AuthRedirects] getRedirectUrl()=', getUri);
+    } catch (e) {
+      console.warn('[AuthRedirects] failed to compute redirect URIs', e);
+    }
+  }, []);
+};
+
 const LoginScreen = () => {
   useWarmUpBrowser();
+  usePrintAuthRedirects();
   const navigation = useNavigation<any>();
   const { signIn, setActive, isLoaded } = useSignIn();
 
   // OAuth Hooks
   const { startOAuthFlow: startGoogleFlow } = useOAuth({ strategy: 'oauth_google' });
   const { startOAuthFlow: startGithubFlow } = useOAuth({ strategy: 'oauth_github' });
+
+  // Clerk session hooks to detect existing sign-in state
+  const { user: clerkUser, isLoaded: clerkLoaded } = useUser();
+  const { isSignedIn } = useAuth();
 
   // State
   const [email, setEmail] = useState('');
@@ -56,6 +78,37 @@ const LoginScreen = () => {
   React.useEffect(() => {
     warmNeonConnection().catch(() => { });
   }, []);
+
+  // If Clerk already has a signed-in session, use it to sync and navigate immediately
+  React.useEffect(() => {
+    if (!isSignedIn || !clerkLoaded || !clerkUser) return;
+
+    (async () => {
+      try {
+        const id = (clerkUser as any).id || (clerkUser as any).userId || null;
+        let email: string | null = null;
+        try {
+          if ((clerkUser as any).primaryEmailAddress && (clerkUser as any).primaryEmailAddress.emailAddress) {
+            email = (clerkUser as any).primaryEmailAddress.emailAddress;
+          } else if ((clerkUser as any).emailAddresses && (clerkUser as any).emailAddresses.length) {
+            email = (clerkUser as any).emailAddresses[0]?.emailAddress || null;
+          }
+        } catch (e) {
+          // ignore
+        }
+
+        if (id && email) {
+          console.log('[LoginScreen] detected existing Clerk session, syncing user', email);
+          await handleSyncAndNavigate(id, email, (clerkUser as any).fullName || null);
+        } else {
+          console.warn('[LoginScreen] Clerk session exists but missing id/email, navigating to Main');
+          navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+        }
+      } catch (e) {
+        console.warn('[LoginScreen] error handling existing Clerk session', e);
+      }
+    })();
+  }, [isSignedIn, clerkLoaded, clerkUser]);
 
   // --- HANDLERS ---
 
@@ -127,11 +180,26 @@ const LoginScreen = () => {
 
       let flowResult: any = null;
       try {
+        // If Clerk already has a session, don't start a new flow — use existing
+        if (isSignedIn) {
+          console.log('[LoginScreen] startOAuthFlow skipped: already signed in');
+          // Let the existing-session effect handle sync/navigation
+          setLoading(false);
+          return;
+        }
+
         flowResult = await startFlow();
-      } catch (e) {
+      } catch (e: any) {
         console.error('startFlow threw', e);
         if (e && (e as any).stack) console.error((e as any).stack);
-        // Surface a clearer error to the UI while keeping the original thrown for upstream handling
+
+        const text = String(e && (e.message || e) || '');
+        if (text.toLowerCase().includes('already signed in') || text.toLowerCase().includes("you're already signed in")) {
+          console.log('[LoginScreen] startFlow error: already signed in — deferring to existing session handler');
+          setLoading(false);
+          return;
+        }
+
         throw e;
       }
       console.log('OAuth startFlow result:', flowResult);
