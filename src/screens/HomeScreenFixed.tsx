@@ -20,6 +20,8 @@ import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../hooks/useAuth';
 import { useEntries } from '../hooks/useEntries';
 import FullScreenSpinner from '../components/FullScreenSpinner';
+import useDelayedLoading from '../hooks/useDelayedLoading';
+import { Image } from 'react-native';
 import dayjs from 'dayjs';
 import Svg, { Defs, LinearGradient, Stop, Rect, Circle } from 'react-native-svg';
 import { LineChart, PieChart } from 'react-native-chart-kit';
@@ -223,6 +225,7 @@ const HomeScreen = () => {
   const navigation = useNavigation<any>();
   const { user } = useAuth();
   const { entries = [], isLoading } = useEntries(user?.id);
+  const showLoading = useDelayedLoading(Boolean(isLoading), 200);
   const { width } = useWindowDimensions();
 
   const PADDING = 20;
@@ -326,7 +329,12 @@ const HomeScreen = () => {
           </TouchableOpacity>
           <View style={{ marginLeft: 12 }}>
             <Text style={styles.greetingText}>{getGreeting()}</Text>
-            <Text style={styles.userName}>{user?.name?.split(' ')[0] || 'Sotu'}</Text>
+            {/* Show avatar image if available, otherwise show first name */}
+            {user?.image ? (
+              <Image source={{ uri: user.image }} style={styles.headerAvatarImage} />
+            ) : (
+              <Text style={styles.userName}>{user?.name?.split(' ')[0] || 'Sotu'}</Text>
+            )}
           </View>
         </View>
         <View style={styles.avatar}>
@@ -492,8 +500,8 @@ const HomeScreen = () => {
     <View style={styles.main}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-        {/* Non-blocking loader */}
-        {isLoading && (
+        {/* Non-blocking loader (delayed to avoid flicker) */}
+        {showLoading && (
           <View pointerEvents="none" style={StyleSheet.absoluteFill}>
             <View style={{ flex: 1, alignItems: 'center', paddingTop: 100 }}>
               <ActivityIndicator size="large" color={colors.primary} />
@@ -561,12 +569,18 @@ const styles = StyleSheet.create({
   },
   userName: { fontSize: fontScale(18), color: colors.text, fontWeight: '800' },
   avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#EFF6FF',
-    justifyContent: 'center',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#E2E8F0',
+    marginRight: 16,
     alignItems: 'center',
+  headerAvatarImage: {
+    width: 140,
+    height: 28,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
     borderWidth: 1,
     borderColor: '#BFDBFE',
   },

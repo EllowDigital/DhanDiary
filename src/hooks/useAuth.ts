@@ -19,7 +19,7 @@ try {
   useClerkAuth = null;
 }
 
-type UserSession = { id: string; name: string; email: string };
+type UserSession = { id: string; name: string; email: string; image?: string | null };
 
 export const useAuth = () => {
   const [user, setUser] = useState<UserSession | null>(null);
@@ -79,6 +79,7 @@ export const useAuth = () => {
         if (isSignedIn && cUser) {
           const id = cUser.id || cUser.userId || null;
           let email: string | null = null;
+          let image: string | null = null;
           try {
             if (cUser.primaryEmailAddress && cUser.primaryEmailAddress.emailAddress) {
               email = cUser.primaryEmailAddress.emailAddress;
@@ -87,10 +88,15 @@ export const useAuth = () => {
             }
           } catch (e) {}
 
+          try {
+            image = cUser.imageUrl || cUser.profileImageUrl || null;
+          } catch (e) {}
+          } catch (e) {}
+
           const name = (cUser.fullName as string) || (cUser.full_name as string) || '';
           if (id) {
             // update in-memory and persist locally (best-effort)
-            setUser({ id, name: name || '', email: email || '' });
+            setUser({ id, name: name || '', email: email || '', image: image || null });
             try {
               // don't await to avoid blocking startup
               void saveSession(id, name || '', email || '');
