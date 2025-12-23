@@ -118,9 +118,29 @@ const SplashScreen = () => {
       let user = null;
       let onboardingCompleted = false;
       try {
+        const timeout = (ms: number) => new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms));
+
+        const safeGetSession = async () => {
+          try {
+            return await Promise.race([getSession(), timeout(3000)]);
+          } catch (e) {
+            console.warn('[Splash] getSession timed out or failed', e?.message || e);
+            return null;
+          }
+        };
+
+        const safeHasCompletedOnboarding = async () => {
+          try {
+            return await Promise.race([hasCompletedOnboarding(), timeout(2000)]);
+          } catch (e) {
+            console.warn('[Splash] hasCompletedOnboarding timed out or failed', e?.message || e);
+            return false;
+          }
+        };
+
         const res = await Promise.all([
-          getSession(),
-          hasCompletedOnboarding(),
+          safeGetSession(),
+          safeHasCompletedOnboarding(),
           new Promise((resolve) => setTimeout(resolve, MIN_SPLASH_TIME_MS)), // Ensure min display time
         ]);
         user = res[0];
@@ -132,11 +152,11 @@ const SplashScreen = () => {
 
       if (!mounted) return;
 
-      // Exit Animation before navigation
-      Animated.parallel([
-        Animated.timing(fadeAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
-        Animated.timing(scaleAnim, { toValue: 1.1, duration: 300, useNativeDriver: true }),
-      ]).start(() => {
+      // Exit Animation (non-blocking) and navigate immediately so UI is responsive.
+      let navigated = false;
+      const doNav = () => {
+        if (navigated) return;
+        navigated = true;
         // Use reset to prevent back-navigation to splash
         if (user) {
           navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
@@ -145,7 +165,28 @@ const SplashScreen = () => {
         } else {
           navigation.reset({ index: 0, routes: [{ name: 'Onboarding' }] });
         }
-      });
+      };
+
+      // Fire the exit animation but don't wait for it to complete to navigate.
+      Animated.parallel([
+        Animated.timing(fadeAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
+        Animated.timing(scaleAnim, { toValue: 1.1, duration: 300, useNativeDriver: true }),
+      ]).start();
+
+      // Navigate immediately so the splash won't block the app.
+      doNav();
+
+      // Safety fallback: if for any reason navigation didn't happen, force it after 2s.
+      const forceTimer = setTimeout(() => {
+        try {
+          doNav();
+        } catch (e) {
+          console.warn('[Splash] forced navigation failed', e);
+        }
+      }, 2000);
+
+      // Clear fallback timer on unmount
+      if (!mounted) clearTimeout(forceTimer);
     };
 
     init();
