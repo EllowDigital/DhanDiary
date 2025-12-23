@@ -88,6 +88,10 @@ export const syncPending = async () => {
   if (!state.isConnected) return { pushed: 0, updated: 0, deleted: 0 };
 
   const pending = await getUnsyncedEntries();
+  try {
+    const sess = await getSession();
+    console.log('[syncPending] local session id=', sess?.id, 'email=', sess?.email);
+  } catch (e) {}
   if (pending.length === 0) return { pushed: 0, updated: 0, deleted: 0 };
 
   console.log(`Syncing ${pending.length} entries...`);
@@ -410,6 +414,7 @@ export const pullRemote = async () => {
   if (!state.isConnected) return;
 
   const session = await getSession();
+  console.log('[pullRemote] using session id=', session?.id, 'email=', session?.email);
   if (!session || !session.id) return;
 
   try {

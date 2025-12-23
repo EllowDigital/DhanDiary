@@ -27,7 +27,7 @@ export const syncClerkUserToNeon = async (clerkUser: {
     if (!email) throw new Error('Clerk user must have an email');
 
     try {
-        // 1. Check if user exists by Clerk ID (Fastest/Common path)
+        // 1. Check by clerk_id
         const byClerkId = await query('SELECT * FROM users WHERE clerk_id = $1 LIMIT 1', [clerkUser.id]);
         if (byClerkId && byClerkId.length > 0) {
             const u = byClerkId[0];
@@ -36,37 +36,34 @@ export const syncClerkUserToNeon = async (clerkUser: {
                 clerk_id: u.clerk_id,
                 email: u.email,
                 name: u.name,
-                server_version: 0 // server_version logic is handled by syncManager usually, not critical here
+                server_version: 0,
             };
         }
 
-        // 2. Check if user exists by Email (Legacy Account Merging)
+        // 2. Check by email (legacy account merge)
         const byEmail = await query('SELECT * FROM users WHERE email = $1 LIMIT 1', [email]);
-
         if (byEmail && byEmail.length > 0) {
-            // Found a legacy user! Link them to Clerk.
-            console.log(`[Bridge] Merging legacy user ${email} to Clerk ID ${clerkUser.id}`);
             const u = byEmail[0];
-
-            // Update the row
-            await query('UPDATE users SET clerk_id = $1, updated_at = NOW() WHERE id = $2', [clerkUser.id, u.id]);
-
+            try {
+                await query('UPDATE users SET clerk_id = $1, updated_at = NOW() WHERE id = $2', [clerkUser.id, u.id]);
+            } catch (e) {
+                // ignore update errors
+            }
             return {
                 uuid: u.id,
                 clerk_id: clerkUser.id,
                 email: u.email,
                 name: u.name,
-                server_version: 0
+                server_version: 0,
             };
         }
 
-        // 3. Create New User
-        console.log(`[Bridge] Creating new user for ${email}`);
+        // 3. Create new user; handle duplicate-key race by recovering if insert fails
         try {
             const newUser = await query(
-                `INSERT INTO users (email, clerk_id, name, password_hash, status) 
-             VALUES ($1, $2, $3, 'clerk_managed', 'active') 
-             RETURNING id, email, name, clerk_id`,
+                `INSERT INTO users (email, clerk_id, name, password_hash, status)
+                 VALUES ($1, $2, $3, 'clerk_managed', 'active')
+                 RETURNING id, email, name, clerk_id`,
                 [email, clerkUser.id, clerkUser.fullName || 'User']
             );
             const created = newUser[0];
@@ -77,14 +74,20 @@ export const syncClerkUserToNeon = async (clerkUser: {
                 name: created.name,
                 server_version: 0,
             };
-        } catch (err: any) {
-            // If Neon is unreachable or the query failed, attempt a final recovery
-            // by looking up the user by email. If that fails, fall back to a local session.
-            console.warn('[Bridge] Neon query failed, attempting recovery by email', err?.message || err);
+        } catch (insertErr: any) {
+            console.warn('[Bridge] Insert failed, attempting to recover by querying email', insertErr?.message || insertErr);
             try {
-                const existing = await query('SELECT * FROM users WHERE email = $1 LIMIT 1', [email]);
-                if (existing && existing.length > 0) {
-                    const u = existing[0];
+                const byEmailAgain = await query('SELECT * FROM users WHERE email = $1 LIMIT 1', [email]);
+                if (byEmailAgain && byEmailAgain.length > 0) {
+                    const u = byEmailAgain[0];
+                    try {
+                        if (!u.clerk_id) {
+                            await query('UPDATE users SET clerk_id = $1, updated_at = NOW() WHERE id = $2', [clerkUser.id, u.id]);
+                            u.clerk_id = clerkUser.id;
+                        }
+                    } catch (e) {
+                        // ignore
+                    }
                     return {
                         uuid: u.id,
                         clerk_id: u.clerk_id,
@@ -94,39 +97,29 @@ export const syncClerkUserToNeon = async (clerkUser: {
                     };
                 }
             } catch (e) {
-                // ignore and fall back
+                // fall through
             }
-
-            const localId = uuidv4();
-            try {
-                await saveSession(localId, clerkUser.fullName || 'User', email);
-            } catch (e) {
-                console.warn('[Bridge] Failed to save local session fallback', e);
-            }
-            return {
-                uuid: localId,
-                clerk_id: clerkUser.id,
-                email,
-                name: clerkUser.fullName || null,
-                server_version: 0,
-            };
-        }
-                        uuid: u.id,
-                        clerk_id: u.clerk_id,
-                        email: u.email,
-                        name: u.name,
-                        server_version: 0,
-                    };
-                }
-            } catch (e) {
-                // fall through to fallback below
-            }
-            // rethrow to be handled by outer catch below
+            // If recovery failed, rethrow to be handled by outer catch
             throw insertErr;
         }
     } catch (err: any) {
-        // If Neon is unreachable or the query failed, fall back to a local session so signup isn't blocked.
-        console.warn('[Bridge] Neon unavailable, falling back to local session', err?.message || err);
+        console.warn('[Bridge] Neon query failed, attempting recovery by email', err?.message || err);
+        try {
+            const existing = await query('SELECT * FROM users WHERE email = $1 LIMIT 1', [email]);
+            if (existing && existing.length > 0) {
+                const u = existing[0];
+                return {
+                    uuid: u.id,
+                    clerk_id: u.clerk_id,
+                    email: u.email,
+                    name: u.name,
+                    server_version: 0,
+                };
+            }
+        } catch (e) {
+            // ignore
+        }
+
         const localId = uuidv4();
         try {
             await saveSession(localId, clerkUser.fullName || 'User', email);
@@ -138,7 +131,7 @@ export const syncClerkUserToNeon = async (clerkUser: {
             clerk_id: clerkUser.id,
             email,
             name: clerkUser.fullName || null,
-            server_version: 0
+            server_version: 0,
         };
     }
 };
