@@ -52,6 +52,7 @@
     "plugins": [
       "expo-updates",
       "expo-sqlite",
+      "expo-web-browser",
       "expo-font",
       [
         "expo-local-authentication",
