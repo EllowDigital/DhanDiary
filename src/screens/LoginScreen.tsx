@@ -120,65 +120,61 @@ const LoginScreen = () => {
   // --- HANDLERS ---
 
   const handleSyncAndNavigate = async (userId: string, userEmail: string, userName?: string | null) => {
-    // Fire-and-forget sync: don't block the UI. Save locally immediately and navigate.
-    console.log('[Login] initiating background bridge sync for', userEmail);
+    // Attempt to sync Clerk user to Neon and persist the Neon uuid BEFORE navigating.
+    // Use timeouts so we don't block forever on slow networks.
+    console.log('[Login] initiating bridge sync for', userEmail);
     setSyncing(true);
 
-    // Start background sync without awaiting to avoid locking the UI.
-    (async () => {
-      try {
-        const bridgeUser = await syncClerkUserToNeon({
+    const bridgeTimeoutMs = 10000; // wait up to 10s for bridge
+    let resolvedBridgeUser: any = null;
+    try {
+      resolvedBridgeUser = await Promise.race([
+        syncClerkUserToNeon({
           id: userId,
           emailAddresses: [{ emailAddress: userEmail }],
           fullName: userName,
-        });
-        try {
-          await saveSession(bridgeUser.uuid, bridgeUser.name || 'User', bridgeUser.email);
-          console.log('[Login][bg] saved session for', bridgeUser.email);
-        } catch (e) {
-          console.warn('[Login][bg] failed saving session after bridge sync', e);
-        }
-      } catch (e) {
-        console.warn('[Login][bg] bridge sync failed, will keep local-only session', e);
-      }
-    })();
+        }),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('Bridge sync timed out')), bridgeTimeoutMs)),
+      ] as any);
+      console.log('[Login] bridge sync completed', resolvedBridgeUser?.uuid || '<no-uuid>');
+    } catch (e) {
+      console.warn('[Login] bridge sync failed or timed out', e?.message || e);
+      resolvedBridgeUser = null;
+    }
 
-    // Best-effort local save immediately, don't block navigation
+    // Persist session: prefer Neon uuid from bridge if available, otherwise use Clerk id as fallback.
+    const targetId = resolvedBridgeUser?.uuid || userId || `local-${Date.now()}`;
     try {
-      const fallbackId = userId || `local-${Date.now()}`;
-      // Save to sqlite but with a short timeout so we don't block if migrations are running
-      const savePromise = saveSession(fallbackId, userName || 'User', userEmail);
+      // Try to persist to sqlite; give migrations a bit longer to complete during login (5s)
+      const savePromise = saveSession(targetId, userName || 'User', resolvedBridgeUser?.email || userEmail);
       const saved = await Promise.race([
         savePromise.then(() => true),
-        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 1500)),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 5000)),
       ]);
-      if (saved) {
-        console.log('[Login] immediate local session saved', fallbackId);
-      } else {
-        // Fallback: persist to AsyncStorage so app can continue and later migrate into sqlite
+      if (!saved) {
+        // Fallback to AsyncStorage so app can continue and later migrate into sqlite
         try {
           await AsyncStorage.setItem(
             'FALLBACK_SESSION',
-            JSON.stringify({ id: fallbackId, name: userName || 'User', email: userEmail })
+            JSON.stringify({ id: targetId, name: userName || 'User', email: resolvedBridgeUser?.email || userEmail })
           );
-          console.log('[Login] saved fallback session to AsyncStorage', fallbackId);
+          console.log('[Login] saved fallback session to AsyncStorage', targetId);
         } catch (e) {
           console.warn('[Login] saving fallback session to AsyncStorage failed', e);
         }
+      } else {
+        console.log('[Login] saved session', targetId);
       }
     } catch (e) {
-      console.warn('[Login] immediate saveSession failed', e);
+      console.warn('[Login] saveSession failed', e);
     }
 
-    // Hide overlay and navigate immediately
+    setSyncing(false);
     try {
-      setSyncing(false);
-    } catch (e) {}
-    try {
-      console.log('[Login] navigating to Main (immediate)');
+      console.log('[Login] navigating to Main');
       navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
     } catch (e) {
-      console.warn('[Login] navigation.reset failed (immediate)', e);
+      console.warn('[Login] navigation.reset failed', e);
     }
   };
 
