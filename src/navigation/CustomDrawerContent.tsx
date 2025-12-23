@@ -71,23 +71,55 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   const handleLogout = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign Out',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await signOut(); // Sign out from Clerk
-            await logout();  // Clear local DB
-            props.navigation.closeDrawer();
-            props.navigation.reset({
-              index: 0,
-              routes: [{ name: 'Auth' }],
-            });
-          } catch (e) {
-            console.error('Logout failed', e);
-          }
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              try {
+                await signOut(); // Sign out from Clerk
+              } catch (e) {
+                console.warn('Clerk signOut failed', e);
+              }
+
+              try {
+                await logout(); // Clear local DB and session
+              } catch (e) {
+                console.warn('Local logout failed', e);
+              }
+
+              // Close drawer first
+              try {
+                props.navigation.closeDrawer();
+              } catch (e) {}
+
+              // Try to reset the root navigator so auth stack is shown.
+              try {
+                // climb to the top-most navigator
+                let rootNav: any = props.navigation as any;
+                while (rootNav.getParent && rootNav.getParent()) {
+                  const p = rootNav.getParent();
+                  if (!p || p === rootNav) break;
+                  rootNav = p;
+                }
+                // Reset to Auth stack at root
+                if (rootNav && typeof rootNav.reset === 'function') {
+                  rootNav.reset({ index: 0, routes: [{ name: 'Auth' }] });
+                } else {
+                  // fallback
+                  props.navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
+                }
+              } catch (e) {
+                // as a final fallback, navigate to Auth on current navigator
+                try {
+                  props.navigation.navigate('Auth');
+                } catch (e2) {}
+              }
+            } catch (e) {
+              console.error('Logout failed', e);
+            }
+          },
         },
-      },
     ]);
   };
 

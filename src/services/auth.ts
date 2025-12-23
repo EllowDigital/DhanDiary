@@ -1,4 +1,5 @@
 import NetInfo from '@react-native-community/netinfo';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { query } from '../api/neonClient';
 import { saveSession, clearSession, getSession } from '../db/session';
 import {
@@ -189,6 +190,11 @@ export const logout = async () => {
   }
 
   await wipeLocalDatabase();
+  // ensure any fallback session stored in AsyncStorage is removed so getSession()
+  // can't accidentally return a stale session after logout.
+  try {
+    await AsyncStorage.removeItem('FALLBACK_SESSION');
+  } catch (e) {}
 };
 
 export const deleteAccount = async () => {
