@@ -33,8 +33,8 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   const slideAnim = useRef(new Animated.Value(20)).current;
 
   // Staggered list animations
-  const listAnims = useMemo(() =>
-    props.state.routes.map(() => new Animated.Value(0)),
+  const listAnims = useMemo(
+    () => props.state.routes.map(() => new Animated.Value(0)),
     [props.state.routes.length]
   );
 
@@ -51,14 +51,17 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
         useNativeDriver: true,
         damping: 20,
       }),
-      Animated.stagger(50, listAnims.map(anim =>
-        Animated.timing(anim, {
-          toValue: 1,
-          duration: 400,
-          useNativeDriver: true,
-          easing: Easing.out(Easing.quad),
-        })
-      ))
+      Animated.stagger(
+        50,
+        listAnims.map((anim) =>
+          Animated.timing(anim, {
+            toValue: 1,
+            duration: 400,
+            useNativeDriver: true,
+            easing: Easing.out(Easing.quad),
+          })
+        )
+      ),
     ]).start();
   }, []);
 
@@ -71,55 +74,55 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   const handleLogout = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Sign Out',
-          style: 'destructive',
-          onPress: async () => {
+      {
+        text: 'Sign Out',
+        style: 'destructive',
+        onPress: async () => {
+          try {
             try {
-              try {
-                await signOut(); // Sign out from Clerk
-              } catch (e) {
-                console.warn('Clerk signOut failed', e);
+              await signOut(); // Sign out from Clerk
+            } catch (e) {
+              console.warn('Clerk signOut failed', e);
+            }
+
+            try {
+              await logout(); // Clear local DB and session
+            } catch (e) {
+              console.warn('Local logout failed', e);
+            }
+
+            // Close drawer first
+            try {
+              props.navigation.closeDrawer();
+            } catch (e) {}
+
+            // Try to reset the root navigator so auth stack is shown.
+            try {
+              // climb to the top-most navigator
+              let rootNav: any = props.navigation as any;
+              while (rootNav.getParent && rootNav.getParent()) {
+                const p = rootNav.getParent();
+                if (!p || p === rootNav) break;
+                rootNav = p;
               }
-
-              try {
-                await logout(); // Clear local DB and session
-              } catch (e) {
-                console.warn('Local logout failed', e);
-              }
-
-              // Close drawer first
-              try {
-                props.navigation.closeDrawer();
-              } catch (e) {}
-
-              // Try to reset the root navigator so auth stack is shown.
-              try {
-                // climb to the top-most navigator
-                let rootNav: any = props.navigation as any;
-                while (rootNav.getParent && rootNav.getParent()) {
-                  const p = rootNav.getParent();
-                  if (!p || p === rootNav) break;
-                  rootNav = p;
-                }
-                // Reset to Auth stack at root
-                if (rootNav && typeof rootNav.reset === 'function') {
-                  rootNav.reset({ index: 0, routes: [{ name: 'Auth' }] });
-                } else {
-                  // fallback
-                  props.navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
-                }
-              } catch (e) {
-                // as a final fallback, navigate to Auth on current navigator
-                try {
-                  props.navigation.navigate('Auth');
-                } catch (e2) {}
+              // Reset to Auth stack at root
+              if (rootNav && typeof rootNav.reset === 'function') {
+                rootNav.reset({ index: 0, routes: [{ name: 'Auth' }] });
+              } else {
+                // fallback
+                props.navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
               }
             } catch (e) {
-              console.error('Logout failed', e);
+              // as a final fallback, navigate to Auth on current navigator
+              try {
+                props.navigation.navigate('Auth');
+              } catch (e2) {}
             }
-          },
+          } catch (e) {
+            console.error('Logout failed', e);
+          }
         },
+      },
     ]);
   };
 
@@ -142,7 +145,9 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
         >
           <View style={styles.userHeader}>
             <Image
-              source={user?.imageUrl ? { uri: user.imageUrl } : require('../../assets/adaptive-icon.png')}
+              source={
+                user?.imageUrl ? { uri: user.imageUrl } : require('../../assets/adaptive-icon.png')
+              }
               style={styles.userAvatar}
             />
             <View style={styles.userInfo}>

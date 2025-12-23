@@ -100,7 +100,10 @@ export const runMigrations = async () => {
 
   console.log('[migrations] currentVersion=', currentVersion);
   const pending = migrations.filter((m) => m.id > currentVersion).sort((a, b) => a.id - b.id);
-  console.log('[migrations] pending ids=', pending.map((p) => p.id));
+  console.log(
+    '[migrations] pending ids=',
+    pending.map((p) => p.id)
+  );
   for (const m of pending) {
     console.log('[migrations] applying', m.id);
     await m.up(db);

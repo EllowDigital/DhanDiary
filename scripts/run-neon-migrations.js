@@ -38,13 +38,18 @@ if (!NEON_URL) {
 }
 
 if (!NEON_URL) {
-  console.error('NEON_URL not found. Set the NEON_URL or NEON_DATABASE_URL environment variable, or add it to app.json > expo.extra or a .env file.');
+  console.error(
+    'NEON_URL not found. Set the NEON_URL or NEON_DATABASE_URL environment variable, or add it to app.json > expo.extra or a .env file.'
+  );
   process.exit(2);
 }
 
 const { neon } = require('@neondatabase/serverless');
 const sql = neon(NEON_URL);
-console.log('Using NEON_URL:', NEON_URL.replace(/(.*:\/\/)([^:]+):(.+)@(.+)/, '$1****:****@$4') || '[masked]');
+console.log(
+  'Using NEON_URL:',
+  NEON_URL.replace(/(.*:\/\/)([^:]+):(.+)@(.+)/, '$1****:****@$4') || '[masked]'
+);
 
 const schemaPath = path.resolve(__dirname, '..', 'db', 'schema.sql');
 if (!fs.existsSync(schemaPath)) {

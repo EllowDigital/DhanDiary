@@ -1,11 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
-import { 
-  LogBox, 
-  View, 
-  Text, 
-  Button, 
-  ActivityIndicator 
-} from 'react-native';
+import { LogBox, View, Text, Button, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -103,10 +97,18 @@ const AppContent = () => {
         // Gather email addresses in the shapes Clerk may expose
         let emails: Array<{ emailAddress: string }> = [];
         try {
-          if ((clerkUser as any).primaryEmailAddress && (clerkUser as any).primaryEmailAddress.emailAddress) {
+          if (
+            (clerkUser as any).primaryEmailAddress &&
+            (clerkUser as any).primaryEmailAddress.emailAddress
+          ) {
             emails = [{ emailAddress: (clerkUser as any).primaryEmailAddress.emailAddress }];
-          } else if ((clerkUser as any).emailAddresses && (clerkUser as any).emailAddresses.length) {
-            emails = (clerkUser as any).emailAddresses.map((e: any) => ({ emailAddress: e.emailAddress }));
+          } else if (
+            (clerkUser as any).emailAddresses &&
+            (clerkUser as any).emailAddresses.length
+          ) {
+            emails = (clerkUser as any).emailAddresses.map((e: any) => ({
+              emailAddress: e.emailAddress,
+            }));
           }
         } catch (e) {
           // leave emails empty
@@ -119,7 +121,11 @@ const AppContent = () => {
 
         // Call bridge to ensure Neon has the user and save session locally.
         try {
-          const bridgeUser = await syncClerkUserToNeon({ id, emailAddresses: emails, fullName: (clerkUser as any).fullName || null });
+          const bridgeUser = await syncClerkUserToNeon({
+            id,
+            emailAddresses: emails,
+            fullName: (clerkUser as any).fullName || null,
+          });
           if (bridgeUser && bridgeUser.uuid) {
             try {
               await saveLocalSession(bridgeUser.uuid, bridgeUser.name || 'User', bridgeUser.email);
@@ -156,7 +162,7 @@ const AppContent = () => {
 function AppWithDb() {
   const [dbReady, setDbReady] = useState(false);
   const [dbInitError, setDbInitError] = useState<string | null>(null);
-  
+
   const queryClient = useMemo(() => new QueryClient(), []);
 
   // --- Database Initialization Logic ---
@@ -171,7 +177,9 @@ function AppWithDb() {
         const sqlite = require('./src/db/sqlite').default;
         await Promise.race([
           sqlite.open(),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('sqlite open timeout')), 8000)),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('sqlite open timeout')), 8000)
+          ),
         ]);
         setDbReady(true);
         setDbInitError(null);
@@ -208,8 +216,13 @@ function AppWithDb() {
           host = String(neonUrl).split('@').pop()?.split('/')[0] || null;
         }
       }
-      console.log('Startup config — neon host:', host || '(not configured)', 'clerkKey present:', !!CLERK_PUBLISHABLE_KEY);
-    } catch (e) { 
+      console.log(
+        'Startup config — neon host:',
+        host || '(not configured)',
+        'clerkKey present:',
+        !!CLERK_PUBLISHABLE_KEY
+      );
+    } catch (e) {
       // ignore
     }
   }, []);
@@ -241,7 +254,7 @@ function AppWithDb() {
       try {
         stopForegroundSyncScheduler();
         stopBackgroundFetch();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, [dbReady]);
 
@@ -263,7 +276,9 @@ function AppWithDb() {
 
   if (!dbReady) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
+      <View
+        style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}
+      >
         <ActivityIndicator size="large" color="#2563EB" />
         <Text style={{ marginTop: 12 }}>Starting app...</Text>
       </View>

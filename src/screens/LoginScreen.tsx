@@ -10,10 +10,10 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  SafeAreaView,
   StatusBar,
   Image,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSignIn, useOAuth, useUser, useAuth } from '@clerk/clerk-expo';
 import { Ionicons, FontAwesome } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser'; // Ensure you have this installed
@@ -38,20 +38,21 @@ const useWarmUpBrowser = () => {
   }, []);
 };
 
-// Print redirect URIs for debugging so you can copy them into GitHub/Clerk
+// Print redirect URIs for debugging so you can copy them into Clerk (native-only app)
 const usePrintAuthRedirects = () => {
   React.useEffect(() => {
     try {
-      // Provide projectNameForProxy matching app owner/slug to enable Expo AuthSession proxy
-      const projectForProxy = '@ellowdigital/dhandiary';
-      const proxyUri = AuthSession.makeRedirectUri({ useProxy: true, projectNameForProxy: projectForProxy });
-      const nativeUri = AuthSession.makeRedirectUri({ useProxy: false });
+      // For standalone / dev-client builds we MUST use a native scheme.
+      // Compute the native redirect URI using our app scheme.
+      const nativeUri = AuthSession.makeRedirectUri({ useProxy: false, scheme: 'dhandiary' });
       const getUri = AuthSession.getRedirectUrl();
-      console.log('[AuthRedirects] makeRedirectUri(useProxy:true, project)=', proxyUri);
-      console.log('[AuthRedirects] makeRedirectUri(useProxy:false)=', nativeUri);
+      console.log('[AuthRedirects] makeRedirectUri(native, scheme=dhandiary)=', nativeUri);
       console.log('[AuthRedirects] getRedirectUrl()=', getUri);
+      console.log(
+        '[AuthRedirects] NOTE: Do NOT use auth.expo.io or exp:// URLs in standalone APKs'
+      );
     } catch (e) {
-      console.warn('[AuthRedirects] failed to compute redirect URIs', e);
+      console.warn('[AuthRedirects] failed to compute native redirect URI', e);
     }
   }, []);
 };
@@ -79,7 +80,7 @@ const LoginScreen = () => {
 
   // Pre-warm DB
   React.useEffect(() => {
-    warmNeonConnection().catch(() => { });
+    warmNeonConnection().catch(() => {});
   }, []);
 
   // If Clerk already has a signed-in session, use it to sync and navigate immediately
@@ -91,9 +92,15 @@ const LoginScreen = () => {
         const id = (clerkUser as any).id || (clerkUser as any).userId || null;
         let email: string | null = null;
         try {
-          if ((clerkUser as any).primaryEmailAddress && (clerkUser as any).primaryEmailAddress.emailAddress) {
+          if (
+            (clerkUser as any).primaryEmailAddress &&
+            (clerkUser as any).primaryEmailAddress.emailAddress
+          ) {
             email = (clerkUser as any).primaryEmailAddress.emailAddress;
-          } else if ((clerkUser as any).emailAddresses && (clerkUser as any).emailAddresses.length) {
+          } else if (
+            (clerkUser as any).emailAddresses &&
+            (clerkUser as any).emailAddresses.length
+          ) {
             email = (clerkUser as any).emailAddresses[0]?.emailAddress || null;
           }
         } catch (e) {
@@ -104,8 +111,12 @@ const LoginScreen = () => {
           console.log('[LoginScreen] detected existing Clerk session, syncing user', email);
           await handleSyncAndNavigate(id, email, (clerkUser as any).fullName || null);
         } else {
-          console.warn('[LoginScreen] Clerk session exists but missing id/email, navigating to Main');
-          const rootNav: any = (navigation as any).getParent ? (navigation as any).getParent() : null;
+          console.warn(
+            '[LoginScreen] Clerk session exists but missing id/email, navigating to Main'
+          );
+          const rootNav: any = (navigation as any).getParent
+            ? (navigation as any).getParent()
+            : null;
           try {
             // Use navigate so React Navigation resolves the correct parent navigator
             navigation.navigate('Main' as any);
@@ -121,7 +132,11 @@ const LoginScreen = () => {
 
   // --- HANDLERS ---
 
-  const handleSyncAndNavigate = async (userId: string, userEmail: string, userName?: string | null) => {
+  const handleSyncAndNavigate = async (
+    userId: string,
+    userEmail: string,
+    userName?: string | null
+  ) => {
     // Attempt to sync Clerk user to Neon and persist the Neon uuid BEFORE navigating.
     // Use timeouts so we don't block forever on slow networks.
     console.log('[Login] initiating bridge sync for', userEmail);
@@ -142,7 +157,9 @@ const LoginScreen = () => {
           emailAddresses: [{ emailAddress: userEmail }],
           fullName: userName,
         }),
-        new Promise((_, rej) => setTimeout(() => rej(new Error('Bridge sync timed out')), bridgeTimeoutMs)),
+        new Promise((_, rej) =>
+          setTimeout(() => rej(new Error('Bridge sync timed out')), bridgeTimeoutMs)
+        ),
       ] as any);
       console.log('[Login] bridge sync completed', resolvedBridgeUser?.uuid || '<no-uuid>');
     } catch (e) {
@@ -154,7 +171,11 @@ const LoginScreen = () => {
     const targetId = resolvedBridgeUser?.uuid || userId || `local-${Date.now()}`;
     try {
       // Try to persist to sqlite; give migrations a bit longer to complete during login (5s)
-      const savePromise = saveSession(targetId, userName || 'User', resolvedBridgeUser?.email || userEmail);
+      const savePromise = saveSession(
+        targetId,
+        userName || 'User',
+        resolvedBridgeUser?.email || userEmail
+      );
       const saved = await Promise.race([
         savePromise.then(() => true),
         new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 5000)),
@@ -164,7 +185,11 @@ const LoginScreen = () => {
         try {
           await AsyncStorage.setItem(
             'FALLBACK_SESSION',
-            JSON.stringify({ id: targetId, name: userName || 'User', email: resolvedBridgeUser?.email || userEmail })
+            JSON.stringify({
+              id: targetId,
+              name: userName || 'User',
+              email: resolvedBridgeUser?.email || userEmail,
+            })
           );
           console.log('[Login] saved fallback session to AsyncStorage', targetId);
         } catch (e) {
@@ -211,14 +236,14 @@ const LoginScreen = () => {
         password,
       });
 
-      // This is for simple email/password. 
+      // This is for simple email/password.
       // If 2FA is enabled, you'd need to handle 'needs_second_factor' status.
       if (completeSignIn.status === 'complete') {
         await setActive({ session: completeSignIn.createdSessionId });
 
-        // We can't easily get the user object synchronously from signIn result 
+        // We can't easily get the user object synchronously from signIn result
         // effectively without a fetch, but let's pass what we know.
-        // Actually, we can get it from the session user later, 
+        // Actually, we can get it from the session user later,
         // but let's rely on the bridged info we have.
         const uid = (completeSignIn as any).createdUserId;
         await handleSyncAndNavigate(uid, email, 'User');
@@ -226,8 +251,20 @@ const LoginScreen = () => {
         Alert.alert('Login Info', 'Further verification required. Please check your email.');
       }
     } catch (err: any) {
-      console.error(JSON.stringify(err, null, 2));
-      Alert.alert('Login Failed', err.errors ? err.errors[0]?.message : err.message);
+      console.error('[Login] signIn.create error', err);
+      // Clerk returns structured errors like { clerkError: true, code, errors: [...] }
+      const clerkCode = err?.code || (err?.errors && err.errors[0]?.code);
+      const clerkMessage =
+        err?.message || (err?.errors && err.errors[0]?.message) || 'Unexpected error during login';
+
+      if (clerkCode === 'strategy_for_user_invalid') {
+        Alert.alert(
+          'Login Failed',
+          'This account was created with a social provider and cannot sign in with a password. Please use Sign in with GitHub / Google or reset your password.'
+        );
+      } else {
+        Alert.alert('Login Failed', clerkMessage);
+      }
     } finally {
       setLoading(false);
     }
@@ -250,17 +287,21 @@ const LoginScreen = () => {
           return;
         }
 
-        // Explicitly provide a redirect URL using the app's scheme to avoid
-        // reliance on auto-computed proxy/native redirect URIs which can be null
-        // in some Expo Go / development setups.
-        flowResult = await startFlow({ redirectUrl: 'dhandiary://oauth-native-callback' });
+        // Explicitly provide the native redirect URL for standalone / dev-client builds.
+        // Use the app scheme `dhandiary://oauth-callback` and do NOT use the Expo proxy.
+        flowResult = await startFlow({ redirectUrl: 'dhandiary://oauth-callback' });
       } catch (e: any) {
         console.error('startFlow threw', e);
         if (e && (e as any).stack) console.error((e as any).stack);
 
-        const text = String(e && (e.message || e) || '');
-        if (text.toLowerCase().includes('already signed in') || text.toLowerCase().includes("you're already signed in")) {
-          console.log('[LoginScreen] startFlow error: already signed in — deferring to existing session handler');
+        const text = String((e && (e.message || e)) || '');
+        if (
+          text.toLowerCase().includes('already signed in') ||
+          text.toLowerCase().includes("you're already signed in")
+        ) {
+          console.log(
+            '[LoginScreen] startFlow error: already signed in — deferring to existing session handler'
+          );
           setLoading(false);
           return;
         }
@@ -302,13 +343,13 @@ const LoginScreen = () => {
         const userObj = signIn || signUp || {};
         const uid = (userObj as any)?.createdUserId || (userObj as any)?.userData?.id || null;
         // OAuth might return email in a different spot depending on provider?
-        // Let's assume the user is valid. 
-        // A safer bet: The `syncbothWays` or `App.tsx` logic also handles checks, 
+        // Let's assume the user is valid.
+        // A safer bet: The `syncbothWays` or `App.tsx` logic also handles checks,
         // but here we want to ensure the DB row exists.
 
         // We can't easily get the email *address* string here without making a call if it's not in the response.
         // However, `syncClerkUserToNeon` REQUIRES email.
-        // Let's defer strict syncing to `App.tsx` or `useUser` hook effect 
+        // Let's defer strict syncing to `App.tsx` or `useUser` hook effect
         // OR try to extract it from the object if possible.
         // `signIn.userData.identifier` usually holds it.
 
@@ -331,7 +372,9 @@ const LoginScreen = () => {
           await handleSyncAndNavigate(uid, bestEmail, (userObj as any)?.firstName || null);
         } else {
           console.warn('OAuth flow returned incomplete user data, uid=', uid, 'email=', bestEmail);
-          const rootNav: any = (navigation as any).getParent ? (navigation as any).getParent() : null;
+          const rootNav: any = (navigation as any).getParent
+            ? (navigation as any).getParent()
+            : null;
           try {
             navigation.navigate('Auth' as any);
           } catch (e) {
@@ -346,7 +389,10 @@ const LoginScreen = () => {
       }
     } catch (err: any) {
       console.error('OAuth Error', err);
-      const msg = (err && (err.message || (typeof err === 'string' ? err : null))) || String(err) || 'Unexpected error during social login';
+      const msg =
+        (err && (err.message || (typeof err === 'string' ? err : null))) ||
+        String(err) ||
+        'Unexpected error during social login';
       Alert.alert('Social Login Failed', msg);
       setLoading(false);
     }
@@ -355,10 +401,7 @@ const LoginScreen = () => {
   return (
     <View style={[styles.container, { backgroundColor: '#fff' }]}>
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
-      <LinearGradient
-        colors={['#ffffff', '#f8fafc']}
-        style={StyleSheet.absoluteFill}
-      />
+      <LinearGradient colors={['#ffffff', '#f8fafc']} style={StyleSheet.absoluteFill} />
 
       <SafeAreaView style={{ flex: 1 }}>
         <KeyboardAvoidingView
@@ -371,7 +414,6 @@ const LoginScreen = () => {
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
           >
-
             {/* Header / Logo */}
             <View style={styles.logoSection}>
               <Image
@@ -401,7 +443,12 @@ const LoginScreen = () => {
               </View>
 
               <View style={styles.inputContainer}>
-                <Ionicons name="lock-closed-outline" size={20} color="#64748b" style={styles.inputIcon} />
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={20}
+                  color="#64748b"
+                  style={styles.inputIcon}
+                />
                 <TextInput
                   style={styles.input}
                   placeholder="Password"
@@ -412,7 +459,11 @@ const LoginScreen = () => {
                   autoCapitalize="none"
                   autoCorrect={false}
                 />
-                <TouchableOpacity onPress={() => setShowPassword((s) => !s)} style={styles.eyeBtn} accessibilityLabel="Toggle password visibility">
+                <TouchableOpacity
+                  onPress={() => setShowPassword((s) => !s)}
+                  style={styles.eyeBtn}
+                  accessibilityLabel="Toggle password visibility"
+                >
                   <Ionicons name={showPassword ? 'eye' : 'eye-off'} size={20} color="#64748b" />
                 </TouchableOpacity>
               </View>
@@ -422,7 +473,11 @@ const LoginScreen = () => {
                 onPress={onSignInPress}
                 disabled={loading}
               >
-                {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Log In</Text>}
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.primaryBtnText}>Log In</Text>
+                )}
               </TouchableOpacity>
 
               {/* Social Login Divider */}
@@ -440,7 +495,6 @@ const LoginScreen = () => {
                   <FontAwesome name="github" size={22} color="#111111" />
                 </TouchableOpacity>
               </View>
-
             </View>
 
             {/* Footer */}
@@ -450,7 +504,6 @@ const LoginScreen = () => {
                 <Text style={styles.linkText}>Sign Up</Text>
               </TouchableOpacity>
             </View>
-
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -615,5 +668,5 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 16,
     fontWeight: '600',
-  }
+  },
 });

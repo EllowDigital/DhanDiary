@@ -29,23 +29,17 @@ export default ({ config }) => {
        * ✅ PUBLIC CLIENT VARIABLES
        * Must be prefixed with EXPO_PUBLIC_
        */
-      EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY:
-        process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? null,
+      EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? null,
 
-      EXPO_PUBLIC_API_URL:
-        process.env.EXPO_PUBLIC_API_URL ?? null,
+      EXPO_PUBLIC_API_URL: process.env.EXPO_PUBLIC_API_URL ?? null,
 
       /**
        * 🔒 NEON DB PROTECTION
        * DB URL is injected ONLY when explicitly enabled
        */
-      EXPO_ENABLE_NEON_CLIENT:
-        process.env.EXPO_ENABLE_NEON_CLIENT ?? '0',
+      EXPO_ENABLE_NEON_CLIENT: process.env.EXPO_ENABLE_NEON_CLIENT ?? '0',
 
-      NEON_URL:
-        process.env.EXPO_ENABLE_NEON_CLIENT === '1'
-          ? process.env.NEON_URL ?? null
-          : null,
+      NEON_URL: process.env.EXPO_ENABLE_NEON_CLIENT === '1' ? (process.env.NEON_URL ?? null) : null,
     },
   };
 };

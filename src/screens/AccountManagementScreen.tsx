@@ -124,7 +124,7 @@ const AccountManagementScreen = () => {
   // --- FORM STATE ---
   const [username, setUsername] = useState(user?.fullName || '');
 
-  // NOTE: Clerk handles email updates via a verification flow. 
+  // NOTE: Clerk handles email updates via a verification flow.
   // Simple update isn't always allowed without verifying new email.
   // For now, we will disable email editing or show it as read-only/info.
   // Or keep it if we want to implement the flow (but it's complex).
@@ -181,7 +181,9 @@ const AccountManagementScreen = () => {
 
   const toggleBiometrics = async (val: boolean) => {
     if (val) {
-      const result = await LocalAuthentication.authenticateAsync({ promptMessage: 'Confirm Identity' });
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Confirm Identity',
+      });
       if (!result.success) return;
     }
     setBiometricsEnabled(val);
@@ -204,7 +206,7 @@ const AccountManagementScreen = () => {
     setSavingUsername(true);
     try {
       await user.update({ firstName: username }); // Clerk separates first/last, but often maps. Or use update({ firstName, lastName })
-      // Actually `update` accepts { firstName, lastName }. 
+      // Actually `update` accepts { firstName, lastName }.
       // We will just put the whole string in firstName for simplicity or split it.
       // Better:
       // await user.update({ firstName: username.split(' ')[0], lastName: username.split(' ').slice(1).join(' ') });
@@ -225,7 +227,8 @@ const AccountManagementScreen = () => {
       return Alert.alert('Missing Fields', 'Please fill in the new password fields.');
     if (newPass !== confirmPass) return Alert.alert('Mismatch', 'New passwords do not match');
     if (newPass.length < 8) return Alert.alert('Weak Password', 'Minimum 8 characters required');
-    if (hasPassword && !curPass) return Alert.alert('Missing Field', 'Current password is required.');
+    if (hasPassword && !curPass)
+      return Alert.alert('Missing Field', 'Current password is required.');
 
     if (!user) return;
 
@@ -241,7 +244,7 @@ const AccountManagementScreen = () => {
       } else {
         // Set Password (for OAuth users)
         await user.updatePassword({
-          newPassword: newPass
+          newPassword: newPass,
         });
         showToast('Password set successfully!');
       }
@@ -311,7 +314,7 @@ const AccountManagementScreen = () => {
               <View style={styles.heroRow}>
                 <View style={styles.heroAvatar}>
                   <Text style={styles.heroAvatarText}>{userInitial}</Text>
-                  {user?.emailAddresses.some(e => e.verification.status === 'verified') && (
+                  {user?.emailAddresses.some((e) => e.verification.status === 'verified') && (
                     <View style={styles.verifiedBadge}>
                       <MaterialIcon name="check" size={12} color="white" />
                     </View>
@@ -415,7 +418,7 @@ const AccountManagementScreen = () => {
                   }
                 />
                 <Button
-                  title={hasPassword ? "Update Password" : "Set Password"}
+                  title={hasPassword ? 'Update Password' : 'Set Password'}
                   loading={savingPasswordState}
                   onPress={handlePasswordSave}
                   buttonStyle={styles.primaryBtn}
@@ -426,7 +429,14 @@ const AccountManagementScreen = () => {
               {/* 3. APP SECURITY (BIOMETRICS) */}
               {hasBiometricHardware && (
                 <ExpandableCard
-                  item={{ id: 'app_security', title: 'App Lock', description: 'Biometric security', icon: 'shield', bgColor: '#E0E7FF', iconColor: colors.primary }}
+                  item={{
+                    id: 'app_security',
+                    title: 'App Lock',
+                    description: 'Biometric security',
+                    icon: 'shield',
+                    bgColor: '#E0E7FF',
+                    iconColor: colors.primary,
+                  }}
                   isExpanded={activeCard === 'app_security'}
                   onToggle={() => toggleCard('app_security')}
                 >

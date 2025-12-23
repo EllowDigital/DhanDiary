@@ -57,7 +57,7 @@ const safeQ = async (sql: string, params: any[] = []) => {
   } catch (err) {
     try {
       console.error('Neon query failed', { sql, params, err });
-    } catch (e) { }
+    } catch (e) {}
     throw err;
   }
 };
@@ -197,7 +197,7 @@ export const syncPending = async () => {
             } catch (e) {
               try {
                 await queueLocalRemoteMapping(localId, String(r.id));
-              } catch (q) { }
+              } catch (q) {}
             }
           }
         }
@@ -253,7 +253,7 @@ export const syncPending = async () => {
             } catch (e) {
               try {
                 await queueLocalRemoteMapping(it.local_id, String(remoteId));
-              } catch (q) { }
+              } catch (q) {}
             }
           }
         } catch (e) {
@@ -310,7 +310,7 @@ export const syncPending = async () => {
                   r.updated_at
                 );
                 updated += 1;
-              } catch (e) { }
+              } catch (e) {}
             }
           }
         }
@@ -339,7 +339,7 @@ export const syncPending = async () => {
             try {
               await markEntrySynced(u.local_id, String(res[0].id), sv, res[0].updated_at);
               updated += 1;
-            } catch (e) { }
+            } catch (e) {}
           }
         } catch (e) {
           console.error('Failed to update remote entry', u.local_id, e);
@@ -396,7 +396,7 @@ const flushPendingProfileUpdates = async () => {
         const user = res[0];
         try {
           await saveSession(user.id, user.name || '', user.email);
-        } catch (e) { }
+        } catch (e) {}
         await markPendingProfileProcessed(p.id);
         processed += 1;
       }
@@ -453,11 +453,11 @@ export const pullRemote = async () => {
           let localForDeleted: any = null;
           try {
             localForDeleted = await getLocalByRemoteId(String(r.id));
-          } catch (e) { }
+          } catch (e) {}
           if (!localForDeleted && r.client_id) {
             try {
               localForDeleted = await getLocalByClientId(String(r.client_id));
-            } catch (e) { }
+            } catch (e) {}
           }
 
           // If local exists and still needs sync, treat local as intent-to-keep:
@@ -578,7 +578,7 @@ export const pullRemote = async () => {
                       : undefined,
                     pushedRow.updated_at
                   );
-                } catch (e) { }
+                } catch (e) {}
               }
               merged += 1;
               return true;
@@ -601,7 +601,7 @@ export const pullRemote = async () => {
                   typeof r.server_version === 'number' ? Number(r.server_version) : undefined,
                   r.updated_at
                 );
-              } catch (e) { }
+              } catch (e) {}
               merged += 1;
               continue;
             }
@@ -636,7 +636,7 @@ export const pullRemote = async () => {
                 try {
                   await markEntrySynced(local.local_id, String(newId), sv, upd[0].updated_at);
                   merged += 1;
-                } catch (e) { }
+                } catch (e) {}
               }
             } catch (err) {
               console.error(
@@ -716,7 +716,9 @@ const ensureRemoteSchema = async () => {
   // skip remote schema verification to avoid attempts to contact Neon from the client.
   const NEON_URL = (Constants?.expoConfig?.extra as any)?.NEON_URL || process.env.NEON_URL || null;
   if (!NEON_URL) {
-    console.warn('ensureRemoteSchema: NEON_URL not configured; skipping remote schema verification');
+    console.warn(
+      'ensureRemoteSchema: NEON_URL not configured; skipping remote schema verification'
+    );
     return;
   }
   try {

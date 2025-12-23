@@ -128,7 +128,10 @@ export const warmNeonConnection = async () => {
 // Additional helper for debugging: attempt a quick health check and return boolean
 export const checkNeonConnection = async (timeoutMs = 10000): Promise<boolean> => {
   try {
-    await Promise.race([warmNeonConnection(), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), timeoutMs))]);
+    await Promise.race([
+      warmNeonConnection(),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), timeoutMs)),
+    ]);
     return true;
   } catch (e) {
     return false;
@@ -175,14 +178,12 @@ export const query = async (
       const result: any = await withTimeout(runner(text, params), timeoutMs);
       recordSuccess(Date.now() - start);
       // Check if result has .rows (pg-compatible) or is array (neon-native)
-      return Array.isArray(result) ? result : (result.rows || []);
+      return Array.isArray(result) ? result : result.rows || [];
     } catch (error) {
       lastErr = error;
       recordFailure(error);
 
-      const msg = String(
-        ((error as any) && ((error as any).message || error)) || ''
-      ).toLowerCase();
+      const msg = String(((error as any) && ((error as any).message || error)) || '').toLowerCase();
 
       const isTransient =
         msg.includes('timeout') ||

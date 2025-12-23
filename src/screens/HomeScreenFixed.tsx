@@ -575,12 +575,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#E2E8F0',
     marginRight: 16,
     alignItems: 'center',
-  headerAvatarImage: {
-    width: 140,
-    height: 28,
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
+    headerAvatarImage: {
+      width: 140,
+      height: 28,
+      borderRadius: 8,
+      overflow: 'hidden',
+    },
     borderWidth: 1,
     borderColor: '#BFDBFE',
   },

@@ -118,7 +118,8 @@ const SplashScreen = () => {
       let user = null;
       let onboardingCompleted = false;
       try {
-        const timeout = (ms: number) => new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms));
+        const timeout = (ms: number) =>
+          new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms));
 
         const safeGetSession = async () => {
           try {
@@ -145,7 +146,12 @@ const SplashScreen = () => {
         ]);
         user = res[0];
         onboardingCompleted = res[1];
-        console.log('[Splash] init results user=', !!user, 'onboardingCompleted=', onboardingCompleted);
+        console.log(
+          '[Splash] init results user=',
+          !!user,
+          'onboardingCompleted=',
+          onboardingCompleted
+        );
       } catch (e) {
         console.warn('[Splash] init error', e);
       }
