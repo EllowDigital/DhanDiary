@@ -116,25 +116,49 @@ const LoginScreen = () => {
     setSyncing(true);
     try {
       // 1. Sync Clerk User to Neon DB (Get internal UUID)
-      const bridgeUser = await syncClerkUserToNeon({
-        id: userId,
-        emailAddresses: [{ emailAddress: userEmail }],
-        fullName: userName,
-      });
+      // Run sync with a timeout so the UI doesn't block indefinitely if Neon is slow/unreachable
+      const syncPromise = (async () => {
+        const bridgeUser = await syncClerkUserToNeon({
+          id: userId,
+          emailAddresses: [{ emailAddress: userEmail }],
+          fullName: userName,
+        });
 
-      // 2. Save Session Locally for Offline-First usage
-      await saveSession(bridgeUser.uuid, bridgeUser.name || 'User', bridgeUser.email);
+        // 2. Save Session Locally for Offline-First usage
+        try {
+          await saveSession(bridgeUser.uuid, bridgeUser.name || 'User', bridgeUser.email);
+        } catch (e) {
+          console.warn('[Login] failed saving session after bridge sync', e);
+        }
 
-      // 3. Navigate
+        return bridgeUser;
+      })();
+
+      const timeoutMs = 10000;
+      const bridgeUser = await Promise.race([
+        syncPromise,
+        new Promise<any>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
+      ]);
+
+      if (!bridgeUser) {
+        console.warn('[Login] sync timed out or failed — falling back to local-only session');
+        // Ensure at least a local session exists so the app can continue
+        try {
+          // create a best-effort local session id
+          const fallbackId = userId || `local-${Date.now()}`;
+          await saveSession(fallbackId, userName || 'User', userEmail);
+        } catch (e) {
+          console.warn('[Login] fallback saveSession failed', e);
+        }
+      }
+
+      // 3. Navigate regardless of sync outcome
       setSyncing(false);
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'Main' }], // or 'Home' depending on your MainStack
-      });
+      navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
     } catch (err: any) {
       console.error('Sync Error:', err);
       setSyncing(false);
-      Alert.alert('Login Error', 'Failed to synchronize user data. Please check your connection.');
+      Alert.alert('Login Error', 'Failed to synchronize user data. Continuing in offline mode.');
     }
   };
 
