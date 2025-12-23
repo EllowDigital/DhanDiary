@@ -22,7 +22,7 @@ import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { syncClerkUserToNeon } from '../services/clerkUserSync';
-import { saveSession } from '../db/localDb';
+import { saveSession, init as initLocalDb } from '../db/localDb';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { warmNeonConnection } from '../services/auth';
 
@@ -130,6 +130,12 @@ const LoginScreen = () => {
     const bridgeTimeoutMs = 10000; // wait up to 10s for bridge
     let resolvedBridgeUser: any = null;
     try {
+      // Ensure local DB is initialized before attempting to save session or run sync
+      try {
+        await initLocalDb();
+      } catch (e) {
+        console.warn('[Login] initLocalDb failed (continuing):', e);
+      }
       resolvedBridgeUser = await Promise.race([
         syncClerkUserToNeon({
           id: userId,
@@ -169,6 +175,20 @@ const LoginScreen = () => {
       }
     } catch (e) {
       console.warn('[Login] saveSession failed', e);
+    }
+
+    // Kick off an initial sync (best-effort) before navigating so the app has
+    // recent data available. Don't block more than a few seconds.
+    try {
+      const { syncBothWays } = require('../services/syncManager');
+      await Promise.race([
+        syncBothWays(),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('Initial sync timed out')), 4000)),
+      ]).catch((e) => {
+        console.warn('[Login] initial sync failed or timed out', e?.message || e);
+      });
+    } catch (e) {
+      console.warn('[Login] failed to start initial sync', e);
     }
 
     setSyncing(false);
