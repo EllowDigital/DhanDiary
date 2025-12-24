@@ -13,7 +13,7 @@ type Report = {
  * Grouping key: `type|amount|date|category|note` (trimmed).
  * Keep the row with the newest `updated_at` and remove others.
  *
- * NOTE: This runs inside the app (uses expo-sqlite) and mutates the DB.
+ * NOTE: This runs inside the app and mutates the DB via the local DB API.
  */
 export const cleanupDuplicateLocalEntries = async (opts?: { dryRun?: boolean }) => {
   const dryRun = !!(opts && opts.dryRun);
