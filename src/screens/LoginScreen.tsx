@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -16,21 +16,23 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSignIn, useOAuth, useUser, useAuth } from '@clerk/clerk-expo';
 import { Ionicons, FontAwesome } from '@expo/vector-icons';
-import * as WebBrowser from 'expo-web-browser'; // Ensure you have this installed
+import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { syncClerkUserToNeon } from '../services/clerkUserSync';
+import { syncClerkUserToNeon, BridgeUser } from '../services/clerkUserSync';
 import { saveSession, init as initLocalDb } from '../db/localDb';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { warmNeonConnection } from '../services/auth';
 
-// Warm up browser for OAuth
+// --- Configuration & Hooks ---
+
+// Warm up browser for smoother OAuth transitions
 WebBrowser.maybeCompleteAuthSession();
 
 const useWarmUpBrowser = () => {
-  React.useEffect(() => {
+  useEffect(() => {
     void WebBrowser.warmUpAsync();
     return () => {
       void WebBrowser.coolDownAsync();
@@ -38,192 +40,143 @@ const useWarmUpBrowser = () => {
   }, []);
 };
 
-// Print redirect URIs for debugging so you can copy them into Clerk (native-only app)
+// Debug helper for Auth Redirects (useful for troubleshooting deep links)
 const usePrintAuthRedirects = () => {
-  React.useEffect(() => {
-    try {
-      // For standalone / dev-client builds we MUST use a native scheme.
-      // Compute the native redirect URI using our app scheme.
-      const nativeUri = AuthSession.makeRedirectUri({ scheme: 'dhandiary' } as any);
-      const getUri = AuthSession.getRedirectUrl();
-      console.log('[AuthRedirects] makeRedirectUri(native, scheme=dhandiary)=', nativeUri);
-      console.log('[AuthRedirects] getRedirectUrl()=', getUri);
-      console.log(
-        '[AuthRedirects] NOTE: Do NOT use auth.expo.io or exp:// URLs in standalone APKs'
-      );
-    } catch (e) {
-      console.warn('[AuthRedirects] failed to compute native redirect URI', e);
+  useEffect(() => {
+    if (__DEV__) {
+      try {
+        const nativeUri = AuthSession.makeRedirectUri({ scheme: 'dhandiary' });
+        console.log('[AuthRedirects] Scheme URI:', nativeUri);
+      } catch (e) {
+        console.warn('[AuthRedirects] Failed to compute URI', e);
+      }
     }
   }, []);
 };
 
+// --- Component ---
+
 const LoginScreen = () => {
   useWarmUpBrowser();
   usePrintAuthRedirects();
+  
   const navigation = useNavigation<any>();
   const { signIn, setActive, isLoaded } = useSignIn();
-
-  // OAuth Hooks
-  const { startOAuthFlow: startGoogleFlow } = useOAuth({ strategy: 'oauth_google' });
-  const { startOAuthFlow: startGithubFlow } = useOAuth({ strategy: 'oauth_github' });
-
-  // Clerk session hooks to detect existing sign-in state
   const { user: clerkUser, isLoaded: clerkLoaded } = useUser();
   const { isSignedIn } = useAuth();
 
-  // State
+  // OAuth Strategies
+  const { startOAuthFlow: startGoogleFlow } = useOAuth({ strategy: 'oauth_google' });
+  const { startOAuthFlow: startGithubFlow } = useOAuth({ strategy: 'oauth_github' });
+
+  // UI State
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
 
-  // Pre-warm DB
-  React.useEffect(() => {
+  // --- Effects ---
+
+  // 1. Pre-warm Database Connection
+  useEffect(() => {
     warmNeonConnection().catch(() => {});
+    initLocalDb().catch(() => {});
   }, []);
 
-  // If Clerk already has a signed-in session, use it to sync and navigate immediately
-  React.useEffect(() => {
+  // 2. Handle Existing Session (Auto-Sync)
+  useEffect(() => {
     if (!isSignedIn || !clerkLoaded || !clerkUser) return;
 
-    (async () => {
+    const processExistingSession = async () => {
       try {
-        const id = (clerkUser as any).id || (clerkUser as any).userId || null;
-        let email: string | null = null;
-        try {
-          if (
-            (clerkUser as any).primaryEmailAddress &&
-            (clerkUser as any).primaryEmailAddress.emailAddress
-          ) {
-            email = (clerkUser as any).primaryEmailAddress.emailAddress;
-          } else if (
-            (clerkUser as any).emailAddresses &&
-            (clerkUser as any).emailAddresses.length
-          ) {
-            email = (clerkUser as any).emailAddresses[0]?.emailAddress || null;
-          }
-        } catch (e) {
-          // ignore
-        }
-
+        const id = clerkUser.id;
+        const email = clerkUser.primaryEmailAddress?.emailAddress || clerkUser.emailAddresses[0]?.emailAddress;
+        
         if (id && email) {
-          console.log('[LoginScreen] detected existing Clerk session, syncing user', email);
-          await handleSyncAndNavigate(id, email, (clerkUser as any).fullName || null);
+          console.log('[LoginScreen] Detected existing session, syncing...');
+          await handleSyncAndNavigate(id, email, clerkUser.fullName);
         } else {
-          console.warn(
-            '[LoginScreen] Clerk session exists but missing id/email, navigating to Main'
-          );
-          const rootNav: any = (navigation as any).getParent
-            ? (navigation as any).getParent()
-            : null;
-          try {
-            // Use navigate so React Navigation resolves the correct parent navigator
-            navigation.navigate('Main' as any);
-          } catch (e) {
-            console.warn('[LoginScreen] navigation.navigate(Main) failed', e);
-          }
+          console.warn('[LoginScreen] Missing user details, navigating to Main safely');
+          navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
         }
       } catch (e) {
-        console.warn('[LoginScreen] error handling existing Clerk session', e);
+        console.error('[LoginScreen] Session restoration failed', e);
+        setSyncing(false); // ensure overlay is removed
       }
-    })();
+    };
+
+    processExistingSession();
   }, [isSignedIn, clerkLoaded, clerkUser]);
 
-  // --- HANDLERS ---
+  // --- Core Logic ---
 
+  /**
+   * Orchestrates the critical handover from Clerk -> Our Database -> Local SQLite.
+   * This ensures the user is legally allowed to access the offline-first data.
+   */
   const handleSyncAndNavigate = async (
     userId: string,
     userEmail: string,
     userName?: string | null
   ) => {
-    // Attempt to sync Clerk user to Neon and persist the Neon uuid BEFORE navigating.
-    // Use timeouts so we don't block forever on slow networks.
-    console.log('[Login] initiating bridge sync for', userEmail);
     setSyncing(true);
+    console.log(`[Login] Initiating sync for ${userEmail}`);
 
-    const bridgeTimeoutMs = 10000; // wait up to 10s for bridge
-    let resolvedBridgeUser: any = null;
+    // 1. Bridge Sync (Remote)
+    const bridgeTimeoutMs = 12000;
+    let resolvedBridgeUser: BridgeUser | null = null;
+
     try {
-      // Ensure local DB is initialized before attempting to save session or run sync
-      try {
-        await initLocalDb();
-      } catch (e) {
-        console.warn('[Login] initLocalDb failed (continuing):', e);
-      }
       resolvedBridgeUser = await Promise.race([
         syncClerkUserToNeon({
           id: userId,
           emailAddresses: [{ emailAddress: userEmail }],
           fullName: userName,
         }),
-        new Promise((_, rej) =>
+        new Promise<never>((_, rej) =>
           setTimeout(() => rej(new Error('Bridge sync timed out')), bridgeTimeoutMs)
         ),
-      ] as any);
-      console.log('[Login] bridge sync completed', resolvedBridgeUser?.uuid || '<no-uuid>');
-    } catch (e) {
-      console.warn('[Login] bridge sync failed or timed out', (e as any)?.message || String(e));
-      resolvedBridgeUser = null;
-    }
-
-    // Persist session: prefer Neon uuid from bridge if available, otherwise use Clerk id as fallback.
-    const targetId = resolvedBridgeUser?.uuid || userId || `local-${Date.now()}`;
-    try {
-      // Try to persist to sqlite; give migrations a bit longer to complete during login (5s)
-      const savePromise = saveSession(
-        targetId,
-        userName || 'User',
-        resolvedBridgeUser?.email || userEmail
-      );
-      const saved = await Promise.race([
-        savePromise.then(() => true),
-        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 5000)),
       ]);
-      if (!saved) {
-        // Fallback to AsyncStorage so app can continue and later migrate into sqlite
-        try {
-          await AsyncStorage.setItem(
-            'FALLBACK_SESSION',
-            JSON.stringify({
-              id: targetId,
-              name: userName || 'User',
-              email: resolvedBridgeUser?.email || userEmail,
-            })
-          );
-          console.log('[Login] saved fallback session to AsyncStorage', targetId);
-        } catch (e) {
-          console.warn('[Login] saving fallback session to AsyncStorage failed', e);
-        }
-      } else {
-        console.log('[Login] saved session', targetId);
-      }
-    } catch (e) {
-      console.warn('[Login] saveSession failed', e);
+      console.log('[Login] Bridge sync success:', resolvedBridgeUser?.uuid);
+    } catch (e: any) {
+      console.warn('[Login] Bridge sync warning:', e.message);
+      // We continue even if bridge fails, using local-only mode
     }
 
-    // Kick off an initial sync (best-effort) before navigating so the app has
-    // recent data available. Don't block more than a few seconds.
+    // 2. Persist Session (Local)
+    const finalId = resolvedBridgeUser?.uuid || userId;
+    const finalName = userName || 'User';
+    const finalEmail = resolvedBridgeUser?.email || userEmail;
+
+    try {
+      await saveSession(finalId, finalName, finalEmail);
+      console.log('[Login] Session saved locally');
+    } catch (e) {
+      console.error('[Login] Failed to save local session', e);
+      // Critical Fallback: AsyncStorage
+      await AsyncStorage.setItem('FALLBACK_SESSION', JSON.stringify({
+         id: finalId, name: finalName, email: finalEmail 
+      })).catch(() => {});
+    }
+
+    // 3. Initial Data Pull (Best Effort)
     try {
       const { syncBothWays } = require('../services/syncManager');
       await Promise.race([
         syncBothWays(),
-        new Promise((_, rej) => setTimeout(() => rej(new Error('Initial sync timed out')), 4000)),
-      ]).catch((e) => {
-        console.warn('[Login] initial sync failed or timed out', (e as any)?.message || String(e));
-      });
+        new Promise((_, rej) => setTimeout(() => rej(new Error('Sync timeout')), 3000)),
+      ]);
     } catch (e) {
-      console.warn('[Login] failed to start initial sync', e);
-    }
-
-    setSyncing(false);
-    try {
-      console.log('[Login] navigating to Main');
+      console.log('[Login] Initial sync skipped/timed out (backgrounding)');
+    } finally {
+      setSyncing(false);
+      // 4. Navigation
       navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
-    } catch (e) {
-      console.warn('[Login] navigation.reset failed', e);
     }
   };
+
+  // --- Handlers ---
 
   const onSignInPress = async () => {
     if (!isLoaded) return;
@@ -231,201 +184,99 @@ const LoginScreen = () => {
 
     setLoading(true);
     try {
-      const completeSignIn = await signIn.create({
-        identifier: email,
-        password,
-      });
+      const result = await signIn.create({ identifier: email, password });
 
-      // This is for simple email/password.
-      // If 2FA is enabled, you'd need to handle 'needs_second_factor' status.
-      if (completeSignIn.status === 'complete') {
-        await setActive({ session: completeSignIn.createdSessionId });
-
-        // We can't easily get the user object synchronously from signIn result
-        // effectively without a fetch, but let's pass what we know.
-        // Actually, we can get it from the session user later,
-        // but let's rely on the bridged info we have.
-        const uid = (completeSignIn as any).createdUserId;
-        await handleSyncAndNavigate(uid, email, 'User');
+      if (result.status === 'complete') {
+        await setActive({ session: result.createdSessionId });
+        // The useEffect hook will detect the new session and trigger handleSyncAndNavigate
+        // We return here to avoid race conditions
+        return; 
       } else {
-        Alert.alert('Login Info', 'Further verification required. Please check your email.');
+        Alert.alert('Verification Required', 'Please check your email for verification steps.');
+        setLoading(false);
       }
     } catch (err: any) {
-      console.error('[Login] signIn.create error', err);
-      // Clerk returns structured errors like { clerkError: true, code, errors: [...] }
-      const clerkCode = err?.code || (err?.errors && err.errors[0]?.code);
-      const clerkMessage =
-        err?.message || (err?.errors && err.errors[0]?.message) || 'Unexpected error during login';
-
-      if (clerkCode === 'strategy_for_user_invalid') {
-        Alert.alert(
-          'Login Failed',
-          'This account was created with a social provider and cannot sign in with a password. Please use Sign in with GitHub / Google or reset your password.'
-        );
+      console.error('[Login] Error:', err);
+      const msg = err.errors?.[0]?.message || err.message || 'Login failed';
+      
+      if (err.errors?.[0]?.code === 'strategy_for_user_invalid') {
+        Alert.alert('Login Failed', 'This account uses Social Login (Google/GitHub). Please use the buttons below.');
       } else {
-        Alert.alert('Login Failed', clerkMessage);
+        Alert.alert('Login Failed', msg);
       }
-    } finally {
       setLoading(false);
     }
   };
 
   const onSocialLogin = async (strategy: 'google' | 'github') => {
-    if (!isLoaded) return;
+    if (!isLoaded || loading) return;
     setLoading(true);
+
     try {
       const startFlow = strategy === 'google' ? startGoogleFlow : startGithubFlow;
-      console.log('Starting OAuth flow for', strategy);
-
-      let flowResult: any = null;
-      try {
-        // If Clerk already has a session, don't start a new flow — use existing
-        if (isSignedIn) {
-          console.log('[LoginScreen] startOAuthFlow skipped: already signed in');
-          // Let the existing-session effect handle sync/navigation
-          setLoading(false);
-          return;
-        }
-
-        // Explicitly provide the native redirect URL for standalone / dev-client builds.
-        // Use the app scheme `dhandiary://oauth-callback` and do NOT use the Expo proxy.
-        flowResult = await startFlow({ redirectUrl: 'dhandiary://oauth-callback' });
-      } catch (e: any) {
-        console.error('startFlow threw', e);
-        if (e && (e as any).stack) console.error((e as any).stack);
-
-        const text = String((e && (e.message || e)) || '');
-        if (
-          text.toLowerCase().includes('already signed in') ||
-          text.toLowerCase().includes("you're already signed in")
-        ) {
-          console.log(
-            '[LoginScreen] startFlow error: already signed in — deferring to existing session handler'
-          );
-          setLoading(false);
-          return;
-        }
-
-        throw e;
-      }
-      console.log('OAuth startFlow result:', flowResult);
-
-      // If Clerk returns a URL, open it in the browser (fallback)
-      if (flowResult && typeof flowResult.url === 'string') {
-        try {
-          await WebBrowser.openBrowserAsync(flowResult.url);
-        } catch (e) {
-          console.warn('Failed to open OAuth URL in browser', e);
-        }
-      }
-
-      const { createdSessionId, signIn, signUp, setActive } = flowResult || {};
+      
+      const { createdSessionId, setActive: setSession, signIn: signInObj, signUp: signUpObj } = await startFlow({
+        redirectUrl: 'dhandiary://oauth-callback',
+      });
 
       if (createdSessionId) {
-        try {
-          await setActive!({ session: createdSessionId });
-        } catch (e) {
-          console.warn('setActive failed after OAuth', e);
-        }
-
-        // For OAuth, we might need to fetch the user details if they aren't readily available
-        // Clerk usually populates basic info.
-        // We'll optimistically try to sync.
-        // Actually, for OAuth, the email might be in signIn.identifier or we rely on syncClerkUserToNeon to fetch/upsert?
-        // Note: `syncClerkUserToNeon` takes {id, email, name}.
-        // The `useUser()` hook would give us this, but handleSyncAndNavigate is async.
-        // A better approach for OAuth implies we are logged in.
-        // The App wrapper `ClerkProvider` -> `useAuth` user object will populate.
-        // BUT we want to force the Neon sync *before* navigating.
-
-        // We can use the return values from startFlow carefully.
-        // If it was a sign up, `signUp` is populated. If sign in, `signIn`.
-        const userObj = signIn || signUp || {};
-        const uid = (userObj as any)?.createdUserId || (userObj as any)?.userData?.id || null;
-        // OAuth might return email in a different spot depending on provider?
-        // Let's assume the user is valid.
-        // A safer bet: The `syncbothWays` or `App.tsx` logic also handles checks,
-        // but here we want to ensure the DB row exists.
-
-        // We can't easily get the email *address* string here without making a call if it's not in the response.
-        // However, `syncClerkUserToNeon` REQUIRES email.
-        // Let's defer strict syncing to `App.tsx` or `useUser` hook effect
-        // OR try to extract it from the object if possible.
-        // `signIn.userData.identifier` usually holds it.
-
-        // Try multiple places for an email value safely
-        let bestEmail: string | null = null;
-        try {
-          if (signIn && (signIn as any).userData && (signIn as any).userData.identifier) {
-            bestEmail = (signIn as any).userData.identifier;
-          } else if (signUp && (signUp as any).emailAddress) {
-            bestEmail = (signUp as any).emailAddress;
-          } else if ((userObj as any).emailAddresses && (userObj as any).emailAddresses.length) {
-            bestEmail = (userObj as any).emailAddresses[0]?.emailAddress || null;
-          }
-        } catch (e) {
-          console.warn('Error extracting email from OAuth result', e);
-          bestEmail = null;
-        }
-
-        if (uid && bestEmail) {
-          await handleSyncAndNavigate(uid, bestEmail, (userObj as any)?.firstName || null);
-        } else {
-          console.warn('OAuth flow returned incomplete user data, uid=', uid, 'email=', bestEmail);
-          const rootNav: any = (navigation as any).getParent
-            ? (navigation as any).getParent()
-            : null;
-          try {
-            navigation.navigate('Auth' as any);
-          } catch (e) {
-            console.warn('[LoginScreen] navigation.navigate(Auth) failed', e);
-          }
+        await setSession!({ session: createdSessionId });
+        
+        // Optimistic Sync Trigger
+        // Try to extract user info immediately to speed up the UX
+        const userData = signInObj?.userData || signUpObj;
+        const uid = signInObj?.createdUserId || signUpObj?.createdUserId;
+        const uEmail = (userData as any)?.identifier || (userData as any)?.emailAddress;
+        
+        // If we can't extract it, the useEffect hook will catch it anyway.
+        // But if we can, we start sync sooner.
+        if (uid && uEmail) {
+             // Let the useEffect handle it to be safe and consistent
         }
       } else {
-        // Flow did not immediately create a session — let background hooks handle it,
-        // but inform the user we started the flow.
-        console.log('OAuth flow started but no immediate session; waiting for Clerk update');
+        // Flow cancelled or incomplete
         setLoading(false);
       }
     } catch (err: any) {
-      console.error('OAuth Error', err);
-      const msg =
-        (err && (err.message || (typeof err === 'string' ? err : null))) ||
-        String(err) ||
-        'Unexpected error during social login';
-      Alert.alert('Social Login Failed', msg);
+      console.log('OAuth Error:', err);
+      // Don't alert if user just cancelled
+      if (!err.message?.includes('cancelled')) {
+        Alert.alert('Social Login Failed', 'Could not complete login. Please try again.');
+      }
       setLoading(false);
     }
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: '#fff' }]}>
+    <View style={[styles.container]}>
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
-      <LinearGradient colors={['#ffffff', '#f8fafc']} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={['#ffffff', '#f1f5f9']} style={StyleSheet.absoluteFill} />
 
       <SafeAreaView style={{ flex: 1 }}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 100}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 20}
         >
           <ScrollView
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="interactive"
+            showsVerticalScrollIndicator={false}
           >
-            {/* Header / Logo */}
+            {/* Logo Section */}
             <View style={styles.logoSection}>
-              <Image
-                source={require('../../assets/splash-icon.png')}
-                style={styles.logo}
-                resizeMode="contain"
-              />
+              <View style={styles.logoContainer}>
+                <Image
+                  source={require('../../assets/splash-icon.png')}
+                  style={styles.logo}
+                  resizeMode="contain"
+                />
+              </View>
               <Text style={styles.appName}>DhanDiary</Text>
               <Text style={styles.tagline}>Finance, Simplified</Text>
             </View>
 
-            {/* Login Form */}
+            {/* Login Card */}
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Welcome Back</Text>
 
@@ -434,7 +285,7 @@ const LoginScreen = () => {
                 <TextInput
                   style={styles.input}
                   placeholder="Email Address"
-                  placeholderTextColor="#64748b"
+                  placeholderTextColor="#94a3b8"
                   value={email}
                   onChangeText={setEmail}
                   autoCapitalize="none"
@@ -443,27 +294,17 @@ const LoginScreen = () => {
               </View>
 
               <View style={styles.inputContainer}>
-                <Ionicons
-                  name="lock-closed-outline"
-                  size={20}
-                  color="#64748b"
-                  style={styles.inputIcon}
-                />
+                <Ionicons name="lock-closed-outline" size={20} color="#64748b" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   placeholder="Password"
-                  placeholderTextColor="#64748b"
+                  placeholderTextColor="#94a3b8"
                   value={password}
                   onChangeText={setPassword}
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
-                  autoCorrect={false}
                 />
-                <TouchableOpacity
-                  onPress={() => setShowPassword((s) => !s)}
-                  style={styles.eyeBtn}
-                  accessibilityLabel="Toggle password visibility"
-                >
+                <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
                   <Ionicons name={showPassword ? 'eye' : 'eye-off'} size={20} color="#64748b" />
                 </TouchableOpacity>
               </View>
@@ -480,19 +321,20 @@ const LoginScreen = () => {
                 )}
               </TouchableOpacity>
 
-              {/* Social Login Divider */}
+              {/* Divider */}
               <View style={styles.dividerContainer}>
                 <View style={styles.line} />
                 <Text style={styles.dividerText}>OR CONTINUE WITH</Text>
                 <View style={styles.line} />
               </View>
 
+              {/* Social Buttons */}
               <View style={styles.socialRow}>
                 <TouchableOpacity style={styles.socialBtn} onPress={() => onSocialLogin('google')}>
-                  <FontAwesome name="google" size={22} color="#DB4437" />
+                  <FontAwesome name="google" size={24} color="#DB4437" />
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.socialBtn} onPress={() => onSocialLogin('github')}>
-                  <FontAwesome name="github" size={22} color="#111111" />
+                  <FontAwesome name="github" size={24} color="#181717" />
                 </TouchableOpacity>
               </View>
             </View>
@@ -508,7 +350,7 @@ const LoginScreen = () => {
         </KeyboardAvoidingView>
       </SafeAreaView>
 
-      {/* Syncing Overlay */}
+      {/* Sync Overlay */}
       {syncing && (
         <View style={styles.overlay}>
           <View style={styles.syncBox}>
@@ -521,103 +363,102 @@ const LoginScreen = () => {
   );
 };
 
-export default LoginScreen;
-
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, backgroundColor: '#fff' },
   scrollContent: {
     flexGrow: 1,
     padding: 24,
     justifyContent: 'center',
-    minHeight: '100%',
+    paddingBottom: 40,
   },
   logoSection: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: 32,
+  },
+  logoContainer: {
+    shadowColor: '#2563eb',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    marginBottom: 16,
   },
   logo: {
     width: 80,
     height: 80,
-    marginBottom: 16,
     borderRadius: 20,
   },
   appName: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: '800',
     color: '#0f172a',
+    letterSpacing: -0.5,
     marginBottom: 4,
   },
   tagline: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#64748b',
+    fontWeight: '500',
   },
   card: {
     backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 18,
+    borderRadius: 24,
+    padding: 24,
+    shadowColor: '#64748b',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
+    elevation: 4,
     borderWidth: 1,
-    borderColor: 'rgba(15, 23, 42, 0.04)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 2,
+    borderColor: 'rgba(241, 245, 249, 1)',
   },
   cardTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 18,
+    fontWeight: '700',
     color: '#0f172a',
-    marginBottom: 24,
+    marginBottom: 20,
     textAlign: 'center',
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#f8fafc',
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(15, 23, 42, 0.06)',
-    marginBottom: 12,
-    paddingHorizontal: 12,
-    height: 52,
+    borderColor: '#e2e8f0',
+    marginBottom: 16,
+    paddingHorizontal: 14,
+    height: 54,
   },
   inputIcon: { marginRight: 12 },
-  input: { flex: 1, color: '#0f172a', fontSize: 16 },
-  eyeBtn: {
-    marginLeft: 8,
-    padding: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  input: { flex: 1, color: '#0f172a', fontSize: 16, height: '100%' },
+  eyeBtn: { padding: 8 },
   primaryBtn: {
     backgroundColor: '#2563eb',
-    borderRadius: 12,
-    height: 52,
+    borderRadius: 14,
+    height: 54,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 8,
     shadowColor: '#2563eb',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 3,
   },
   disabledBtn: { opacity: 0.7 },
-  primaryBtnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-
+  primaryBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   dividerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 32,
-    marginBottom: 24,
+    marginVertical: 24,
   },
-  line: { flex: 1, height: 1, backgroundColor: '#e6eef8' },
+  line: { flex: 1, height: 1, backgroundColor: '#e2e8f0' },
   dividerText: {
     color: '#94a3b8',
     paddingHorizontal: 12,
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 1,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   socialRow: {
     flexDirection: 'row',
@@ -625,48 +466,55 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   socialBtn: {
-    width: 52,
-    height: 52,
-    borderRadius: 12,
+    width: 56,
+    height: 56,
+    borderRadius: 16,
     backgroundColor: '#fff',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(15,23,42,0.06)',
+    borderColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 32,
+    marginTop: 24,
   },
   footerText: { color: '#64748b', fontSize: 14 },
   linkText: {
     color: '#2563eb',
-    fontWeight: '600',
+    fontWeight: '700',
     fontSize: 14,
     marginLeft: 6,
   },
-
-  // Overlay
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.8)',
+    backgroundColor: 'rgba(255,255,255,0.9)',
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 100,
+    zIndex: 999,
   },
   syncBox: {
-    backgroundColor: '#1e293b',
-    padding: 24,
-    borderRadius: 16,
+    backgroundColor: '#fff',
+    padding: 32,
+    borderRadius: 20,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#3b82f6',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 10,
   },
   syncText: {
-    color: '#fff',
+    color: '#0f172a',
     marginTop: 16,
     fontSize: 16,
     fontWeight: '600',
   },
 });
+
+export default LoginScreen;
