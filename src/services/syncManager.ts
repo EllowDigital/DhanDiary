@@ -91,6 +91,8 @@ const chunkArray = <T>(array: T[], size: number): T[][] => {
 const isLocalDbDisabledError = (err: any) =>
   String(err?.message || '').includes('Offline/local DB disabled');
 
+const isUuid = (s: any) =>
+  typeof s === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(s);
 
 export const subscribeSyncConflicts = (listener: SyncConflictListener) => {
   conflictListeners.add(listener);
@@ -127,6 +129,10 @@ export const pullRemote = async () => {
   const session = await getSession();
   console.log('[pullRemote] using session id=', session?.id);
   if (!session || !session.id) return { pulled: 0, merged: 0 };
+  if (!isUuid(session.id)) {
+    console.log('[pullRemote] session id is not a valid Neon UUID, skipping pull');
+    return { pulled: 0, merged: 0 };
+  }
 
   try {
     // Queueing disabled in online-only mode; nothing to flush.
@@ -154,57 +160,57 @@ export const pullRemote = async () => {
     for (const r of rows) {
       try {
         // 1. Handle Remote Deletion
-          if (r.deleted) {
-            // Attempt to find local mapping if local DB is available
-            let localForDeleted: any = null;
+        if (r.deleted) {
+          // Attempt to find local mapping if local DB is available
+          let localForDeleted: any = null;
+          try {
+            localForDeleted = await getLocalByRemoteId(String(r.id));
+          } catch (e: any) {
+            if (isLocalDbDisabledError(e)) {
+              localForDeleted = null;
+            } else throw e;
+          }
+          if (!localForDeleted && r.client_id) {
             try {
-              localForDeleted = await getLocalByRemoteId(String(r.id));
+              localForDeleted = await getLocalByClientId(String(r.client_id));
+            } catch (e: any) {
+              if (isLocalDbDisabledError(e)) localForDeleted = null;
+              else throw e;
+            }
+          }
+
+          if (localForDeleted && (localForDeleted as any).need_sync) {
+            // Local was modified while remote was deleted. Revive remote.
+            const revivedUpdatedAt = new Date().toISOString();
+            await Q(
+              `UPDATE cash_entries SET deleted = false, need_sync = false, updated_at = $1::timestamptz WHERE id = $2`,
+              [revivedUpdatedAt, r.id]
+            );
+            // Attempt to mark local entry as synced; ignore if local DB disabled
+            try {
+              await markEntrySynced(
+                (localForDeleted as any).local_id,
+                String(r.id),
+                undefined,
+                revivedUpdatedAt
+              );
             } catch (e: any) {
               if (isLocalDbDisabledError(e)) {
-                localForDeleted = null;
+                console.log('[pullRemote] local DB disabled; skipping markEntrySynced');
               } else throw e;
             }
-            if (!localForDeleted && r.client_id) {
-              try {
-                localForDeleted = await getLocalByClientId(String(r.client_id));
-              } catch (e: any) {
-                if (isLocalDbDisabledError(e)) localForDeleted = null;
-                else throw e;
-              }
+          } else {
+            // Accept deletion: try to remove local mapping if possible
+            try {
+              await markLocalDeletedByRemoteId(String(r.id));
+            } catch (e: any) {
+              if (isLocalDbDisabledError(e)) {
+                // local DB disabled — nothing to do
+              } else throw e;
             }
-
-            if (localForDeleted && (localForDeleted as any).need_sync) {
-              // Local was modified while remote was deleted. Revive remote.
-              const revivedUpdatedAt = new Date().toISOString();
-              await Q(
-                `UPDATE cash_entries SET deleted = false, need_sync = false, updated_at = $1::timestamptz WHERE id = $2`,
-                [revivedUpdatedAt, r.id]
-              );
-              // Attempt to mark local entry as synced; ignore if local DB disabled
-              try {
-                await markEntrySynced(
-                  (localForDeleted as any).local_id,
-                  String(r.id),
-                  undefined,
-                  revivedUpdatedAt
-                );
-              } catch (e: any) {
-                if (isLocalDbDisabledError(e)) {
-                  console.log('[pullRemote] local DB disabled; skipping markEntrySynced');
-                } else throw e;
-              }
-            } else {
-              // Accept deletion: try to remove local mapping if possible
-              try {
-                await markLocalDeletedByRemoteId(String(r.id));
-              } catch (e: any) {
-                if (isLocalDbDisabledError(e)) {
-                  // local DB disabled — nothing to do
-                } else throw e;
-              }
-            }
-            continue;
           }
+          continue;
+        }
 
         // 2. Handle Merges / Upserts
         let local: any = null;
@@ -367,6 +373,10 @@ export const syncBothWays = async () => {
     const session = await getSession();
     if (!session || !session.id)
       return { pushed: 0, updated: 0, deleted: 0, pulled: 0, merged: 0, total: 0 };
+    if (!isUuid(session.id)) {
+      console.log('[syncBothWays] session id is not a valid Neon UUID, skipping full sync');
+      return { pushed: 0, updated: 0, deleted: 0, pulled: 0, merged: 0, total: 0 };
+    }
 
     // --- Optimization: Quick Probe ---
     // If we haven't synced before, check if remote has ANY data before doing heavy lifting

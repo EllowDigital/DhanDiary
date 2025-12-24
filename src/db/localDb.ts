@@ -28,8 +28,7 @@ export const markEntryDeleted = async (..._args: any[]) => {
 export const markEntrySynced = async (..._args: any[]) => {
   return null;
 };
-export const getEntryByLocalId = async (..._args: any[]): Promise<any | null> =>
-  null;
+export const getEntryByLocalId = async (..._args: any[]): Promise<any | null> => null;
 export const getLocalByRemoteId = async (..._args: any[]): Promise<any | null> => null;
 export const upsertLocalFromRemote = async (..._args: any[]) => {
   return null;
@@ -38,7 +37,9 @@ export const getLocalByClientId = async (..._args: any[]): Promise<any | null> =
 export const getUnsyncedEntries = async (..._args: any[]): Promise<any[]> => [];
 
 // eslint-disable-next-line require-yield
-export const fetchEntriesGenerator = async function* (..._args: any[]): AsyncGenerator<any, void, unknown> {
+export const fetchEntriesGenerator = async function* (
+  ..._args: any[]
+): AsyncGenerator<any, void, unknown> {
   // yields nothing in online-only mode
   return;
 };

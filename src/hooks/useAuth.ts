@@ -93,12 +93,33 @@ export const useAuth = () => {
 
           const name = (cUser.fullName as string) || (cUser.full_name as string) || '';
           if (id) {
-            // update in-memory and persist locally (best-effort)
-            setUser({ id, name: name || '', email: email || '', image: image || null });
-            try {
-              // don't await to avoid blocking startup
-              void saveSession(id, name || '', email || '');
-            } catch (e) {}
+            // Map Clerk user -> Neon (bridge) user and persist Neon id.
+            (async () => {
+              try {
+                const { syncClerkUserToNeon } = require('../services/clerkUserSync');
+                const bridge = await syncClerkUserToNeon({
+                  id,
+                  emailAddresses: [{ emailAddress: email }],
+                  fullName: name,
+                });
+                const uid = bridge?.uuid || id;
+                setUser({
+                  id: uid,
+                  name: bridge?.name || name || '',
+                  email: bridge?.email || email || '',
+                  image: image || null,
+                });
+                try {
+                  void saveSession(uid, bridge?.name || name || '', bridge?.email || email || '');
+                } catch (e) {}
+              } catch (e) {
+                // Fallback: persist clerk id if bridge fails
+                setUser({ id, name: name || '', email: email || '', image: image || null });
+                try {
+                  void saveSession(id, name || '', email || '');
+                } catch (ee) {}
+              }
+            })();
           }
         }
       } catch (e) {

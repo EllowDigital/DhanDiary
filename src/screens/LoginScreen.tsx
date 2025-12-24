@@ -162,14 +162,15 @@ const LoginScreen = () => {
         console.warn('[Login] bridge background sync failed/timeout', e?.message || e);
       });
 
-    // 2. Persist session immediately with Clerk id so user can continue.
-    const immediateId = userId || `local-${Date.now()}`;
+    // 2. Persist a temporary fallback session so the UI can continue.
+    // Do NOT persist the Clerk id as the authoritative session (it is not a Neon UUID).
+    const immediateId = `fallback_${Date.now()}`;
     try {
       await Promise.race([
         saveSession(immediateId, userName || 'User', userEmail),
         new Promise((res) => setTimeout(() => res(null), 1500)),
       ]);
-      console.log('[Login] session saved (immediate)');
+      console.log('[Login] fallback session saved (immediate)');
     } catch (e) {
       console.warn('[Login] immediate save failed, falling back to AsyncStorage', e);
       try {
