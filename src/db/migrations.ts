@@ -1,4 +1,4 @@
-// Migrations disabled when SQLite is removed. Keep API for compatibility.
+// Migrations removed (no local DB). Keep API for compatibility.
 export const runMigrations = async () => {
   // No-op
   return;

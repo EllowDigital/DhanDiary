@@ -25,7 +25,7 @@ import { useAuth } from './src/hooks/useAuth';
 import { checkNeonConnection } from './src/api/neonClient';
 import { useUser } from '@clerk/clerk-expo';
 import { syncClerkUserToNeon } from './src/services/clerkUserSync';
-import { saveSession as saveLocalSession } from './src/db/localDb';
+import { saveSession as saveLocalSession } from './src/db/session';
 import { BiometricAuth } from './src/components/BiometricAuth';
 import tokenCache from './src/utils/tokenCache';
 
@@ -165,7 +165,7 @@ function AppWithDb() {
 
   const queryClient = useMemo(() => new QueryClient(), []);
 
-  // No local SQLite: app is online-only. Mark DB ready immediately.
+  // App is online-only. Mark DB ready immediately.
   const initializeDatabase = useCallback(async () => {
     setDbReady(true);
     setDbInitError(null);
@@ -195,7 +195,7 @@ function AppWithDb() {
     }
   }, []);
 
-  // Run DB init on mount (no-op for local SQLite)
+  // Run DB init on mount (no-op)
   useEffect(() => {
     initializeDatabase();
   }, [initializeDatabase]);

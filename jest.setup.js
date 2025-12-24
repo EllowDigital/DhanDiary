@@ -46,7 +46,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   multiRemove: jest.fn(),
 }));
 
-// expo-sqlite removed from project; do not mock it here.
+// No runtime local DB module to mock here.
 
 // Provide a benign mock for the local DB layer (tests expect localDb APIs).
 try {

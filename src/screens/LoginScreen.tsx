@@ -78,7 +78,7 @@ const LoginScreen = () => {
 
   // --- Effects ---
 
-  // 1. Pre-warm Neon DB connection (no local SQLite)
+  // 1. Pre-warm Neon DB connection (online-only)
   useEffect(() => {
     warmNeonConnection().catch(() => {});
   }, []);
