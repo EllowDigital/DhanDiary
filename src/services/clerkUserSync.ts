@@ -30,10 +30,12 @@ export const syncClerkUserToNeon = async (clerkUser: {
   emailAddresses: { emailAddress: string }[];
   fullName?: string | null;
 }): Promise<BridgeUser> => {
-  const email = clerkUser.emailAddresses[0]?.emailAddress;
-  if (!email) throw new Error('Clerk user must have an email');
+  const rawEmail = clerkUser.emailAddresses[0]?.emailAddress;
+  if (!rawEmail) throw new Error('Clerk user must have an email');
 
-  const name = clerkUser.fullName || 'User';
+  // Normalize email to avoid case/dot mismatches from providers
+  const email = String(rawEmail).trim().toLowerCase();
+  const name = (clerkUser.fullName || 'User')?.toString().trim() || 'User';
 
   try {
     // 1. FAST PATH: Check if we already know this Clerk ID
@@ -67,9 +69,18 @@ export const syncClerkUserToNeon = async (clerkUser: {
         updated_at = NOW()
       RETURNING id, email, name, clerk_id
     `;
+    // perform upsert with normalized email
+    await query(upsertSql, [email, clerkUser.id, name]);
 
-    const result = await query<DbUser>(upsertSql, [email, clerkUser.id, name]);
-    const user = result[0];
+    // Read authoritative record back from DB to ensure we don't overwrite
+    // any existing name that may have been edited directly in Neon.
+    const finalRows = await query<DbUser>('SELECT id, clerk_id, email, name FROM users WHERE lower(email) = $1 LIMIT 1', [email]);
+    const user = finalRows && finalRows.length ? finalRows[0] : null;
+
+    if (!user) {
+      // Fallback to generated offline record if select failed
+      return await createOfflineFallback(clerkUser.id, email, name);
+    }
 
     return {
       uuid: user.id,

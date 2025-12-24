@@ -334,6 +334,10 @@ const AccountManagementScreen = () => {
                   <Text style={styles.heroEmail}>
                     {user?.primaryEmailAddress?.emailAddress || 'No email linked'}
                   </Text>
+                  <Text style={styles.emailNote}>
+                    Changing your email requires verification via Clerk — you'll receive a
+                    verification email and the change will take effect after confirmation.
+                  </Text>
                   <Text style={styles.authMethod}>
                     {hasPassword ? 'Password Authenticated' : 'Social Login'}
                   </Text>
@@ -578,6 +582,13 @@ const styles = StyleSheet.create({
   heroEmail: {
     fontSize: 14,
     color: colors.muted,
+  },
+  emailNote: {
+    color: colors.muted,
+    fontSize: 12,
+    marginTop: 8,
+    lineHeight: 16,
+    maxWidth: '92%',
   },
   authMethod: {
     fontSize: 12,
