@@ -5,7 +5,10 @@ const uuidValidate = (s: any) =>
 
 const uuidv4 = () => {
   // Simple v4 generator (sufficient for client-side IDs)
-  const hex = () => Math.floor((1 + Math.random()) * 0x10000).toString(16).substring(1);
+  const hex = () =>
+    Math.floor((1 + Math.random()) * 0x10000)
+      .toString(16)
+      .substring(1);
   return `${hex()}${hex()}-${hex()}-${hex()}-${hex()}-${hex()}${hex()}${hex()}`;
 };
 

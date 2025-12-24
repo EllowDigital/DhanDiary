@@ -309,10 +309,10 @@ const flushPendingProfileUpdates = async () => {
         // Guard: ensure user_id passed to SQL is a valid UUID. If it's not, set to null
         // so the query does not attempt to cast an invalid string to UUID.
         const safeUserId = p.user_id && isUuid(p.user_id) ? p.user_id : null;
-        const existing = await Q('SELECT id FROM users WHERE email = $1 AND (id <> $2 OR $2 IS NULL) LIMIT 1', [
-          p.email,
-          safeUserId,
-        ]);
+        const existing = await Q(
+          'SELECT id FROM users WHERE email = $1 AND (id <> $2 OR $2 IS NULL) LIMIT 1',
+          [p.email, safeUserId]
+        );
         if (existing && existing.length > 0) continue; // Skip on conflict
       }
 
