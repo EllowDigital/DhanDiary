@@ -58,12 +58,16 @@ const formatCompact = (val: number, currency: string = 'INR') => {
   if (currency === 'INR' || currency === '₹') {
     if (abs >= 10000000) return prefix + (val / 10000000).toFixed(2) + 'Cr';
     if (abs >= 100000) return prefix + (val / 100000).toFixed(2) + 'L';
+    // For typical amounts (including 1,000), show full localized number instead of compact 'k'
+    return prefix + Math.round(val).toLocaleString();
   } else {
     if (abs >= 1000000000) return prefix + (val / 1000000000).toFixed(2) + 'B';
     if (abs >= 1000000) return prefix + (val / 1000000).toFixed(2) + 'M';
   }
 
-  if (abs >= 1000) return prefix + (val / 1000).toFixed(1) + 'k';
+  // For other currencies, keep previous compacting behavior for very large numbers,
+  // but prefer readable localized numbers for typical values.
+  if (abs >= 1000) return prefix + Math.round(val).toLocaleString();
   return prefix + Math.round(val).toLocaleString();
 };
 
