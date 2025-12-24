@@ -74,7 +74,10 @@ export const syncClerkUserToNeon = async (clerkUser: {
 
     // Read authoritative record back from DB to ensure we don't overwrite
     // any existing name that may have been edited directly in Neon.
-    const finalRows = await query<DbUser>('SELECT id, clerk_id, email, name FROM users WHERE lower(email) = $1 LIMIT 1', [email]);
+    const finalRows = await query<DbUser>(
+      'SELECT id, clerk_id, email, name FROM users WHERE lower(email) = $1 LIMIT 1',
+      [email]
+    );
     const user = finalRows && finalRows.length ? finalRows[0] : null;
 
     if (!user) {

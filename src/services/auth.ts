@@ -7,11 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { query } from '../api/neonClient';
 import { saveSession, getSession } from '../db/session';
-import {
-  addPendingProfileUpdate,
-  clearAllData,
-  wipeLocalDatabase,
-} from '../db/localDb';
+import { addPendingProfileUpdate, clearAllData, wipeLocalDatabase } from '../db/localDb';
 
 // --- Types ---
 
@@ -146,7 +142,7 @@ export const registerOnline = async (
     const user = result[0];
     await saveSession(user.id, user.name || '', user.email);
     await prepareOfflineWorkspace(user.id);
-    
+
     return { id: user.id, name: user.name || '', email: user.email };
   } catch (err: any) {
     if (err?.code === '23505' || err?.message?.includes('unique constraint')) {
@@ -162,7 +158,9 @@ export const loginOnline = async (email: string, password: string): Promise<Auth
   }
 
   const result = await withTimeout(
-    query<UserRow>('SELECT id, name, email, password_hash FROM users WHERE email = $1 LIMIT 1', [email]),
+    query<UserRow>('SELECT id, name, email, password_hash FROM users WHERE email = $1 LIMIT 1', [
+      email,
+    ]),
     20_000
   );
 
@@ -198,9 +196,10 @@ export const logout = async (): Promise<boolean> => {
     const sync = require('./syncManager'); // Ensure this path matches your file structure
     if (sync) {
       if (typeof sync.stopAutoSyncListener === 'function') sync.stopAutoSyncListener();
-      if (typeof sync.stopForegroundSyncScheduler === 'function') sync.stopForegroundSyncScheduler();
+      if (typeof sync.stopForegroundSyncScheduler === 'function')
+        sync.stopForegroundSyncScheduler();
       if (typeof sync.stopBackgroundFetch === 'function') await sync.stopBackgroundFetch();
-      
+
       // Attempt a final quick sync, don't wait too long
       if (typeof sync.syncBothWays === 'function') {
         await withTimeout(sync.syncBothWays(), 3000).catch(() => {});
@@ -227,7 +226,7 @@ export const logout = async (): Promise<boolean> => {
     const { notifyEntriesChanged } = require('../utils/dbEvents');
     notifyEntriesChanged();
   });
-  
+
   await safeRun(async () => {
     const { notifySessionChanged } = require('../utils/sessionEvents');
     await notifySessionChanged();
@@ -242,7 +241,9 @@ export const logout = async (): Promise<boolean> => {
       } else if (typeof clerk.useAuth === 'function') {
         // useAuth() is a hook, cannot be used here outside a component.
         // We rely on direct signOut or the AuthContext reference if stored elsewhere.
-        console.warn('[Auth] Cannot use hook inside logout function. Ensure Clerk handles token storage clearing automatically.');
+        console.warn(
+          '[Auth] Cannot use hook inside logout function. Ensure Clerk handles token storage clearing automatically.'
+        );
       }
     }
   });
@@ -261,9 +262,9 @@ export const logout = async (): Promise<boolean> => {
 export const deleteAccount = async () => {
   const NEON_URL = resolveNeonUrl();
   const session = await getSession();
-  
+
   if (!session) throw new Error('No active session found');
-  
+
   let remoteDeleted = 0;
   let userDeleted = 0;
 
@@ -283,7 +284,6 @@ export const deleteAccount = async () => {
         10_000
       );
       if (userRes && Array.isArray(userRes)) userDeleted = userRes.length;
-
     } catch (err) {
       console.warn('[Auth] Failed to connect or delete remote account:', err);
       // Proceed to wipe local data anyway
@@ -299,7 +299,7 @@ export const deleteAccount = async () => {
     if (clerk && typeof clerk.signOut === 'function') {
       await clerk.signOut();
     }
-    // Note: Actual user deletion usually requires a backend API call to Clerk 
+    // Note: Actual user deletion usually requires a backend API call to Clerk
     // rather than a client-side call, unless using useUser().delete().
   } catch (e) {
     console.warn('[Auth] Clerk clean up failed', e);
@@ -385,18 +385,18 @@ export const updateProfileWithClerk = async (opts: {
   if (clerkUser && typeof clerkUser.update === 'function') {
     try {
       const updatePayload: any = {};
-      
+
       if (updates.name !== undefined) {
         const parts = (updates.name || '').trim().split(/\s+/);
         updatePayload.firstName = parts[0] || updates.name || '';
         updatePayload.lastName = parts.length > 1 ? parts.slice(1).join(' ') : '';
       }
-      
+
       // Updating email in Clerk usually requires a verification flow.
       // We attempt it here, but it might throw if not verified.
       if (updates.email !== undefined) {
-         // This is highly dependent on Clerk configuration (strict vs loose)
-         // updatePayload.emailAddress = updates.email; 
+        // This is highly dependent on Clerk configuration (strict vs loose)
+        // updatePayload.emailAddress = updates.email;
       }
 
       if (Object.keys(updatePayload).length > 0) {
