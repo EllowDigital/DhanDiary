@@ -23,6 +23,7 @@ import FullScreenSpinner from '../components/FullScreenSpinner';
 import useDelayedLoading from '../hooks/useDelayedLoading';
 import { Image } from 'react-native';
 import dayjs from 'dayjs';
+import UserAvatar from '../components/UserAvatar';
 import Svg, { Defs, LinearGradient, Stop, Rect, Circle } from 'react-native-svg';
 import { LineChart, PieChart } from 'react-native-chart-kit';
 import { LocalEntry } from '../db/entries';
@@ -354,9 +355,13 @@ const HomeScreen = () => {
             )}
           </View>
         </View>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarInitial}>{user?.name?.[0]?.toUpperCase() || 'S'}</Text>
-        </View>
+        <UserAvatar
+          size={36}
+          name={user?.name}
+          imageUrl={user?.image}
+          onPress={() => navigation.navigate('Account')}
+          style={{ marginRight: 0 }}
+        />
       </View>
 
       {/* 2. HERO CARD */}

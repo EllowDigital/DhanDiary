@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 
 import { colors, spacing } from '../utils/design';
+import UserAvatar from '../components/UserAvatar';
 import { logout } from '../services/auth';
 import appConfig from '../../app.json';
 
@@ -144,11 +145,10 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
           ]}
         >
           <View style={styles.userHeader}>
-            <Image
-              source={
-                user?.imageUrl ? { uri: user.imageUrl } : require('../../assets/adaptive-icon.png')
-              }
-              style={styles.userAvatar}
+            <UserAvatar
+              size={44}
+              name={user?.fullName || user?.firstName}
+              imageUrl={user?.imageUrl}
             />
             <View style={styles.userInfo}>
               <Text style={styles.userName} numberOfLines={1}>
@@ -327,8 +327,8 @@ const styles = StyleSheet.create({
 
   /* USER HEADER */
   userHeader: {
-    paddingHorizontal: 24,
-    paddingVertical: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
     flexDirection: 'row',
     alignItems: 'center',
   },

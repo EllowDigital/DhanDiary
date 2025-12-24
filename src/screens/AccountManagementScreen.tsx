@@ -31,6 +31,7 @@ import { colors } from '../utils/design';
 import ScreenHeader from '../components/ScreenHeader';
 import { deleteAccount } from '../services/auth';
 import { syncClerkUserToNeon } from '../services/clerkUserSync';
+import UserAvatar from '../components/UserAvatar';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -313,14 +314,21 @@ const AccountManagementScreen = () => {
             <Animated.View style={{ opacity: fadeAnim }}>
               {/* HERO PROFILE ROW */}
               <View style={styles.heroRow}>
-                <View style={styles.heroAvatar}>
-                  <Text style={styles.heroAvatarText}>{userInitial}</Text>
-                  {user?.emailAddresses.some((e) => e.verification.status === 'verified') && (
-                    <View style={styles.verifiedBadge}>
-                      <MaterialIcon name="check" size={12} color="white" />
-                    </View>
-                  )}
+                <View style={[styles.heroAvatar, { width: 56, height: 56, borderRadius: 28 }]}> 
+                  <View style={{ position: 'relative' }}>
+                    <UserAvatar
+                      size={48}
+                      name={user?.fullName || user?.firstName}
+                      imageUrl={user?.imageUrl}
+                    />
+                    {user?.emailAddresses.some((e) => e.verification.status === 'verified') && (
+                      <View style={styles.verifiedBadge}>
+                        <MaterialIcon name="check" size={12} color="white" />
+                      </View>
+                    )}
+                  </View>
                 </View>
+
                 <View style={styles.heroInfo}>
                   <Text style={styles.heroName}>{user?.fullName || 'User'}</Text>
                   <Text style={styles.heroEmail}>

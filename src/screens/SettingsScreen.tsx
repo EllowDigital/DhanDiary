@@ -26,6 +26,7 @@ import { useToast } from '../context/ToastContext';
 import { colors, spacing } from '../utils/design';
 import ScreenHeader from '../components/ScreenHeader';
 import appConfig from '../../app.json';
+import UserAvatar from '../components/UserAvatar';
 
 // Safe Package Import
 let pkg: { version?: string } = {};
@@ -156,9 +157,6 @@ const SettingsScreen = () => {
             <Animated.View style={getAnimStyle(0)}>
               <View style={styles.profileCard}>
                 <View style={styles.profileRow}>
-                  <View style={styles.avatarContainer}>
-                    <Text style={styles.avatarText}>{userInitial}</Text>
-                  </View>
                   <View style={styles.profileInfo}>
                     <Text style={styles.profileName} numberOfLines={1}>
                       {user?.name || 'User'}

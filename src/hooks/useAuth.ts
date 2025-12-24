@@ -150,6 +150,7 @@ export const useAuth = () => {
 
     const id = cUser.id || cUser.userId || null;
     let email: string | null = null;
+    let image: string | null = null;
     try {
       if (cUser.primaryEmailAddress && cUser.primaryEmailAddress.emailAddress) {
         email = cUser.primaryEmailAddress.emailAddress;
@@ -159,6 +160,9 @@ export const useAuth = () => {
     } catch (e) {}
 
     const name = (cUser.fullName as string) || (cUser.full_name as string) || '';
+    try {
+      image = cUser.imageUrl || cUser.profileImageUrl || null;
+    } catch (e) {}
     if (!id) return;
 
     (async () => {
@@ -170,10 +174,10 @@ export const useAuth = () => {
         try {
           await saveSession(uid, bridge?.name || name || '', bridge?.email || email || '');
         } catch (e) {}
-        setUser({ id: uid, name: bridge?.name || name || '', email: bridge?.email || email || '' });
+        setUser({ id: uid, name: bridge?.name || name || '', email: bridge?.email || email || '', image: image || null });
       } catch (e) {
         // fallback to clerk identity
-        setUser({ id: id, name: name || '', email: email || '' });
+        setUser({ id: id, name: name || '', email: email || '', image: image || null });
         try {
           await saveSession(id, name || '', email || '');
         } catch (ee) {}
