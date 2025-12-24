@@ -220,7 +220,19 @@ export const query = async <T = any>(
 
       // Calculate backoff
       const backoff = Math.min(1000 * Math.pow(2, attempt), 10000);
-      bumpCircuit(attempt);
+              // Execute query via HTTP driver. Prefer explicit `.query(text, params)`
+              if (typeof (sql as any).query === 'function') {
+                const result: any = await withTimeout((sql as any).query(text, params), timeoutMs);
+                recordSuccess(Date.now() - start);
+                return result as T[];
+              } else if (typeof (sql as any) === 'function') {
+                // Older callable client requires tagged-template usage; refuse to call
+                throw new Error(
+                  'Incompatible Neon client: expected .query() method, not callable sql function'
+                );
+              } else {
+                throw new Error('Neon client not available');
+              }
 
       const host = getHostFromUrl(NEON_URL);
       console.warn(
