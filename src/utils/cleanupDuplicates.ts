@@ -1,4 +1,4 @@
-import sqlite from '../db/sqlite';
+import * as localDb from '../db/localDb';
 
 type Report = {
   groupsProcessed: number;
@@ -17,9 +17,9 @@ type Report = {
  */
 export const cleanupDuplicateLocalEntries = async (opts?: { dryRun?: boolean }) => {
   const dryRun = !!(opts && opts.dryRun);
-  const db = await sqlite.open();
-
-  const rows = await db.all<{
+  // Using AsyncStorage-backed localDb shim
+  const rows = await localDb.getEntries();
+  // Filter local-only rows
     local_id: string;
     remote_id?: string | null;
     amount: number;
@@ -30,8 +30,7 @@ export const cleanupDuplicateLocalEntries = async (opts?: { dryRun?: boolean }) 
     created_at?: string | null;
     updated_at?: string | null;
   }>(
-    `SELECT local_id, remote_id, amount, category, note, type, date, created_at, updated_at FROM local_entries WHERE (remote_id IS NULL OR remote_id = '') AND is_deleted = 0`
-  );
+    
 
   const map: Record<string, typeof rows> = {};
   for (const r of rows) {
