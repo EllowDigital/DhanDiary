@@ -1,11 +1,13 @@
 {
   "expo": {
-    "platforms": ["android"],
+    "owner": "ellowdigital",
     "name": "DhanDiary",
-    "slug": "DhanDiary",
-    "version": "1.0.0",
+    "slug": "dhandiary",
+    "scheme": "dhandiary",
+    "version": "1.2.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
+    "jsEngine": "hermes",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
@@ -14,17 +16,69 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
+      "bundleIdentifier": "com.ellowdigital.dhandiary",
+      "buildNumber": "122",
       "supportsTablet": true
     },
     "android": {
+      "package": "com.ellowdigital.dhandiary",
+      "versionCode": 122,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "category": ["BROWSABLE", "DEFAULT"],
+          "data": [
+            {
+              "scheme": "dhandiary"
+            }
+          ]
+        }
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-updates",
+      "expo-web-browser",
+      "expo-font",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow DhanDiary to use Face ID to secure your data."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableHermes": true,
+            "minSdkVersion": 24,
+            "abiFilters": ["arm64-v8a"],
+            "ndk": {
+              "debugSymbolLevel": "NONE"
+            }
+          }
+        }
+      ]
+    ],
+    "updates": {
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/77c33e0a-8d3a-4f5b-afcf-72967c9af0bf"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "77c33e0a-8d3a-4f5b-afcf-72967c9af0bf"
+      }
     }
   }
 }
