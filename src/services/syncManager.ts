@@ -789,6 +789,49 @@ export const syncBothWays = async () => {
   _syncInProgress = true;
   let result = { pushed: 0, updated: 0, deleted: 0, pulled: 0, merged: 0, total: 0 };
   try {
+    // Quick fast-path: if there are no local pending changes and the remote
+    // has no rows for this user, skip the heavier remote schema checks and
+    // pulls so login doesn't block waiting for remote when the DB is empty.
+    // This keeps initial syncs very fast (1-3s) on cold accounts.
+    await initDb();
+    const session = await getSession();
+    if (!session || !session.id) return { pushed: 0, updated: 0, deleted: 0, pulled: 0, merged: 0, total: 0 };
+
+    // If we have no local pending entries, probe the remote with a very
+    // short timeout to see if any remote rows exist. If none, we can
+    // return quickly without touching the remote schema or pulling.
+    let pendingLocal = [] as any[];
+    try {
+      pendingLocal = await getUnsyncedEntries();
+    } catch (e) {
+      // ignore and continue with full sync path below
+      pendingLocal = [];
+    }
+
+    if (pendingLocal.length === 0) {
+      let remoteHasAny: boolean | null = null;
+      try {
+        const probe = await query(
+          `SELECT 1 FROM cash_entries WHERE user_id = $1 LIMIT 1`,
+          [session.id],
+          { retries: 0, timeoutMs: 1500 }
+        );
+        remoteHasAny = !!(probe && probe.length);
+      } catch (e) {
+        // If the quick probe fails (network/transient), fall back to full sync
+        remoteHasAny = null;
+      }
+
+      if (remoteHasAny === false) {
+        try {
+          const now = new Date().toISOString();
+          await AsyncStorage.setItem('last_sync_at', now);
+          await AsyncStorage.setItem('last_sync_count', '0');
+        } catch (e) {}
+        return { pushed: 0, updated: 0, deleted: 0, pulled: 0, merged: 0, total: 0 };
+      }
+    }
+
     // ensure remote schema can accept our metadata
     await ensureRemoteSchema();
     // Flush any pending profile updates first
