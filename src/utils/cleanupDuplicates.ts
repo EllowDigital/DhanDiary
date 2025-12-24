@@ -18,19 +18,11 @@ type Report = {
 export const cleanupDuplicateLocalEntries = async (opts?: { dryRun?: boolean }) => {
   const dryRun = !!(opts && opts.dryRun);
   // Using AsyncStorage-backed localDb shim
-  const rows = await localDb.getEntries();
+  const allRows = await localDb.getEntries();
   // Filter local-only rows
-    local_id: string;
-    remote_id?: string | null;
-    amount: number;
-    category?: string | null;
-    note?: string | null;
-    type: string;
-    date?: string | null;
-    created_at?: string | null;
-    updated_at?: string | null;
-  }>(
-    
+  const rows = (allRows || []).filter(
+    (r: any) => (!r.remote_id || String(r.remote_id).trim() === '') && !r.is_deleted
+  );
 
   const map: Record<string, typeof rows> = {};
   for (const r of rows) {
@@ -67,7 +59,7 @@ export const cleanupDuplicateLocalEntries = async (opts?: { dryRun?: boolean }) 
     if (!dryRun) {
       for (const id of toRemove) {
         try {
-          await db.run('DELETE FROM local_entries WHERE local_id = ?', [id]);
+          await localDb.deleteLocalEntry(id);
           removed += 1;
         } catch (e) {
           // ignore individual failures but note them in details

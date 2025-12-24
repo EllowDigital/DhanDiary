@@ -13,7 +13,7 @@ import {
   wipeLocalDatabase,
 } from '../db/localDb';
 import { getOfflineDbOwner, setOfflineDbOwner } from '../db/offlineOwner';
-import sqlite from '../db/sqlite';
+import * as localDb from '../db/localDb';
 
 // --- Types ---
 
@@ -125,12 +125,8 @@ const prepareOfflineWorkspace = async (userId: string) => {
   // Check if we need to trigger an initial sync
   let hasExistingData = false;
   try {
-    const db = await sqlite.open();
-    const row = await db.get<{ total: number }>(
-      'SELECT COUNT(1) as total FROM local_entries WHERE user_id = ?',
-      [userId]
-    );
-    hasExistingData = !!(row && (row.total || 0) > 0);
+    const existing = await localDb.getEntries(userId);
+    hasExistingData = Array.isArray(existing) && existing.length > 0;
   } catch (e) {
     hasExistingData = false;
   }
