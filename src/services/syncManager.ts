@@ -97,6 +97,10 @@ const chunkArray = <T>(array: T[], size: number): T[][] => {
   return result;
 };
 
+const isLocalDbDisabledError = (err: any) =>
+  String(err?.message || '').includes('Offline/local DB disabled');
+
+
 export const subscribeSyncConflicts = (listener: SyncConflictListener) => {
   conflictListeners.add(listener);
   return () => {
@@ -117,12 +121,33 @@ const emitSyncConflict = (event: SyncConflictEvent) => {
 // --- Core Sync Logic ---
 
 export const syncPending = async () => {
-  await initDb();
+  // Attempt to initialize local DB, but if the project is configured
+  // online-only the local DB functions throw; detect and fall back.
+  let localDbDisabled = false;
+  try {
+    await initDb();
+  } catch (e: any) {
+    if (isLocalDbDisabledError(e)) {
+      localDbDisabled = true;
+      console.log('[syncPending] local DB disabled, running online-only (no queued pushes)');
+    } else throw e;
+  }
+
   const state = await NetInfo.fetch();
   if (!state.isConnected) return { pushed: 0, updated: 0, deleted: 0 };
 
-  const pendingRaw = await getUnsyncedEntries();
-  if (pendingRaw.length === 0) return { pushed: 0, updated: 0, deleted: 0 };
+  let pendingRaw: any[] = [];
+  if (!localDbDisabled) {
+    try {
+      pendingRaw = await getUnsyncedEntries();
+    } catch (e: any) {
+      if (isLocalDbDisabledError(e)) {
+        localDbDisabled = true;
+        pendingRaw = [];
+      } else throw e;
+    }
+  }
+  if (!pendingRaw || pendingRaw.length === 0) return { pushed: 0, updated: 0, deleted: 0 };
 
   // Cast raw DB results to typed interface
   const pending = pendingRaw as unknown as CashEntry[];
@@ -224,7 +249,13 @@ export const syncPending = async () => {
       if (res && res.length) {
         for (const r of res) {
           const localId = String(r.client_id);
-          await markEntrySynced(localId, String(r.id), Number(r.server_version), r.updated_at);
+          try {
+            await markEntrySynced(localId, String(r.id), Number(r.server_version), r.updated_at);
+          } catch (e: any) {
+            if (isLocalDbDisabledError(e)) {
+              // local DB disabled — skip marking local entries as synced
+            } else throw e;
+          }
           pushed++;
         }
       }
@@ -254,23 +285,28 @@ export const syncPending = async () => {
           // Handle response or check for existence (idempotency)
           let remoteData = insertRes?.[0];
 
-          if (!remoteData) {
+            if (!remoteData) {
             const found = await safeQ(
               `SELECT id, server_version, updated_at FROM cash_entries WHERE client_id = $1 LIMIT 1`,
               [it.local_id]
             );
             remoteData = found?.[0];
           }
-
-          if (remoteData) {
-            await markEntrySynced(
-              it.local_id,
-              String(remoteData.id),
-              Number(remoteData.server_version),
-              remoteData.updated_at
-            );
-            pushed++;
-          }
+            if (remoteData) {
+              try {
+                await markEntrySynced(
+                  it.local_id,
+                  String(remoteData.id),
+                  Number(remoteData.server_version),
+                  remoteData.updated_at
+                );
+              } catch (e: any) {
+                if (isLocalDbDisabledError(e)) {
+                  // skip
+                } else throw e;
+              }
+              pushed++;
+            }
         } catch (e) {
           console.error('Failed to insert remote entry (fallback)', it.local_id, e);
         }
@@ -404,34 +440,57 @@ export const pullRemote = async () => {
     for (const r of rows) {
       try {
         // 1. Handle Remote Deletion
-        if (r.deleted) {
-          // Attempt to find local mapping
-          let localForDeleted = await getLocalByRemoteId(String(r.id));
-          if (!localForDeleted && r.client_id) {
-            localForDeleted = await getLocalByClientId(String(r.client_id));
-          }
+          if (r.deleted) {
+            // Attempt to find local mapping if local DB is available
+            let localForDeleted: any = null;
+            try {
+              localForDeleted = await getLocalByRemoteId(String(r.id));
+            } catch (e: any) {
+              if (isLocalDbDisabledError(e)) {
+                localForDeleted = null;
+              } else throw e;
+            }
+            if (!localForDeleted && r.client_id) {
+              try {
+                localForDeleted = await getLocalByClientId(String(r.client_id));
+              } catch (e: any) {
+                if (isLocalDbDisabledError(e)) localForDeleted = null;
+                else throw e;
+              }
+            }
 
-          if (localForDeleted && (localForDeleted as any).need_sync) {
-            // Local was modified while remote was deleted. Revive remote.
-            // (Revival logic preserved from original code)
-            const revivedUpdatedAt = new Date().toISOString();
-            await Q(
-              `UPDATE cash_entries SET deleted = false, need_sync = false, updated_at = $1::timestamptz WHERE id = $2`,
-              [revivedUpdatedAt, r.id]
-            );
-            // We only update timestamp here for simplicity, assuming data is fixed in next push
-            await markEntrySynced(
-              localForDeleted.local_id,
-              String(r.id),
-              undefined,
-              revivedUpdatedAt
-            );
-          } else {
-            // Accept deletion
-            await markLocalDeletedByRemoteId(String(r.id));
+            if (localForDeleted && (localForDeleted as any).need_sync) {
+              // Local was modified while remote was deleted. Revive remote.
+              const revivedUpdatedAt = new Date().toISOString();
+              await Q(
+                `UPDATE cash_entries SET deleted = false, need_sync = false, updated_at = $1::timestamptz WHERE id = $2`,
+                [revivedUpdatedAt, r.id]
+              );
+              // Attempt to mark local entry as synced; ignore if local DB disabled
+              try {
+                await markEntrySynced(
+                  (localForDeleted as any).local_id,
+                  String(r.id),
+                  undefined,
+                  revivedUpdatedAt
+                );
+              } catch (e: any) {
+                if (isLocalDbDisabledError(e)) {
+                  console.log('[pullRemote] local DB disabled; skipping markEntrySynced');
+                } else throw e;
+              }
+            } else {
+              // Accept deletion: try to remove local mapping if possible
+              try {
+                await markLocalDeletedByRemoteId(String(r.id));
+              } catch (e: any) {
+                if (isLocalDbDisabledError(e)) {
+                  // local DB disabled — nothing to do
+                } else throw e;
+              }
+            }
+            continue;
           }
-          continue;
-        }
 
         // 2. Handle Merges / Upserts
         let local = await getLocalByRemoteId(String(r.id));
