@@ -91,8 +91,7 @@ export const warmNeonConnection = async (opts: { force?: boolean; timeoutMs?: nu
   } catch (e) {
     return false;
   }
-};
-
+  return true;
 // --- Workspace Management ---
 
 /**
@@ -180,7 +179,7 @@ export const loginOnline = async (email: string, password: string): Promise<Auth
   return { id: user.id, name: user.name, email: user.email };
 };
 
-export const logout = async () => {
+export const logout = async (): Promise<boolean> => {
   // 1. Stop background sync and background fetch to avoid races
   try {
     const sync = require('./syncManager');
@@ -206,6 +205,7 @@ export const logout = async () => {
     } catch (e) {}
   } catch (e) {}
 
+  return true;
   // 2. Wipe local DB and app caches
   try {
     await wipeLocalDatabase();

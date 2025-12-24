@@ -93,6 +93,8 @@ const SettingsScreen = () => {
     }
   };
 
+  const { signOut: clerkSignOut } = require('@clerk/clerk-expo').useAuth();
+
   const handleLogout = () => {
     Alert.alert('Sign Out', 'Are you sure you want to log out?', [
       { text: 'Cancel', style: 'cancel' },
@@ -100,10 +102,26 @@ const SettingsScreen = () => {
         text: 'Sign Out',
         style: 'destructive',
         onPress: async () => {
-          await logout();
-          query.clear();
-          showToast('Signed out successfully');
-          navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
+          try {
+            // Sign out from Clerk first (if available)
+            if (clerkSignOut && typeof clerkSignOut === 'function') {
+              try {
+                await clerkSignOut();
+              } catch (e) {
+                console.warn('[Settings] Clerk signOut failed', e);
+              }
+            }
+
+            const ok = await logout();
+            try {
+              query.clear();
+            } catch (e) {}
+            if (ok) showToast('Signed out successfully');
+            navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
+          } catch (e) {
+            console.warn('[Settings] logout failed', e);
+            showToast('Sign out failed. Please try again.');
+          }
         },
       },
     ]);
