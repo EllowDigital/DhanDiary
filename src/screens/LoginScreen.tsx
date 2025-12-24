@@ -22,7 +22,7 @@ import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { syncClerkUserToNeon, BridgeUser } from '../services/clerkUserSync';
-import { saveSession, init as initLocalDb } from '../db/localDb';
+import { saveSession } from '../db/session';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { warmNeonConnection } from '../services/auth';
 
@@ -78,10 +78,9 @@ const LoginScreen = () => {
 
   // --- Effects ---
 
-  // 1. Pre-warm Database Connection
+  // 1. Pre-warm Neon DB connection (no local SQLite)
   useEffect(() => {
     warmNeonConnection().catch(() => {});
-    initLocalDb().catch(() => {});
   }, []);
 
   // 2. Handle Existing Session (Auto-Sync)
@@ -112,8 +111,8 @@ const LoginScreen = () => {
   // --- Core Logic ---
 
   /**
-   * Orchestrates the critical handover from Clerk -> Our Database -> Local SQLite.
-   * This ensures the user is legally allowed to access the offline-first data.
+   * Orchestrates the critical handover from Clerk -> Our Database.
+   * This ensures the user is synced to Neon and a session is saved.
    */
   const handleSyncAndNavigate = async (
     userId: string,

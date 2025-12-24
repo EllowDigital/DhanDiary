@@ -94,7 +94,7 @@ const createOfflineFallback = async (
 ): Promise<BridgeUser> => {
   const localId = uuidv4();
   try {
-    // Save to local SQLite/AsyncStorage so the app "remembers" them while offline
+    // Save fallback session locally (no local SQLite; session persisted via AsyncStorage wrapper)
     await saveSession(localId, name, email);
   } catch (e) {
     console.warn('[Bridge] Failed to save local session fallback', e);

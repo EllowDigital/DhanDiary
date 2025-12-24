@@ -165,42 +165,10 @@ function AppWithDb() {
 
   const queryClient = useMemo(() => new QueryClient(), []);
 
-  // --- Database Initialization Logic ---
+  // No local SQLite: app is online-only. Mark DB ready immediately.
   const initializeDatabase = useCallback(async () => {
-    try {
-      const pending = await AsyncStorage.getItem('PENDING_UPDATE');
-      if (pending) {
-        await AsyncStorage.removeItem('PENDING_UPDATE');
-      }
-
-      try {
-        const sqlite = require('./src/db/sqlite').default;
-        await Promise.race([
-          sqlite.open(),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('sqlite open timeout')), 8000)
-          ),
-        ]);
-        setDbReady(true);
-        setDbInitError(null);
-      } catch (e) {
-        console.warn('Early sqlite.open failed (will retry in background):', e);
-      }
-
-      (async () => {
-        try {
-          const { init } = require('./src/db/localDb');
-          await init();
-          console.log('[App] background DB init complete');
-        } catch (e) {
-          console.error('[App] background DB init failed', e);
-          setDbInitError(String((e as any)?.message || String(e)));
-        }
-      })();
-    } catch (e: any) {
-      setDbInitError(String((e as any)?.message || 'Unknown DB Error'));
-      setDbReady(false);
-    }
+    setDbReady(true);
+    setDbInitError(null);
   }, []);
 
   // 1. Initial Config Logging
@@ -227,7 +195,7 @@ function AppWithDb() {
     }
   }, []);
 
-  // Run DB init on mount
+  // Run DB init on mount (no-op for local SQLite)
   useEffect(() => {
     initializeDatabase();
   }, [initializeDatabase]);
