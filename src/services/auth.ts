@@ -13,7 +13,6 @@ import {
   wipeLocalDatabase,
 } from '../db/localDb';
 import { getOfflineDbOwner, setOfflineDbOwner } from '../db/offlineOwner';
-import * as localDb from '../db/localDb';
 
 // --- Types ---
 
@@ -100,49 +99,9 @@ export const warmNeonConnection = async (opts: { force?: boolean; timeoutMs?: nu
  * Prepares the local database for a specific user.
  * If a different user previously logged in, this wipes their data to prevent leaks.
  */
-const prepareOfflineWorkspace = async (userId: string) => {
-  await initDb();
-
-  let owner: string | null = null;
-  try {
-    owner = await getOfflineDbOwner();
-  } catch (e) {
-    // If table doesn't exist yet, ignore
-    owner = null;
-  }
-
-  // Security: If the DB belongs to someone else, wipe it clean.
-  if (owner && owner !== userId) {
-    console.log('[Auth] Detected user switch. Wiping previous user data.');
-    await clearAllData({ includeSession: false });
-  }
-
-  // Claim ownership
-  if (owner !== userId) {
-    await setOfflineDbOwner(userId);
-  }
-
-  // Check if we need to trigger an initial sync
-  let hasExistingData = false;
-  try {
-    const existing = await localDb.getEntries(userId);
-    hasExistingData = Array.isArray(existing) && existing.length > 0;
-  } catch (e) {
-    hasExistingData = false;
-  }
-
-  if (!hasExistingData) {
-    // Trigger background sync to pull remote data
-    // We use require() here to avoid circular dependency loops with syncManager
-    try {
-      const { syncBothWays } = require('./syncManager');
-      setTimeout(() => {
-        syncBothWays().catch((e: any) => console.warn('[Auth] Background initial sync failed', e));
-      }, 100);
-    } catch (e) {
-      console.warn('[Auth] Could not load syncManager for initial sync');
-    }
-  }
+const prepareOfflineWorkspace = async (_userId: string) => {
+  // Offline workspace is disabled. App requires online NeonDB/Clerk.
+  return;
 };
 
 // --- Auth Functions ---
