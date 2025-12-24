@@ -429,7 +429,7 @@ export const syncBothWays = async () => {
     } catch (e) {}
 
     return { ...pushStats, ...pullStats, total };
-    } catch (err) {
+  } catch (err) {
     // Log error but do not re-throw to keep auto-sync safe
     try {
       console.error('Sync failed', err);

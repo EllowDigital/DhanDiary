@@ -92,6 +92,8 @@ export const warmNeonConnection = async (opts: { force?: boolean; timeoutMs?: nu
     return false;
   }
   return true;
+};
+
 // --- Workspace Management ---
 
 /**

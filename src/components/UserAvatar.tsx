@@ -35,7 +35,12 @@ export default function UserAvatar({ size = 36, name, imageUrl, onPress, style }
         <View
           style={[
             styles.fallback,
-            { width: size, height: size, borderRadius: radius, backgroundColor: colors.primarySoft },
+            {
+              width: size,
+              height: size,
+              borderRadius: radius,
+              backgroundColor: colors.primarySoft,
+            },
           ]}
         >
           <Text style={[styles.initial, { fontSize, color: colors.primary }]}>{initial}</Text>

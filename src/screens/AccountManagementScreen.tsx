@@ -314,7 +314,7 @@ const AccountManagementScreen = () => {
             <Animated.View style={{ opacity: fadeAnim }}>
               {/* HERO PROFILE ROW */}
               <View style={styles.heroRow}>
-                <View style={[styles.heroAvatar, { width: 56, height: 56, borderRadius: 28 }]}> 
+                <View style={[styles.heroAvatar, { width: 56, height: 56, borderRadius: 28 }]}>
                   <View style={{ position: 'relative' }}>
                     <UserAvatar
                       size={48}

@@ -158,7 +158,9 @@ const RegisterScreen = ({ navigation }: any) => {
 
                 <PrimaryButton loading={loading} title="Sign Up" onPress={onSignUpPress} />
                 <View style={styles.trustRow}>
-                  <Text style={styles.trustText}>Your sign-in is secured by ellowdigital.space</Text>
+                  <Text style={styles.trustText}>
+                    Your sign-in is secured by ellowdigital.space
+                  </Text>
                 </View>
               </View>
             ) : (
