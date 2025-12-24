@@ -181,18 +181,61 @@ export const loginOnline = async (email: string, password: string): Promise<Auth
 };
 
 export const logout = async () => {
-  // 1. Attempt one last sync to save data
+  // 1. Stop background sync and background fetch to avoid races
   try {
-    const { syncBothWays } = require('./syncManager');
-    await withTimeout(syncBothWays(), 5000).catch(() => {});
+    const sync = require('./syncManager');
+    if (sync && typeof sync.stopAutoSyncListener === 'function') {
+      try {
+        sync.stopAutoSyncListener();
+      } catch (e) {}
+    }
+    if (sync && typeof sync.stopForegroundSyncScheduler === 'function') {
+      try {
+        sync.stopForegroundSyncScheduler();
+      } catch (e) {}
+    }
+    if (sync && typeof sync.stopBackgroundFetch === 'function') {
+      try {
+        await Promise.resolve(sync.stopBackgroundFetch()).catch(() => {});
+      } catch (e) {}
+    }
+    // Try a quick final sync but do not block logout on failure
+    try {
+      const { syncBothWays } = sync;
+      await withTimeout(syncBothWays(), 3000).catch(() => {});
+    } catch (e) {}
+  } catch (e) {}
+
+  // 2. Wipe local DB and app caches
+  try {
+    await wipeLocalDatabase();
+  } catch (e) {}
+  try {
+    await clearAllData();
+  } catch (e) {}
+
+  // 3. Clear AsyncStorage completely (last_sync_at, last_sync_count, session keys, etc.)
+  try {
+    await AsyncStorage.clear();
   } catch (e) {
-    // Ignore sync errors on logout
+    try {
+      await AsyncStorage.removeItem('FALLBACK_SESSION');
+      await AsyncStorage.removeItem('last_sync_at');
+      await AsyncStorage.removeItem('last_sync_count');
+    } catch (ee) {}
   }
 
-  // 2. Wipe data
-  await wipeLocalDatabase();
+  // 4. Notify app to refresh UI/state
+  try {
+    const { notifyEntriesChanged } = require('../utils/dbEvents');
+    notifyEntriesChanged();
+  } catch (e) {}
+  try {
+    const { notifySessionChanged } = require('../utils/sessionEvents');
+    await notifySessionChanged();
+  } catch (e) {}
 
-  // 3. Clear any backup session flags
+  // 5. Remove any explicit fallback session key
   try {
     await AsyncStorage.removeItem('FALLBACK_SESSION');
   } catch (e) {}
