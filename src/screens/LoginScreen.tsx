@@ -44,7 +44,7 @@ const usePrintAuthRedirects = () => {
     try {
       // For standalone / dev-client builds we MUST use a native scheme.
       // Compute the native redirect URI using our app scheme.
-      const nativeUri = AuthSession.makeRedirectUri(({ scheme: 'dhandiary' } as any));
+      const nativeUri = AuthSession.makeRedirectUri({ scheme: 'dhandiary' } as any);
       const getUri = AuthSession.getRedirectUrl();
       console.log('[AuthRedirects] makeRedirectUri(native, scheme=dhandiary)=', nativeUri);
       console.log('[AuthRedirects] getRedirectUrl()=', getUri);

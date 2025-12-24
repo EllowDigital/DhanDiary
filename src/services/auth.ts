@@ -1,7 +1,11 @@
 import NetInfo from '@react-native-community/netinfo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
+import bcrypt from 'bcryptjs';
+import { v4 as uuidv4 } from 'uuid'; // Ensure uuid is installed: npm install uuid
+
 import { query } from '../api/neonClient';
-import { saveSession, clearSession, getSession } from '../db/session';
+import { saveSession, getSession } from '../db/session';
 import {
   addPendingProfileUpdate,
   clearAllData,
@@ -10,29 +14,46 @@ import {
 } from '../db/localDb';
 import { getOfflineDbOwner, setOfflineDbOwner } from '../db/offlineOwner';
 import sqlite from '../db/sqlite';
-import bcrypt from 'bcryptjs';
-import Constants from 'expo-constants';
+
+// --- Types ---
+
+export interface UserSession {
+  id: string;
+  name: string;
+  email: string;
+}
+
+interface AuthResult {
+  id: string;
+  name: string;
+  email: string;
+  isOfflineOnly?: boolean;
+}
+
+// --- Configuration & Helpers ---
 
 const resolveNeonUrl = () =>
   (Constants?.expoConfig?.extra as any)?.NEON_URL || process.env.NEON_URL || null;
 
-// Utility: helper to fail fast on slow network operations
-// Increase default timeout to 15s for mobile networks which may be slower.
+/**
+ * Helper to fail fast on slow network operations.
+ * Important for mobile usage where connections hang.
+ */
 const withTimeout = <T>(p: Promise<T>, ms = 15000): Promise<T> => {
   return Promise.race([
     p,
-    new Promise<T>((_res, rej) => setTimeout(() => rej(new Error('Request timed out')), ms)),
-  ] as any);
+    new Promise<T>((_, rej) =>
+      setTimeout(() => rej(new Error(`Request timed out after ${ms}ms`)), ms)
+    ),
+  ]);
 };
 
-// Rely on `react-native-get-random-values` polyfill (imported in App.tsx)
-// so `crypto.getRandomValues` is available for uuid/bcrypt usage.
-
-export const isOnline = async () => {
+export const isOnline = async (): Promise<boolean> => {
   const state = await NetInfo.fetch();
-  // isInternetReachable can be null initially, so we check isConnected too
-  return state.isConnected;
+  return !!state.isConnected && !!state.isInternetReachable;
 };
+
+// --- Connection Warming ---
 
 let neonWarmPromise: Promise<boolean> | null = null;
 let lastNeonWarm = 0;
@@ -41,11 +62,14 @@ const NEON_WARM_CACHE_MS = 60_000;
 export const warmNeonConnection = async (opts: { force?: boolean; timeoutMs?: number } = {}) => {
   const NEON_URL = resolveNeonUrl();
   if (!NEON_URL) return false;
+
   const online = await isOnline();
   if (!online) return false;
 
   const now = Date.now();
-  if (!opts.force && now - lastNeonWarm < NEON_WARM_CACHE_MS && !neonWarmPromise) return true;
+  if (!opts.force && now - lastNeonWarm < NEON_WARM_CACHE_MS && !neonWarmPromise) {
+    return true;
+  }
 
   if (!neonWarmPromise) {
     const timeoutMs = opts.timeoutMs ?? 15000;
@@ -55,7 +79,7 @@ export const warmNeonConnection = async (opts: { force?: boolean; timeoutMs?: nu
         return true;
       })
       .catch((err) => {
-        console.warn('Neon warm-up failed', err?.message || err);
+        console.warn('[Auth] Neon warm-up failed', err?.message || err);
         return false;
       })
       .finally(() => {
@@ -70,65 +94,88 @@ export const warmNeonConnection = async (opts: { force?: boolean; timeoutMs?: nu
   }
 };
 
+// --- Workspace Management ---
+
+/**
+ * Prepares the local database for a specific user.
+ * If a different user previously logged in, this wipes their data to prevent leaks.
+ */
 const prepareOfflineWorkspace = async (userId: string) => {
   await initDb();
+
   let owner: string | null = null;
   try {
     owner = await getOfflineDbOwner();
   } catch (e) {
+    // If table doesn't exist yet, ignore
     owner = null;
   }
 
+  // Security: If the DB belongs to someone else, wipe it clean.
   if (owner && owner !== userId) {
+    console.log('[Auth] Detected user switch. Wiping previous user data.');
     await clearAllData({ includeSession: false });
   }
 
+  // Claim ownership
   if (owner !== userId) {
     await setOfflineDbOwner(userId);
   }
 
-  let hasExisting = false;
+  // Check if we need to trigger an initial sync
+  let hasExistingData = false;
   try {
     const db = await sqlite.open();
     const row = await db.get<{ total: number }>(
       'SELECT COUNT(1) as total FROM local_entries WHERE user_id = ?',
       [userId]
     );
-    hasExisting = !!(row && Number(row.total) > 0);
+    hasExistingData = !!(row && (row.total || 0) > 0);
   } catch (e) {
-    hasExisting = false;
+    hasExistingData = false;
   }
 
-  if (!hasExisting) {
-    // Run sync in background so we don't block login/signup
-    const { syncBothWays } = require('./syncManager');
-    syncBothWays().catch((e: any) => {
-      console.warn('Background initial sync after login failed', e);
-    });
+  if (!hasExistingData) {
+    // Trigger background sync to pull remote data
+    // We use require() here to avoid circular dependency loops with syncManager
+    try {
+      const { syncBothWays } = require('./syncManager');
+      setTimeout(() => {
+        syncBothWays().catch((e: any) => console.warn('[Auth] Background initial sync failed', e));
+      }, 100);
+    } catch (e) {
+      console.warn('[Auth] Could not load syncManager for initial sync');
+    }
   }
 };
 
-export const registerOnline = async (name: string, email: string, password: string) => {
-  // If NEON_URL is not configured, skip remote registration and create a local session for dev/test
+// --- Auth Functions ---
+
+export const registerOnline = async (
+  name: string,
+  email: string,
+  password: string
+): Promise<AuthResult> => {
   const NEON_URL = resolveNeonUrl();
+
+  // 1. Dev/Offline Mode: If no URL, create local session
   if (!NEON_URL) {
-    const { v4: uuidv4 } = require('uuid');
+    console.log('[Auth] No NEON_URL, registering locally');
     const id = uuidv4();
     await saveSession(id, name || '', email);
     await prepareOfflineWorkspace(id);
-    return { id, name, email };
+    return { id, name, email, isOfflineOnly: true };
   }
 
-  // Attempt remote Neon registration
+  // 2. Production Mode
   const online = await isOnline();
-  if (!online) throw new Error('Online required for registration');
+  if (!online) throw new Error('Internet connection required for registration');
 
-  // Start hashing in parallel with other checks if possible, but here we need it for query
+  // Generate hash on client (Direct-to-DB architecture)
   const salt = await bcrypt.genSalt(10);
   const hash = await bcrypt.hash(password, salt);
 
   try {
-    // Attempt insert directly. If email exists, it will throw a unique constraint violation.
     const result = await withTimeout(
       query(
         'INSERT INTO users (name, email, password_hash) VALUES ($1, $2, $3) RETURNING id, name, email',
@@ -137,99 +184,103 @@ export const registerOnline = async (name: string, email: string, password: stri
       20000
     );
 
+    if (!result || result.length === 0) throw new Error('Registration failed to return user');
+
     const user = result[0];
     await saveSession(user.id, user.name || '', user.email);
-    // await offline workspace setup but sync is now backgrounded
     await prepareOfflineWorkspace(user.id);
-    return user;
+    return { id: user.id, name: user.name, email: user.email };
   } catch (err: any) {
-    // Check for unique constraint violation
-    if (
-      err?.code === '23505' ||
-      (err?.message && err.message.includes('unique constraint') && err.message.includes('email'))
-    ) {
-      throw new Error('User already exists');
+    if (err?.code === '23505' || err?.message?.includes('unique constraint')) {
+      throw new Error('This email is already registered.');
     }
     throw err;
   }
 };
 
-export const loginOnline = async (email: string, password: string) => {
+export const loginOnline = async (email: string, password: string): Promise<AuthResult> => {
   const online = await isOnline();
-  if (!online) throw new Error('Online required for login');
+  if (!online) throw new Error('Internet connection required for login');
 
-  // Removed explicit warming to save a round trip. The main query will warm if needed.
-  // fail fast on slow responses
-  const result = await withTimeout(query('SELECT * FROM users WHERE email = $1', [email]), 20000);
-  if (result.length === 0) {
+  // Select only necessary fields for speed and security
+  const result = await withTimeout(
+    query('SELECT id, name, email, password_hash FROM users WHERE email = $1 LIMIT 1', [email]),
+    20000
+  );
+
+  if (!result || result.length === 0) {
     throw new Error('User not found');
   }
 
   const user = result[0];
   const match = await bcrypt.compare(password, user.password_hash);
+
   if (!match) {
     throw new Error('Invalid password');
   }
+
   await saveSession(user.id, user.name || '', user.email);
   await prepareOfflineWorkspace(user.id);
-  return user;
+
+  return { id: user.id, name: user.name, email: user.email };
 };
 
 export const logout = async () => {
+  // 1. Attempt one last sync to save data
   try {
-    // attempt a final sync before clearing session so pending local changes are pushed
     const { syncBothWays } = require('./syncManager');
-    try {
-      await syncBothWays();
-    } catch (e) {
-      // ignore sync failures during logout
-      console.warn('Final sync before logout failed', e);
-    }
+    await withTimeout(syncBothWays(), 5000).catch(() => {});
   } catch (e) {
-    // ignore if syncManager can't be required
+    // Ignore sync errors on logout
   }
 
+  // 2. Wipe data
   await wipeLocalDatabase();
-  // ensure any fallback session stored in AsyncStorage is removed so getSession()
-  // can't accidentally return a stale session after logout.
+
+  // 3. Clear any backup session flags
   try {
     await AsyncStorage.removeItem('FALLBACK_SESSION');
   } catch (e) {}
 };
 
 export const deleteAccount = async () => {
-  // Delete remote user and their entries if NEON_URL is configured
   const NEON_URL = resolveNeonUrl();
   const session = await getSession();
-  if (!session) throw new Error('No session');
+  if (!session) throw new Error('No active session found');
+
   let remoteDeleted = 0;
   let userDeleted = 0;
 
+  // Try to delete remote data if online
   if (NEON_URL) {
     try {
-      // delete remote entries then user and count rows
+      // Delete entries first (FK constraint)
       try {
-        const res = await query('DELETE FROM cash_entries WHERE user_id = $1 RETURNING id', [
-          session.id,
-        ]);
+        const res = await withTimeout(
+          query('DELETE FROM cash_entries WHERE user_id = $1 RETURNING id', [session.id]),
+          10000
+        );
         if (res && Array.isArray(res)) remoteDeleted = res.length;
       } catch (err) {
-        console.warn('Failed to delete remote entries', err);
+        console.warn('[Auth] Failed to delete remote entries', err);
       }
 
+      // Delete user
       try {
-        const ures = await query('DELETE FROM users WHERE id = $1 RETURNING id', [session.id]);
+        const ures = await withTimeout(
+          query('DELETE FROM users WHERE id = $1 RETURNING id', [session.id]),
+          10000
+        );
         if (ures && Array.isArray(ures)) userDeleted = ures.length;
       } catch (err) {
-        console.warn('Failed to delete remote user', err);
+        console.warn('[Auth] Failed to delete remote user', err);
       }
     } catch (err) {
-      console.warn('Failed to delete remote user data', err);
-      // continue to clear local data anyway
+      console.warn('[Auth] Failed to connect to delete remote account', err);
     }
   }
 
-  // Clear local DB
+  // Always wipe local data regardless of remote success
   await wipeLocalDatabase();
   return { remoteDeleted, userDeleted };
 };
@@ -237,90 +288,99 @@ export const deleteAccount = async () => {
 export const updateProfile = async (updates: { name?: string; email?: string }) => {
   const NEON_URL = resolveNeonUrl();
   const session = await getSession();
-  if (!session) throw new Error('No session');
+  if (!session) throw new Error('No active session');
 
-  // If remote available, try to update remote when online; otherwise queue update locally
-  if (NEON_URL) {
-    const online = await isOnline();
-    if (!online) {
-      // queue pending update locally for later sync
+  const newName = updates.name !== undefined ? updates.name : session.name;
+  const newEmail = updates.email !== undefined ? updates.email : session.email;
+
+  // 1. Offline or No-Backend Mode: Update locally
+  const online = await isOnline();
+  if (!NEON_URL || !online) {
+    if (NEON_URL) {
+      // If we have a backend but are offline, queue the update
       try {
         await addPendingProfileUpdate(session.id, updates);
       } catch (e) {
-        console.warn('Failed to queue pending profile update locally', e);
+        console.warn('[Auth] Failed to queue pending profile update', e);
       }
-      // update local session so UI reflects changes immediately
-      const newName = updates.name !== undefined ? updates.name : session.name;
-      const newEmail = updates.email !== undefined ? updates.email : session.email;
-      await saveSession(session.id, newName || '', newEmail || '');
-      return { id: session.id, name: newName, email: newEmail, queued: true };
     }
+    // Apply locally
+    await saveSession(session.id, newName || '', newEmail || '');
+    return { id: session.id, name: newName, email: newEmail, queued: !online };
+  }
 
-    // if email is changing, ensure uniqueness
-    if (updates.email && updates.email !== session.email) {
-      // check uniqueness with timeout
-      const existing = await withTimeout(
-        query('SELECT id FROM users WHERE email = $1', [updates.email]),
-        6000
-      );
-      if (existing && existing.length > 0) throw new Error('Email already in use');
-    }
+  // 2. Online Mode
+  if (updates.email && updates.email !== session.email) {
+    const existing = await withTimeout(
+      query('SELECT id FROM users WHERE email = $1 AND id != $2 LIMIT 1', [
+        updates.email,
+        session.id,
+      ]),
+      6000
+    );
+    if (existing && existing.length > 0) throw new Error('Email already in use');
+  }
 
-    const fields: string[] = [];
-    const params: any[] = [];
-    let idx = 1;
-    if (updates.name !== undefined) {
-      fields.push(`name = $${idx++}`);
-      params.push(updates.name);
-    }
-    if (updates.email !== undefined) {
-      fields.push(`email = $${idx++}`);
-      params.push(updates.email);
-    }
-    if (fields.length > 0) {
-      params.push(session.id);
-      const sql = `UPDATE users SET ${fields.join(', ')} WHERE id = $${idx} RETURNING id, name, email`;
-      const res = await query(sql, params);
-      if (res && res.length) {
-        const user = res[0];
-        await saveSession(user.id, user.name || '', user.email);
-        return user;
-      }
+  const fields: string[] = [];
+  const params: any[] = [];
+  let idx = 1;
+
+  if (updates.name !== undefined) {
+    fields.push(`name = $${idx++}`);
+    params.push(updates.name);
+  }
+  if (updates.email !== undefined) {
+    fields.push(`email = $${idx++}`);
+    params.push(updates.email);
+  }
+
+  if (fields.length > 0) {
+    params.push(session.id);
+    const sql = `UPDATE users SET ${fields.join(', ')} WHERE id = $${idx} RETURNING id, name, email`;
+
+    const res = await query(sql, params);
+    if (res && res.length) {
+      const user = res[0];
+      await saveSession(user.id, user.name || '', user.email);
+      return user;
     }
   }
 
-  // Fallback: update local-only session
-  const newName = updates.name !== undefined ? updates.name : session.name;
-  const newEmail = updates.email !== undefined ? updates.email : session.email;
-  await saveSession(session.id, newName || '', newEmail || '');
+  // Fallback (no fields changed)
   return { id: session.id, name: newName, email: newEmail };
 };
 
 export const changePassword = async (currentPassword: string, newPassword: string) => {
   const NEON_URL = resolveNeonUrl();
-  const session = await getSession();
-  if (!session) throw new Error('No session');
+  if (!NEON_URL) throw new Error('Cannot change password in offline-only mode');
 
-  if (!NEON_URL) throw new Error('Online required to change password');
+  const session = await getSession();
+  if (!session) throw new Error('No active session');
+
   const online = await isOnline();
-  if (!online) throw new Error('Online required to change password');
-  // try to fail fast if DB is slow
+  if (!online) throw new Error('Online connection required to change password');
+
+  // Verify current password
   const res = await withTimeout(
     query('SELECT password_hash FROM users WHERE id = $1', [session.id]),
     8000
   );
-  if (!res || res.length === 0) throw new Error('User not found');
+
+  if (!res || res.length === 0) throw new Error('User record not found');
+
   const userRow = res[0];
   const match = await bcrypt.compare(currentPassword, userRow.password_hash);
   if (!match) throw new Error('Current password is incorrect');
 
-  // Basic password strength check (min 8 chars, contains digit)
-  if (typeof newPassword !== 'string' || newPassword.length < 8 || !/[0-9]/.test(newPassword)) {
-    throw new Error('Password must be at least 8 characters and include a number');
+  // Validate new password
+  if (typeof newPassword !== 'string' || newPassword.length < 8) {
+    throw new Error('Password must be at least 8 characters');
   }
 
+  // Update
   const salt = await bcrypt.genSalt(10);
   const hash = await bcrypt.hash(newPassword, salt);
   await query('UPDATE users SET password_hash = $1 WHERE id = $2', [hash, session.id]);
+
   return true;
 };

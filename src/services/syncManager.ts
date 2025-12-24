@@ -28,8 +28,7 @@ import { query } from '../api/neonClient';
 
 const CHUNK_SIZE = 50; // Batch operations in groups of 50 to avoid SQL parameter limits
 
-const Q = (sql: string, params: any[] = []) =>
-  query(sql, params, { retries: 2, timeoutMs: 15000 });
+const Q = (sql: string, params: any[] = []) => query(sql, params, { retries: 2, timeoutMs: 15000 });
 
 type SyncConflictEvent = {
   localId?: string;
@@ -53,7 +52,7 @@ interface CashEntry {
   currency?: string;
   created_at: string; // ISO String
   updated_at: string; // ISO String
-  date?: string;      // ISO String
+  date?: string; // ISO String
   is_deleted?: boolean;
   need_sync?: boolean;
   server_version?: number;
@@ -213,16 +212,11 @@ export const syncPending = async () => {
                    RETURNING id, client_id, server_version, updated_at`;
 
       const res = await safeQ(sql, values);
-      
+
       if (res && res.length) {
         for (const r of res) {
           const localId = String(r.client_id);
-          await markEntrySynced(
-            localId,
-            String(r.id),
-            Number(r.server_version),
-            r.updated_at
-          );
+          await markEntrySynced(localId, String(r.id), Number(r.server_version), r.updated_at);
           pushed++;
         }
       }
@@ -236,14 +230,22 @@ export const syncPending = async () => {
              VALUES ($1, $2, $3::numeric, $4, $5, $6, $7::timestamptz, $8::timestamptz, false, $9, $10::timestamptz) 
              RETURNING id, server_version, updated_at`,
             [
-              it.user_id, it.type, Number(it.amount), it.category, it.note || null,
-              it.currency || 'INR', it.created_at, it.updated_at, it.local_id, it.date || it.created_at
+              it.user_id,
+              it.type,
+              Number(it.amount),
+              it.category,
+              it.note || null,
+              it.currency || 'INR',
+              it.created_at,
+              it.updated_at,
+              it.local_id,
+              it.date || it.created_at,
             ]
           );
 
           // Handle response or check for existence (idempotency)
           let remoteData = insertRes?.[0];
-          
+
           if (!remoteData) {
             const found = await safeQ(
               `SELECT id, server_version, updated_at FROM cash_entries WHERE client_id = $1 LIMIT 1`,
@@ -253,13 +255,13 @@ export const syncPending = async () => {
           }
 
           if (remoteData) {
-             await markEntrySynced(
-               it.local_id, 
-               String(remoteData.id), 
-               Number(remoteData.server_version), 
-               remoteData.updated_at
-             );
-             pushed++;
+            await markEntrySynced(
+              it.local_id,
+              String(remoteData.id),
+              Number(remoteData.server_version),
+              remoteData.updated_at
+            );
+            pushed++;
           }
         } catch (e) {
           console.error('Failed to insert remote entry (fallback)', it.local_id, e);
@@ -274,7 +276,7 @@ export const syncPending = async () => {
     const vals: any[] = [];
     const rowPlaceholders: string[] = [];
     let j = 1;
-    
+
     for (const u of chunk) {
       rowPlaceholders.push(
         `($${j++}::uuid,$${j++}::numeric,$${j++},$${j++},$${j++},$${j++},$${j++}::timestamptz,$${j++}::timestamptz)`
@@ -305,17 +307,12 @@ export const syncPending = async () => {
       if (updRes && updRes.length) {
         // Map remote IDs back to local IDs for marking synced
         const remoteToLocal = new Map<string, string>();
-        chunk.forEach(u => remoteToLocal.set(String(u.remote_id), u.local_id));
+        chunk.forEach((u) => remoteToLocal.set(String(u.remote_id), u.local_id));
 
         for (const r of updRes) {
           const localId = remoteToLocal.get(String(r.id));
           if (localId) {
-            await markEntrySynced(
-              localId,
-              String(r.id),
-              Number(r.server_version),
-              r.updated_at
-            );
+            await markEntrySynced(localId, String(r.id), Number(r.server_version), r.updated_at);
             updated++;
           }
         }
@@ -332,18 +329,24 @@ export const syncPending = async () => {
              WHERE id = $7 
              RETURNING id, server_version, updated_at`,
             [
-              Number(u.amount), u.type, u.category, u.note || null, u.currency || 'INR',
-              u.updated_at, u.remote_id, u.date || u.created_at
+              Number(u.amount),
+              u.type,
+              u.category,
+              u.note || null,
+              u.currency || 'INR',
+              u.updated_at,
+              u.remote_id,
+              u.date || u.created_at,
             ]
           );
           if (res && res[0]) {
-             await markEntrySynced(
-               u.local_id, 
-               String(res[0].id), 
-               Number(res[0].server_version), 
-               res[0].updated_at
-             );
-             updated++;
+            await markEntrySynced(
+              u.local_id,
+              String(res[0].id),
+              Number(res[0].server_version),
+              res[0].updated_at
+            );
+            updated++;
           }
         } catch (e) {
           console.error('Failed to update remote entry', u.local_id, e);
@@ -405,19 +408,19 @@ export const pullRemote = async () => {
             // (Revival logic preserved from original code)
             const revivedUpdatedAt = new Date().toISOString();
             await Q(
-               `UPDATE cash_entries SET deleted = false, need_sync = false, updated_at = $1::timestamptz WHERE id = $2`,
-               [revivedUpdatedAt, r.id]
+              `UPDATE cash_entries SET deleted = false, need_sync = false, updated_at = $1::timestamptz WHERE id = $2`,
+              [revivedUpdatedAt, r.id]
             );
             // We only update timestamp here for simplicity, assuming data is fixed in next push
-             await markEntrySynced(
-               localForDeleted.local_id, 
-               String(r.id), 
-               undefined, 
-               revivedUpdatedAt
-             );
+            await markEntrySynced(
+              localForDeleted.local_id,
+              String(r.id),
+              undefined,
+              revivedUpdatedAt
+            );
           } else {
-             // Accept deletion
-             await markLocalDeletedByRemoteId(String(r.id));
+            // Accept deletion
+            await markLocalDeletedByRemoteId(String(r.id));
           }
           continue;
         }
@@ -429,31 +432,36 @@ export const pullRemote = async () => {
         }
 
         if (local && local.local_id) {
-           const localEntry = local as unknown as CashEntry;
-           
-           // Conflict: Local has unsynced changes
-           if (localEntry.need_sync) {
-             const localTime = new Date(localEntry.updated_at || 0).getTime();
-             const remoteTime = new Date(r.updated_at || 0).getTime();
+          const localEntry = local as unknown as CashEntry;
 
-             // If timestamps match, it's the same update
-             if (localTime === remoteTime) {
-                await markEntrySynced(localEntry.local_id, String(r.id), Number(r.server_version), r.updated_at);
-                merged++;
-                continue;
-             }
+          // Conflict: Local has unsynced changes
+          if (localEntry.need_sync) {
+            const localTime = new Date(localEntry.updated_at || 0).getTime();
+            const remoteTime = new Date(r.updated_at || 0).getTime();
 
-             // Actual Conflict: Client Wins logic (Push local change as update to remote)
-             emitSyncConflict({
-               localId: localEntry.local_id,
-               remoteId: String(r.id),
-               message: 'Conflict detected. Preserving local changes.',
-             });
+            // If timestamps match, it's the same update
+            if (localTime === remoteTime) {
+              await markEntrySynced(
+                localEntry.local_id,
+                String(r.id),
+                Number(r.server_version),
+                r.updated_at
+              );
+              merged++;
+              continue;
+            }
 
-             // We skip merging the remote row into local. 
-             // We ensure the local row triggers a push next time by leaving need_sync=true
-             continue;
-           }
+            // Actual Conflict: Client Wins logic (Push local change as update to remote)
+            emitSyncConflict({
+              localId: localEntry.local_id,
+              remoteId: String(r.id),
+              message: 'Conflict detected. Preserving local changes.',
+            });
+
+            // We skip merging the remote row into local.
+            // We ensure the local row triggers a push next time by leaving need_sync=true
+            continue;
+          }
         }
 
         // 3. Upsert Local
@@ -473,7 +481,6 @@ export const pullRemote = async () => {
           date: r.date,
         });
         pulled++;
-
       } catch (err) {
         console.error('Failed to merge remote row', r.id, err);
         await queueRemoteRow(r).catch(() => {});
@@ -490,22 +497,31 @@ const flushPendingProfileUpdates = async () => {
   await initDb();
   const pending = await getPendingProfileUpdates();
   if (!pending || pending.length === 0) return { processed: 0 };
-  
+
   let processed = 0;
   for (const p of pending) {
     try {
       if (p.email) {
-        const existing = await Q('SELECT id FROM users WHERE email = $1 AND id <> $2 LIMIT 1', [p.email, p.user_id]);
+        const existing = await Q('SELECT id FROM users WHERE email = $1 AND id <> $2 LIMIT 1', [
+          p.email,
+          p.user_id,
+        ]);
         if (existing && existing.length > 0) continue; // Skip on conflict
       }
-      
+
       const fields: string[] = [];
       const params: any[] = [];
       let idx = 1;
-      
-      if (p.name) { fields.push(`name = $${idx++}`); params.push(p.name); }
-      if (p.email) { fields.push(`email = $${idx++}`); params.push(p.email); }
-      
+
+      if (p.name) {
+        fields.push(`name = $${idx++}`);
+        params.push(p.name);
+      }
+      if (p.email) {
+        fields.push(`email = $${idx++}`);
+        params.push(p.email);
+      }
+
       if (fields.length > 0) {
         params.push(p.user_id);
         const sql = `UPDATE users SET ${fields.join(', ')} WHERE id = $${idx} RETURNING id, name, email`;
@@ -537,25 +553,30 @@ export const syncBothWays = async () => {
 
   const state = await NetInfo.fetch();
   if (!state.isConnected) return;
-  
+
   _syncInProgress = true;
 
   try {
     await initDb();
     const session = await getSession();
-    if (!session || !session.id) return { pushed: 0, updated: 0, deleted: 0, pulled: 0, merged: 0, total: 0 };
+    if (!session || !session.id)
+      return { pushed: 0, updated: 0, deleted: 0, pulled: 0, merged: 0, total: 0 };
 
     // --- Optimization: Quick Probe ---
     // If we haven't synced before, check if remote has ANY data before doing heavy lifting
     const lastSyncCount = await AsyncStorage.getItem('last_sync_count');
     if (!lastSyncCount || lastSyncCount === '0') {
-       try {
-         const probe = await query('SELECT 1 FROM cash_entries WHERE user_id = $1 LIMIT 1', [session.id], { timeoutMs: 2000 });
-         if (!probe || probe.length === 0) {
-           // Remote is empty, just push.
-           console.log('Remote empty, skipping pull');
-         }
-       } catch (e) {}
+      try {
+        const probe = await query(
+          'SELECT 1 FROM cash_entries WHERE user_id = $1 LIMIT 1',
+          [session.id],
+          { timeoutMs: 2000 }
+        );
+        if (!probe || probe.length === 0) {
+          // Remote is empty, just push.
+          console.log('Remote empty, skipping pull');
+        }
+      } catch (e) {}
     }
 
     // 1. Flush Profiles
@@ -567,8 +588,12 @@ export const syncBothWays = async () => {
     // 3. Pull Remote Changes (Delta)
     const pullStats = await pullRemote();
 
-    const total = (pushStats.pushed || 0) + (pushStats.updated || 0) + (pushStats.deleted || 0) +
-                  (pullStats.pulled || 0) + (pullStats.merged || 0);
+    const total =
+      (pushStats.pushed || 0) +
+      (pushStats.updated || 0) +
+      (pushStats.deleted || 0) +
+      (pullStats.pulled || 0) +
+      (pullStats.merged || 0);
 
     // 4. Update Sync Metadata
     const now = new Date().toISOString();
@@ -582,7 +607,6 @@ export const syncBothWays = async () => {
     } catch (e) {}
 
     return { ...pushStats, ...pullStats, total };
-
   } catch (err) {
     console.error('Sync failed', err);
     throw err;
@@ -647,7 +671,7 @@ export const stopForegroundSyncScheduler = () => {
 
 export const startBackgroundFetch = async () => {
   if (_backgroundFetchInstance) return;
-  
+
   // Expo Go check
   const isExpoGo = Constants.appOwnership === 'expo';
   if (isExpoGo) return;
@@ -688,7 +712,7 @@ export const stopBackgroundFetch = async () => {
   if (_backgroundFetchInstance) {
     try {
       _backgroundFetchInstance.stop();
-    } catch(e) {}
+    } catch (e) {}
     _backgroundFetchInstance = null;
   }
 };
