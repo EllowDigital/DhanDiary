@@ -18,7 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSignUp } from '@clerk/clerk-expo';
 
 import { syncClerkUserToNeon } from '../services/clerkUserSync';
-import { saveSession } from '../db/localDb';
+import { saveSession } from '../db/session';
 
 const RegisterScreen = ({ navigation }: any) => {
   const { isLoaded, signUp, setActive } = useSignUp();

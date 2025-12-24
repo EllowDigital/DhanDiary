@@ -26,7 +26,6 @@ import DailyTrendChart from '../components/charts/DailyTrendChart'; // Ensure th
 import { LocalEntry } from '../db/entries';
 import asyncAggregator from '../utils/asyncAggregator'; // Ensure this path is correct
 import { aggregateWithPreferSummary } from '../services/aggregates';
-import { fetchEntriesGenerator } from '../db/localDb'; // Ensure this path is correct
 import { PieChart } from 'react-native-chart-kit';
 
 // Enable LayoutAnimation for Android
@@ -237,7 +236,17 @@ const StatsScreen = () => {
           signal: controller.signal,
         });
       } else if (filter === 'All' || entries.length > 10000) {
-        const pages = fetchEntriesGenerator(user?.id || '', 1000);
+        // Stream entries in pages from in-memory `entries` (online-only).
+        async function* pagesFromEntries(items: LocalEntry[], pageSize: number) {
+          for (let i = 0; i < items.length; i += pageSize) {
+            // Respect abort signal by yielding in microtasks
+            const slice = items.slice(i, i + pageSize);
+            yield slice;
+            await Promise.resolve();
+          }
+        }
+
+        const pages = pagesFromEntries(entries as LocalEntry[], 1000);
         result = await asyncAggregator.aggregateFromPages(pages, rangeStart, rangeEnd, {
           signal: controller.signal,
         });

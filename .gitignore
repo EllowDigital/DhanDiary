@@ -110,7 +110,7 @@ coverage/
 *.tmp
 *.orig
 *.rej
-# (SQLite files removed from project)
+# (No local SQLite files expected)
 
 # -----------------------------------------------------
 # Lockfiles (optional - uncomment any tool you don't use)
