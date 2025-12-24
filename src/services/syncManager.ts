@@ -67,6 +67,15 @@ let _backgroundFetchInstance: any = null;
 let _backgroundFetchWarned = false;
 let _pendingSyncRequested: boolean = false;
 let _syncInProgress: boolean = false;
+// Sync status listeners (UI can subscribe to show progress)
+const _syncStatusListeners = new Set<(running: boolean) => void>();
+
+export const subscribeSyncStatus = (listener: (running: boolean) => void) => {
+  _syncStatusListeners.add(listener);
+  return () => _syncStatusListeners.delete(listener);
+};
+
+export const isSyncInProgress = () => !!_syncInProgress;
 
 // --- Helper Functions ---
 
@@ -555,6 +564,14 @@ export const syncBothWays = async () => {
   if (!state.isConnected) return;
 
   _syncInProgress = true;
+  // notify listeners that sync started
+  try {
+    _syncStatusListeners.forEach((l) => {
+      try {
+        l(true);
+      } catch (e) {}
+    });
+  } catch (e) {}
 
   try {
     await initDb();
@@ -612,6 +629,14 @@ export const syncBothWays = async () => {
     throw err;
   } finally {
     _syncInProgress = false;
+    // notify listeners that sync finished
+    try {
+      _syncStatusListeners.forEach((l) => {
+        try {
+          l(false);
+        } catch (e) {}
+      });
+    } catch (e) {}
     if (_pendingSyncRequested) {
       _pendingSyncRequested = false;
       setTimeout(() => {
