@@ -2,16 +2,7 @@ import NetInfo from '@react-native-community/netinfo';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import AsyncStorage from '../utils/AsyncStorageWrapper';
-import {
-  init as initDb,
-  getPendingProfileUpdates,
-  markPendingProfileProcessed,
-  queueLocalRemoteMapping,
-  queueRemoteRow,
-  flushQueuedLocalRemoteMappings,
-  flushQueuedRemoteRows,
-  getUnsyncedEntries,
-} from '../db/localDb';
+import { getPendingProfileUpdates, markPendingProfileProcessed } from '../db/localDb';
 import { getSession, saveSession } from '../db/session';
 import {
   getLocalByRemoteId,
@@ -121,103 +112,12 @@ const emitSyncConflict = (event: SyncConflictEvent) => {
 // --- Core Sync Logic ---
 
 export const syncPending = async () => {
-  // Attempt to initialize local DB, but if the project is configured
-  // online-only the local DB functions throw; detect and fall back.
-  let localDbDisabled = false;
-  try {
-    await initDb();
-  } catch (e: any) {
-    if (isLocalDbDisabledError(e)) {
-      localDbDisabled = true;
-      console.log('[syncPending] local DB disabled, running online-only (no queued pushes)');
-    } else throw e;
-  }
-
+  // Online-only mode: push from local DB is disabled. Transactions must be
+  // created directly against NeonDB. This function is kept for API
+  // compatibility and is a no-op.
   const state = await NetInfo.fetch();
   if (!state.isConnected) return { pushed: 0, updated: 0, deleted: 0 };
-
-  let pendingRaw: any[] = [];
-  if (!localDbDisabled) {
-    try {
-      pendingRaw = await getUnsyncedEntries();
-    } catch (e: any) {
-      if (isLocalDbDisabledError(e)) {
-        localDbDisabled = true;
-        pendingRaw = [];
-      } else throw e;
-    }
-  }
-  if (!pendingRaw || pendingRaw.length === 0) return { pushed: 0, updated: 0, deleted: 0 };
-
-  // Cast raw DB results to typed interface
-  const pending = pendingRaw as unknown as CashEntry[];
-
-  console.log(`Syncing ${pending.length} entries...`);
-
-  let pushed = 0;
-  let updated = 0;
-  let deleted = 0;
-
-  // Partition pending rows
-  const remoteDeletionEntries = pending.filter((e) => e.is_deleted && e.remote_id);
-  const localOnlyDeletions = pending.filter((e) => e.is_deleted && !e.remote_id);
-  const inserts = pending.filter((e) => !e.remote_id && !e.is_deleted);
-  const updates = pending.filter((e) => e.remote_id && e.need_sync && !e.is_deleted);
-
-  // 1. Handle Deletions
-  const localsToDelete = new Set<string>();
-
-  // A. Local-only deletions (never synced, just remove local record)
-  if (localOnlyDeletions.length > 0) {
-    localOnlyDeletions.forEach((entry) => localsToDelete.add(entry.local_id));
-    deleted += localOnlyDeletions.length;
-  }
-
-  // B. Remote deletions (Chunked)
-  const deleteChunks = chunkArray(remoteDeletionEntries, CHUNK_SIZE);
-  for (const chunk of deleteChunks) {
-    const remoteIds = chunk.map((e) => String(e.remote_id));
-    try {
-      await safeQ(
-        'UPDATE cash_entries SET deleted = true, updated_at = NOW(), need_sync = false WHERE id = ANY($1::uuid[])',
-        [remoteIds]
-      );
-      deleted += chunk.length;
-      chunk.forEach((entry) => localsToDelete.add(entry.local_id));
-    } catch (err) {
-      console.error('Batch delete failed, falling back to per-row', err);
-      // Fallback: per-row
-      for (const entry of chunk) {
-        try {
-          await safeQ(
-            'UPDATE cash_entries SET deleted = true, updated_at = NOW(), need_sync = false WHERE id = $1',
-            [entry.remote_id]
-          );
-          deleted++;
-          localsToDelete.add(entry.local_id);
-        } catch (e) {
-          console.error('Failed to delete remote row', entry.remote_id, e);
-        }
-      }
-    }
-  }
-
-  // Purge locals
-  if (localsToDelete.size > 0) {
-    for (const localId of localsToDelete) {
-      try {
-        await deleteLocalEntry(localId);
-      } catch (e) {
-        console.error('Failed to purge local entry', localId, e);
-      }
-    }
-  }
-
-  // 2. Handle Inserts (Chunked)
-  const insertChunks = chunkArray(inserts, CHUNK_SIZE);
-  for (const chunk of insertChunks) {
-    try {
-      const values: any[] = [];
+  return { pushed: 0, updated: 0, deleted: 0 };
       const placeholders: string[] = [];
       let idx = 1;
 
@@ -416,7 +316,6 @@ export const syncPending = async () => {
 };
 
 export const pullRemote = async () => {
-  await initDb();
   const state = await NetInfo.fetch();
   if (!state.isConnected) return { pulled: 0, merged: 0 };
 
@@ -425,9 +324,7 @@ export const pullRemote = async () => {
   if (!session || !session.id) return { pulled: 0, merged: 0 };
 
   try {
-    // Attempt to flush queues
-    await flushQueuedLocalRemoteMappings().catch(() => {});
-    await flushQueuedRemoteRows().catch(() => {});
+    // Queueing disabled in online-only mode; nothing to flush.
 
     // --- DELTA SYNC IMPLEMENTATION ---
     const lastSyncAt = await AsyncStorage.getItem('last_sync_at');
@@ -580,7 +477,7 @@ export const pullRemote = async () => {
         pulled++;
       } catch (err) {
         console.error('Failed to merge remote row', r.id, err);
-        await queueRemoteRow(r).catch(() => {});
+        // Queueing disabled in online-only mode; skipping queue.
       }
     }
     return { pulled, merged };
@@ -591,7 +488,6 @@ export const pullRemote = async () => {
 };
 
 const flushPendingProfileUpdates = async () => {
-  await initDb();
   const pending = await getPendingProfileUpdates();
   if (!pending || pending.length === 0) return { processed: 0 };
 
@@ -662,7 +558,7 @@ export const syncBothWays = async () => {
   } catch (e) {}
 
   try {
-    await initDb();
+    // local DB init skipped in online-only mode
     const session = await getSession();
     if (!session || !session.id)
       return { pushed: 0, updated: 0, deleted: 0, pulled: 0, merged: 0, total: 0 };
