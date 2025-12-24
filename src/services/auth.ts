@@ -253,6 +253,16 @@ export const logout = async () => {
       } catch (e) {}
     }
   } catch (e) {}
+
+  // 7. Clear React Query cache if available
+  try {
+    const holder = require('../utils/queryClientHolder');
+    if (holder && typeof holder.clearQueryCache === 'function') {
+      try {
+        await holder.clearQueryCache();
+      } catch (e) {}
+    }
+  } catch (e) {}
 };
 
 export const deleteAccount = async () => {

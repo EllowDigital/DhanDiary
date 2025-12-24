@@ -169,6 +169,11 @@ function AppWithDb() {
   const [dbInitError, setDbInitError] = useState<string | null>(null);
 
   const queryClient = useMemo(() => new QueryClient(), []);
+  // expose queryClient to other modules so logout can clear cache globally
+  try {
+    const holder = require('./src/utils/queryClientHolder');
+    if (holder && typeof holder.setQueryClient === 'function') holder.setQueryClient(queryClient);
+  } catch (e) {}
 
   // App is online-only. Mark DB ready immediately.
   const initializeDatabase = useCallback(async () => {
