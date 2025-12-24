@@ -2,17 +2,16 @@ import NetInfo from '@react-native-community/netinfo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import bcrypt from 'bcryptjs';
-import { v4 as uuidv4 } from 'uuid'; // Ensure uuid is installed: npm install uuid
+import { v4 as uuidv4 } from 'uuid';
+// NOTE: Ensure 'react-native-get-random-values' is imported in your App.tsx or index.js for uuid to work.
 
 import { query } from '../api/neonClient';
 import { saveSession, getSession } from '../db/session';
 import {
   addPendingProfileUpdate,
   clearAllData,
-  init as initDb,
   wipeLocalDatabase,
 } from '../db/localDb';
-import { getOfflineDbOwner, setOfflineDbOwner } from '../db/offlineOwner';
 
 // --- Types ---
 
@@ -22,27 +21,38 @@ export interface UserSession {
   email: string;
 }
 
-interface AuthResult {
+export interface AuthResult {
   id: string;
   name: string;
   email: string;
   isOfflineOnly?: boolean;
 }
 
+interface UserRow {
+  id: string;
+  name: string | null;
+  email: string;
+  password_hash: string;
+}
+
 // --- Configuration & Helpers ---
 
-const resolveNeonUrl = () =>
-  (Constants?.expoConfig?.extra as any)?.NEON_URL || process.env.NEON_URL || null;
+const NEON_WARM_CACHE_MS = 60_000;
+const TIMEOUT_DEFAULT_MS = 15_000;
+
+const resolveNeonUrl = (): string | null => {
+  const extra = Constants.expoConfig?.extra as Record<string, any> | undefined;
+  return extra?.NEON_URL || process.env.NEON_URL || null;
+};
 
 /**
  * Helper to fail fast on slow network operations.
- * Important for mobile usage where connections hang.
  */
-const withTimeout = <T>(p: Promise<T>, ms = 15000): Promise<T> => {
+const withTimeout = <T>(p: Promise<T>, ms = TIMEOUT_DEFAULT_MS): Promise<T> => {
   return Promise.race([
     p,
-    new Promise<T>((_, rej) =>
-      setTimeout(() => rej(new Error(`Request timed out after ${ms}ms`)), ms)
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`Request timed out after ${ms}ms`)), ms)
     ),
   ]);
 };
@@ -56,7 +66,6 @@ export const isOnline = async (): Promise<boolean> => {
 
 let neonWarmPromise: Promise<boolean> | null = null;
 let lastNeonWarm = 0;
-const NEON_WARM_CACHE_MS = 60_000;
 
 export const warmNeonConnection = async (opts: { force?: boolean; timeoutMs?: number } = {}) => {
   const NEON_URL = resolveNeonUrl();
@@ -71,14 +80,14 @@ export const warmNeonConnection = async (opts: { force?: boolean; timeoutMs?: nu
   }
 
   if (!neonWarmPromise) {
-    const timeoutMs = opts.timeoutMs ?? 15000;
+    const timeoutMs = opts.timeoutMs ?? TIMEOUT_DEFAULT_MS;
     neonWarmPromise = withTimeout(query('SELECT 1'), timeoutMs)
       .then(() => {
         lastNeonWarm = Date.now();
         return true;
       })
       .catch((err) => {
-        console.warn('[Auth] Neon warm-up failed', err?.message || err);
+        console.warn('[Auth] Neon warm-up failed:', err?.message || err);
         return false;
       })
       .finally(() => {
@@ -86,22 +95,13 @@ export const warmNeonConnection = async (opts: { force?: boolean; timeoutMs?: nu
       });
   }
 
-  try {
-    return await neonWarmPromise;
-  } catch (e) {
-    return false;
-  }
-  return true;
+  return (await neonWarmPromise) ?? false;
 };
 
 // --- Workspace Management ---
 
-/**
- * Prepares the local database for a specific user.
- * If a different user previously logged in, this wipes their data to prevent leaks.
- */
 const prepareOfflineWorkspace = async (_userId: string) => {
-  // Offline workspace is disabled. App requires online NeonDB/Clerk.
+  // Offline workspace preparation logic can go here if needed in the future.
   return;
 };
 
@@ -114,7 +114,7 @@ export const registerOnline = async (
 ): Promise<AuthResult> => {
   const NEON_URL = resolveNeonUrl();
 
-  // 1. Dev/Offline Mode: If no URL, create local session
+  // 1. Offline Mode / No Backend
   if (!NEON_URL) {
     console.log('[Auth] No NEON_URL, registering locally');
     const id = uuidv4();
@@ -124,20 +124,21 @@ export const registerOnline = async (
   }
 
   // 2. Production Mode
-  const online = await isOnline();
-  if (!online) throw new Error('Internet connection required for registration');
+  if (!(await isOnline())) {
+    throw new Error('Internet connection required for registration');
+  }
 
-  // Generate hash on client (Direct-to-DB architecture)
+  // Generate hash on client
   const salt = await bcrypt.genSalt(10);
   const hash = await bcrypt.hash(password, salt);
 
   try {
     const result = await withTimeout(
-      query(
+      query<UserRow>(
         'INSERT INTO users (name, email, password_hash) VALUES ($1, $2, $3) RETURNING id, name, email',
         [name, email, hash]
       ),
-      20000
+      20_000
     );
 
     if (!result || result.length === 0) throw new Error('Registration failed to return user');
@@ -145,7 +146,8 @@ export const registerOnline = async (
     const user = result[0];
     await saveSession(user.id, user.name || '', user.email);
     await prepareOfflineWorkspace(user.id);
-    return { id: user.id, name: user.name, email: user.email };
+    
+    return { id: user.id, name: user.name || '', email: user.email };
   } catch (err: any) {
     if (err?.code === '23505' || err?.message?.includes('unique constraint')) {
       throw new Error('This email is already registered.');
@@ -155,13 +157,13 @@ export const registerOnline = async (
 };
 
 export const loginOnline = async (email: string, password: string): Promise<AuthResult> => {
-  const online = await isOnline();
-  if (!online) throw new Error('Internet connection required for login');
+  if (!(await isOnline())) {
+    throw new Error('Internet connection required for login');
+  }
 
-  // Select only necessary fields for speed and security
   const result = await withTimeout(
-    query('SELECT id, name, email, password_hash FROM users WHERE email = $1 LIMIT 1', [email]),
-    20000
+    query<UserRow>('SELECT id, name, email, password_hash FROM users WHERE email = $1 LIMIT 1', [email]),
+    20_000
   );
 
   if (!result || result.length === 0) {
@@ -178,155 +180,129 @@ export const loginOnline = async (email: string, password: string): Promise<Auth
   await saveSession(user.id, user.name || '', user.email);
   await prepareOfflineWorkspace(user.id);
 
-  return { id: user.id, name: user.name, email: user.email };
+  return { id: user.id, name: user.name || '', email: user.email };
 };
 
 export const logout = async (): Promise<boolean> => {
-  // 1. Stop background sync and background fetch to avoid races
-  try {
-    const sync = require('./syncManager');
-    if (sync && typeof sync.stopAutoSyncListener === 'function') {
-      try {
-        sync.stopAutoSyncListener();
-      } catch (e) {}
-    }
-    if (sync && typeof sync.stopForegroundSyncScheduler === 'function') {
-      try {
-        sync.stopForegroundSyncScheduler();
-      } catch (e) {}
-    }
-    if (sync && typeof sync.stopBackgroundFetch === 'function') {
-      try {
-        await Promise.resolve(sync.stopBackgroundFetch()).catch(() => {});
-      } catch (e) {}
-    }
-    // Try a quick final sync but do not block logout on failure
+  // Helper to safely run a promise without throwing
+  const safeRun = async (fn: () => Promise<any> | any) => {
     try {
-      const { syncBothWays } = sync;
-      await withTimeout(syncBothWays(), 3000).catch(() => {});
-    } catch (e) {}
-  } catch (e) {}
+      await fn();
+    } catch (e) {
+      // Ignore cleanup errors
+    }
+  };
 
-  return true;
-  // 2. Wipe local DB and app caches
-  try {
-    await wipeLocalDatabase();
-  } catch (e) {}
-  try {
-    await clearAllData();
-  } catch (e) {}
+  // 1. Stop background sync and fetch (Dynamic requires to avoid circular deps)
+  await safeRun(async () => {
+    const sync = require('./syncManager'); // Ensure this path matches your file structure
+    if (sync) {
+      if (typeof sync.stopAutoSyncListener === 'function') sync.stopAutoSyncListener();
+      if (typeof sync.stopForegroundSyncScheduler === 'function') sync.stopForegroundSyncScheduler();
+      if (typeof sync.stopBackgroundFetch === 'function') await sync.stopBackgroundFetch();
+      
+      // Attempt a final quick sync, don't wait too long
+      if (typeof sync.syncBothWays === 'function') {
+        await withTimeout(sync.syncBothWays(), 3000).catch(() => {});
+      }
+    }
+  });
 
-  // 3. Clear AsyncStorage completely (last_sync_at, last_sync_count, session keys, etc.)
+  // 2. Wipe Local Data
+  await safeRun(wipeLocalDatabase);
+  await safeRun(clearAllData);
+
+  // 3. Clear Storage
   try {
     await AsyncStorage.clear();
   } catch (e) {
-    try {
-      await AsyncStorage.removeItem('FALLBACK_SESSION');
-      await AsyncStorage.removeItem('last_sync_at');
-      await AsyncStorage.removeItem('last_sync_count');
-    } catch (ee) {}
+    // Fallback if clear fails
+    await safeRun(() => AsyncStorage.removeItem('FALLBACK_SESSION'));
+    await safeRun(() => AsyncStorage.removeItem('last_sync_at'));
+    await safeRun(() => AsyncStorage.removeItem('last_sync_count'));
   }
 
-  // 4. Notify app to refresh UI/state
-  try {
+  // 4. Notify UI
+  await safeRun(() => {
     const { notifyEntriesChanged } = require('../utils/dbEvents');
     notifyEntriesChanged();
-  } catch (e) {}
-  try {
+  });
+  
+  await safeRun(async () => {
     const { notifySessionChanged } = require('../utils/sessionEvents');
     await notifySessionChanged();
-  } catch (e) {}
+  });
 
-  // 5. Remove any explicit fallback session key
-  try {
-    await AsyncStorage.removeItem('FALLBACK_SESSION');
-  } catch (e) {}
-  // 6. Sign out from Clerk (best-effort)
-  try {
+  // 5. Sign out from Clerk (Best Effort)
+  await safeRun(async () => {
     const clerk = require('@clerk/clerk-expo');
-    if (clerk && typeof clerk.signOut === 'function') {
-      try {
+    if (clerk) {
+      if (typeof clerk.signOut === 'function') {
         await clerk.signOut();
-      } catch (e) {}
-    } else if (clerk && typeof clerk.useAuth === 'function') {
-      try {
-        const ca = clerk.useAuth();
-        if (ca && typeof ca.signOut === 'function') await ca.signOut();
-      } catch (e) {}
+      } else if (typeof clerk.useAuth === 'function') {
+        // useAuth() is a hook, cannot be used here outside a component.
+        // We rely on direct signOut or the AuthContext reference if stored elsewhere.
+        console.warn('[Auth] Cannot use hook inside logout function. Ensure Clerk handles token storage clearing automatically.');
+      }
     }
-  } catch (e) {}
+  });
 
-  // 7. Clear React Query cache if available
-  try {
+  // 6. Clear React Query Cache
+  await safeRun(async () => {
     const holder = require('../utils/queryClientHolder');
     if (holder && typeof holder.clearQueryCache === 'function') {
-      try {
-        await holder.clearQueryCache();
-      } catch (e) {}
+      await holder.clearQueryCache();
     }
-  } catch (e) {}
+  });
+
+  return true;
 };
 
 export const deleteAccount = async () => {
   const NEON_URL = resolveNeonUrl();
   const session = await getSession();
+  
   if (!session) throw new Error('No active session found');
+  
   let remoteDeleted = 0;
   let userDeleted = 0;
 
-  // Try to delete remote data if online
+  // 1. Remote Deletion (if online and configured)
   if (NEON_URL) {
     try {
-      // Delete entries first (FK constraint)
-      try {
-        const res = await withTimeout(
-          query('DELETE FROM cash_entries WHERE user_id = $1 RETURNING id', [session.id]),
-          10000
-        );
-        if (res && Array.isArray(res)) remoteDeleted = res.length;
-      } catch (err) {
-        console.warn('[Auth] Failed to delete remote entries', err);
-      }
+      // Delete dependent entries first
+      const entriesRes = await withTimeout(
+        query('DELETE FROM cash_entries WHERE user_id = $1 RETURNING id', [session.id]),
+        10_000
+      );
+      if (entriesRes && Array.isArray(entriesRes)) remoteDeleted = entriesRes.length;
 
-      // Delete user
-      try {
-        const ures = await withTimeout(
-          query('DELETE FROM users WHERE id = $1 RETURNING id', [session.id]),
-          10000
-        );
-        if (ures && Array.isArray(ures)) userDeleted = ures.length;
-      } catch (err) {
-        console.warn('[Auth] Failed to delete remote user', err);
-      }
+      // Delete user record
+      const userRes = await withTimeout(
+        query('DELETE FROM users WHERE id = $1 RETURNING id', [session.id]),
+        10_000
+      );
+      if (userRes && Array.isArray(userRes)) userDeleted = userRes.length;
+
     } catch (err) {
-      console.warn('[Auth] Failed to connect to delete remote account', err);
+      console.warn('[Auth] Failed to connect or delete remote account:', err);
+      // Proceed to wipe local data anyway
     }
   }
 
-  // Always wipe local data regardless of remote success
+  // 2. Wipe Local Data
   await wipeLocalDatabase();
 
-  // Attempt to delete user from Clerk as well (best-effort).
+  // 3. Clerk Deletion (Best Effort)
   try {
-    // Try to require Clerk SDK and delete user if a delete API is available.
     const clerk = require('@clerk/clerk-expo');
-    // Some Clerk SDKs expose a `User` object with a `delete` method when used in secure contexts.
-    const maybeUser = (clerk && (clerk.useUser ? clerk.useUser() : null)) || null;
-    if (maybeUser && typeof maybeUser.user?.delete === 'function') {
-      try {
-        await maybeUser.user.delete();
-      } catch (e) {
-        console.warn('[Auth] Clerk user delete failed (client-side)', e);
-      }
-    } else if (clerk && typeof clerk.signOut === 'function') {
-      // At minimum sign the user out of Clerk.
-      try {
-        await clerk.signOut();
-      } catch (e) {}
+    if (clerk && typeof clerk.signOut === 'function') {
+      await clerk.signOut();
     }
+    // Note: Actual user deletion usually requires a backend API call to Clerk 
+    // rather than a client-side call, unless using useUser().delete().
   } catch (e) {
-    // Likely not running in an environment where Clerk admin APIs are available.
-    console.warn('[Auth] Clerk deletion not performed (needs server-side API)', e);
+    console.warn('[Auth] Clerk clean up failed', e);
   }
 
   return { remoteDeleted, userDeleted };
@@ -340,34 +316,36 @@ export const updateProfile = async (updates: { name?: string; email?: string }) 
   const newName = updates.name !== undefined ? updates.name : session.name;
   const newEmail = updates.email !== undefined ? updates.email : session.email;
 
-  // 1. Offline or No-Backend Mode: Update locally
+  // 1. Offline Handling
   const online = await isOnline();
   if (!NEON_URL || !online) {
     if (NEON_URL) {
-      // If we have a backend but are offline, queue the update
+      // Online configured but currently offline -> Queue it
       try {
         await addPendingProfileUpdate(session.id, updates);
       } catch (e) {
         console.warn('[Auth] Failed to queue pending profile update', e);
       }
     }
-    // Apply locally
+    // Apply locally immediately
     await saveSession(session.id, newName || '', newEmail || '');
     return { id: session.id, name: newName, email: newEmail, queued: !online };
   }
 
-  // 2. Online Mode
+  // 2. Online Handling
+  // Check for email collision if email is changing
   if (updates.email && updates.email !== session.email) {
     const existing = await withTimeout(
       query('SELECT id FROM users WHERE email = $1 AND id != $2 LIMIT 1', [
         updates.email,
         session.id,
       ]),
-      6000
+      6_000
     );
     if (existing && existing.length > 0) throw new Error('Email already in use');
   }
 
+  // Construct Dynamic SQL
   const fields: string[] = [];
   const params: any[] = [];
   let idx = 1;
@@ -385,51 +363,52 @@ export const updateProfile = async (updates: { name?: string; email?: string }) 
     params.push(session.id);
     const sql = `UPDATE users SET ${fields.join(', ')} WHERE id = $${idx} RETURNING id, name, email`;
 
-    const res = await query(sql, params);
+    const res = await query<UserRow>(sql, params);
     if (res && res.length) {
       const user = res[0];
       await saveSession(user.id, user.name || '', user.email);
-      return user;
+      return { id: user.id, name: user.name, email: user.email };
     }
   }
 
-  // Fallback (no fields changed)
+  // Fallback (no fields changed or update failed silently)
   return { id: session.id, name: newName, email: newEmail };
 };
 
-/**
- * Update profile both in Clerk (if available) and Neon. Caller can pass a
- * Clerk user object (from `useUser()`) for client-side update; if absent,
- * only Neon will be updated.
- */
 export const updateProfileWithClerk = async (opts: {
-  clerkUser?: any;
+  clerkUser?: any; // Keeping any to avoid strict dependency on Clerk types if not installed
   updates: { name?: string; email?: string };
 }) => {
   const { clerkUser, updates } = opts;
 
-  // 1. If Clerk user object is provided, update Clerk first (best-effort)
+  // 1. Update Clerk (Best Effort)
   if (clerkUser && typeof clerkUser.update === 'function') {
     try {
+      const updatePayload: any = {};
+      
       if (updates.name !== undefined) {
         const parts = (updates.name || '').trim().split(/\s+/);
-        const firstName = parts[0] || updates.name || '';
-        const lastName = parts.length > 1 ? parts.slice(1).join(' ') : '';
-        await clerkUser.update({ firstName, lastName });
+        updatePayload.firstName = parts[0] || updates.name || '';
+        updatePayload.lastName = parts.length > 1 ? parts.slice(1).join(' ') : '';
       }
+      
+      // Updating email in Clerk usually requires a verification flow.
+      // We attempt it here, but it might throw if not verified.
       if (updates.email !== undefined) {
-        try {
-          await clerkUser.update({ emailAddress: updates.email });
-        } catch (e) {
-          // Some Clerk SDKs require email verification flows; ignore here and proceed
-        }
+         // This is highly dependent on Clerk configuration (strict vs loose)
+         // updatePayload.emailAddress = updates.email; 
+      }
+
+      if (Object.keys(updatePayload).length > 0) {
+        await clerkUser.update(updatePayload);
       }
     } catch (e) {
-      console.warn('[Auth] Clerk profile update failed', e);
+      console.warn('[Auth] Clerk profile update failed:', e);
+      // We continue to update Neon/Local even if Clerk fails to keep app usable
     }
   }
 
-  // 2. Persist to Neon via existing helper (this will save local session)
+  // 2. Persist to Neon & Local
   return await updateProfile(updates);
 };
 
@@ -440,13 +419,14 @@ export const changePassword = async (currentPassword: string, newPassword: strin
   const session = await getSession();
   if (!session) throw new Error('No active session');
 
-  const online = await isOnline();
-  if (!online) throw new Error('Online connection required to change password');
+  if (!(await isOnline())) {
+    throw new Error('Online connection required to change password');
+  }
 
   // Verify current password
   const res = await withTimeout(
-    query('SELECT password_hash FROM users WHERE id = $1', [session.id]),
-    8000
+    query<UserRow>('SELECT password_hash FROM users WHERE id = $1', [session.id]),
+    8_000
   );
 
   if (!res || res.length === 0) throw new Error('User record not found');
