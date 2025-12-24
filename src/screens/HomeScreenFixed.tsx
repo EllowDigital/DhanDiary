@@ -27,6 +27,7 @@ import Svg, { Defs, LinearGradient, Stop, Rect, Circle } from 'react-native-svg'
 import { LineChart, PieChart } from 'react-native-chart-kit';
 import { LocalEntry } from '../db/entries';
 import { getIconForCategory } from '../constants/categories';
+import { subscribeSyncStatus } from '../services/syncManager';
 
 // --- CRASH FIX: Safe LayoutAnimation Setup ---
 try {
@@ -234,6 +235,7 @@ const HomeScreen = () => {
   const [showBalance, setShowBalance] = useState(true);
   const [period, setPeriod] = useState<'week' | 'month'>('month');
   const [chartType, setChartType] = useState<'wave' | 'pie' | 'list'>('wave');
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(40)).current;
@@ -243,6 +245,13 @@ const HomeScreen = () => {
       Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
       Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, damping: 20 }),
     ]).start();
+  }, []);
+
+  useEffect(() => {
+    const unsub = subscribeSyncStatus((running) => {
+      setIsSyncing(running);
+    });
+    return () => unsub();
   }, []);
 
   const triggerLayoutAnimation = () => {
@@ -321,6 +330,12 @@ const HomeScreen = () => {
 
   const renderHeader = () => (
     <View style={styles.headerContainer}>
+      {isSyncing && (
+        <View style={styles.syncBanner}>
+          <ActivityIndicator size="small" color="#fff" />
+          <Text style={styles.syncBannerText}>Syncing…</Text>
+        </View>
+      )}
       {/* 1. TOP BAR */}
       <View style={styles.topBar}>
         <View style={styles.userInfo}>
@@ -536,6 +551,7 @@ const HomeScreen = () => {
   );
 };
 
+
 // --- STYLES ---
 const styles = StyleSheet.create({
   main: { flex: 1, backgroundColor: colors.background },
@@ -551,6 +567,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
   },
+  syncBanner: {
+    backgroundColor: '#2563eb',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  syncBannerText: { color: '#fff', marginLeft: 8, fontWeight: '600' },
   userInfo: { flexDirection: 'row', alignItems: 'center' },
   menuBtn: {
     padding: 8,

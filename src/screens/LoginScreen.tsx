@@ -120,60 +120,61 @@ const LoginScreen = () => {
     userEmail: string,
     userName?: string | null
   ) => {
-    setSyncing(true);
-    console.log(`[Login] Initiating sync for ${userEmail}`);
+    console.log(`[Login] initiating background sync for ${userEmail}`);
 
-    // 1. Bridge Sync (Remote)
-    const bridgeTimeoutMs = 12000;
-    let resolvedBridgeUser: BridgeUser | null = null;
+    // 1. Start bridge sync in background (do not block navigation)
+    const bridgeTimeoutMs = 8000;
+    const bridgePromise = Promise.race([
+      syncClerkUserToNeon({ id: userId, emailAddresses: [{ emailAddress: userEmail }], fullName: userName }),
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error('Bridge sync timed out')), bridgeTimeoutMs)),
+    ])
+      .then(async (resolved: any) => {
+        try {
+          if (resolved && resolved.uuid) {
+            await saveSession(resolved.uuid, resolved.name || userName || 'User', resolved.email || userEmail);
+            console.log('[Login] bridge persisted Neon UUID to local DB', resolved.uuid);
+          }
+        } catch (e) {
+          console.warn('[Login] persisting bridge result failed', e);
+          try {
+            await AsyncStorage.setItem('FALLBACK_SESSION', JSON.stringify({ id: resolved?.uuid || userId, name: resolved?.name || userName || 'User', email: resolved?.email || userEmail }));
+          } catch (e) {}
+        }
+      })
+      .catch((e) => {
+        console.warn('[Login] bridge background sync failed/timeout', e?.message || e);
+      });
 
+    // 2. Persist session immediately with Clerk id so user can continue.
+    const immediateId = userId || `local-${Date.now()}`;
     try {
-      resolvedBridgeUser = await Promise.race([
-        syncClerkUserToNeon({
-          id: userId,
-          emailAddresses: [{ emailAddress: userEmail }],
-          fullName: userName,
-        }),
-        new Promise<never>((_, rej) =>
-          setTimeout(() => rej(new Error('Bridge sync timed out')), bridgeTimeoutMs)
-        ),
-      ]);
-      console.log('[Login] Bridge sync success:', resolvedBridgeUser?.uuid);
-    } catch (e: any) {
-      console.warn('[Login] Bridge sync warning:', e.message);
-      // We continue even if bridge fails, using local-only mode
-    }
-
-    // 2. Persist Session (Local)
-    const finalId = resolvedBridgeUser?.uuid || userId;
-    const finalName = userName || 'User';
-    const finalEmail = resolvedBridgeUser?.email || userEmail;
-
-    try {
-      await saveSession(finalId, finalName, finalEmail);
-      console.log('[Login] Session saved locally');
+      await Promise.race([saveSession(immediateId, userName || 'User', userEmail), new Promise((res) => setTimeout(() => res(null), 1500))]);
+      console.log('[Login] session saved (immediate)');
     } catch (e) {
-      console.error('[Login] Failed to save local session', e);
-      // Critical Fallback: AsyncStorage
-      await AsyncStorage.setItem('FALLBACK_SESSION', JSON.stringify({
-         id: finalId, name: finalName, email: finalEmail 
-      })).catch(() => {});
+      console.warn('[Login] immediate save failed, falling back to AsyncStorage', e);
+      try {
+        await AsyncStorage.setItem('FALLBACK_SESSION', JSON.stringify({ id: immediateId, name: userName || 'User', email: userEmail }));
+      } catch (e) {}
     }
 
-    // 3. Initial Data Pull (Best Effort)
+    // 3. Navigate immediately so user can start using app; sync will continue in background.
+    try {
+      navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+    } catch (e) {
+      console.warn('[Login] navigation.reset failed', e);
+    }
+
+    // 4. Kick off initial background data sync (non-blocking)
     try {
       const { syncBothWays } = require('../services/syncManager');
-      await Promise.race([
-        syncBothWays(),
-        new Promise((_, rej) => setTimeout(() => rej(new Error('Sync timeout')), 3000)),
-      ]);
+      // run but don't await; handle errors
+      syncBothWays().catch((err: any) => console.warn('[Login] background initial sync failed', err));
     } catch (e) {
-      console.log('[Login] Initial sync skipped/timed out (backgrounding)');
-    } finally {
-      setSyncing(false);
-      // 4. Navigation
-      navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+      console.warn('[Login] failed to start background sync', e);
     }
+
+    // Allow bridgePromise to finish and persist if possible (already started above)
+    void bridgePromise;
   };
 
   // --- Handlers ---
