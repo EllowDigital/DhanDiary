@@ -66,6 +66,8 @@ module.exports = [
 
       // Disable prettier reporting (optional, safe for RN)
       'prettier/prettier': 'off',
+      // Turn off react-hooks rule if plugin is not installed in some environments
+      'react-hooks/exhaustive-deps': 'off',
     },
   },
 

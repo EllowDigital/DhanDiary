@@ -133,8 +133,7 @@ export const useAuth = () => {
     try {
       const current = clerk.user as any;
       const id = current?.id || current?.userId;
-      const name =
-        (current?.fullName as string) || (current?.full_name as string) || '';
+      const name = (current?.fullName as string) || (current?.full_name as string) || '';
       const email =
         current?.primaryEmailAddress?.emailAddress || current?.emailAddresses?.[0]?.emailAddress;
       if (id && (name || email)) {
@@ -152,7 +151,11 @@ export const useAuth = () => {
             if (bridge && bridge.uuid) {
               try {
                 await saveSession(uid, bridge.name || name || '', bridge.email || email || '');
-                setUser({ id: uid, name: bridge.name || name || '', email: bridge.email || email || '' });
+                setUser({
+                  id: uid,
+                  name: bridge.name || name || '',
+                  email: bridge.email || email || '',
+                });
               } catch (e) {}
             }
           } catch (e) {

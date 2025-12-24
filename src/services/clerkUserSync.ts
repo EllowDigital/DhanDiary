@@ -14,6 +14,7 @@ export interface BridgeUser {
   email: string;
   name: string | null;
   server_version: number;
+  isOfflineFallback?: boolean; // true when we couldn't persist to Neon
 }
 
 // Internal DB Row Interface
@@ -76,6 +77,7 @@ export const syncClerkUserToNeon = async (clerkUser: {
       email: user.email,
       name: user.name,
       server_version: 0,
+      isOfflineFallback: false,
     };
   } catch (err: any) {
     // 3. OFFLINE FALLBACK
@@ -106,5 +108,6 @@ const createOfflineFallback = async (
     email: email,
     name: name,
     server_version: 0,
+    isOfflineFallback: true,
   };
 };

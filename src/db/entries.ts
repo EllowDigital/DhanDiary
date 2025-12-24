@@ -18,7 +18,13 @@ const mapClerkToNeon = async (clerkId: string) => {
     const mod = require('../services/clerkUserSync');
     if (mod && typeof mod.syncClerkUserToNeon === 'function') {
       const res = await mod.syncClerkUserToNeon({ id: clerkId, emailAddresses: [], fullName: '' });
-      return res?.uuid || null;
+      if (!res) return null;
+      // If the bridge returned an offline fallback, treat it as a mapping failure.
+      if (res.isOfflineFallback) {
+        console.warn('[mapClerkToNeon] bridge returned offline fallback for clerkId', clerkId);
+        return null;
+      }
+      return res.uuid || null;
     }
   } catch (e) {}
   return null;

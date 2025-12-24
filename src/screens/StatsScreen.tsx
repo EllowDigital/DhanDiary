@@ -316,7 +316,6 @@ const StatsScreen = () => {
     const shouldRun = true;
     if (!shouldRun) return;
     runAnalysis();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter, rangeStart?.valueOf(), rangeEnd?.valueOf(), entries?.length, user?.id]);
 
   // --- RENDER HELPERS ---

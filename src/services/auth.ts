@@ -202,31 +202,7 @@ export const deleteAccount = async () => {
   const NEON_URL = resolveNeonUrl();
   const session = await getSession();
   if (!session) throw new Error('No active session found');
-
-  // Attempt to delete user from Clerk as well (best-effort).
-  try {
-    // Try to require Clerk SDK and delete user if a delete API is available.
-    const clerk = require('@clerk/clerk-expo');
-    // Some Clerk SDKs expose a `User` object with a `delete` method when used in secure contexts.
-    const maybeUser = (clerk && (clerk.useUser ? clerk.useUser() : null)) || null;
-    if (maybeUser && typeof maybeUser.user?.delete === 'function') {
-      try {
-        await maybeUser.user.delete();
-      } catch (e) {
-        console.warn('[Auth] Clerk user delete failed (client-side)', e);
-      }
-    } else if (clerk && typeof clerk.signOut === 'function') {
-      // At minimum sign the user out of Clerk.
-      try {
-        await clerk.signOut();
-      } catch (e) {}
-    }
-  } catch (e) {
-    // Likely not running in an environment where Clerk admin APIs are available.
-    console.warn('[Auth] Clerk deletion not performed (needs server-side API)', e);
-  }
-
-  return { remoteDeleted, userDeleted };
+  let remoteDeleted = 0;
   let userDeleted = 0;
 
   // Try to delete remote data if online
@@ -260,6 +236,30 @@ export const deleteAccount = async () => {
 
   // Always wipe local data regardless of remote success
   await wipeLocalDatabase();
+
+  // Attempt to delete user from Clerk as well (best-effort).
+  try {
+    // Try to require Clerk SDK and delete user if a delete API is available.
+    const clerk = require('@clerk/clerk-expo');
+    // Some Clerk SDKs expose a `User` object with a `delete` method when used in secure contexts.
+    const maybeUser = (clerk && (clerk.useUser ? clerk.useUser() : null)) || null;
+    if (maybeUser && typeof maybeUser.user?.delete === 'function') {
+      try {
+        await maybeUser.user.delete();
+      } catch (e) {
+        console.warn('[Auth] Clerk user delete failed (client-side)', e);
+      }
+    } else if (clerk && typeof clerk.signOut === 'function') {
+      // At minimum sign the user out of Clerk.
+      try {
+        await clerk.signOut();
+      } catch (e) {}
+    }
+  } catch (e) {
+    // Likely not running in an environment where Clerk admin APIs are available.
+    console.warn('[Auth] Clerk deletion not performed (needs server-side API)', e);
+  }
+
   return { remoteDeleted, userDeleted };
 };
 

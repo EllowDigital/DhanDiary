@@ -275,10 +275,10 @@ function AppBootstrap() {
 
   // Wait until Clerk SDK resolves session state. Render nothing (or a splash)
   // while Clerk is initializing so we don't assume logged-out before Clerk is ready.
-  if (!isLoaded) {
-    return null;
-  }
-
+  // Previously we returned `null` while Clerk initialized which could leave
+  // the app as a blank white screen on resume. Instead render the app shell
+  // and let internal components handle loading states. This avoids a white
+  // screen when the process was backgrounded and resumed.
   return <AppWithDb />;
 }
 
