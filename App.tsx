@@ -37,7 +37,12 @@ import {
 } from './src/services/syncManager';
 
 // --- Configuration ---
-LogBox.ignoreLogs(['setLayoutAnimationEnabledExperimental', 'Process ID']);
+LogBox.ignoreLogs([
+  'setLayoutAnimationEnabledExperimental',
+  'setLayoutAnimationEnabledExperimental is currently a no-op in the New Architecture.',
+  "The action 'GO_BACK' was not handled by any navigator.",
+  'Process ID',
+]);
 
 if (__DEV__) {
   require('./src/utils/devDiagnostics');

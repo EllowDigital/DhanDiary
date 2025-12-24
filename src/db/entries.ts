@@ -1,4 +1,25 @@
 import { query } from '../api/neonClient';
+// lightweight UUID helpers (avoid importing ESM-only 'uuid' in tests)
+const uuidValidate = (s: any) =>
+  typeof s === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(s);
+
+const uuidv4 = () => {
+  // Simple v4 generator (sufficient for client-side IDs)
+  const hex = () => Math.floor((1 + Math.random()) * 0x10000).toString(16).substring(1);
+  return `${hex()}${hex()}-${hex()}-${hex()}-${hex()}-${hex()}${hex()}${hex()}`;
+};
+
+// lazy import to avoid circular at runtime; used when mapping clerk id -> neon uuid
+const mapClerkToNeon = async (clerkId: string) => {
+  try {
+    const mod = require('../services/clerkUserSync');
+    if (mod && typeof mod.syncClerkUserToNeon === 'function') {
+      const res = await mod.syncClerkUserToNeon({ id: clerkId, emailAddresses: [], fullName: '' });
+      return res?.uuid || null;
+    }
+  } catch (e) {}
+  return null;
+};
 
 export type LocalEntry = any;
 
@@ -18,6 +39,7 @@ const mapRowToLocal = (r: any): LocalEntry => ({
 });
 
 export const getEntries = async (userId: string) => {
+  if (!userId || !uuidValidate(userId)) return [];
   const rows = await query(
     `SELECT id, user_id, type, amount, category, note, currency, created_at, updated_at, date FROM cash_entries WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 1000`,
     [userId]
@@ -26,10 +48,27 @@ export const getEntries = async (userId: string) => {
 };
 
 export const addLocalEntry = async (entry: any) => {
+  // Ensure we have a valid Neon user id. If caller passed a Clerk id (non-UUID),
+  // attempt to map it to a Neon UUID via the bridge. If mapping fails, abort.
+  let userId = entry.user_id;
+  if (!userId) throw new Error('Missing user_id for entry');
+  if (!uuidValidate(userId)) {
+    const mapped = await mapClerkToNeon(userId);
+    if (mapped) userId = mapped;
+    else {
+      console.error('[addLocalEntry] user_id is not a valid Neon UUID and mapping failed', userId);
+      throw new Error('Invalid user id for remote insert');
+    }
+  }
+
+  // Ensure client_id exists
+  const clientId = entry.client_id && uuidValidate(entry.client_id) ? entry.client_id : uuidv4();
+
   const res = await query(
-    `INSERT INTO cash_entries (user_id, type, amount, category, note, currency, created_at, updated_at, date) VALUES ($1,$2,$3::numeric,$4,$5,$6,$7::timestamptz,$8::timestamptz,$9::timestamptz) RETURNING id, user_id, type, amount, category, note, currency, created_at, updated_at, date`,
+    `INSERT INTO cash_entries (user_id, client_id, type, amount, category, note, currency, created_at, updated_at, date) VALUES ($1,$2,$3,$4::numeric,$5,$6,$7,$8::timestamptz,$9::timestamptz,$10::timestamptz) RETURNING id, user_id, type, amount, category, note, currency, created_at, updated_at, date, client_id`,
     [
-      entry.user_id,
+      userId,
+      clientId,
       entry.type,
       Number(entry.amount),
       entry.category,
@@ -126,6 +165,7 @@ export const getLocalByClientId = async (_clientId: string) => {
 export const getUnsyncedEntries = async () => [];
 
 export async function* fetchEntriesGenerator(userId: string, pageSize: number = 1000) {
+  if (!userId || !uuidValidate(userId)) return;
   const rows = await query(
     `SELECT id, user_id, type, amount, category, note, currency, created_at, updated_at, date FROM cash_entries WHERE user_id = $1 ORDER BY updated_at DESC`,
     [userId]

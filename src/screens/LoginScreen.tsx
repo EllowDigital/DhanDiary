@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -19,6 +19,7 @@ import { Ionicons, FontAwesome } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
 import { useNavigation } from '@react-navigation/native';
+import { AppState, AppStateStatus } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { syncClerkUserToNeon, BridgeUser } from '../services/clerkUserSync';
@@ -68,6 +69,14 @@ const LoginScreen = () => {
   // OAuth Strategies
   const { startOAuthFlow: startGoogleFlow } = useOAuth({ strategy: 'oauth_google' });
   const { startOAuthFlow: startGithubFlow } = useOAuth({ strategy: 'oauth_github' });
+
+  const isActiveRef = useRef(true);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
+      isActiveRef.current = next === 'active';
+    });
+    return () => sub.remove();
+  }, []);
 
   // UI State
   const [email, setEmail] = useState('');
@@ -163,8 +172,13 @@ const LoginScreen = () => {
       });
 
     // 2. Persist a temporary fallback session so the UI can continue.
-    // Do NOT persist the Clerk id as the authoritative session (it is not a Neon UUID).
-    const immediateId = `fallback_${Date.now()}`;
+    // Use a proper UUID (v4-like) instead of a human-readable fallback string
+    // so it won't be accidentally used in UUID-typed DB columns.
+    const genUuid = () => {
+      const hex = () => Math.floor((1 + Math.random()) * 0x10000).toString(16).substring(1);
+      return `${hex()}${hex()}-${hex()}-${hex()}-${hex()}-${hex()}${hex()}${hex()}`;
+    };
+    const immediateId = genUuid();
     try {
       await Promise.race([
         saveSession(immediateId, userName || 'User', userEmail),
@@ -240,6 +254,12 @@ const LoginScreen = () => {
 
   const onSocialLogin = async (strategy: 'google' | 'github') => {
     if (!isLoaded || loading) return;
+    // Ensure app is in foreground; opening browser from background can fail on Android
+    if (!isActiveRef.current) {
+      console.warn('[Login] App not active; skipping social login start');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -274,9 +294,14 @@ const LoginScreen = () => {
       }
     } catch (err: any) {
       console.log('OAuth Error:', err);
-      // Don't alert if user just cancelled
-      if (!err.message?.includes('cancelled')) {
-        Alert.alert('Social Login Failed', 'Could not complete login. Please try again.');
+      // Don't alert if user just cancelled or if app not active
+      const shouldAlert = isActiveRef.current && !err.message?.includes('cancelled');
+      if (shouldAlert) {
+        try {
+          Alert.alert('Social Login Failed', 'Could not complete login. Please try again.');
+        } catch (e) {
+          console.warn('Failed to show alert (app may be backgrounded)', e);
+        }
       }
       setLoading(false);
     }

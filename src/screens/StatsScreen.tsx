@@ -215,7 +215,7 @@ const StatsScreen = () => {
   }, [filter, activeMonthKey, activeYear]);
 
   // --- 3. ROBUST ANALYSIS ENGINE ---
-  const runAnalysis = useCallback(async () => {
+  const runAnalysis = async () => {
     // 1. Cancel previous runs
     if (abortControllerRef.current) abortControllerRef.current.abort();
     const controller = new AbortController();
@@ -308,11 +308,16 @@ const StatsScreen = () => {
     } finally {
       if (abortControllerRef.current === controller) setComputing(false);
     }
-  }, [filter, rangeStart, rangeEnd, entries, user]);
+  };
 
   useEffect(() => {
+    // Depend on stable primitives only to avoid re-creating the effect when
+    // array/object identities change across renders (prevents update loops).
+    const shouldRun = true;
+    if (!shouldRun) return;
     runAnalysis();
-  }, [runAnalysis]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filter, rangeStart?.valueOf(), rangeEnd?.valueOf(), entries?.length, user?.id]);
 
   // --- RENDER HELPERS ---
   const currencySymbol = stats?.currency === 'USD' ? '$' : '₹';

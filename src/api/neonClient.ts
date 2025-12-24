@@ -9,7 +9,7 @@ const NEON_URL = (Constants?.expoConfig?.extra as any)?.NEON_URL || process.env.
 const sql = NEON_URL ? neon(NEON_URL) : null;
 
 // Timeouts / caches
-const DEFAULT_TIMEOUT_MS = 25000;
+const DEFAULT_TIMEOUT_MS = 45000;
 const NETINFO_CACHE_MS = 10000;
 const CIRCUIT_FUSE_MAX_MS = 30000;
 
