@@ -1,69 +1,30 @@
-import AsyncStorage from '../utils/AsyncStorageWrapper';
+// AsyncStorage-backed queueing disabled for online-only mode. Do not persist
+// transactions or large objects in AsyncStorage. Keep APIs as no-ops returning
+// safe defaults so callers continue to work without error.
 
-const KEY_QUEUED_REMOTE = 'queued_remote_rows_v1';
-const KEY_QUEUED_MAP = 'queued_local_remote_map_v1';
-
-const read = async (key: string) => {
-  const raw = await AsyncStorage.getItem(key);
-  return raw ? JSON.parse(raw) : [];
+export const queueRemoteRow = async (_remote: any) => {
+  return null;
 };
 
-const write = async (key: string, arr: any[]) => {
-  await AsyncStorage.setItem(key, JSON.stringify(arr));
+export const getQueuedRemoteRows = async () => [];
+
+export const removeQueuedRemoteRow = async (_id: number) => {
+  return null;
 };
 
-export const queueRemoteRow = async (remote: any) => {
-  const arr = await read(KEY_QUEUED_REMOTE);
-  arr.push({
-    id: Date.now() + Math.random(),
-    payload: JSON.stringify(remote),
-    queued_at: new Date().toISOString(),
-    attempts: 0,
-  });
-  await write(KEY_QUEUED_REMOTE, arr);
+export const queueLocalRemoteMapping = async (_localId: string, _remoteId: string) => {
+  return null;
 };
 
-export const getQueuedRemoteRows = async () => {
-  return await read(KEY_QUEUED_REMOTE);
+export const getQueuedLocalRemoteMappings = async () => [];
+
+export const removeQueuedLocalRemoteMapping = async (_id: number) => {
+  return null;
 };
 
-export const removeQueuedRemoteRow = async (id: number) => {
-  let arr = await read(KEY_QUEUED_REMOTE);
-  arr = arr.filter((x: any) => x.id !== id);
-  await write(KEY_QUEUED_REMOTE, arr);
-};
+export const flushQueuedRemoteRows = async () => ({ processed: 0 });
 
-export const queueLocalRemoteMapping = async (localId: string, remoteId: string) => {
-  const arr = await read(KEY_QUEUED_MAP);
-  arr.push({
-    id: Date.now() + Math.random(),
-    local_id: localId,
-    remote_id: remoteId,
-    queued_at: new Date().toISOString(),
-    attempts: 0,
-  });
-  await write(KEY_QUEUED_MAP, arr);
-};
-
-export const getQueuedLocalRemoteMappings = async () => {
-  return await read(KEY_QUEUED_MAP);
-};
-
-export const removeQueuedLocalRemoteMapping = async (id: number) => {
-  let arr = await read(KEY_QUEUED_MAP);
-  arr = arr.filter((x: any) => x.id !== id);
-  await write(KEY_QUEUED_MAP, arr);
-};
-
-export const flushQueuedRemoteRows = async () => {
-  await write(KEY_QUEUED_REMOTE, []);
-  return { processed: 0 };
-};
-
-export const flushQueuedLocalRemoteMappings = async () => {
-  await write(KEY_QUEUED_MAP, []);
-  return { processed: 0 };
-};
+export const flushQueuedLocalRemoteMappings = async () => ({ processed: 0 });
 
 export default {
   queueRemoteRow,

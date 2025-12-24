@@ -1,65 +1,88 @@
-// Offline/local DB support disabled: app requires online NeonDB/Clerk.
-const offlineError = (fnName = ''): never => {
-  throw new Error(`Offline/local DB disabled (${fnName}). App requires online NeonDB/Clerk.`);
-};
+// Offline/local DB support removed: provide safe no-op implementations so runtime
+// code running in online-only mode (Clerk + NeonDB) does not throw.
 
 // Export functions with compatible signatures so callers across the app compile
-export const init = async (..._args: any[]): Promise<void> => offlineError('init');
-export const isDbOperational = async (..._args: any[]) => offlineError('isDbOperational');
-export const getDb = async (..._args: any[]) => offlineError('getDb');
-
-export const addLocalEntry = async (..._args: any[]) => offlineError('addLocalEntry');
-export const getEntries = async (..._args: any[]): Promise<any[]> => offlineError('getEntries');
-export const updateLocalEntry = async (..._args: any[]) => offlineError('updateLocalEntry');
-export const markEntryDeleted = async (..._args: any[]) => offlineError('markEntryDeleted');
-export const markEntrySynced = async (..._args: any[]) => offlineError('markEntrySynced');
-export const getEntryByLocalId = async (..._args: any[]): Promise<any | null> =>
-  offlineError('getEntryByLocalId');
-export const getLocalByRemoteId = async (..._args: any[]): Promise<any | null> =>
-  offlineError('getLocalByRemoteId');
-export const upsertLocalFromRemote = async (..._args: any[]) =>
-  offlineError('upsertLocalFromRemote');
-export const getLocalByClientId = async (..._args: any[]): Promise<any | null> =>
-  offlineError('getLocalByClientId');
-export const getUnsyncedEntries = async (..._args: any[]): Promise<any[]> =>
-  offlineError('getUnsyncedEntries');
-
-// eslint-disable-next-line require-yield
-export const fetchEntriesGenerator = async function* (
-  ..._args: any[]
-): AsyncGenerator<any, void, unknown> {
-  offlineError('fetchEntriesGenerator');
+export const init = async (..._args: any[]): Promise<void> => {
+  // no-op initializer for online-only mode
+  return;
+};
+export const isDbOperational = async (..._args: any[]) => {
+  return false;
+};
+export const getDb = async (..._args: any[]) => {
+  return null;
 };
 
-export const getSummary = async (..._args: any[]): Promise<any> => offlineError('getSummary');
+export const addLocalEntry = async (..._args: any[]) => {
+  return null;
+};
+export const getEntries = async (..._args: any[]): Promise<any[]> => {
+  return [];
+};
+export const updateLocalEntry = async (..._args: any[]) => {
+  return null;
+};
+export const markEntryDeleted = async (..._args: any[]) => {
+  return null;
+};
+export const markEntrySynced = async (..._args: any[]) => {
+  return null;
+};
+export const getEntryByLocalId = async (..._args: any[]): Promise<any | null> =>
+  null;
+export const getLocalByRemoteId = async (..._args: any[]): Promise<any | null> => null;
+export const upsertLocalFromRemote = async (..._args: any[]) => {
+  return null;
+};
+export const getLocalByClientId = async (..._args: any[]): Promise<any | null> => null;
+export const getUnsyncedEntries = async (..._args: any[]): Promise<any[]> => [];
 
-export const addPendingProfileUpdate = async (..._args: any[]) =>
-  offlineError('addPendingProfileUpdate');
-export const getPendingProfileUpdates = async (..._args: any[]): Promise<any[]> =>
-  offlineError('getPendingProfileUpdates');
-export const markPendingProfileProcessed = async (..._args: any[]) =>
-  offlineError('markPendingProfileProcessed');
+// eslint-disable-next-line require-yield
+export const fetchEntriesGenerator = async function* (..._args: any[]): AsyncGenerator<any, void, unknown> {
+  // yields nothing in online-only mode
+  return;
+};
 
-export const queueRemoteRow = async (..._args: any[]) => offlineError('queueRemoteRow');
-export const getQueuedRemoteRows = async (..._args: any[]) => offlineError('getQueuedRemoteRows');
-export const removeQueuedRemoteRow = async (..._args: any[]) =>
-  offlineError('removeQueuedRemoteRow');
-export const flushQueuedRemoteRows = async (..._args: any[]) =>
-  offlineError('flushQueuedRemoteRows');
-export const queueLocalRemoteMapping = async (..._args: any[]) =>
-  offlineError('queueLocalRemoteMapping');
-export const getQueuedLocalRemoteMappings = async (..._args: any[]) =>
-  offlineError('getQueuedLocalRemoteMappings');
-export const removeQueuedLocalRemoteMapping = async (..._args: any[]) =>
-  offlineError('removeQueuedLocalRemoteMapping');
-export const flushQueuedLocalRemoteMappings = async (..._args: any[]) =>
-  offlineError('flushQueuedLocalRemoteMappings');
+export const getSummary = async (..._args: any[]): Promise<any> => ({ total: 0 });
 
-export const flushFallbackLocalEntries = async (..._args: any[]) =>
-  offlineError('flushFallbackLocalEntries');
+export const addPendingProfileUpdate = async (..._args: any[]) => {
+  return null;
+};
+export const getPendingProfileUpdates = async (..._args: any[]): Promise<any[]> => [];
+export const markPendingProfileProcessed = async (..._args: any[]) => {
+  return null;
+};
 
-export const clearAllData = async (..._args: any[]) => offlineError('clearAllData');
-export const wipeLocalDatabase = async (..._args: any[]) => offlineError('wipeLocalDatabase');
+export const queueRemoteRow = async (..._args: any[]) => {
+  // disabled: do not persist remote rows in AsyncStorage
+  return null;
+};
+export const getQueuedRemoteRows = async (..._args: any[]) => [];
+export const removeQueuedRemoteRow = async (..._args: any[]) => {
+  return null;
+};
+export const flushQueuedRemoteRows = async (..._args: any[]) => {
+  return { processed: 0 };
+};
+export const queueLocalRemoteMapping = async (..._args: any[]) => {
+  return null;
+};
+export const getQueuedLocalRemoteMappings = async (..._args: any[]) => [];
+export const removeQueuedLocalRemoteMapping = async (..._args: any[]) => {
+  return null;
+};
+export const flushQueuedLocalRemoteMappings = async (..._args: any[]) => {
+  return { processed: 0 };
+};
+
+export const flushFallbackLocalEntries = async (..._args: any[]) => ({ processed: 0 });
+
+export const clearAllData = async (..._args: any[]) => {
+  return null;
+};
+export const wipeLocalDatabase = async (..._args: any[]) => {
+  return null;
+};
 
 // Provide compat exports for session helpers (redirect to session module)
 import * as session from './session';
@@ -67,7 +90,9 @@ export const getSession = session.getSession;
 export const saveSession = session.saveSession;
 export const clearSession = session.clearSession;
 
-export const deleteLocalEntry = async (..._args: any[]) => offlineError('deleteLocalEntry');
+export const deleteLocalEntry = async (..._args: any[]) => {
+  return null;
+};
 
 export default {
   init,
