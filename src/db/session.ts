@@ -18,7 +18,9 @@ export const getSession = async (): Promise<Session> => {
 export const saveSession = async (id: string, name: string, email: string) => {
   try {
     await AsyncStorage.setItem(KEY, JSON.stringify({ id, name, email }));
-    try { notifySessionChanged(); } catch (e) {}
+    try {
+      notifySessionChanged();
+    } catch (e) {}
   } catch (e) {
     console.error('[Session] Failed to save session', e);
   }
@@ -27,7 +29,9 @@ export const saveSession = async (id: string, name: string, email: string) => {
 export const clearSession = async () => {
   try {
     await AsyncStorage.removeItem(KEY);
-    try { notifySessionChanged(); } catch (e) {}
+    try {
+      notifySessionChanged();
+    } catch (e) {}
   } catch (e) {
     console.warn('[Session] Failed to clear session', e);
   }

@@ -35,7 +35,9 @@ const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
 const withTimeout = <T>(p: Promise<T>, ms: number): Promise<T> =>
   Promise.race([
     p,
-    new Promise<T>((_, rej) => setTimeout(() => rej(new Error(`Request timed out after ${ms}ms`)), ms)),
+    new Promise<T>((_, rej) =>
+      setTimeout(() => rej(new Error(`Request timed out after ${ms}ms`)), ms)
+    ),
   ] as any);
 
 const getHostFromUrl = (u: string | null) => {
@@ -56,7 +58,8 @@ const recordSuccess = (latencyMs: number) => {
 };
 
 const recordFailure = (err: unknown) => {
-  const message = err instanceof Error ? err.message : typeof err === 'string' ? err : 'Unknown Neon error';
+  const message =
+    err instanceof Error ? err.message : typeof err === 'string' ? err : 'Unknown Neon error';
   lastErrorMessage = message;
 };
 
@@ -118,7 +121,10 @@ export const warmNeonConnection = async () => {
 export const checkNeonConnection = async (timeoutMs = 10000): Promise<boolean> => {
   try {
     const p = warmNeonConnection();
-    await Promise.race([p || Promise.resolve(), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), timeoutMs))]);
+    await Promise.race([
+      p || Promise.resolve(),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), timeoutMs)),
+    ]);
     return !!lastHealthyAt && Date.now() - lastHealthyAt < 60000;
   } catch (e) {
     return false;
@@ -179,7 +185,11 @@ export const query = async <T = any>(
         msg.includes('502') ||
         msg.includes('503');
 
-      if ((error as any)?.code === '23505' || msg.includes('duplicate key') || msg.includes('unique constraint')) {
+      if (
+        (error as any)?.code === '23505' ||
+        msg.includes('duplicate key') ||
+        msg.includes('unique constraint')
+      ) {
         console.warn('Neon Query duplicate key (suppressed):', msg);
         throw error;
       }
@@ -205,4 +215,3 @@ export const query = async <T = any>(
   console.error('Neon Query failed after retries:', lastErr);
   throw lastErr;
 };
-

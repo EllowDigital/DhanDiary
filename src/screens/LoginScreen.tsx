@@ -59,7 +59,7 @@ const usePrintAuthRedirects = () => {
 const LoginScreen = () => {
   useWarmUpBrowser();
   usePrintAuthRedirects();
-  
+
   const navigation = useNavigation<any>();
   const { signIn, setActive, isLoaded } = useSignIn();
   const { user: clerkUser, isLoaded: clerkLoaded } = useUser();
@@ -90,8 +90,9 @@ const LoginScreen = () => {
     const processExistingSession = async () => {
       try {
         const id = clerkUser.id;
-        const email = clerkUser.primaryEmailAddress?.emailAddress || clerkUser.emailAddresses[0]?.emailAddress;
-        
+        const email =
+          clerkUser.primaryEmailAddress?.emailAddress || clerkUser.emailAddresses[0]?.emailAddress;
+
         if (id && email) {
           console.log('[LoginScreen] Detected existing session, syncing...');
           await handleSyncAndNavigate(id, email, clerkUser.fullName);
@@ -124,19 +125,36 @@ const LoginScreen = () => {
     // 1. Start bridge sync in background (do not block navigation)
     const bridgeTimeoutMs = 8000;
     const bridgePromise = Promise.race([
-      syncClerkUserToNeon({ id: userId, emailAddresses: [{ emailAddress: userEmail }], fullName: userName }),
-      new Promise<never>((_, rej) => setTimeout(() => rej(new Error('Bridge sync timed out')), bridgeTimeoutMs)),
+      syncClerkUserToNeon({
+        id: userId,
+        emailAddresses: [{ emailAddress: userEmail }],
+        fullName: userName,
+      }),
+      new Promise<never>((_, rej) =>
+        setTimeout(() => rej(new Error('Bridge sync timed out')), bridgeTimeoutMs)
+      ),
     ])
       .then(async (resolved: any) => {
         try {
           if (resolved && resolved.uuid) {
-            await saveSession(resolved.uuid, resolved.name || userName || 'User', resolved.email || userEmail);
+            await saveSession(
+              resolved.uuid,
+              resolved.name || userName || 'User',
+              resolved.email || userEmail
+            );
             console.log('[Login] bridge persisted Neon UUID to local DB', resolved.uuid);
           }
         } catch (e) {
           console.warn('[Login] persisting bridge result failed', e);
           try {
-            await AsyncStorage.setItem('FALLBACK_SESSION', JSON.stringify({ id: resolved?.uuid || userId, name: resolved?.name || userName || 'User', email: resolved?.email || userEmail }));
+            await AsyncStorage.setItem(
+              'FALLBACK_SESSION',
+              JSON.stringify({
+                id: resolved?.uuid || userId,
+                name: resolved?.name || userName || 'User',
+                email: resolved?.email || userEmail,
+              })
+            );
           } catch (e) {}
         }
       })
@@ -147,12 +165,18 @@ const LoginScreen = () => {
     // 2. Persist session immediately with Clerk id so user can continue.
     const immediateId = userId || `local-${Date.now()}`;
     try {
-      await Promise.race([saveSession(immediateId, userName || 'User', userEmail), new Promise((res) => setTimeout(() => res(null), 1500))]);
+      await Promise.race([
+        saveSession(immediateId, userName || 'User', userEmail),
+        new Promise((res) => setTimeout(() => res(null), 1500)),
+      ]);
       console.log('[Login] session saved (immediate)');
     } catch (e) {
       console.warn('[Login] immediate save failed, falling back to AsyncStorage', e);
       try {
-        await AsyncStorage.setItem('FALLBACK_SESSION', JSON.stringify({ id: immediateId, name: userName || 'User', email: userEmail }));
+        await AsyncStorage.setItem(
+          'FALLBACK_SESSION',
+          JSON.stringify({ id: immediateId, name: userName || 'User', email: userEmail })
+        );
       } catch (e) {}
     }
 
@@ -167,7 +191,9 @@ const LoginScreen = () => {
     try {
       const { syncBothWays } = require('../services/syncManager');
       // run but don't await; handle errors
-      syncBothWays().catch((err: any) => console.warn('[Login] background initial sync failed', err));
+      syncBothWays().catch((err: any) =>
+        console.warn('[Login] background initial sync failed', err)
+      );
     } catch (e) {
       console.warn('[Login] failed to start background sync', e);
     }
@@ -190,7 +216,7 @@ const LoginScreen = () => {
         await setActive({ session: result.createdSessionId });
         // The useEffect hook will detect the new session and trigger handleSyncAndNavigate
         // We return here to avoid race conditions
-        return; 
+        return;
       } else {
         Alert.alert('Verification Required', 'Please check your email for verification steps.');
         setLoading(false);
@@ -198,9 +224,12 @@ const LoginScreen = () => {
     } catch (err: any) {
       console.error('[Login] Error:', err);
       const msg = err.errors?.[0]?.message || err.message || 'Login failed';
-      
+
       if (err.errors?.[0]?.code === 'strategy_for_user_invalid') {
-        Alert.alert('Login Failed', 'This account uses Social Login (Google/GitHub). Please use the buttons below.');
+        Alert.alert(
+          'Login Failed',
+          'This account uses Social Login (Google/GitHub). Please use the buttons below.'
+        );
       } else {
         Alert.alert('Login Failed', msg);
       }
@@ -214,24 +243,29 @@ const LoginScreen = () => {
 
     try {
       const startFlow = strategy === 'google' ? startGoogleFlow : startGithubFlow;
-      
-      const { createdSessionId, setActive: setSession, signIn: signInObj, signUp: signUpObj } = await startFlow({
+
+      const {
+        createdSessionId,
+        setActive: setSession,
+        signIn: signInObj,
+        signUp: signUpObj,
+      } = await startFlow({
         redirectUrl: 'dhandiary://oauth-callback',
       });
 
       if (createdSessionId) {
         await setSession!({ session: createdSessionId });
-        
+
         // Optimistic Sync Trigger
         // Try to extract user info immediately to speed up the UX
         const userData = signInObj?.userData || signUpObj;
         const uid = signInObj?.createdUserId || signUpObj?.createdUserId;
         const uEmail = (userData as any)?.identifier || (userData as any)?.emailAddress;
-        
+
         // If we can't extract it, the useEffect hook will catch it anyway.
         // But if we can, we start sync sooner.
         if (uid && uEmail) {
-             // Let the useEffect handle it to be safe and consistent
+          // Let the useEffect handle it to be safe and consistent
         }
       } else {
         // Flow cancelled or incomplete
@@ -294,7 +328,12 @@ const LoginScreen = () => {
               </View>
 
               <View style={styles.inputContainer}>
-                <Ionicons name="lock-closed-outline" size={20} color="#64748b" style={styles.inputIcon} />
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={20}
+                  color="#64748b"
+                  style={styles.inputIcon}
+                />
                 <TextInput
                   style={styles.input}
                   placeholder="Password"
@@ -304,7 +343,10 @@ const LoginScreen = () => {
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
                 />
-                <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
+                <TouchableOpacity
+                  onPress={() => setShowPassword(!showPassword)}
+                  style={styles.eyeBtn}
+                >
                   <Ionicons name={showPassword ? 'eye' : 'eye-off'} size={20} color="#64748b" />
                 </TouchableOpacity>
               </View>

@@ -14,7 +14,12 @@ const write = async (key: string, arr: any[]) => {
 
 export const queueRemoteRow = async (remote: any) => {
   const arr = await read(KEY_QUEUED_REMOTE);
-  arr.push({ id: Date.now() + Math.random(), payload: JSON.stringify(remote), queued_at: new Date().toISOString(), attempts: 0 });
+  arr.push({
+    id: Date.now() + Math.random(),
+    payload: JSON.stringify(remote),
+    queued_at: new Date().toISOString(),
+    attempts: 0,
+  });
   await write(KEY_QUEUED_REMOTE, arr);
 };
 
@@ -30,7 +35,13 @@ export const removeQueuedRemoteRow = async (id: number) => {
 
 export const queueLocalRemoteMapping = async (localId: string, remoteId: string) => {
   const arr = await read(KEY_QUEUED_MAP);
-  arr.push({ id: Date.now() + Math.random(), local_id: localId, remote_id: remoteId, queued_at: new Date().toISOString(), attempts: 0 });
+  arr.push({
+    id: Date.now() + Math.random(),
+    local_id: localId,
+    remote_id: remoteId,
+    queued_at: new Date().toISOString(),
+    attempts: 0,
+  });
   await write(KEY_QUEUED_MAP, arr);
 };
 

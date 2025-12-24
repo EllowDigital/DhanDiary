@@ -18,7 +18,12 @@ export const markEntryDeleted = async (localId: string) => {
   return localDb.markEntryDeleted(localId);
 };
 
-export const markEntrySynced = async (localId: string, remoteId?: string, serverVersion?: number, syncedUpdatedAt?: string | null) => {
+export const markEntrySynced = async (
+  localId: string,
+  remoteId?: string,
+  serverVersion?: number,
+  syncedUpdatedAt?: string | null
+) => {
   return localDb.markEntrySynced(localId, remoteId, serverVersion, syncedUpdatedAt);
 };
 
