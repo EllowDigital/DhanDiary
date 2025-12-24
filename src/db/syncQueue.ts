@@ -1,66 +1,57 @@
-// Flush queued remote rows
-export const flushQueuedRemoteRows = async () => {
-  const rows = await getQueuedRemoteRows();
-  for (const row of rows) {
-    // Implement actual remote sync logic here
-    // For now, just remove from queue
-    await removeQueuedRemoteRow(row.id);
-  }
+import AsyncStorage from '../utils/AsyncStorageWrapper';
+
+const KEY_QUEUED_REMOTE = 'queued_remote_rows_v1';
+const KEY_QUEUED_MAP = 'queued_local_remote_map_v1';
+
+const read = async (key: string) => {
+  const raw = await AsyncStorage.getItem(key);
+  return raw ? JSON.parse(raw) : [];
 };
 
-// Flush queued local->remote mappings
-export const flushQueuedLocalRemoteMappings = async () => {
-  const mappings = await getQueuedLocalRemoteMappings();
-  for (const map of mappings) {
-    // Implement actual mapping sync logic here
-    // For now, just remove from queue
-    await removeQueuedLocalRemoteMapping(map.id);
-  }
+const write = async (key: string, arr: any[]) => {
+  await AsyncStorage.setItem(key, JSON.stringify(arr));
 };
-import sqlite from './sqlite';
 
 export const queueRemoteRow = async (remote: any) => {
-  const db = await sqlite.open();
-  await db.run('INSERT INTO queued_remote_rows (payload, queued_at, attempts) VALUES (?, ?, 0)', [
-    JSON.stringify(remote),
-    new Date().toISOString(),
-  ]);
+  const arr = await read(KEY_QUEUED_REMOTE);
+  arr.push({ id: Date.now() + Math.random(), payload: JSON.stringify(remote), queued_at: new Date().toISOString(), attempts: 0 });
+  await write(KEY_QUEUED_REMOTE, arr);
 };
 
 export const getQueuedRemoteRows = async () => {
-  const db = await sqlite.open();
-  return await db.all<{ id: number; payload: string; queued_at: string; attempts: number }>(
-    'SELECT * FROM queued_remote_rows ORDER BY id ASC'
-  );
+  return await read(KEY_QUEUED_REMOTE);
 };
 
 export const removeQueuedRemoteRow = async (id: number) => {
-  const db = await sqlite.open();
-  await db.run('DELETE FROM queued_remote_rows WHERE id = ?', [id]);
+  let arr = await read(KEY_QUEUED_REMOTE);
+  arr = arr.filter((x: any) => x.id !== id);
+  await write(KEY_QUEUED_REMOTE, arr);
 };
 
 export const queueLocalRemoteMapping = async (localId: string, remoteId: string) => {
-  const db = await sqlite.open();
-  await db.run(
-    'INSERT INTO queued_local_remote_map (local_id, remote_id, queued_at, attempts) VALUES (?, ?, ?, 0)',
-    [localId, remoteId, new Date().toISOString()]
-  );
+  const arr = await read(KEY_QUEUED_MAP);
+  arr.push({ id: Date.now() + Math.random(), local_id: localId, remote_id: remoteId, queued_at: new Date().toISOString(), attempts: 0 });
+  await write(KEY_QUEUED_MAP, arr);
 };
 
 export const getQueuedLocalRemoteMappings = async () => {
-  const db = await sqlite.open();
-  return await db.all<{
-    id: number;
-    local_id: string;
-    remote_id: string;
-    queued_at: string;
-    attempts: number;
-  }>('SELECT * FROM queued_local_remote_map ORDER BY id ASC');
+  return await read(KEY_QUEUED_MAP);
 };
 
 export const removeQueuedLocalRemoteMapping = async (id: number) => {
-  const db = await sqlite.open();
-  await db.run('DELETE FROM queued_local_remote_map WHERE id = ?', [id]);
+  let arr = await read(KEY_QUEUED_MAP);
+  arr = arr.filter((x: any) => x.id !== id);
+  await write(KEY_QUEUED_MAP, arr);
+};
+
+export const flushQueuedRemoteRows = async () => {
+  await write(KEY_QUEUED_REMOTE, []);
+  return { processed: 0 };
+};
+
+export const flushQueuedLocalRemoteMappings = async () => {
+  await write(KEY_QUEUED_MAP, []);
+  return { processed: 0 };
 };
 
 export default {
