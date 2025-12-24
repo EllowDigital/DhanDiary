@@ -156,14 +156,10 @@ const LoginScreen = () => {
         } catch (e) {
           console.warn('[Login] persisting bridge result failed', e);
           try {
-            await AsyncStorage.setItem(
-              'FALLBACK_SESSION',
-              JSON.stringify({
-                id: resolved?.uuid || userId,
-                name: resolved?.name || userName || 'User',
-                email: resolved?.email || userEmail,
-              })
-            );
+            // Use central saveSession which will generate an internal UUID
+            // when `resolved?.uuid` is missing or when a Clerk id is supplied.
+            await saveSession(resolved?.uuid || userId, resolved?.name || userName || 'User',
+              resolved?.email || userEmail);
           } catch (e) {}
         }
       })
@@ -179,21 +175,15 @@ const LoginScreen = () => {
       return `${hex()}${hex()}-${hex()}-${hex()}-${hex()}-${hex()}${hex()}${hex()}`;
     };
     const immediateId = genUuid();
-    try {
-      await Promise.race([
-        saveSession(immediateId, userName || 'User', userEmail),
-        new Promise((res) => setTimeout(() => res(null), 1500)),
-      ]);
-      console.log('[Login] fallback session saved (immediate)');
-    } catch (e) {
-      console.warn('[Login] immediate save failed, falling back to AsyncStorage', e);
       try {
-        await AsyncStorage.setItem(
-          'FALLBACK_SESSION',
-          JSON.stringify({ id: immediateId, name: userName || 'User', email: userEmail })
-        );
-      } catch (e) {}
-    }
+        await Promise.race([
+          saveSession(immediateId, userName || 'User', userEmail),
+          new Promise((res) => setTimeout(() => res(null), 1500)),
+        ]);
+        console.log('[Login] fallback session saved (immediate)');
+      } catch (e) {
+        console.warn('[Login] immediate save failed', e);
+      }
 
     // 3. Navigate immediately so user can start using app; sync will continue in background.
     try {
