@@ -46,34 +46,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   multiRemove: jest.fn(),
 }));
 
-try {
-  jest.mock('expo-sqlite', () => {
-    const mockDb = {
-      transaction: jest.fn(function (cb) {
-        const tx = {
-          executeSql: jest.fn((sql, params, success) => {
-            if (success) {
-              success(tx, { rows: { _array: [], length: 0, item: () => null } });
-            }
-          }),
-        };
-        cb(tx);
-      }),
-      execAsync: jest.fn(() => Promise.resolve()),
-      runAsync: jest.fn(() => Promise.resolve()),
-      getFirstAsync: jest.fn(() => Promise.resolve(null)),
-      getAllAsync: jest.fn(() => Promise.resolve([])),
-      closeAsync: jest.fn(() => Promise.resolve()),
-    };
-
-    return {
-      openDatabase: jest.fn(() => mockDb),
-      openDatabaseAsync: jest.fn(() => Promise.resolve(mockDb)),
-    };
-  });
-} catch (e) {
-  // expo-sqlite is not installed; tests that depend on sqlite should be skipped or updated
-}
+// expo-sqlite removed from project; do not mock it here.
 
 // Provide a benign mock for the local DB layer (tests expect localDb APIs).
 try {
@@ -87,6 +60,13 @@ try {
     queueRemoteRow: jest.fn(() => Promise.resolve()),
     flushQueuedRemoteRows: jest.fn(() => Promise.resolve()),
     clearAllData: jest.fn(() => Promise.resolve()),
+    getSession: jest.fn(() => Promise.resolve(null)),
+    saveSession: jest.fn(() => Promise.resolve()),
+    getPendingProfileUpdates: jest.fn(() => Promise.resolve([])),
+    markPendingProfileProcessed: jest.fn(() => Promise.resolve()),
+    queueLocalRemoteMapping: jest.fn(() => Promise.resolve()),
+    flushQueuedLocalRemoteMappings: jest.fn(() => Promise.resolve()),
+    getQueuedLocalRemoteMappings: jest.fn(() => Promise.resolve([])),
     default: {},
   }));
 } catch (e) {}
@@ -101,6 +81,38 @@ try {
     queueRemoteRow: jest.fn(() => Promise.resolve()),
     flushQueuedRemoteRows: jest.fn(() => Promise.resolve()),
     clearAllData: jest.fn(() => Promise.resolve()),
+    getSession: jest.fn(() => Promise.resolve(null)),
+    saveSession: jest.fn(() => Promise.resolve()),
+    getPendingProfileUpdates: jest.fn(() => Promise.resolve([])),
+    markPendingProfileProcessed: jest.fn(() => Promise.resolve()),
+    queueLocalRemoteMapping: jest.fn(() => Promise.resolve()),
+    flushQueuedLocalRemoteMappings: jest.fn(() => Promise.resolve()),
+    getQueuedLocalRemoteMappings: jest.fn(() => Promise.resolve([])),
+    default: {},
+  }));
+} catch (e) {}
+// Mock session utilities used by services/screens
+try {
+  jest.mock('src/db/session', () => ({
+    getSession: jest.fn(() => Promise.resolve(null)),
+    saveSession: jest.fn(() => Promise.resolve()),
+    clearSession: jest.fn(() => Promise.resolve()),
+    default: {},
+  }));
+} catch (e) {}
+try {
+  jest.mock('../src/db/session', () => ({
+    getSession: jest.fn(() => Promise.resolve(null)),
+    saveSession: jest.fn(() => Promise.resolve()),
+    clearSession: jest.fn(() => Promise.resolve()),
+    default: {},
+  }));
+} catch (e) {}
+try {
+  jest.mock('./src/db/session', () => ({
+    getSession: jest.fn(() => Promise.resolve(null)),
+    saveSession: jest.fn(() => Promise.resolve()),
+    clearSession: jest.fn(() => Promise.resolve()),
     default: {},
   }));
 } catch (e) {}
@@ -115,6 +127,13 @@ try {
     queueRemoteRow: jest.fn(() => Promise.resolve()),
     flushQueuedRemoteRows: jest.fn(() => Promise.resolve()),
     clearAllData: jest.fn(() => Promise.resolve()),
+    getSession: jest.fn(() => Promise.resolve(null)),
+    saveSession: jest.fn(() => Promise.resolve()),
+    getPendingProfileUpdates: jest.fn(() => Promise.resolve([])),
+    markPendingProfileProcessed: jest.fn(() => Promise.resolve()),
+    queueLocalRemoteMapping: jest.fn(() => Promise.resolve()),
+    flushQueuedLocalRemoteMappings: jest.fn(() => Promise.resolve()),
+    getQueuedLocalRemoteMappings: jest.fn(() => Promise.resolve([])),
     default: {},
   }));
 } catch (e) {}
