@@ -130,46 +130,56 @@ export const useAuth = () => {
     // If Clerk user profile fields change (for example, name updated in Clerk dashboard),
     // ensure we synchronize the update to Neon and local session. Rely on clerk.user
     // object changing reference or its fields updating.
-    try {
-      const current = clerk.user as any;
-      const id = current?.id || current?.userId;
-      const name = (current?.fullName as string) || (current?.full_name as string) || '';
-      const email =
-        current?.primaryEmailAddress?.emailAddress || current?.emailAddresses?.[0]?.emailAddress;
-      if (id && (name || email)) {
-        // run sync but do not block initialization
-        (async () => {
-          try {
-            const { syncClerkUserToNeon } = require('../services/clerkUserSync');
-            const bridge = await syncClerkUserToNeon({
-              id,
-              emailAddresses: email ? [{ emailAddress: email }] : [],
-              fullName: name,
-            });
-            const uid = bridge?.uuid || id;
-            // update session if bridge returned authoritative info
-            if (bridge && bridge.uuid) {
-              try {
-                await saveSession(uid, bridge.name || name || '', bridge.email || email || '');
-                setUser({
-                  id: uid,
-                  name: bridge.name || name || '',
-                  email: bridge.email || email || '',
-                });
-              } catch (e) {}
-            }
-          } catch (e) {
-            // ignore
-          }
-        })();
-      }
-    } catch (e) {}
+    // We intentionally handle Clerk profile updates in a separate effect below
+    // so that changes to `clerk.user` or `clerkAuth.isSignedIn` re-run and update
+    // the local `user` state. This block is kept empty to preserve the original
+    // initialization flow above.
     // subscribe to session changes
     const unsub = subscribeSession((s) => {
       setUser(s || null);
     });
     return () => unsub();
   }, []);
+
+  // React to Clerk user changes and keep local session in sync.
+  useEffect(() => {
+    if (!useClerkUser || !useClerkAuth) return;
+    const cUser = clerk.user as any;
+    const isSignedIn = clerkAuth.isSignedIn;
+    if (!isSignedIn || !cUser) return;
+
+    const id = cUser.id || cUser.userId || null;
+    let email: string | null = null;
+    try {
+      if (cUser.primaryEmailAddress && cUser.primaryEmailAddress.emailAddress) {
+        email = cUser.primaryEmailAddress.emailAddress;
+      } else if (cUser.emailAddresses && cUser.emailAddresses.length) {
+        email = cUser.emailAddresses[0]?.emailAddress || null;
+      }
+    } catch (e) {}
+
+    const name = (cUser.fullName as string) || (cUser.full_name as string) || '';
+    if (!id) return;
+
+    (async () => {
+      try {
+        const { syncClerkUserToNeon } = require('../services/clerkUserSync');
+        const bridge = await syncClerkUserToNeon({ id, emailAddresses: email ? [{ emailAddress: email }] : [], fullName: name });
+        const uid = bridge?.uuid || id;
+        // persist authoritative session info
+        try {
+          await saveSession(uid, bridge?.name || name || '', bridge?.email || email || '');
+        } catch (e) {}
+        setUser({ id: uid, name: bridge?.name || name || '', email: bridge?.email || email || '' });
+      } catch (e) {
+        // fallback to clerk identity
+        setUser({ id: id, name: name || '', email: email || '' });
+        try {
+          await saveSession(id, name || '', email || '');
+        } catch (ee) {}
+      }
+    })();
+  }, [clerk.user, clerkAuth.isSignedIn]);
 
   return { user, loading };
 };

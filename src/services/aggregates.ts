@@ -4,7 +4,8 @@ import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
 dayjs.extend(isSameOrBefore);
 import { getSummary } from '../db/localDb';
 import asyncAggregator from '../utils/asyncAggregator';
-import { fetchEntriesGenerator } from '../db/localDb';
+// Use the online entries generator which reads directly from Neon
+import { fetchEntriesGenerator } from '../db/entries';
 import { StatResult } from '../utils/asyncAggregator';
 
 /**

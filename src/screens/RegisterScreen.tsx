@@ -45,8 +45,14 @@ const RegisterScreen = ({ navigation }: any) => {
 
     setLoading(true);
     try {
+      // Split full name into first and last for Clerk
+      const parts = name.trim().split(/\s+/);
+      const firstName = parts[0] || name;
+      const lastName = parts.length > 1 ? parts.slice(1).join(' ') : '';
+
       await signUp.create({
-        firstName: name,
+        firstName,
+        lastName,
         emailAddress: email,
         password,
       });

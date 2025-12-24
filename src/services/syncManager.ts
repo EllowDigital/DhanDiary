@@ -293,8 +293,11 @@ export const pullRemote = async () => {
     }
     return { pulled, merged };
   } catch (err) {
-    console.error('Failed to pull remote entries', err);
-    throw err;
+    // Log and return safe empty result instead of throwing to avoid crashing
+    try {
+      console.error('Failed to pull remote entries', err);
+    } catch (e) {}
+    return { pulled: 0, merged: 0 };
   }
 };
 
@@ -426,9 +429,13 @@ export const syncBothWays = async () => {
     } catch (e) {}
 
     return { ...pushStats, ...pullStats, total };
-  } catch (err) {
-    console.error('Sync failed', err);
-    throw err;
+    } catch (err) {
+    // Log error but do not re-throw to keep auto-sync safe
+    try {
+      console.error('Sync failed', err);
+    } catch (e) {}
+    // Continue to finally block to ensure _syncInProgress is reset
+    return { pushed: 0, updated: 0, deleted: 0, pulled: 0, merged: 0, total: 0 };
   } finally {
     _syncInProgress = false;
     // notify listeners that sync finished

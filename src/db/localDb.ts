@@ -44,7 +44,11 @@ export const fetchEntriesGenerator = async function* (
   return;
 };
 
-export const getSummary = async (..._args: any[]): Promise<any> => ({ total: 0 });
+export const getSummary = async (..._args: any[]): Promise<any | null> => {
+  // No precomputed summaries available in online-only mode.
+  // Return null to signal "no summary" so callers will fallback to streaming aggregation.
+  return null;
+};
 
 export const addPendingProfileUpdate = async (..._args: any[]) => {
   return null;

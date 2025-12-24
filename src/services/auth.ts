@@ -328,6 +328,42 @@ export const updateProfile = async (updates: { name?: string; email?: string }) 
   return { id: session.id, name: newName, email: newEmail };
 };
 
+/**
+ * Update profile both in Clerk (if available) and Neon. Caller can pass a
+ * Clerk user object (from `useUser()`) for client-side update; if absent,
+ * only Neon will be updated.
+ */
+export const updateProfileWithClerk = async (opts: {
+  clerkUser?: any;
+  updates: { name?: string; email?: string };
+}) => {
+  const { clerkUser, updates } = opts;
+
+  // 1. If Clerk user object is provided, update Clerk first (best-effort)
+  if (clerkUser && typeof clerkUser.update === 'function') {
+    try {
+      if (updates.name !== undefined) {
+        const parts = (updates.name || '').trim().split(/\s+/);
+        const firstName = parts[0] || updates.name || '';
+        const lastName = parts.length > 1 ? parts.slice(1).join(' ') : '';
+        await clerkUser.update({ firstName, lastName });
+      }
+      if (updates.email !== undefined) {
+        try {
+          await clerkUser.update({ emailAddress: updates.email });
+        } catch (e) {
+          // Some Clerk SDKs require email verification flows; ignore here and proceed
+        }
+      }
+    } catch (e) {
+      console.warn('[Auth] Clerk profile update failed', e);
+    }
+  }
+
+  // 2. Persist to Neon via existing helper (this will save local session)
+  return await updateProfile(updates);
+};
+
 export const changePassword = async (currentPassword: string, newPassword: string) => {
   const NEON_URL = resolveNeonUrl();
   if (!NEON_URL) throw new Error('Cannot change password in offline-only mode');

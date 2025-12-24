@@ -206,19 +206,12 @@ const AccountManagementScreen = () => {
 
     setSavingUsername(true);
     try {
-      // Split into first and last name intelligently
-      const parts = username.trim().split(/\s+/);
-      const firstName = parts[0] || username;
-      const lastName = parts.length > 1 ? parts.slice(1).join(' ') : '';
-
-      // Update Clerk with both fields to avoid overwriting last name unintentionally
-      await user.update({ firstName, lastName });
-
-      // Also sync to Neon (best-effort). Do not block the UI if it fails.
+      // Update Clerk + Neon via shared helper so both backends stay consistent.
       try {
-        await syncClerkUserToNeon({ id: user.id, emailAddresses: user.emailAddresses || [], fullName: username });
+        const { updateProfileWithClerk } = require('../services/auth');
+        await updateProfileWithClerk({ clerkUser: user, updates: { name: username } });
       } catch (e) {
-        console.warn('[Account] syncClerkUserToNeon failed', e);
+        console.warn('[Account] updateProfileWithClerk failed', e);
       }
 
       showToast('Name updated successfully');
