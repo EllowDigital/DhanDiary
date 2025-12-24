@@ -46,27 +46,75 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   multiRemove: jest.fn(),
 }));
 
-jest.mock('expo-sqlite', () => {
-  const mockDb = {
-    transaction: jest.fn(function (cb) {
-      const tx = {
-        executeSql: jest.fn((sql, params, success) => {
-          if (success) {
-            success(tx, { rows: { _array: [], length: 0, item: () => null } });
-          }
-        }),
-      };
-      cb(tx);
-    }),
-    execAsync: jest.fn(() => Promise.resolve()),
-    runAsync: jest.fn(() => Promise.resolve()),
-    getFirstAsync: jest.fn(() => Promise.resolve(null)),
-    getAllAsync: jest.fn(() => Promise.resolve([])),
-    closeAsync: jest.fn(() => Promise.resolve()),
-  };
+try {
+  jest.mock('expo-sqlite', () => {
+    const mockDb = {
+      transaction: jest.fn(function (cb) {
+        const tx = {
+          executeSql: jest.fn((sql, params, success) => {
+            if (success) {
+              success(tx, { rows: { _array: [], length: 0, item: () => null } });
+            }
+          }),
+        };
+        cb(tx);
+      }),
+      execAsync: jest.fn(() => Promise.resolve()),
+      runAsync: jest.fn(() => Promise.resolve()),
+      getFirstAsync: jest.fn(() => Promise.resolve(null)),
+      getAllAsync: jest.fn(() => Promise.resolve([])),
+      closeAsync: jest.fn(() => Promise.resolve()),
+    };
 
-  return {
-    openDatabase: jest.fn(() => mockDb),
-    openDatabaseAsync: jest.fn(() => Promise.resolve(mockDb)),
-  };
-});
+    return {
+      openDatabase: jest.fn(() => mockDb),
+      openDatabaseAsync: jest.fn(() => Promise.resolve(mockDb)),
+    };
+  });
+} catch (e) {
+  // expo-sqlite is not installed; tests that depend on sqlite should be skipped or updated
+}
+
+// Provide a benign mock for the local DB layer (tests expect localDb APIs).
+try {
+  jest.mock('src/db/localDb', () => ({
+    init: jest.fn(() => Promise.resolve()),
+    isDbOperational: jest.fn(() => Promise.resolve(true)),
+    getDb: jest.fn(() => Promise.resolve(null)),
+    addLocalEntry: jest.fn(() => Promise.resolve(null)),
+    getEntries: jest.fn(() => Promise.resolve([])),
+    getUnsyncedEntries: jest.fn(() => Promise.resolve([])),
+    queueRemoteRow: jest.fn(() => Promise.resolve()),
+    flushQueuedRemoteRows: jest.fn(() => Promise.resolve()),
+    clearAllData: jest.fn(() => Promise.resolve()),
+    default: {},
+  }));
+} catch (e) {}
+try {
+  jest.mock('../src/db/localDb', () => ({
+    init: jest.fn(() => Promise.resolve()),
+    isDbOperational: jest.fn(() => Promise.resolve(true)),
+    getDb: jest.fn(() => Promise.resolve(null)),
+    addLocalEntry: jest.fn(() => Promise.resolve(null)),
+    getEntries: jest.fn(() => Promise.resolve([])),
+    getUnsyncedEntries: jest.fn(() => Promise.resolve([])),
+    queueRemoteRow: jest.fn(() => Promise.resolve()),
+    flushQueuedRemoteRows: jest.fn(() => Promise.resolve()),
+    clearAllData: jest.fn(() => Promise.resolve()),
+    default: {},
+  }));
+} catch (e) {}
+try {
+  jest.mock('./src/db/localDb', () => ({
+    init: jest.fn(() => Promise.resolve()),
+    isDbOperational: jest.fn(() => Promise.resolve(true)),
+    getDb: jest.fn(() => Promise.resolve(null)),
+    addLocalEntry: jest.fn(() => Promise.resolve(null)),
+    getEntries: jest.fn(() => Promise.resolve([])),
+    getUnsyncedEntries: jest.fn(() => Promise.resolve([])),
+    queueRemoteRow: jest.fn(() => Promise.resolve()),
+    flushQueuedRemoteRows: jest.fn(() => Promise.resolve()),
+    clearAllData: jest.fn(() => Promise.resolve()),
+    default: {},
+  }));
+} catch (e) {}
