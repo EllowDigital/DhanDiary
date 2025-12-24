@@ -26,7 +26,7 @@ import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 // --- PLACEHOLDERS ---
 import ScreenHeader from '../components/ScreenHeader';
 // Mock utility if missing
-const getLatestShareLink = async () => 'https://ellowdigital.netlify.app';
+const getLatestShareLink = async () => 'https://www.ellowdigital.space';
 
 let pkg: any = {};
 try {
@@ -50,7 +50,7 @@ const theme = {
 };
 
 // --- CONSTANTS ---
-const ELLOW_URL = 'https://ellowdigital.netlify.app';
+const ELLOW_URL = 'https://www.ellowdigital.space';
 const BRAND_NAME = 'EllowDigital';
 const BUILD_TYPE =
   Constants.expoConfig?.extra?.BUILD_TYPE || (pkg.version.includes('beta') ? 'Beta' : 'Release');

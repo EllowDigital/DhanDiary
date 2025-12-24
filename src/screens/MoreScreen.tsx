@@ -79,7 +79,7 @@ const MoreScreen: React.FC = () => {
   }, []);
 
   const handleRoadmap = useCallback(() => {
-    Linking.openURL('https://ellowdigital.netlify.app');
+    Linking.openURL('https://www.ellowdigital.space');
   }, []);
 
   const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {

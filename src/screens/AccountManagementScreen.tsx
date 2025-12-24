@@ -319,7 +319,7 @@ const AccountManagementScreen = () => {
                     <UserAvatar
                       size={48}
                       name={user?.fullName || user?.firstName}
-                      imageUrl={user?.imageUrl}
+                      imageUrl={user?.imageUrl || (user as any)?.image}
                     />
                     {user?.emailAddresses.some((e) => e.verification.status === 'verified') && (
                       <View style={styles.verifiedBadge}>

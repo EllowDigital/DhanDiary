@@ -148,7 +148,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
             <UserAvatar
               size={44}
               name={user?.fullName || user?.firstName}
-              imageUrl={user?.imageUrl}
+              imageUrl={user?.imageUrl || (user as any)?.image}
             />
             <View style={styles.userInfo}>
               <Text style={styles.userName} numberOfLines={1}>

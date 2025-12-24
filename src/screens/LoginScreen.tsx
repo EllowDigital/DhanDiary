@@ -401,6 +401,10 @@ const LoginScreen = () => {
                   <FontAwesome name="github" size={24} color="#181717" />
                 </TouchableOpacity>
               </View>
+              {/* Trust notice for OAuth flows */}
+              <View style={styles.trustRow}>
+                <Text style={styles.trustText}>Login via secure domain — ellowdigital.space</Text>
+              </View>
             </View>
 
             {/* Footer */}
@@ -579,6 +583,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  trustRow: { alignItems: 'center', marginTop: 12, marginBottom: 8 },
+  trustText: { color: '#64748b', fontSize: 12, textAlign: 'center', fontWeight: '600' },
 });
 
 export default LoginScreen;

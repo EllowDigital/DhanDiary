@@ -358,7 +358,7 @@ const HomeScreen = () => {
         <UserAvatar
           size={36}
           name={user?.name}
-          imageUrl={user?.image}
+          imageUrl={user?.image || (user as any)?.imageUrl}
           onPress={() => navigation.navigate('Account')}
           style={{ marginRight: 0 }}
         />

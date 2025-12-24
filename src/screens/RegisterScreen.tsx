@@ -157,6 +157,9 @@ const RegisterScreen = ({ navigation }: any) => {
                 />
 
                 <PrimaryButton loading={loading} title="Sign Up" onPress={onSignUpPress} />
+                <View style={styles.trustRow}>
+                  <Text style={styles.trustText}>Your sign-in is secured by ellowdigital.space</Text>
+                </View>
               </View>
             ) : (
               <View style={styles.card}>
@@ -292,6 +295,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   syncText: { marginTop: 12, color: '#fff', fontWeight: '600' },
+  trustRow: { alignItems: 'center', marginTop: 12 },
+  trustText: { color: '#64748b', fontSize: 13, textAlign: 'center', marginTop: 8 },
 });
 
 export default RegisterScreen;

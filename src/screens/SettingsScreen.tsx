@@ -153,27 +153,7 @@ const SettingsScreen = () => {
           contentContainerStyle={{ paddingBottom: 100, paddingTop: 10 }}
         >
           <View style={{ width: contentWidth, alignSelf: 'center' }}>
-            {/* 1. PROFILE CARD */}
-            <Animated.View style={getAnimStyle(0)}>
-              <View style={styles.profileCard}>
-                <View style={styles.profileRow}>
-                  <View style={styles.profileInfo}>
-                    <Text style={styles.profileName} numberOfLines={1}>
-                      {user?.name || 'User'}
-                    </Text>
-                    <Text style={styles.profileEmail} numberOfLines={1}>
-                      {user?.email || 'No email linked'}
-                    </Text>
-                  </View>
-                  <TouchableOpacity
-                    style={styles.editButton}
-                    onPress={() => navigation.navigate('Account')}
-                  >
-                    <MaterialIcon name="edit" size={20} color={colors.primary} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </Animated.View>
+            {/* Profile card removed as per design — name/email accessible via Account screen */}
 
             {/* 2. DATA & SYNC */}
             <Animated.View style={getAnimStyle(1)}>

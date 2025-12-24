@@ -18,7 +18,7 @@ try {
   useClerkAuth = null;
 }
 
-type UserSession = { id: string; name: string; email: string; image?: string | null };
+type UserSession = { id: string; name: string; email: string; image?: string | null; imageUrl?: string | null };
 
 export const useAuth = () => {
   const [user, setUser] = useState<UserSession | null>(null);
@@ -174,10 +174,10 @@ export const useAuth = () => {
         try {
           await saveSession(uid, bridge?.name || name || '', bridge?.email || email || '');
         } catch (e) {}
-        setUser({ id: uid, name: bridge?.name || name || '', email: bridge?.email || email || '', image: image || null });
+                setUser({ id: uid, name: bridge?.name || name || '', email: bridge?.email || email || '', image: image || null, imageUrl: image || null });
       } catch (e) {
         // fallback to clerk identity
-        setUser({ id: id, name: name || '', email: email || '', image: image || null });
+        setUser({ id: id, name: name || '', email: email || '', image: image || null, imageUrl: image || null });
         try {
           await saveSession(id, name || '', email || '');
         } catch (ee) {}
