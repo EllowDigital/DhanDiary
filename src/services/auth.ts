@@ -239,6 +239,20 @@ export const logout = async () => {
   try {
     await AsyncStorage.removeItem('FALLBACK_SESSION');
   } catch (e) {}
+  // 6. Sign out from Clerk (best-effort)
+  try {
+    const clerk = require('@clerk/clerk-expo');
+    if (clerk && typeof clerk.signOut === 'function') {
+      try {
+        await clerk.signOut();
+      } catch (e) {}
+    } else if (clerk && typeof clerk.useAuth === 'function') {
+      try {
+        const ca = clerk.useAuth();
+        if (ca && typeof ca.signOut === 'function') await ca.signOut();
+      } catch (e) {}
+    }
+  } catch (e) {}
 };
 
 export const deleteAccount = async () => {
