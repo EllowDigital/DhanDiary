@@ -2,18 +2,6 @@ import { neon } from '@neondatabase/serverless';
 import Constants from 'expo-constants';
 import NetInfo from '@react-native-community/netinfo';
 
-// --- Configuration ---
-
-// Read NEON_URL from Expo config (app.config.js) -> Constants.expoConfig?.extra
-const NEON_URL = (Constants?.expoConfig?.extra as any)?.NEON_URL || process.env.NEON_URL || null;
-
-// Use stateless HTTP client
-// neon() returns a query function: async (sql, params) => result[]
-const sql = NEON_URL ? neon(NEON_URL) : null;
-import { neon } from '@neondatabase/serverless';
-import Constants from 'expo-constants';
-import NetInfo from '@react-native-community/netinfo';
-
 // Read NEON_URL from Expo config (app.config.js) -> Constants.expoConfig?.extra
 const NEON_URL = (Constants?.expoConfig?.extra as any)?.NEON_URL || process.env.NEON_URL || null;
 
