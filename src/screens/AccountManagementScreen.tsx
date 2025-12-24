@@ -30,6 +30,7 @@ import { useToast } from '../context/ToastContext';
 import { colors } from '../utils/design';
 import ScreenHeader from '../components/ScreenHeader';
 import { deleteAccount } from '../services/auth';
+import { syncClerkUserToNeon } from '../services/clerkUserSync';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -205,13 +206,20 @@ const AccountManagementScreen = () => {
 
     setSavingUsername(true);
     try {
-      await user.update({ firstName: username }); // Clerk separates first/last, but often maps. Or use update({ firstName, lastName })
-      // Actually `update` accepts { firstName, lastName }.
-      // We will just put the whole string in firstName for simplicity or split it.
-      // Better:
-      // await user.update({ firstName: username.split(' ')[0], lastName: username.split(' ').slice(1).join(' ') });
-      // But let's just use what Clerk allows.
-      await user.update({ firstName: username });
+      // Split into first and last name intelligently
+      const parts = username.trim().split(/\s+/);
+      const firstName = parts[0] || username;
+      const lastName = parts.length > 1 ? parts.slice(1).join(' ') : '';
+
+      // Update Clerk with both fields to avoid overwriting last name unintentionally
+      await user.update({ firstName, lastName });
+
+      // Also sync to Neon (best-effort). Do not block the UI if it fails.
+      try {
+        await syncClerkUserToNeon({ id: user.id, emailAddresses: user.emailAddresses || [], fullName: username });
+      } catch (e) {
+        console.warn('[Account] syncClerkUserToNeon failed', e);
+      }
 
       showToast('Name updated successfully');
       toggleCard('');
