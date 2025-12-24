@@ -356,7 +356,13 @@ export const syncPending = async () => {
         for (const r of updRes) {
           const localId = remoteToLocal.get(String(r.id));
           if (localId) {
-            await markEntrySynced(localId, String(r.id), Number(r.server_version), r.updated_at);
+            try {
+              await markEntrySynced(localId, String(r.id), Number(r.server_version), r.updated_at);
+            } catch (e: any) {
+              if (isLocalDbDisabledError(e)) {
+                // skip marking when local DB disabled
+              } else throw e;
+            }
             updated++;
           }
         }
@@ -384,12 +390,18 @@ export const syncPending = async () => {
             ]
           );
           if (res && res[0]) {
-            await markEntrySynced(
-              u.local_id,
-              String(res[0].id),
-              Number(res[0].server_version),
-              res[0].updated_at
-            );
+            try {
+              await markEntrySynced(
+                u.local_id,
+                String(res[0].id),
+                Number(res[0].server_version),
+                res[0].updated_at
+              );
+            } catch (e: any) {
+              if (isLocalDbDisabledError(e)) {
+                // skip
+              } else throw e;
+            }
             updated++;
           }
         } catch (e) {
@@ -493,9 +505,21 @@ export const pullRemote = async () => {
           }
 
         // 2. Handle Merges / Upserts
-        let local = await getLocalByRemoteId(String(r.id));
+        let local: any = null;
+        try {
+          local = await getLocalByRemoteId(String(r.id));
+        } catch (e: any) {
+          if (isLocalDbDisabledError(e)) {
+            local = null;
+          } else throw e;
+        }
         if (!local && r.client_id) {
-          local = await getLocalByClientId(String(r.client_id));
+          try {
+            local = await getLocalByClientId(String(r.client_id));
+          } catch (e: any) {
+            if (isLocalDbDisabledError(e)) local = null;
+            else throw e;
+          }
         }
 
         if (local && local.local_id) {
@@ -508,12 +532,18 @@ export const pullRemote = async () => {
 
             // If timestamps match, it's the same update
             if (localTime === remoteTime) {
-              await markEntrySynced(
-                localEntry.local_id,
-                String(r.id),
-                Number(r.server_version),
-                r.updated_at
-              );
+              try {
+                await markEntrySynced(
+                  localEntry.local_id,
+                  String(r.id),
+                  Number(r.server_version),
+                  r.updated_at
+                );
+              } catch (e: any) {
+                if (isLocalDbDisabledError(e)) {
+                  console.log('[pullRemote] local DB disabled; skipping markEntrySynced');
+                } else throw e;
+              }
               merged++;
               continue;
             }
