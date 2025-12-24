@@ -205,19 +205,4 @@ export const query = async <T = any>(
   console.error('Neon Query failed after retries:', lastErr);
   throw lastErr;
 };
-                throw new Error('Neon client not available');
-              }
 
-      const host = getHostFromUrl(NEON_URL);
-      console.warn(
-        `[Neon] Transient error (${host}), retrying ${attempt}/${retries} in ${backoff}ms`,
-        msg
-      );
-
-      await sleep(backoff);
-    }
-  }
-
-  console.error('[Neon] Query failed after max retries:', lastErr);
-  throw lastErr;
-};
