@@ -259,7 +259,7 @@ const LoginScreen = () => {
         // Optimistic Sync Trigger
         // Try to extract user info immediately to speed up the UX
         const userData = signInObj?.userData || signUpObj;
-        const uid = signInObj?.createdUserId || signUpObj?.createdUserId;
+        const uid = (signInObj as any)?.createdUserId || (signUpObj as any)?.createdUserId;
         const uEmail = (userData as any)?.identifier || (userData as any)?.emailAddress;
 
         // If we can't extract it, the useEffect hook will catch it anyway.

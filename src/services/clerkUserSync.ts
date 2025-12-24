@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { query } from '../api/neonClient';
-import { saveSession } from '../db/localDb';
+import { saveSession } from '../db/session';
 
 /*
   The Bridge Service:

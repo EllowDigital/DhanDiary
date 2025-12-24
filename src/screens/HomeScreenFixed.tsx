@@ -251,7 +251,9 @@ const HomeScreen = () => {
     const unsub = subscribeSyncStatus((running) => {
       setIsSyncing(running);
     });
-    return () => unsub();
+    return () => {
+      unsub();
+    };
   }, []);
 
   const triggerLayoutAnimation = () => {

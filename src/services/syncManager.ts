@@ -6,14 +6,13 @@ import {
   init as initDb,
   getPendingProfileUpdates,
   markPendingProfileProcessed,
-  getSession,
-  saveSession,
   queueLocalRemoteMapping,
   queueRemoteRow,
   flushQueuedLocalRemoteMappings,
   flushQueuedRemoteRows,
   getUnsyncedEntries,
 } from '../db/localDb';
+import { getSession, saveSession } from '../db/session';
 import {
   getLocalByRemoteId,
   getLocalByClientId,

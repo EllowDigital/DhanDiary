@@ -73,10 +73,16 @@ export default {
   markLocalDeletedByRemoteId: async (remoteId: string) => {
     // Mark local deleted by remote id via localDb
     const rec = await localDb.getLocalByRemoteId(remoteId);
-    if (rec && rec.local_id) return localDb.markEntryDeleted(rec.local_id);
+    if (rec && (rec as any).local_id) return localDb.markEntryDeleted((rec as any).local_id);
     return null;
   },
   getLocalByClientId,
   getUnsyncedEntries,
   deleteLocalEntry,
+};
+
+export const markLocalDeletedByRemoteId = async (remoteId: string) => {
+  const rec = await localDb.getLocalByRemoteId(remoteId);
+  if (rec && (rec as any).local_id) return localDb.markEntryDeleted((rec as any).local_id);
+  return null;
 };
