@@ -19,6 +19,7 @@ import EulaScreen from './src/screens/EulaScreen';
 
 import { RootStackParamList, AuthStackParamList, MainStackParamList } from './src/types/navigation';
 import { ToastProvider } from './src/context/ToastContext';
+import { enableLegacyLayoutAnimations } from './src/utils/layoutAnimation';
 import DrawerNavigator from './src/navigation/DrawerNavigator';
 import { useOfflineSync } from './src/hooks/useOfflineSync';
 import { useAuth } from './src/hooks/useAuth';
@@ -183,6 +184,10 @@ function AppWithDb() {
 
   // 1. Initial Config Logging
   useEffect(() => {
+    // Enable legacy LayoutAnimation on Android when appropriate (centralized)
+    try {
+      enableLegacyLayoutAnimations();
+    } catch (e) {}
     try {
       const extra = (Constants?.expoConfig?.extra as any) || {};
       const neonUrl = extra.NEON_URL || process.env.NEON_URL || null;

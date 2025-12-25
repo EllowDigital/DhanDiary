@@ -35,9 +35,7 @@ import dayjs from 'dayjs';
 import { Swipeable } from 'react-native-gesture-handler';
 
 // Fix Android Animation Layout
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+// layout animations are enabled centrally in App initialization
 
 const resolveEntryMoment = (entry: any) => dayjs(entry?.date || entry?.created_at);
 
@@ -178,7 +176,7 @@ const EditTransactionModal = React.memo(({ visible, entry, onClose, onSave }: an
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       {/* Fix: KeyboardAvoidingView must wrap the View directly */}
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
       >
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
@@ -211,8 +209,12 @@ const EditTransactionModal = React.memo(({ visible, entry, onClose, onSave }: an
                   onChangeText={setAmount}
                   keyboardType="numeric"
                   inputContainerStyle={styles.modalInput}
+                  inputStyle={{ color: colors.text }}
+                  placeholderTextColor={colors.muted}
+                  selectionColor={colors.primary}
                   leftIcon={<MaterialIcon name="currency-rupee" size={16} color={colors.muted} />}
                   renderErrorMessage={false}
+                  autoFocus
                 />
 
                 <View style={styles.quickRow}>
@@ -250,7 +252,10 @@ const EditTransactionModal = React.memo(({ visible, entry, onClose, onSave }: an
                   value={note}
                   onChangeText={setNote}
                   inputContainerStyle={styles.modalInput}
+                  inputStyle={{ color: colors.text }}
                   placeholder="Optional description"
+                  placeholderTextColor={colors.muted}
+                  selectionColor={colors.primary}
                   renderErrorMessage={false}
                 />
 

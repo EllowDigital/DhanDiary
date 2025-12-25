@@ -238,12 +238,6 @@ export const logout = async (): Promise<boolean> => {
     if (clerk) {
       if (typeof clerk.signOut === 'function') {
         await clerk.signOut();
-      } else if (typeof clerk.useAuth === 'function') {
-        // useAuth() is a hook, cannot be used here outside a component.
-        // We rely on direct signOut or the AuthContext reference if stored elsewhere.
-        console.warn(
-          '[Auth] Cannot use hook inside logout function. Ensure Clerk handles token storage clearing automatically.'
-        );
       }
     }
   });

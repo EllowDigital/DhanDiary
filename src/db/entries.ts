@@ -183,7 +183,7 @@ export async function* fetchEntriesGenerator(userId: string, pageSize: number = 
 }
 
 export const getSummary = async (period: 'daily' | 'monthly', key: string) => {
-  // Minimal implementation: return zeroed summary
+  // legacy stub — the app reads summaries via `src/db/localDb.getSummary` in online-only mode.
   return { total: 0 };
 };
 

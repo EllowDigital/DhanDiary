@@ -32,9 +32,7 @@ import { subscribeSyncStatus } from '../services/syncManager';
 
 // --- CRASH FIX: Safe LayoutAnimation Setup ---
 try {
-  if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
-  }
+  // layout animations are enabled centrally in App initialization
 } catch (e) {
   console.warn('LayoutAnimation config skipped');
 }

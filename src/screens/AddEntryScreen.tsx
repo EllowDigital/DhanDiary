@@ -33,11 +33,7 @@ import { ALLOWED_CATEGORIES, DEFAULT_CATEGORY, ensureCategory } from '../constan
 import ScreenHeader from '../components/ScreenHeader';
 import dayjs from 'dayjs';
 
-try {
-  if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
-  }
-} catch (e) {}
+// layout animations are enabled centrally in App initialization
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 

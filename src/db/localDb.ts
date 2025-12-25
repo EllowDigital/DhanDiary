@@ -45,9 +45,104 @@ export const fetchEntriesGenerator = async function* (
 };
 
 export const getSummary = async (..._args: any[]): Promise<any | null> => {
-  // No precomputed summaries available in online-only mode.
-  // Return null to signal "no summary" so callers will fallback to streaming aggregation.
-  return null;
+  // Try to read precomputed summaries from Neon when running in online-only mode.
+  try {
+    // lazy require to avoid circular imports at module init
+    const { query } = require('../api/neonClient');
+    const session = await getSession();
+    const userId = session?.id;
+    if (!userId) return null;
+
+    // daily key is YYYY-MM-DD
+    if (_args.length >= 2 && _args[0] === 'daily') {
+      const key = _args[1];
+      try {
+        const rows = await query(
+          'SELECT total_in, total_out, count FROM daily_summaries WHERE user_id = $1 AND date = $2 LIMIT 1',
+          [userId, key]
+        );
+        const r = rows && rows[0];
+        if (!r) return null;
+        return {
+          totalInCents: Math.round(Number(r.total_in || 0) * 100),
+          totalOutCents: Math.round(Number(r.total_out || 0) * 100),
+          count: Number(r.count || 0),
+        };
+      } catch (e) {
+        console.warn('Failed to query daily_summaries', e);
+        return null;
+      }
+    }
+    // monthly key is YYYY-MM or YYYY-MM-01 etc.
+    if (_args.length >= 2 && _args[0] === 'monthly') {
+      const key = _args[1];
+      try {
+        // Parse year/month
+        const m = String(key).split('-');
+        const year = Number(m[0]);
+        const month = Number(m[1]);
+        if (!year || !month) return null;
+        const rows = await query(
+          'SELECT total_in, total_out, count FROM monthly_summaries WHERE user_id = $1 AND year = $2 AND month = $3 LIMIT 1',
+          [userId, year, month]
+        );
+        const r = rows && rows[0];
+        if (!r) return null;
+        return {
+          totalInCents: Math.round(Number(r.total_in || 0) * 100),
+          totalOutCents: Math.round(Number(r.total_out || 0) * 100),
+          count: Number(r.count || 0),
+        };
+      } catch (e) {
+        console.warn('Failed to query monthly_summaries', e);
+        return null;
+      }
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+};
+
+export const getSummaries = async (
+  period: 'daily' | 'monthly',
+  start: string,
+  end: string
+): Promise<any[] | null> => {
+  try {
+    const { query } = require('../api/neonClient');
+    const session = await getSession();
+    const userId = session?.id;
+    if (!userId) return null;
+
+    if (period === 'daily') {
+      // expecting start/end as YYYY-MM-DD
+      const rows = await query(
+        'SELECT date, total_in, total_out, count FROM daily_summaries WHERE user_id = $1 AND date >= $2::date AND date <= $3::date ORDER BY date',
+        [userId, start, end]
+      );
+      return rows || [];
+    }
+
+    if (period === 'monthly') {
+      // expecting start/end as YYYY-MM (use first day of month)
+      const rows = await query(
+        `SELECT year, month, total_in, total_out, count FROM monthly_summaries WHERE user_id = $1 AND (year > $2 OR (year = $2 AND month >= $3)) AND (year < $4 OR (year = $4 AND month <= $5)) ORDER BY year, month`,
+        [
+          userId,
+          Number(start.split('-')[0]),
+          Number(start.split('-')[1]),
+          Number(end.split('-')[0]),
+          Number(end.split('-')[1]),
+        ]
+      );
+      return rows || [];
+    }
+
+    return null;
+  } catch (e) {
+    return null;
+  }
 };
 
 export const addPendingProfileUpdate = async (..._args: any[]) => {

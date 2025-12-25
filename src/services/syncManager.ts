@@ -57,6 +57,9 @@ let _backgroundFetchInstance: any = null;
 let _backgroundFetchWarned = false;
 let _pendingSyncRequested: boolean = false;
 let _syncInProgress: boolean = false;
+let _lastSuccessfulSyncAt: number | null = null;
+let _lastSyncAttemptAt: number | null = null;
+let _syncFailureCount = 0;
 // Sync status listeners (UI can subscribe to show progress)
 const _syncStatusListeners = new Set<(running: boolean) => void>();
 
@@ -361,6 +364,8 @@ export const syncBothWays = async () => {
     return { pushed: 0, updated: 0, deleted: 0, pulled: 0, merged: 0, total: 0 };
   }
 
+  _lastSyncAttemptAt = Date.now();
+
   const state = await NetInfo.fetch();
   if (!state.isConnected) return;
 
@@ -422,6 +427,9 @@ export const syncBothWays = async () => {
     await AsyncStorage.setItem('last_sync_at', now);
     await AsyncStorage.setItem('last_sync_count', String(total));
 
+    _lastSuccessfulSyncAt = Date.now();
+    _syncFailureCount = 0;
+
     // 5. Notify UI
     try {
       const { notifyEntriesChanged } = require('../utils/dbEvents');
@@ -435,6 +443,7 @@ export const syncBothWays = async () => {
       console.error('Sync failed', err);
     } catch (e) {}
     // Continue to finally block to ensure _syncInProgress is reset
+    _syncFailureCount = Math.min(5, _syncFailureCount + 1);
     return { pushed: 0, updated: 0, deleted: 0, pulled: 0, merged: 0, total: 0 };
   } finally {
     _syncInProgress = false;
@@ -474,7 +483,12 @@ export const startAutoSyncListener = () => {
   _unsubscribe = NetInfo.addEventListener((state) => {
     const isOnline = !!state.isConnected;
     if (!wasOnline && isOnline) {
-      syncBothWays().catch((err) => console.error('Auto sync failed', err));
+      // Kick off a sync when we come online, but respect recent successful syncs
+      const now = Date.now();
+      const MIN_ONLINE_SYNC_MS = 30 * 1000; // don't run online sync more often than this
+      if (!_lastSuccessfulSyncAt || now - _lastSuccessfulSyncAt > MIN_ONLINE_SYNC_MS) {
+        syncBothWays().catch((err) => console.error('Auto sync failed', err));
+      }
     }
     wasOnline = isOnline;
   });
@@ -490,15 +504,25 @@ export const stopAutoSyncListener = () => {
 export const startForegroundSyncScheduler = (intervalMs: number = 15000) => {
   if (_foregroundTimer) return;
   _foregroundTimer = setInterval(() => {
-    if (!_syncInProgress) {
-      try {
-        // prefer exported binding (so tests can replace it), fallback to internal
+    try {
+      // Throttle frequent runs: if we recently synced successfully, skip until MIN_SCHEDULE_MS
+      const MIN_SCHEDULE_MS = Math.max(60000, intervalMs); // at least 60s
+      const now = Date.now();
+      if (_lastSuccessfulSyncAt && now - _lastSuccessfulSyncAt < MIN_SCHEDULE_MS) return;
+
+      // If we recently attempted and failed several times, back off
+      if (_syncFailureCount > 0) {
+        const backoffMs = Math.min(60000 * _syncFailureCount, 5 * 60 * 1000);
+        if (_lastSyncAttemptAt && now - _lastSyncAttemptAt < backoffMs) return;
+      }
+
+      if (!_syncInProgress) {
         const mod: any = require('./syncManager');
         const fn = mod && typeof mod.syncBothWays === 'function' ? mod.syncBothWays : syncBothWays;
         Promise.resolve(fn()).catch((err) => console.error('Scheduled sync failed', err));
-      } catch (err) {
-        syncBothWays().catch((e) => console.error('Scheduled sync failed', e));
       }
+    } catch (err) {
+      if (!_syncInProgress) syncBothWays().catch((e) => console.error('Scheduled sync failed', e));
     }
   }, intervalMs);
 };

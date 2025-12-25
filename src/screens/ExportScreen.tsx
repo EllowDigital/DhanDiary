@@ -24,9 +24,7 @@ import FullScreenSpinner from '../components/FullScreenSpinner';
 import dayjs from 'dayjs';
 
 // --- CONFIG ---
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+// layout animations are enabled centrally in App initialization
 
 const FILTERS = ['Today', 'Daily', 'Weekly', 'Monthly', 'Custom', 'All'];
 type Mode = 'Today' | 'Day' | 'Week' | 'Month' | 'Custom' | 'All';

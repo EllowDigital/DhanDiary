@@ -144,7 +144,34 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
             { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
           ]}
         >
-          <View style={styles.userHeader}>
+          <TouchableOpacity
+            style={styles.userHeader}
+            activeOpacity={0.8}
+            onPress={() => {
+              try {
+                props.navigation.closeDrawer();
+              } catch (e) {}
+              // slight delay to avoid drawer animation conflicts
+              setTimeout(() => {
+                try {
+                  props.navigation.navigate('Account');
+                } catch (e) {
+                  // best-effort: try to find top-level nav and navigate
+                  try {
+                    let rootNav: any = props.navigation as any;
+                    while (rootNav.getParent && rootNav.getParent()) {
+                      const p = rootNav.getParent();
+                      if (!p || p === rootNav) break;
+                      rootNav = p;
+                    }
+                    if (rootNav && typeof rootNav.navigate === 'function') {
+                      rootNav.navigate('Account');
+                    }
+                  } catch (e2) {}
+                }
+              }, 220);
+            }}
+          >
             <UserAvatar
               size={44}
               name={user?.fullName || user?.firstName}
@@ -158,13 +185,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
                 {user?.primaryEmailAddress?.emailAddress || ''}
               </Text>
             </View>
-            <TouchableOpacity
-              style={styles.editButton}
-              onPress={() => props.navigation.navigate('Account')}
-            >
-              <MaterialIcon name="edit" size={20} color={colors.primary} />
-            </TouchableOpacity>
-          </View>
+          </TouchableOpacity>
           <View style={styles.headerDivider} />
         </Animated.View>
 

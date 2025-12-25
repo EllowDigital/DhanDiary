@@ -37,30 +37,37 @@ export const syncClerkUserToNeon = async (clerkUser: {
   const email = String(rawEmail).trim().toLowerCase();
   const name = (clerkUser.fullName || 'User')?.toString().trim() || 'User';
 
-  try {
-    // 1. FAST PATH: Check if we already know this Clerk ID
-    // This handles the vast majority of logins for existing users.
-    const existingUsers = await query<DbUser>(
-      'SELECT id, clerk_id, email, name FROM users WHERE clerk_id = $1 LIMIT 1',
-      [clerkUser.id]
-    );
+  // Retry transient failures a few times to avoid creating offline fallbacks unnecessarily
+  let attempt = 0;
+  const maxAttempts = 3;
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-    if (existingUsers && existingUsers.length > 0) {
-      const u = existingUsers[0];
-      return {
-        uuid: u.id,
-        clerk_id: u.clerk_id,
-        email: u.email,
-        name: u.name,
-        server_version: 0,
-      };
-    }
+  while (attempt < maxAttempts) {
+    attempt += 1;
+    try {
+      // 1. FAST PATH: Check if we already know this Clerk ID
+      // This handles the vast majority of logins for existing users.
+      const existingUsers = await query<DbUser>(
+        'SELECT id, clerk_id, email, name FROM users WHERE clerk_id = $1 LIMIT 1',
+        [clerkUser.id]
+      );
 
-    // 2. ATOMIC UPSERT: Handle New User OR Legacy Account Merge
-    // If email exists: Update it with the new clerk_id (Merge).
-    // If email does not exist: Insert a new row (Create).
-    // We use ON CONFLICT to make this race-condition proof.
-    const upsertSql = `
+      if (existingUsers && existingUsers.length > 0) {
+        const u = existingUsers[0];
+        return {
+          uuid: u.id,
+          clerk_id: u.clerk_id,
+          email: u.email,
+          name: u.name,
+          server_version: 0,
+        };
+      }
+
+      // 2. ATOMIC UPSERT: Handle New User OR Legacy Account Merge
+      // If email exists: Update it with the new clerk_id (Merge).
+      // If email does not exist: Insert a new row (Create).
+      // We use ON CONFLICT to make this race-condition proof.
+      const upsertSql = `
       INSERT INTO users (email, clerk_id, name, password_hash, status)
       VALUES ($1, $2, $3, 'clerk_managed', 'active')
       ON CONFLICT (email) 
@@ -69,37 +76,60 @@ export const syncClerkUserToNeon = async (clerkUser: {
         updated_at = NOW()
       RETURNING id, email, name, clerk_id
     `;
-    // perform upsert with normalized email
-    await query(upsertSql, [email, clerkUser.id, name]);
+      // perform upsert with normalized email
+      await query(upsertSql, [email, clerkUser.id, name]);
 
-    // Read authoritative record back from DB to ensure we don't overwrite
-    // any existing name that may have been edited directly in Neon.
-    const finalRows = await query<DbUser>(
-      'SELECT id, clerk_id, email, name FROM users WHERE lower(email) = $1 LIMIT 1',
-      [email]
-    );
-    const user = finalRows && finalRows.length ? finalRows[0] : null;
+      // Read authoritative record back from DB to ensure we don't overwrite
+      // any existing name that may have been edited directly in Neon.
+      const finalRows = await query<DbUser>(
+        'SELECT id, clerk_id, email, name FROM users WHERE lower(email) = $1 LIMIT 1',
+        [email]
+      );
+      const user = finalRows && finalRows.length ? finalRows[0] : null;
 
-    if (!user) {
-      // Fallback to generated offline record if select failed
+      if (!user) {
+        // Fallback to generated offline record if select failed
+        return await createOfflineFallback(clerkUser.id, email, name);
+      }
+
+      return {
+        uuid: user.id,
+        clerk_id: user.clerk_id,
+        email: user.email,
+        name: user.name,
+        server_version: 0,
+        isOfflineFallback: false,
+      };
+    } catch (err: any) {
+      // Determine if error is transient
+      const msg = String(err?.message || err || '').toLowerCase();
+      const isTransient =
+        msg.includes('timeout') ||
+        msg.includes('connection') ||
+        msg.includes('network') ||
+        msg.includes('econnreset') ||
+        msg.includes('enotfound') ||
+        msg.includes('502') ||
+        msg.includes('503') ||
+        msg.includes('fetch');
+
+      if (attempt < maxAttempts && isTransient) {
+        const backoff = 500 * attempt;
+        console.warn(`[Bridge] transient error, retrying in ${backoff}ms`, err);
+        await sleep(backoff);
+        continue;
+      }
+
+      // Non-transient or exhausted attempts: fallback to offline
+      console.warn(
+        '[Bridge] Database unreachable or permanent error, falling back to offline session',
+        err
+      );
       return await createOfflineFallback(clerkUser.id, email, name);
     }
-
-    return {
-      uuid: user.id,
-      clerk_id: user.clerk_id,
-      email: user.email,
-      name: user.name,
-      server_version: 0,
-      isOfflineFallback: false,
-    };
-  } catch (err: any) {
-    // 3. OFFLINE FALLBACK
-    // If the database connection fails (network error, timeout),
-    // we generate a temporary local session so the user can still use the app.
-    console.warn('[Bridge] Database unreachable, falling back to offline session', err);
-    return await createOfflineFallback(clerkUser.id, email, name);
   }
+  // If we somehow exit the retry loop without returning, fall back to offline.
+  return await createOfflineFallback(clerkUser.id, email, name);
 };
 
 // Separated helper for cleaner code

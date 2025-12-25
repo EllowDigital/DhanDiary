@@ -15,6 +15,11 @@ export const BiometricAuth = () => {
   const [isLocked, setIsLocked] = useState(false);
   const [biometricType, setBiometricType] = useState<LocalAuthentication.AuthenticationType[]>([]);
 
+  // Prevent repeated prompts: remember last successful auth in-memory for a short grace
+  const lastAuthAt = useRef<number | null>(null);
+  const isAuthInProgress = useRef(false);
+  const AUTH_GRACE_MS = 5 * 60 * 1000; // 5 minutes grace after successful auth
+
   // Check if feature is enabled and supported on mount
   useEffect(() => {
     checkBiometrics();
@@ -50,6 +55,14 @@ export const BiometricAuth = () => {
     try {
       const enabled = await SecureStore.getItemAsync(BIOMETRIC_KEY);
       if (enabled === 'true') {
+        // If user recently authenticated, skip locking again
+        if (lastAuthAt.current && Date.now() - lastAuthAt.current < AUTH_GRACE_MS) {
+          return;
+        }
+
+        // Avoid triggering multiple concurrent auth prompts
+        if (isAuthInProgress.current) return;
+
         setIsLocked(true);
         authenticate();
       }
@@ -59,6 +72,8 @@ export const BiometricAuth = () => {
   };
 
   const authenticate = async () => {
+    if (isAuthInProgress.current) return;
+    isAuthInProgress.current = true;
     try {
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage: 'Unlock DhanDiary',
@@ -68,13 +83,15 @@ export const BiometricAuth = () => {
       });
 
       if (result.success) {
+        lastAuthAt.current = Date.now();
         setIsLocked(false);
       } else {
-        // Determine if we should retry or just sit there
-        // Usually we just leave the lock screen up and let them tap "Retry"
+        // keep locked; user can tap Unlock to retry
       }
     } catch (e) {
       console.error('Biometric error', e);
+    } finally {
+      isAuthInProgress.current = false;
     }
   };
 
