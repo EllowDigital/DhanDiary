@@ -45,37 +45,38 @@ export const fetchEntriesGenerator = async function* (
 };
 
 export const getSummary = async (..._args: any[]): Promise<any | null> => {
-    // Try to read precomputed summaries from Neon when running in online-only mode.
-    try {
-      // lazy require to avoid circular imports at module init
-      const { query } = require('../api/neonClient');
-      const session = await getSession();
-      const userId = session?.id;
-      if (!userId) return null;
-      // daily key is YYYY-MM-DD
-      if (arguments.length >= 2 && arguments[0] === 'daily') {
-        const key = arguments[1];
-        try {
-          const rows = await query(
-            'SELECT total_in, total_out, count FROM daily_summaries WHERE user_id = $1 AND date = $2 LIMIT 1',
-            [userId, key]
-          );
-          const r = rows && rows[0];
-          if (!r) return null;
-          return {
-            totalInCents: Math.round(Number(r.total_in || 0) * 100),
-            totalOutCents: Math.round(Number(r.total_out || 0) * 100),
-            count: Number(r.count || 0),
-          };
-        } catch (e) {
-          console.warn('Failed to query daily_summaries', e);
-          return null;
-        }
+  // Try to read precomputed summaries from Neon when running in online-only mode.
+  try {
+    // lazy require to avoid circular imports at module init
+    const { query } = require('../api/neonClient');
+    const session = await getSession();
+    const userId = session?.id;
+    if (!userId) return null;
+
+    // daily key is YYYY-MM-DD
+    if (_args.length >= 2 && _args[0] === 'daily') {
+      const key = _args[1];
+      try {
+        const rows = await query(
+          'SELECT total_in, total_out, count FROM daily_summaries WHERE user_id = $1 AND date = $2 LIMIT 1',
+          [userId, key]
+        );
+        const r = rows && rows[0];
+        if (!r) return null;
+        return {
+          totalInCents: Math.round(Number(r.total_in || 0) * 100),
+          totalOutCents: Math.round(Number(r.total_out || 0) * 100),
+          count: Number(r.count || 0),
+        };
+      } catch (e) {
+        console.warn('Failed to query daily_summaries', e);
+        return null;
       }
-      return null;
-    } catch (e) {
-      return null;
     }
+    return null;
+  } catch (e) {
+    return null;
+  }
 };
 
 export const addPendingProfileUpdate = async (..._args: any[]) => {
