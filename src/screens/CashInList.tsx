@@ -254,9 +254,9 @@ const CashInList = () => {
   // --- HANDLERS ---
   const handleEdit = (item: any) => {
     // If you have a dedicated edit screen or modal, navigate there
-    navigation.navigate('AddEntry', { 
-        local_id: item.local_id, 
-        type: 'in' // Ensure the editor knows it's an Income
+    navigation.navigate('AddEntry', {
+      local_id: item.local_id,
+      type: 'in', // Ensure the editor knows it's an Income
     });
   };
 

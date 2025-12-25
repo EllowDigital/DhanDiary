@@ -80,9 +80,9 @@ const SettingsScreen = () => {
   // Clerk Auth (Safe Import)
   let clerkSignOut: any = null;
   try {
-  const clerk = require('@clerk/clerk-expo');
-  const auth = clerk.useAuth();
-  clerkSignOut = auth.signOut;
+    const clerk = require('@clerk/clerk-expo');
+    const auth = clerk.useAuth();
+    clerkSignOut = auth.signOut;
   } catch (e) {
     // Clerk not installed or configured, ignore
   }

@@ -76,7 +76,7 @@ const OnboardingItem = ({
   // Responsive sizing logic
   const isSmallScreen = width < 380;
   const isTablet = width > 700;
-  
+
   // Circle Sizing
   const circleSize = isTablet ? 360 : isSmallScreen ? 240 : 280;
   const iconSize = isTablet ? 80 : 56;
@@ -191,10 +191,7 @@ const Paginator = ({ data, scrollX }: { data: typeof SLIDES; scrollX: Animated.V
         });
 
         return (
-          <Animated.View 
-            key={i.toString()} 
-            style={[styles.dot, { width: dotWidth, opacity }]} 
-          />
+          <Animated.View key={i.toString()} style={[styles.dot, { width: dotWidth, opacity }]} />
         );
       })}
     </View>
@@ -208,7 +205,7 @@ const OnboardingScreen = () => {
   const scrollX = useRef(new Animated.Value(0)).current;
   const listRef = useRef<FlatList>(null);
   const [completing, setCompleting] = useState(false);
-  
+
   // Optimizing FlatList updates
   const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
     if (viewableItems && viewableItems.length > 0) {
@@ -225,7 +222,7 @@ const OnboardingScreen = () => {
     // Use reset to prevent going back to onboarding
     navigation.reset({
       index: 0,
-      routes: [{ name: 'Auth' }], 
+      routes: [{ name: 'Auth' }],
     });
   };
 
@@ -299,7 +296,7 @@ const OnboardingScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background || '#F9FAFB', 
+    backgroundColor: colors.background || '#F9FAFB',
     alignItems: 'center',
     justifyContent: 'center',
   },

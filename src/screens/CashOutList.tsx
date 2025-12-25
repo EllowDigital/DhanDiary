@@ -253,10 +253,10 @@ const CashOutList = () => {
 
   // --- HANDLERS ---
   const handleEdit = (item: any) => {
-      navigation.navigate('AddEntry', { 
-          local_id: item.local_id,
-          type: 'out' // Explicitly tell editor this is an expense
-      });
+    navigation.navigate('AddEntry', {
+      local_id: item.local_id,
+      type: 'out', // Explicitly tell editor this is an expense
+    });
   };
 
   const handleDelete = (id: string) => {

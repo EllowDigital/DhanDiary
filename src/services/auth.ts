@@ -299,6 +299,14 @@ export const deleteAccount = async () => {
     console.warn('[Auth] Clerk clean up failed', e);
   }
 
+  // Ensure we run standard logout cleanup (stop sync, clear caches/storage)
+  try {
+    await logout();
+  } catch (e) {
+    // best-effort: ignore errors here but log for diagnostics
+    console.warn('[Auth] logout during deleteAccount failed', e);
+  }
+
   return { remoteDeleted, userDeleted };
 };
 

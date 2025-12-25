@@ -22,13 +22,12 @@ import { hasCompletedOnboarding } from '../utils/onboarding';
 
 type SplashNavProp = NativeStackNavigationProp<RootStackParamList, 'Splash'>;
 
-const MIN_SPLASH_TIME_MS = 2500; // Increased slightly for better perception of animation
+const MIN_SPLASH_TIME_MS = 2500; // Minimum time to show splash for branding
 
 const SplashScreen = () => {
   const navigation = useNavigation<SplashNavProp>();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const [isReady, setIsReady] = useState(false);
 
   // --- ANIMATION VALUES ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -113,10 +112,10 @@ const SplashScreen = () => {
     let mounted = true;
 
     const init = async () => {
-      const startTime = Date.now();
       // Run checks in parallel with minimum timer
       let user = null;
       let onboardingCompleted = false;
+
       try {
         const timeout = (ms: number) =>
           new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms));
@@ -125,10 +124,7 @@ const SplashScreen = () => {
           try {
             return await Promise.race([getSession(), timeout(3000)]);
           } catch (e) {
-            console.warn(
-              '[Splash] getSession timed out or failed',
-              (e as any)?.message || String(e)
-            );
+            console.warn('[Splash] getSession timed out or failed', e);
             return null;
           }
         };
@@ -137,10 +133,7 @@ const SplashScreen = () => {
           try {
             return await Promise.race([hasCompletedOnboarding(), timeout(2000)]);
           } catch (e) {
-            console.warn(
-              '[Splash] hasCompletedOnboarding timed out or failed',
-              (e as any)?.message || String(e)
-            );
+            console.warn('[Splash] hasCompletedOnboarding timed out', e);
             return false;
           }
         };
@@ -150,14 +143,9 @@ const SplashScreen = () => {
           safeHasCompletedOnboarding(),
           new Promise((resolve) => setTimeout(resolve, MIN_SPLASH_TIME_MS)), // Ensure min display time
         ]);
+
         user = res[0];
         onboardingCompleted = Boolean(res[1]);
-        console.log(
-          '[Splash] init results user=',
-          !!user,
-          'onboardingCompleted=',
-          onboardingCompleted
-        );
       } catch (e) {
         console.warn('[Splash] init error', e);
       }
@@ -169,7 +157,8 @@ const SplashScreen = () => {
       const doNav = () => {
         if (navigated) return;
         navigated = true;
-        // Use reset to prevent back-navigation to splash
+
+        // Navigation Logic
         if (user) {
           navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
         } else if (onboardingCompleted) {
@@ -179,26 +168,14 @@ const SplashScreen = () => {
         }
       };
 
-      // Fire the exit animation but don't wait for it to complete to navigate.
+      // Fire the exit animation
       Animated.parallel([
         Animated.timing(fadeAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
         Animated.timing(scaleAnim, { toValue: 1.1, duration: 300, useNativeDriver: true }),
       ]).start();
 
-      // Navigate immediately so the splash won't block the app.
+      // Navigate
       doNav();
-
-      // Safety fallback: if for any reason navigation didn't happen, force it after 2s.
-      const forceTimer = setTimeout(() => {
-        try {
-          doNav();
-        } catch (e) {
-          console.warn('[Splash] forced navigation failed', e);
-        }
-      }, 2000);
-
-      // Clear fallback timer on unmount
-      if (!mounted) clearTimeout(forceTimer);
     };
 
     init();

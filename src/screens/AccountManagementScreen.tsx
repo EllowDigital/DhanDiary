@@ -275,12 +275,39 @@ const AccountManagementScreen = () => {
             if (!user) return;
             setDeletingAccount(true);
             try {
-              await user.delete(); // Clerk
-              await deleteAccount(); // Local DB cleanup
+              // Try to delete Clerk user, but don't block local cleanup if it fails.
+              try {
+                if (typeof (user as any).delete === 'function') {
+                  await (user as any).delete();
+                }
+              } catch (clerkErr) {
+                console.warn(
+                  '[Account] Clerk user.delete() failed, continuing with local cleanup',
+                  clerkErr
+                );
+              }
+
+              // Ensure local cleanup runs even if Clerk deletion failed.
+              try {
+                await deleteAccount();
+              } catch (localErr) {
+                console.warn('[Account] deleteAccount() failed', localErr);
+              }
+
               showToast('Account deleted');
-              navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
+              // Force navigation to Auth screen and clear history to avoid any stale state
+              try {
+                navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
+              } catch (navErr) {
+                console.warn('[Account] navigation.reset failed', navErr);
+              }
             } catch (err: any) {
-              Alert.alert('Error', err.errors ? err.errors[0]?.message : err.message);
+              // Catch-all: surface message but still attempt to navigate to Auth so app isn't left in broken state
+              console.warn('[Account] unexpected error during delete flow', err);
+              try {
+                navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
+              } catch (navErr) {}
+              Alert.alert('Error', err?.message || 'Failed to delete account');
             } finally {
               setDeletingAccount(false);
             }

@@ -38,11 +38,11 @@ const RegisterScreen = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  
+
   // Verification State
   const [pendingVerification, setPendingVerification] = useState(false);
   const [verificationCode, setVerificationCode] = useState('');
-  
+
   // UI State
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -66,12 +66,12 @@ const RegisterScreen = () => {
         useNativeDriver: true,
       }),
     ]).start(() => {
-        setPendingVerification(toStep2);
-        slideAnim.setValue(toStep2 ? 50 : -50);
-        Animated.parallel([
-            Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
-            Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true }),
-        ]).start();
+      setPendingVerification(toStep2);
+      slideAnim.setValue(toStep2 ? 50 : -50);
+      Animated.parallel([
+        Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true }),
+      ]).start();
     });
   };
 
@@ -115,11 +115,11 @@ const RegisterScreen = () => {
 
       if (result.status === 'complete') {
         await setActive({ session: result.createdSessionId });
-        
+
         // Start Sync
         setSyncing(true);
         const fullName = `${firstName} ${lastName}`.trim();
-        
+
         // 1. Sync to Neon DB
         const bridgeUser = await syncClerkUserToNeon({
           id: result.createdUserId!,
@@ -153,11 +153,11 @@ const RegisterScreen = () => {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
-      
+
       {/* Background Gradient */}
-      <LinearGradient 
-        colors={['#E0F2FE', '#F0F9FF', '#FFFFFF']} 
-        style={StyleSheet.absoluteFill} 
+      <LinearGradient
+        colors={['#E0F2FE', '#F0F9FF', '#FFFFFF']}
+        style={StyleSheet.absoluteFill}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
       />
@@ -173,20 +173,23 @@ const RegisterScreen = () => {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            
             {/* Header */}
             <View style={styles.header}>
-              <TouchableOpacity 
-                onPress={() => pendingVerification ? animateTransition(false) : navigation.goBack()} 
+              <TouchableOpacity
+                onPress={() =>
+                  pendingVerification ? animateTransition(false) : navigation.goBack()
+                }
                 style={styles.backBtn}
               >
                 <Ionicons name="arrow-back" size={24} color="#0F172A" />
               </TouchableOpacity>
-              
+
               {/* Progress Indicator */}
               <View style={styles.progressContainer}>
                 <View style={[styles.progressDot, !pendingVerification && styles.progressActive]} />
-                <View style={[styles.progressLine, pendingVerification && styles.progressLineActive]} />
+                <View
+                  style={[styles.progressLine, pendingVerification && styles.progressLineActive]}
+                />
                 <View style={[styles.progressDot, pendingVerification && styles.progressActive]} />
               </View>
             </View>
@@ -201,7 +204,12 @@ const RegisterScreen = () => {
                   <View style={styles.formContainer}>
                     <View style={styles.row}>
                       <View style={[styles.inputContainer, { flex: 1 }]}>
-                        <Ionicons name="person-outline" size={20} color="#94A3B8" style={styles.inputIcon} />
+                        <Ionicons
+                          name="person-outline"
+                          size={20}
+                          color="#94A3B8"
+                          style={styles.inputIcon}
+                        />
                         <TextInput
                           style={styles.input}
                           placeholder="First Name"
@@ -223,7 +231,12 @@ const RegisterScreen = () => {
                     </View>
 
                     <View style={styles.inputContainer}>
-                      <Ionicons name="mail-outline" size={20} color="#94A3B8" style={styles.inputIcon} />
+                      <Ionicons
+                        name="mail-outline"
+                        size={20}
+                        color="#94A3B8"
+                        style={styles.inputIcon}
+                      />
                       <TextInput
                         style={styles.input}
                         placeholder="Email Address"
@@ -236,7 +249,12 @@ const RegisterScreen = () => {
                     </View>
 
                     <View style={styles.inputContainer}>
-                      <Ionicons name="lock-closed-outline" size={20} color="#94A3B8" style={styles.inputIcon} />
+                      <Ionicons
+                        name="lock-closed-outline"
+                        size={20}
+                        color="#94A3B8"
+                        style={styles.inputIcon}
+                      />
                       <TextInput
                         style={styles.input}
                         placeholder="Create Password"
@@ -245,17 +263,28 @@ const RegisterScreen = () => {
                         onChangeText={setPassword}
                         secureTextEntry={!showPassword}
                       />
-                      <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
-                        <Ionicons name={showPassword ? 'eye' : 'eye-off'} size={20} color="#94A3B8" />
+                      <TouchableOpacity
+                        onPress={() => setShowPassword(!showPassword)}
+                        style={styles.eyeBtn}
+                      >
+                        <Ionicons
+                          name={showPassword ? 'eye' : 'eye-off'}
+                          size={20}
+                          color="#94A3B8"
+                        />
                       </TouchableOpacity>
                     </View>
 
-                    <TouchableOpacity 
-                      style={[styles.primaryBtn, loading && styles.disabledBtn]} 
+                    <TouchableOpacity
+                      style={[styles.primaryBtn, loading && styles.disabledBtn]}
                       onPress={onSignUpPress}
                       disabled={loading}
                     >
-                      {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Continue</Text>}
+                      {loading ? (
+                        <ActivityIndicator color="#fff" />
+                      ) : (
+                        <Text style={styles.primaryBtnText}>Continue</Text>
+                      )}
                     </TouchableOpacity>
                   </View>
 
@@ -272,10 +301,11 @@ const RegisterScreen = () => {
                   <View style={styles.iconCircle}>
                     <Ionicons name="mail-open" size={32} color="#2563EB" />
                   </View>
-                  
+
                   <Text style={styles.titleCenter}>Verify Email</Text>
                   <Text style={styles.subtitleCenter}>
-                    We sent a code to <Text style={{fontWeight: '700', color: '#0F172A'}}>{email}</Text>
+                    We sent a code to{' '}
+                    <Text style={{ fontWeight: '700', color: '#0F172A' }}>{email}</Text>
                   </Text>
 
                   <View style={styles.formContainer}>
@@ -290,12 +320,16 @@ const RegisterScreen = () => {
                       autoFocus
                     />
 
-                    <TouchableOpacity 
-                      style={[styles.primaryBtn, loading && styles.disabledBtn]} 
+                    <TouchableOpacity
+                      style={[styles.primaryBtn, loading && styles.disabledBtn]}
                       onPress={onVerifyPress}
                       disabled={loading}
                     >
-                      {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Verify & Create</Text>}
+                      {loading ? (
+                        <ActivityIndicator color="#fff" />
+                      ) : (
+                        <Text style={styles.primaryBtnText}>Verify & Create</Text>
+                      )}
                     </TouchableOpacity>
 
                     <TouchableOpacity style={styles.resendBtn}>
@@ -305,7 +339,6 @@ const RegisterScreen = () => {
                 </View>
               )}
             </Animated.View>
-
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -329,7 +362,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     padding: 24,
   },
-  
+
   /* HEADER */
   header: {
     flexDirection: 'row',
@@ -378,9 +411,21 @@ const styles = StyleSheet.create({
   /* TEXT */
   title: { fontSize: 28, fontWeight: '800', color: '#0F172A', marginBottom: 8 },
   subtitle: { fontSize: 16, color: '#64748B', marginBottom: 32 },
-  
-  titleCenter: { fontSize: 24, fontWeight: '800', color: '#0F172A', marginBottom: 8, textAlign: 'center' },
-  subtitleCenter: { fontSize: 15, color: '#64748B', marginBottom: 32, textAlign: 'center', lineHeight: 22 },
+
+  titleCenter: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  subtitleCenter: {
+    fontSize: 15,
+    color: '#64748B',
+    marginBottom: 32,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
   centerContent: { alignItems: 'center', marginTop: 20 },
 
   /* FORM */

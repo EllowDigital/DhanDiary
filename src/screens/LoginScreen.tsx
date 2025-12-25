@@ -48,7 +48,7 @@ const { width, height } = Dimensions.get('window');
 
 const LoginScreen = () => {
   useWarmUpBrowser();
-  
+
   const navigation = useNavigation<any>();
   const { signIn, setActive, isLoaded } = useSignIn();
   const { user: clerkUser, isLoaded: clerkLoaded } = useUser();
@@ -92,7 +92,7 @@ const LoginScreen = () => {
         useNativeDriver: true,
       }),
     ]).start();
-    
+
     // Pre-warm DB
     warmNeonConnection().catch(() => {});
   }, []);
@@ -123,28 +123,33 @@ const LoginScreen = () => {
   }, [isSignedIn, clerkLoaded, clerkUser]);
 
   // --- LOGIC ---
-  const handleSyncAndNavigate = async (userId: string, userEmail: string, userName?: string | null) => {
+  const handleSyncAndNavigate = async (
+    userId: string,
+    userEmail: string,
+    userName?: string | null
+  ) => {
     try {
-        await saveSession(userId, userName || 'User', userEmail);
+      await saveSession(userId, userName || 'User', userEmail);
     } catch (e) {
-        console.warn('Local session save failed', e);
+      console.warn('Local session save failed', e);
     }
 
     const syncPromise = syncClerkUserToNeon({
-        id: userId,
-        emailAddresses: [{ emailAddress: userEmail }],
-        fullName: userName,
-    }).catch(err => console.warn('Background sync failed', err));
+      id: userId,
+      emailAddresses: [{ emailAddress: userEmail }],
+      fullName: userName,
+    }).catch((err) => console.warn('Background sync failed', err));
 
     setSyncing(false);
     setLoading(false);
     navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
-    await syncPromise; 
+    await syncPromise;
   };
 
   const onSignInPress = async () => {
     if (!isLoaded) return;
-    if (!email || !password) return Alert.alert('Missing Info', 'Please enter both email and password.');
+    if (!email || !password)
+      return Alert.alert('Missing Info', 'Please enter both email and password.');
 
     setLoading(true);
     try {
@@ -158,7 +163,10 @@ const LoginScreen = () => {
     } catch (err: any) {
       const msg = err.errors?.[0]?.message || 'Invalid credentials.';
       if (err.errors?.[0]?.code === 'strategy_for_user_invalid') {
-        Alert.alert('Wrong Method', 'This email uses social login. Please click the buttons below.');
+        Alert.alert(
+          'Wrong Method',
+          'This email uses social login. Please click the buttons below.'
+        );
       } else {
         Alert.alert('Login Failed', msg);
       }
@@ -184,7 +192,7 @@ const LoginScreen = () => {
       }
     } catch (err: any) {
       if (!err.message?.includes('cancelled')) {
-         Alert.alert('Social Login Failed', 'Please try again.');
+        Alert.alert('Social Login Failed', 'Please try again.');
       }
       setLoading(false);
     }
@@ -193,11 +201,11 @@ const LoginScreen = () => {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
-      
+
       {/* Background Gradient */}
-      <LinearGradient 
-        colors={['#E0F2FE', '#F0F9FF', '#FFFFFF']} 
-        style={StyleSheet.absoluteFill} 
+      <LinearGradient
+        colors={['#E0F2FE', '#F0F9FF', '#FFFFFF']}
+        style={StyleSheet.absoluteFill}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
       />
@@ -212,7 +220,6 @@ const LoginScreen = () => {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            
             {/* Top Brand Section */}
             <Animated.View style={[styles.brandSection, { opacity: fadeAnim }]}>
               <View style={styles.logoCircle}>
@@ -227,13 +234,13 @@ const LoginScreen = () => {
             </Animated.View>
 
             {/* Bottom Sheet Form */}
-            <Animated.View 
+            <Animated.View
               style={[
-                styles.formSheet, 
-                { 
+                styles.formSheet,
+                {
                   opacity: fadeAnim,
-                  transform: [{ translateY: slideAnim }] 
-                }
+                  transform: [{ translateY: slideAnim }],
+                },
               ]}
             >
               <Text style={styles.welcomeText}>Welcome Back!</Text>
@@ -242,7 +249,12 @@ const LoginScreen = () => {
               {/* Inputs */}
               <View style={styles.inputGroup}>
                 <View style={styles.inputContainer}>
-                  <Ionicons name="mail" size={20} color={colors.muted || "#94A3B8"} style={styles.inputIcon} />
+                  <Ionicons
+                    name="mail"
+                    size={20}
+                    color={colors.muted || '#94A3B8'}
+                    style={styles.inputIcon}
+                  />
                   <TextInput
                     style={styles.input}
                     placeholder="Email Address"
@@ -255,7 +267,12 @@ const LoginScreen = () => {
                 </View>
 
                 <View style={styles.inputContainer}>
-                  <Ionicons name="lock-closed" size={20} color={colors.muted || "#94A3B8"} style={styles.inputIcon} />
+                  <Ionicons
+                    name="lock-closed"
+                    size={20}
+                    color={colors.muted || '#94A3B8'}
+                    style={styles.inputIcon}
+                  />
                   <TextInput
                     style={styles.input}
                     placeholder="Password"
@@ -265,7 +282,10 @@ const LoginScreen = () => {
                     secureTextEntry={!showPassword}
                     autoCapitalize="none"
                   />
-                  <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
+                  <TouchableOpacity
+                    onPress={() => setShowPassword(!showPassword)}
+                    style={styles.eyeBtn}
+                  >
                     <Ionicons name={showPassword ? 'eye' : 'eye-off'} size={20} color="#94A3B8" />
                   </TouchableOpacity>
                 </View>
@@ -294,17 +314,17 @@ const LoginScreen = () => {
               {/* Social Buttons */}
               <View style={styles.socialRow}>
                 <TouchableOpacity style={styles.socialBtn} onPress={() => onSocialLogin('google')}>
-                  <Image 
-                    source={{uri: 'https://cdn-icons-png.flaticon.com/512/300/300221.png'}} 
-                    style={styles.socialIcon} 
+                  <Image
+                    source={{ uri: 'https://cdn-icons-png.flaticon.com/512/300/300221.png' }}
+                    style={styles.socialIcon}
                   />
                   <Text style={styles.socialBtnText}>Google</Text>
                 </TouchableOpacity>
-                
+
                 <TouchableOpacity style={styles.socialBtn} onPress={() => onSocialLogin('github')}>
-                  <Image 
-                    source={{uri: 'https://cdn-icons-png.flaticon.com/512/25/25231.png'}} 
-                    style={styles.socialIcon} 
+                  <Image
+                    source={{ uri: 'https://cdn-icons-png.flaticon.com/512/25/25231.png' }}
+                    style={styles.socialIcon}
                   />
                   <Text style={styles.socialBtnText}>GitHub</Text>
                 </TouchableOpacity>
@@ -317,7 +337,6 @@ const LoginScreen = () => {
                   <Text style={styles.linkText}>Create Account</Text>
                 </TouchableOpacity>
               </View>
-
             </Animated.View>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -342,7 +361,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'space-between',
   },
-  
+
   /* BRAND SECTION */
   brandSection: {
     alignItems: 'center',
@@ -406,7 +425,7 @@ const styles = StyleSheet.create({
     color: '#64748B',
     marginBottom: 24,
   },
-  
+
   /* INPUTS */
   inputGroup: {
     gap: 16,
