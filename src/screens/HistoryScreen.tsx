@@ -35,9 +35,7 @@ import dayjs from 'dayjs';
 import { Swipeable } from 'react-native-gesture-handler';
 
 // Fix Android Animation Layout
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+// layout animations are enabled centrally in App initialization
 
 const resolveEntryMoment = (entry: any) => dayjs(entry?.date || entry?.created_at);
 

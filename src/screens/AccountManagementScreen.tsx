@@ -33,9 +33,7 @@ import { deleteAccount } from '../services/auth';
 import { syncClerkUserToNeon } from '../services/clerkUserSync';
 import UserAvatar from '../components/UserAvatar';
 
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+// layout animations are enabled centrally in App initialization
 
 // --- SUB-COMPONENT: CUSTOM INPUT ---
 const CustomInput = ({ containerStyle, ...props }: any) => (

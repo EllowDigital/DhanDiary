@@ -2,7 +2,7 @@ import dayjs from 'dayjs';
 import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
 
 dayjs.extend(isSameOrBefore);
-import { getSummary } from '../db/localDb';
+import { getSummaries } from '../db/localDb';
 import asyncAggregator from '../utils/asyncAggregator';
 // Use the online entries generator which reads directly from Neon
 import { fetchEntriesGenerator } from '../db/entries';
@@ -23,24 +23,19 @@ export const readPrecomputedDaily = async (
 ) => {
   if (!userId) return null;
   try {
-    // Read summaries from local DB for each day in range (inclusive)
-    const results: any[] = [];
-    let cur = start.startOf('day');
-    const last = end.startOf('day');
-    while (cur.isSameOrBefore(last)) {
-      const key = cur.format('YYYY-MM-DD');
-      const s: any = await getSummary('daily', key);
-      if (s) {
-        results.push({
-          id: key,
-          date: key,
-          in: (s.totalInCents || 0) / 100,
-          out: (s.totalOutCents || 0) / 100,
-          count: s.count || 0,
-        });
-      }
-      cur = cur.add(1, 'day');
-    }
+    // Fetch daily summaries in a single range query to avoid N round-trips
+    const srows: any = await getSummaries(
+      'daily',
+      start.format('YYYY-MM-DD'),
+      end.format('YYYY-MM-DD')
+    );
+    const results: any[] = (srows || []).map((r: any) => ({
+      id: dayjs(r.date).format('YYYY-MM-DD'),
+      date: dayjs(r.date).format('YYYY-MM-DD'),
+      in: Number(r.total_in || r.totalIn || 0),
+      out: Number(r.total_out || r.totalOut || 0),
+      count: Number(r.count || 0),
+    }));
     if (results.length === 0) return null;
     return results;
   } catch (err) {

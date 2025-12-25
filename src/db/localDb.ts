@@ -104,6 +104,47 @@ export const getSummary = async (..._args: any[]): Promise<any | null> => {
   }
 };
 
+export const getSummaries = async (
+  period: 'daily' | 'monthly',
+  start: string,
+  end: string
+): Promise<any[] | null> => {
+  try {
+    const { query } = require('../api/neonClient');
+    const session = await getSession();
+    const userId = session?.id;
+    if (!userId) return null;
+
+    if (period === 'daily') {
+      // expecting start/end as YYYY-MM-DD
+      const rows = await query(
+        'SELECT date, total_in, total_out, count FROM daily_summaries WHERE user_id = $1 AND date >= $2::date AND date <= $3::date ORDER BY date',
+        [userId, start, end]
+      );
+      return rows || [];
+    }
+
+    if (period === 'monthly') {
+      // expecting start/end as YYYY-MM (use first day of month)
+      const rows = await query(
+        `SELECT year, month, total_in, total_out, count FROM monthly_summaries WHERE user_id = $1 AND (year > $2 OR (year = $2 AND month >= $3)) AND (year < $4 OR (year = $4 AND month <= $5)) ORDER BY year, month`,
+        [
+          userId,
+          Number(start.split('-')[0]),
+          Number(start.split('-')[1]),
+          Number(end.split('-')[0]),
+          Number(end.split('-')[1]),
+        ]
+      );
+      return rows || [];
+    }
+
+    return null;
+  } catch (e) {
+    return null;
+  }
+};
+
 export const addPendingProfileUpdate = async (..._args: any[]) => {
   return null;
 };

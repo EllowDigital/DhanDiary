@@ -13,6 +13,7 @@ try {
 const fs = require('fs');
 const path = require('path');
 const { Pool } = require('@neondatabase/serverless');
+const { URL } = require('url');
 
 // Normalize NEON_URL from env and strip accidental quotes/spaces
 const rawNeon = process.env.NEON_URL || process.env.EXPO_PUBLIC_NEON_URL || '';
@@ -189,12 +190,16 @@ const pool = new Pool({ connectionString: NEON_URL });
       );
     }
 
+    // Make audit variables available outside try block
+    let foundFuncs = [];
+    let foundTriggers = [];
+
     // Log existence of key DB objects (functions/triggers) we expect to be deployed
     try {
       const funcs = await pool.query(
         "SELECT proname FROM pg_proc WHERE proname IN ('upsert_monthly_summary','tr_upsert_daily_summary','update_modified_column','increment_server_version')"
       );
-      const foundFuncs =
+      foundFuncs =
         funcs && (funcs.rows || funcs).map ? (funcs.rows || funcs).map((r) => r.proname) : [];
       console.log(
         'Deployed functions:',
@@ -204,7 +209,7 @@ const pool = new Pool({ connectionString: NEON_URL });
       const triggers = await pool.query(
         "SELECT tgname, (tgrelid::regclass::text) AS table_name FROM pg_trigger WHERE tgname = 'tr_summary_on_cash_entries'"
       );
-      const foundTriggers =
+      foundTriggers =
         triggers && (triggers.rows || triggers).map
           ? (triggers.rows || triggers).map((r) => `${r.tgname}@${r.table_name}`)
           : [];
@@ -217,6 +222,28 @@ const pool = new Pool({ connectionString: NEON_URL });
         'Could not inspect deployed functions/triggers:',
         logErr && logErr.message ? logErr.message : logErr
       );
+    }
+    // Append an audit entry for this migration run for traceability
+    try {
+      const audit = {
+        timestamp: new Date().toISOString(),
+        neon_host: new URL(NEON_URL).hostname,
+        functions: Array.isArray(foundFuncs) ? foundFuncs : [],
+        triggers: Array.isArray(foundTriggers) ? foundTriggers : [],
+      };
+      try {
+        fs.appendFileSync(
+          path.join(__dirname, 'migration_audit.log'),
+          JSON.stringify(audit) + '\n'
+        );
+      } catch (fsErr) {
+        console.warn(
+          'Failed to write migration audit log:',
+          fsErr && fsErr.message ? fsErr.message : fsErr
+        );
+      }
+    } catch (e) {
+      // ignore audit failures
     }
   } catch (err) {
     console.error('Migration failed:', err);

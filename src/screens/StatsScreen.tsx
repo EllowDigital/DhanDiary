@@ -30,9 +30,7 @@ import { PieChart } from 'react-native-chart-kit';
 
 // Enable LayoutAnimation for Android
 try {
-  if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
-  }
+  // layout animations are enabled centrally in App initialization
 } catch (e) {}
 
 // --- CONSTANTS ---
