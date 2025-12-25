@@ -16,7 +16,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
-import * as Haptics from 'expo-haptics'; // Optional: Add for better feel
 
 // Logic
 import { logout } from '../services/auth';
@@ -35,6 +34,15 @@ try {
   pkg = require('../../package.json');
 } catch (e) {
   pkg = { version: '1.0.0' };
+}
+
+// Optional: try to require expo-haptics if available (avoid hard dependency)
+let Haptics: any = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  Haptics = require('expo-haptics');
+} catch (e) {
+  Haptics = null;
 }
 
 // --- SUB-COMPONENT: SETTINGS ROW ---
