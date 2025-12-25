@@ -765,7 +765,7 @@ const styles = StyleSheet.create({
   chartContent: {
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 180,
+    minHeight: 240,
     overflow: 'hidden',
   },
 
