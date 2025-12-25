@@ -128,15 +128,19 @@ const pool = new Pool({ connectionString: NEON_URL });
 
     // If BACKFILL not explicitly requested, optionally run AUTO_BACKFILL when summaries table exists and is empty
     try {
+      if (process.env.BACKFILL === '1') {
+        console.log('BACKFILL=1 was used; skipping AUTO_BACKFILL detection.');
+      } else {
       const checkTable = await pool.query(
         "SELECT to_regclass('public.daily_summaries') IS NOT NULL AS exists"
       );
-      const tableExists = checkTable && checkTable[0] && (checkTable[0].exists === true || checkTable[0].exists === 't');
+      const checkRow = checkTable && checkTable.rows && checkTable.rows[0];
+      const tableExists = checkRow && (checkRow.exists === true || checkRow.exists === 't');
       if (!tableExists) {
         console.log('daily_summaries table does not exist yet; skipping AUTO_BACKFILL check.');
       } else {
         const res = await pool.query('SELECT count(*)::bigint AS cnt FROM daily_summaries');
-        const first = res && res[0];
+        const first = res && res.rows && res.rows[0];
         const cnt = first ? Number(first.cnt || first.count || 0) : 0;
         if ((cnt === 0 || isNaN(cnt)) && process.env.AUTO_BACKFILL === '1') {
           console.log('daily_summaries appears empty and AUTO_BACKFILL=1; running backfill now.');
@@ -166,6 +170,7 @@ const pool = new Pool({ connectionString: NEON_URL });
           console.log('daily_summaries already populated (rows=', cnt, '), skipping AUTO backfill.');
         }
       }
+    }
     } catch (e) {
       console.warn('Could not inspect daily_summaries table (it may not exist yet):', e && e.message ? e.message : e);
     }
