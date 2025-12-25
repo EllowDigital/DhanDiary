@@ -325,7 +325,7 @@ const HomeScreen = () => {
     return {
       stats: { in: inVal, out: outVal, bal: inVal - outVal },
       chartData: { wave: displayWave, pie: piePoints },
-      recentEntries: entries.slice(0, 10),
+      recentEntries: entries.slice(0, 5),
     };
   }, [entries, period]);
 
