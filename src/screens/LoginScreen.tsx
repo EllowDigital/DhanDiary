@@ -186,22 +186,21 @@ const LoginScreen = () => {
         setLoading(false);
       }
     } catch (err: any) {
-      console.error(err);
-      const msg = err.errors?.[0]?.message || 'Invalid credentials.';
-      const code = err.errors?.[0]?.code;
+      console.error('Sign-in error', err);
+      const firstErr = err?.errors?.[0] || {};
+      const code = firstErr.code;
+      const rawMsg = firstErr.message || err.message || '';
 
+      // Friendly messages for common cases
       if (code === 'strategy_for_user_invalid') {
-        Alert.alert(
-          'Wrong Method',
-          'This email uses social login. Please click the Google or GitHub button below.'
-        );
+        Alert.alert('Wrong Method', 'This email is registered via Google/GitHub. Use the social buttons.');
       } else if (code === 'form_identifier_not_found') {
-        Alert.alert(
-          'Account Not Found',
-          'No account found with this email. Please create an account.'
-        );
+        Alert.alert('Account Not Found', 'No account exists for this email — please sign up.');
+      } else if (rawMsg.toLowerCase().includes('password') || rawMsg.toLowerCase().includes('credentials')) {
+        Alert.alert('Incorrect Password', 'The password you entered is incorrect. Please try again or reset your password.');
       } else {
-        Alert.alert('Login Failed', msg);
+        // Generic fallback; include Clerk message when available for debugging
+        Alert.alert('Login Failed', rawMsg || 'Unable to sign in. Please try again.');
       }
       setLoading(false);
     }
