@@ -65,11 +65,7 @@ const SettingsRow = ({
     activeOpacity={0.6}
   >
     <View style={[styles.rowIcon, danger && styles.rowIconDanger]}>
-      <MaterialIcon 
-        name={icon} 
-        size={20} 
-        color={danger ? colors.accentRed : colors.text} 
-      />
+      <MaterialIcon name={icon} size={20} color={danger ? colors.accentRed : colors.text} />
     </View>
     <Text style={[styles.rowLabel, danger && { color: colors.accentRed }]}>{label}</Text>
     <MaterialIcon name="chevron-right" size={22} color={colors.border || '#E2E8F0'} />
@@ -81,14 +77,14 @@ const SettingsScreen = () => {
   const query = useQueryClient();
   const { showToast } = useToast();
   const { user } = useAuth();
-  
+
   // Clerk Auth (Safe Import)
   let clerkSignOut: any = null;
   try {
-     // eslint-disable-next-line @typescript-eslint/no-var-requires
-     const clerk = require('@clerk/clerk-expo');
-     const auth = clerk.useAuth();
-     clerkSignOut = auth.signOut;
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const clerk = require('@clerk/clerk-expo');
+    const auth = clerk.useAuth();
+    clerkSignOut = auth.signOut;
   } catch (e) {
     // Clerk not installed or configured, ignore
   }
@@ -132,9 +128,13 @@ const SettingsScreen = () => {
   // Handlers
   const handleManualSync = async () => {
     if (isSyncing) return;
-    
-    // Haptic feedback
-    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    // Haptic feedback (if available)
+    if (Platform.OS !== 'web' && Haptics && typeof Haptics.impactAsync === 'function') {
+      try {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle?.Medium || 1);
+      } catch (e) {}
+    }
 
     setIsSyncing(true);
     try {
@@ -170,9 +170,9 @@ const SettingsScreen = () => {
             try {
               query.clear();
             } catch (e) {}
-            
+
             if (ok) showToast('Signed out successfully');
-            
+
             // Force navigation reset
             navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
           } catch (e) {
@@ -194,7 +194,15 @@ const SettingsScreen = () => {
           text: 'Reset Everything',
           style: 'destructive',
           onPress: async () => {
-            if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+            if (
+              Platform.OS !== 'web' &&
+              Haptics &&
+              typeof Haptics.notificationAsync === 'function'
+            ) {
+              try {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType?.Warning || 2);
+              } catch (e) {}
+            }
             await logout();
             query.clear();
             showToast('App has been reset');
@@ -227,7 +235,6 @@ const SettingsScreen = () => {
           contentContainerStyle={{ paddingBottom: 100, paddingTop: 10 }}
         >
           <View style={{ width: contentWidth, alignSelf: 'center' }}>
-            
             {/* 1. DATA & SYNC CARD */}
             <Animated.View style={getAnimStyle(1)}>
               <Text style={styles.sectionLabel}>CLOUD & DATA</Text>
@@ -238,9 +245,7 @@ const SettingsScreen = () => {
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.cardTitle}>Sync Status</Text>
-                    <Text style={styles.cardSub}>
-                      Data is backed up automatically.
-                    </Text>
+                    <Text style={styles.cardSub}>Data is backed up automatically.</Text>
                   </View>
                 </View>
 
@@ -292,7 +297,7 @@ const SettingsScreen = () => {
                   label="Notifications"
                   onPress={() => showToast('Coming soon!')}
                 />
-                 <SettingsRow
+                <SettingsRow
                   icon="lock-outline"
                   label="Privacy Policy"
                   onPress={() => navigation.navigate('PrivacyPolicy')}
@@ -314,25 +319,33 @@ const SettingsScreen = () => {
             {/* 3. DANGER ZONE */}
             <Animated.View style={getAnimStyle(3)}>
               <View style={styles.dangerHeaderRow}>
-                <MaterialIcon name="error-outline" size={18} color={colors.accentRed || '#EF4444'} />
+                <MaterialIcon
+                  name="error-outline"
+                  size={18}
+                  color={colors.accentRed || '#EF4444'}
+                />
                 <Text style={styles.dangerLabel}>DANGER ZONE</Text>
               </View>
 
               <View style={styles.dangerCard}>
-                <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
-                    <View style={{flex: 1, paddingRight: 10}}>
-                        <Text style={styles.dangerTitle}>Reset Application</Text>
-                        <Text style={styles.dangerDesc}>
-                        Clears local cache & restarts.
-                        </Text>
-                    </View>
-                    <TouchableOpacity
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                  }}
+                >
+                  <View style={{ flex: 1, paddingRight: 10 }}>
+                    <Text style={styles.dangerTitle}>Reset Application</Text>
+                    <Text style={styles.dangerDesc}>Clears local cache & restarts.</Text>
+                  </View>
+                  <TouchableOpacity
                     style={styles.dangerBtn}
                     onPress={handleResetApp}
                     activeOpacity={0.7}
-                    >
+                  >
                     <Text style={styles.dangerBtnText}>Reset</Text>
-                    </TouchableOpacity>
+                  </TouchableOpacity>
                 </View>
               </View>
             </Animated.View>
@@ -348,7 +361,6 @@ const SettingsScreen = () => {
                 Version {pkg.version} ({appConfig.expo.version || '100'})
               </Text>
             </Animated.View>
-
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -410,7 +422,12 @@ const styles = StyleSheet.create({
   },
   statItem: { flex: 1, alignItems: 'center', gap: 4 },
   statBorderLeft: { borderLeftWidth: 1, borderLeftColor: '#E2E8F0' },
-  statLabel: { fontSize: 10, color: colors.muted || '#64748B', fontWeight: '800', letterSpacing: 0.5 },
+  statLabel: {
+    fontSize: 10,
+    color: colors.muted || '#64748B',
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
   statValue: { fontSize: 14, fontWeight: '600', color: colors.text || '#1E293B' },
 
   syncBtn: {

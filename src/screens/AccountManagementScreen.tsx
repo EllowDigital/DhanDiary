@@ -104,7 +104,12 @@ const ExpandableCard = ({
           <MaterialIcon name={item.icon} size={22} color={item.iconColor} />
         </View>
         <View style={styles.headerTextContainer}>
-          <Text style={[styles.cardTitle, item.id === 'delete' && { color: colors.danger || '#EF4444' }]}>
+          <Text
+            style={[
+              styles.cardTitle,
+              item.id === 'delete' && { color: colors.danger || '#EF4444' },
+            ]}
+          >
             {item.title}
           </Text>
           <Text style={styles.cardDesc}>{item.description}</Text>
@@ -114,11 +119,7 @@ const ExpandableCard = ({
         </Animated.View>
       </TouchableOpacity>
 
-      {isExpanded && (
-        <View style={styles.cardBody}>
-          {children}
-        </View>
-      )}
+      {isExpanded && <View style={styles.cardBody}>{children}</View>}
     </View>
   );
 };
@@ -171,7 +172,7 @@ const AccountManagementScreen = () => {
     try {
       const hasHw = await LocalAuthentication.hasHardwareAsync();
       const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-      
+
       setHasBiometricHardware(hasHw && isEnrolled);
 
       if (hasHw && isEnrolled) {
@@ -203,7 +204,7 @@ const AccountManagementScreen = () => {
         });
         if (!result.success) return;
       }
-      
+
       setBiometricsEnabled(val);
       if (val) {
         await SecureStore.setItemAsync('BIOMETRIC_ENABLED', 'true');
@@ -225,10 +226,12 @@ const AccountManagementScreen = () => {
   };
 
   const handlePasswordSave = useCallback(async () => {
-    if (!newPass || !confirmPass) return Alert.alert('Missing Fields', 'Please fill in the new password fields.');
+    if (!newPass || !confirmPass)
+      return Alert.alert('Missing Fields', 'Please fill in the new password fields.');
     if (newPass !== confirmPass) return Alert.alert('Mismatch', 'New passwords do not match');
     if (newPass.length < 8) return Alert.alert('Weak Password', 'Minimum 8 characters required');
-    if (hasPassword && !curPass) return Alert.alert('Missing Field', 'Current password is required.');
+    if (hasPassword && !curPass)
+      return Alert.alert('Missing Field', 'Current password is required.');
 
     if (!user) return;
 
@@ -317,7 +320,6 @@ const AccountManagementScreen = () => {
             keyboardShouldPersistTaps="handled"
           >
             <Animated.View style={{ opacity: fadeAnim }}>
-              
               {/* 1. HERO PROFILE ROW */}
               <View style={styles.heroRow}>
                 <View style={styles.heroAvatar}>
@@ -340,10 +342,10 @@ const AccountManagementScreen = () => {
                     {user?.primaryEmailAddress?.emailAddress || 'No email linked'}
                   </Text>
                   <View style={styles.authMethodContainer}>
-                    <MaterialIcon 
-                      name={hasPassword ? "lock" : "public"} 
-                      size={12} 
-                      color={colors.primary} 
+                    <MaterialIcon
+                      name={hasPassword ? 'lock' : 'public'}
+                      size={12}
+                      color={colors.primary}
                       style={{ marginRight: 4 }}
                     />
                     <Text style={styles.authMethodText}>
@@ -358,7 +360,9 @@ const AccountManagementScreen = () => {
                 item={{
                   id: 'password',
                   title: hasPassword ? 'Change Password' : 'Set Password',
-                  description: hasPassword ? 'Update your login password' : 'Secure account with a password',
+                  description: hasPassword
+                    ? 'Update your login password'
+                    : 'Secure account with a password',
                   icon: hasPassword ? 'lock-outline' : 'lock-open',
                   bgColor: '#FFF7ED', // Orange Tint
                   iconColor: '#EA580C',
@@ -468,9 +472,15 @@ const AccountManagementScreen = () => {
               >
                 <View style={styles.dangerZone}>
                   <View style={styles.dangerAlert}>
-                    <MaterialIcon name="warning" size={20} color="#991B1B" style={{ marginBottom: 8 }} />
+                    <MaterialIcon
+                      name="warning"
+                      size={20}
+                      color="#991B1B"
+                      style={{ marginBottom: 8 }}
+                    />
                     <Text style={styles.dangerText}>
-                      This action will permanently delete your account, transactions, and settings. This cannot be undone.
+                      This action will permanently delete your account, transactions, and settings.
+                      This cannot be undone.
                     </Text>
                   </View>
                   <Button

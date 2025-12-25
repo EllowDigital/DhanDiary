@@ -6,26 +6,34 @@ import {
   TouchableOpacity,
   Alert,
   Platform,
-  UIManager,
   LayoutAnimation,
   InteractionManager,
   PixelRatio,
+  UIManager,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text, Button } from '@rneui/themed';
+import MaterialIcon from '@expo/vector-icons/MaterialIcons';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import dayjs from 'dayjs';
+
+// --- CUSTOM IMPORTS (Assumed paths) ---
 import ScreenHeader from '../components/ScreenHeader';
 import { useEntries } from '../hooks/useEntries';
 import { useAuth } from '../hooks/useAuth';
 import { colors } from '../utils/design';
-import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { exportToFile, shareFile } from '../utils/reportExporter';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import FullScreenSpinner from '../components/FullScreenSpinner';
-import dayjs from 'dayjs';
+
+// Enable LayoutAnimation for Android
+if (Platform.OS === 'android') {
+  if (UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+  }
+}
 
 // --- CONFIG ---
-// layout animations are enabled centrally in App initialization
-
 const FILTERS = ['Today', 'Daily', 'Weekly', 'Monthly', 'Custom', 'All'];
 type Mode = 'Today' | 'Day' | 'Week' | 'Month' | 'Custom' | 'All';
 type Format = 'pdf' | 'csv';
@@ -61,7 +69,7 @@ const FormatOption = React.memo(
       activeOpacity={0.8}
     >
       <MaterialIcon
-        name={type === 'pdf' ? 'picture-as-pdf' : type === 'csv' ? 'table-view' : 'code'}
+        name={type === 'pdf' ? 'picture-as-pdf' : 'table-view'}
         size={24}
         color={active ? colors.primary : '#94A3B8'}
       />
@@ -74,30 +82,31 @@ const FormatOption = React.memo(
 
 const ExportScreen = () => {
   const { user } = useAuth();
-  const { entries = [] } = useEntries(user?.id); // Changed from uid to id based on previous knowledge
+  const { entries = [] } = useEntries(user?.id);
 
   // --- STATE ---
   const [exporting, setExporting] = useState(false);
   const [mode, setMode] = useState<Mode>('Month');
   const [pivotDate, setPivotDate] = useState(dayjs());
+
+  // Custom Date Range
   const [customStart, setCustomStart] = useState(new Date());
   const [customEnd, setCustomEnd] = useState(new Date());
-
   const [pickerMode, setPickerMode] = useState<'start' | 'end' | null>(null);
 
+  // Options
   const [format, setFormat] = useState<Format>('pdf');
   const [includeNotes, setIncludeNotes] = useState(true);
   const [groupBy, setGroupBy] = useState<'none' | 'category'>('category');
 
   // --- FILTERING ENGINE ---
-  const { targetEntries, count, totalAmount } = useMemo(() => {
-    if (!entries.length) return { targetEntries: [], count: 0, totalAmount: 0 };
+  const { targetEntries, count } = useMemo(() => {
+    if (!entries.length) return { targetEntries: [], count: 0 };
 
     let startUnix = -Infinity;
     let endUnix = Infinity;
-
     const now = dayjs();
-    let pDate = pivotDate;
+    const pDate = pivotDate; // Reference to state
 
     switch (mode) {
       case 'Today':
@@ -121,62 +130,55 @@ const ExportScreen = () => {
         endUnix = dayjs(customEnd).endOf('day').unix();
         break;
       case 'All':
+        // Default Infinity values work here
         break;
     }
 
+    // Filter Loop (Optimized for speed)
     const filtered = [];
-    let sum = 0;
-
-    if (mode === 'All') {
-      for (let i = 0; i < entries.length; i++) {
-        filtered.push(entries[i]);
-        sum += Number(entries[i].amount) || 0;
-      }
-    } else {
-      for (let i = 0; i < entries.length; i++) {
-        const e = entries[i];
-        const t = getUnix(e.date || e.created_at);
-        if (t >= startUnix && t <= endUnix) {
-          filtered.push(e);
-          sum += Number(e.amount) || 0;
-        }
+    for (let i = 0; i < entries.length; i++) {
+      const e = entries[i];
+      const t = getUnix(e.date || e.created_at);
+      if (t >= startUnix && t <= endUnix) {
+        filtered.push(e);
       }
     }
 
-    return { targetEntries: filtered, count: filtered.length, totalAmount: sum };
+    return { targetEntries: filtered, count: filtered.length };
   }, [entries, mode, pivotDate, customStart, customEnd]);
 
   // --- HANDLERS ---
   const handleModeChange = useCallback((newMode: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    const m =
-      newMode === 'Daily'
-        ? 'Day'
-        : newMode === 'Weekly'
-          ? 'Week'
-          : newMode === 'Monthly'
-            ? 'Month'
-            : newMode;
-    setMode(m as Mode);
+
+    // Map UI labels to internal state keys
+    let m: Mode = 'Month';
+    if (newMode === 'Daily') m = 'Day';
+    else if (newMode === 'Weekly') m = 'Week';
+    else if (newMode === 'Monthly') m = 'Month';
+    else m = newMode as Mode;
+
+    setMode(m);
   }, []);
 
   const handleDateChange = (event: any, selectedDate?: Date) => {
     const currentMode = pickerMode;
-    setPickerMode(null);
+    setPickerMode(null); // Close picker immediately
 
     if (event.type === 'dismissed' || !selectedDate) return;
 
     if (currentMode === 'start') {
-      if (selectedDate > customEnd) setCustomEnd(selectedDate);
+      if (selectedDate > customEnd) setCustomEnd(selectedDate); // Auto-adjust end
       setCustomStart(selectedDate);
     } else {
-      if (selectedDate < customStart) setCustomStart(selectedDate);
+      if (selectedDate < customStart) setCustomStart(selectedDate); // Auto-adjust start
       setCustomEnd(selectedDate);
     }
   };
 
   const executeExport = () => {
     setExporting(true);
+    // Defer heavy work to next tick to allow UI spinner to render
     InteractionManager.runAfterInteractions(async () => {
       try {
         const periodLabel =
@@ -186,11 +188,13 @@ const ExportScreen = () => {
               ? `${dayjs(customStart).format('D MMM')} - ${dayjs(customEnd).format('D MMM')}`
               : getDateLabel();
 
+        // Prepare Data
         let finalData = targetEntries;
         if (!includeNotes) {
           finalData = targetEntries.map(({ note, ...rest }: any) => rest);
         }
 
+        // Generate File
         const filePath = await exportToFile(format, finalData, {
           title: `Report_${dayjs().format('YYYY-MM-DD')}`,
           periodLabel,
@@ -199,21 +203,25 @@ const ExportScreen = () => {
 
         if (filePath) await shareFile(filePath);
         else throw new Error('Could not generate file path.');
-      } catch (error) {
-        Alert.alert('Export Failed', (error as any)?.message || 'An unknown error occurred.');
+      } catch (error: any) {
+        Alert.alert('Export Failed', error.message || 'An unknown error occurred.');
       } finally {
         setExporting(false);
       }
     });
   };
 
-  const handleExport = async () => {
+  const handleExport = () => {
     if (count === 0) return;
-    if (format === 'pdf' && count > 3000) {
-      Alert.alert('Large Dataset', `Generating a PDF with ${count} items may be slow.`, [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Continue', onPress: executeExport },
-      ]);
+    if (format === 'pdf' && count > 1000) {
+      Alert.alert(
+        'Large Dataset',
+        `Generating a PDF with ${count} items may take a while. Continue?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Continue', onPress: executeExport },
+        ]
+      );
       return;
     }
     executeExport();
@@ -228,15 +236,25 @@ const ExportScreen = () => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <ScreenHeader title="Export Data" subtitle="Generate detailed financial reports" />
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+      {/* Fixed: ScreenHeader logic. 
+        Assuming ScreenHeader handles the back button internally or via navigation. 
+        Added paddingHorizontal to align with content if needed.
+      */}
+      <View style={styles.headerContainer}>
+        <ScreenHeader
+          title="Export Data"
+          subtitle="Generate detailed financial reports"
+          useSafeAreaPadding={false}
+        />
+      </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* 1. SELECTION CARD */}
         <View style={styles.card}>
           <View style={styles.cardHeaderRow}>
             <Text style={styles.cardTitle}>1. TIMEFRAME</Text>
-            {count > 0 && <Text style={styles.countLabel}>{count} items</Text>}
+            {count > 0 && <Text style={styles.countLabel}>{count} items found</Text>}
           </View>
 
           <View style={styles.chipGrid}>
@@ -253,6 +271,7 @@ const ExportScreen = () => {
             ))}
           </View>
 
+          {/* Navigation Controls for Day/Week/Month */}
           {['Day', 'Week', 'Month'].includes(mode) && (
             <View style={styles.navRow}>
               <TouchableOpacity
@@ -261,7 +280,9 @@ const ExportScreen = () => {
               >
                 <MaterialIcon name="chevron-left" size={26} color={colors.primary} />
               </TouchableOpacity>
+
               <Text style={styles.navLabel}>{getDateLabel()}</Text>
+
               <TouchableOpacity
                 style={styles.navBtn}
                 onPress={() => setPivotDate(pivotDate.add(1, mode.toLowerCase() as any))}
@@ -271,15 +292,18 @@ const ExportScreen = () => {
             </View>
           )}
 
+          {/* Custom Date Pickers */}
           {mode === 'Custom' && (
             <View style={styles.customRow}>
               <TouchableOpacity style={styles.dateInput} onPress={() => setPickerMode('start')}>
                 <Text style={styles.inputHint}>FROM</Text>
                 <Text style={styles.inputText}>{dayjs(customStart).format('DD MMM YYYY')}</Text>
               </TouchableOpacity>
+
               <View style={styles.arrowContainer}>
                 <MaterialIcon name="arrow-forward" size={20} color={colors.muted} />
               </View>
+
               <TouchableOpacity style={styles.dateInput} onPress={() => setPickerMode('end')}>
                 <Text style={styles.inputHint}>TO</Text>
                 <Text style={styles.inputText}>{dayjs(customEnd).format('DD MMM YYYY')}</Text>
@@ -287,10 +311,11 @@ const ExportScreen = () => {
             </View>
           )}
 
+          {/* Status Box */}
           <View style={[styles.infoBox, { backgroundColor: count > 0 ? '#F0FDF4' : '#FEF2F2' }]}>
             <MaterialIcon
               name={count > 0 ? 'check-circle' : 'info'}
-              size={16}
+              size={18}
               color={count > 0 ? '#166534' : '#991B1B'}
             />
             <Text style={[styles.infoText, { color: count > 0 ? '#166534' : '#991B1B' }]}>
@@ -309,6 +334,7 @@ const ExportScreen = () => {
               <FormatOption key={f} type={f} active={format === f} onPress={() => setFormat(f)} />
             ))}
           </View>
+
           <View style={styles.optionsContainer}>
             <TouchableOpacity
               style={styles.checkRow}
@@ -322,6 +348,7 @@ const ExportScreen = () => {
               />
               <Text style={styles.checkText}>Include notes</Text>
             </TouchableOpacity>
+
             {format === 'pdf' && (
               <TouchableOpacity
                 style={styles.checkRow}
@@ -343,14 +370,10 @@ const ExportScreen = () => {
 
         {/* 3. MAIN ACTION BUTTON */}
         <Button
-          // --- LOGIC: Dynamic Text ---
           title={exporting ? 'Generating...' : count === 0 ? 'No Data to Export' : 'Export & Share'}
-          // --- LOGIC: Disable if no data or processing ---
           disabled={count === 0 || exporting}
-          // --- STYLE: Active State (Primary Color + Shadow) ---
           buttonStyle={styles.exportBtn}
           titleStyle={styles.exportBtnTitle}
-          // --- STYLE: Disabled State (Gray + No Shadow) ---
           disabledStyle={styles.exportBtnDisabled}
           disabledTitleStyle={styles.exportBtnTitleDisabled}
           icon={
@@ -364,6 +387,7 @@ const ExportScreen = () => {
         <View style={{ height: 40 }} />
       </ScrollView>
 
+      {/* Date Picker Modal (Platform Specific) */}
       {pickerMode && (
         <DateTimePicker
           value={pickerMode === 'start' ? customStart : customEnd}
@@ -374,6 +398,7 @@ const ExportScreen = () => {
         />
       )}
 
+      {/* Loading Overlay */}
       <FullScreenSpinner visible={exporting} message="Creating Report..." />
     </SafeAreaView>
   );
@@ -381,6 +406,10 @@ const ExportScreen = () => {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F8FAFC' },
+  headerContainer: {
+    paddingHorizontal: 16, // Ensure alignment with content
+    paddingBottom: 8,
+  },
   scrollContent: { padding: 16 },
 
   card: {
@@ -442,7 +471,7 @@ const styles = StyleSheet.create({
   arrowContainer: { justifyContent: 'center', paddingTop: 10 },
 
   infoBox: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 12, gap: 8 },
-  infoText: { fontSize: fontScale(12), fontWeight: '600' },
+  infoText: { fontSize: fontScale(12), fontWeight: '600', flex: 1 },
 
   formatRow: { flexDirection: 'row', gap: 12, marginTop: 16, marginBottom: 20 },
   formatBtn: {
@@ -462,7 +491,6 @@ const styles = StyleSheet.create({
   checkRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   checkText: { fontSize: fontScale(14), fontWeight: '500', color: '#334155' },
 
-  // --- BUTTON STYLES ---
   exportBtn: {
     backgroundColor: colors.primary,
     borderRadius: 20,
@@ -478,15 +506,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#FFF',
   },
-  // Disabled State
   exportBtnDisabled: {
-    backgroundColor: '#E2E8F0', // Gray background
-    borderColor: 'transparent',
-    elevation: 0, // Remove shadow
-    shadowOpacity: 0,
+    backgroundColor: '#E2E8F0',
+    elevation: 0,
   },
   exportBtnTitleDisabled: {
-    color: '#94A3B8', // Gray text
+    color: '#94A3B8',
   },
 });
 

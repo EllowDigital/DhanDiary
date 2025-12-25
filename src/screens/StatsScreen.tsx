@@ -82,20 +82,22 @@ interface MetricCardProps {
   style?: any;
 }
 
-const MetricCard = memo(({ title, value, icon, colorBg, colorIcon, subTitle, style }: MetricCardProps) => (
-  <View style={[styles.gridCard, style]}>
-    <View style={[styles.iconBox, { backgroundColor: colorBg }]}>
-      <MaterialIcon name={icon} size={20} color={colorIcon} />
+const MetricCard = memo(
+  ({ title, value, icon, colorBg, colorIcon, subTitle, style }: MetricCardProps) => (
+    <View style={[styles.gridCard, style]}>
+      <View style={[styles.iconBox, { backgroundColor: colorBg }]}>
+        <MaterialIcon name={icon} size={20} color={colorIcon} />
+      </View>
+      <View style={{ flex: 1, alignItems: 'center' }}>
+        <Text style={styles.gridLabel}>{title}</Text>
+        <Text style={styles.gridValue} numberOfLines={1} adjustsFontSizeToFit>
+          {value}
+        </Text>
+        {subTitle && <Text style={styles.gridSubLabel}>{subTitle}</Text>}
+      </View>
     </View>
-    <View style={{ flex: 1, alignItems: 'center' }}>
-      <Text style={styles.gridLabel}>{title}</Text>
-      <Text style={styles.gridValue} numberOfLines={1} adjustsFontSizeToFit>
-        {value}
-      </Text>
-      {subTitle && <Text style={styles.gridSubLabel}>{subTitle}</Text>}
-    </View>
-  </View>
-));
+  )
+);
 
 const CategoryRow = memo(({ item, currency }: { item: any; currency: string }) => (
   <View style={styles.catRow}>
@@ -132,9 +134,9 @@ const StatsScreen = () => {
   const maxContentWidth = 600;
   const contentWidth = Math.min(width - 32, maxContentWidth);
   const containerStyle: any = { width: contentWidth, alignSelf: 'center' };
-  
+
   // Chart Sizing
-  const donutSize = Math.min(contentWidth * 0.55, 220); 
+  const donutSize = Math.min(contentWidth * 0.55, 220);
 
   // --- 1. DATA PREPARATION (Memoized) ---
   const { availableMonths, availableYears } = useMemo(() => {
@@ -305,7 +307,7 @@ const StatsScreen = () => {
   useEffect(() => {
     runAnalysis();
     return () => {
-       if (abortControllerRef.current) abortControllerRef.current.abort();
+      if (abortControllerRef.current) abortControllerRef.current.abort();
     };
   }, [filter, rangeStart?.valueOf(), rangeEnd?.valueOf(), entries?.length, user?.id]);
 
@@ -504,7 +506,11 @@ const StatsScreen = () => {
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   {stats.dailyTrend?.length > 0 ? (
                     <DailyTrendChart
-                      data={stats.dailyTrend.length === 1 ? [stats.dailyTrend[0], {...stats.dailyTrend[0], label: ''}] : stats.dailyTrend}
+                      data={
+                        stats.dailyTrend.length === 1
+                          ? [stats.dailyTrend[0], { ...stats.dailyTrend[0], label: '' }]
+                          : stats.dailyTrend
+                      }
                       width={Math.max(contentWidth - 60, stats.dailyTrend.length * 40)}
                       currency={currencySymbol}
                     />
@@ -544,7 +550,7 @@ const StatsScreen = () => {
                             height: donutSize * 0.6,
                             borderRadius: (donutSize * 0.6) / 2,
                             // Dynamic centering relative to the library's quirks
-                            left: (donutSize / 4) + (donutSize * 0.2) + 15,
+                            left: donutSize / 4 + donutSize * 0.2 + 15,
                           },
                         ]}
                       >

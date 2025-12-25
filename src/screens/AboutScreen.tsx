@@ -25,9 +25,11 @@ import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 
 // --- PLACEHOLDERS ---
 import ScreenHeader from '../components/ScreenHeader';
-// Mock utility if missing
+
+// --- MOCK UTILS (Replace with actual imports if available) ---
 const getLatestShareLink = async () => 'https://www.ellowdigital.space';
 
+// Safe package import
 let pkg: any = {};
 try {
   pkg = require('../../package.json');
@@ -104,8 +106,8 @@ const AboutScreen: React.FC = () => {
         setUpdateAvailable(false);
         Alert.alert('Up to Date', 'You are running the latest version of DhanDiary.');
       }
-    } catch (err) {
-      Alert.alert('Check Failed', (err as any)?.message || 'Unable to check for updates.');
+    } catch (err: any) {
+      Alert.alert('Check Failed', err?.message || 'Unable to check for updates.');
     } finally {
       setChecking(false);
     }
@@ -117,8 +119,8 @@ const AboutScreen: React.FC = () => {
     try {
       await Updates.fetchUpdateAsync();
       await Updates.reloadAsync();
-    } catch (err) {
-      Alert.alert('Update Failed', (err as any)?.message);
+    } catch (err: any) {
+      Alert.alert('Update Failed', err?.message);
       const newCount = failureCount + 1;
       setFailureCount(newCount);
       AsyncStorage.setItem('UPDATE_FAIL_COUNT', String(newCount));
