@@ -27,12 +27,13 @@ import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 // --- CUSTOM IMPORTS ---
+// Ensure these paths match your project structure
 import { syncClerkUserToNeon } from '../services/clerkUserSync';
 import { saveSession } from '../db/session';
 import { warmNeonConnection } from '../services/auth';
 import { colors } from '../utils/design';
 
-// Warm up browser
+// Warm up browser for smoother OAuth transitions
 WebBrowser.maybeCompleteAuthSession();
 
 const useWarmUpBrowser = () => {
@@ -54,11 +55,11 @@ const LoginScreen = () => {
   const { user: clerkUser, isLoaded: clerkLoaded } = useUser();
   const { isSignedIn } = useAuth();
 
-  // OAuth
+  // OAuth Strategies
   const { startOAuthFlow: startGoogleFlow } = useOAuth({ strategy: 'oauth_google' });
   const { startOAuthFlow: startGithubFlow } = useOAuth({ strategy: 'oauth_github' });
 
-  // App State Ref
+  // App State Management (for Android background handling)
   const isActiveRef = useRef(true);
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
@@ -67,18 +68,19 @@ const LoginScreen = () => {
     return () => sub.remove();
   }, []);
 
-  // UI State
+  // --- STATE ---
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
 
-  // Animations
+  // --- ANIMATIONS ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
 
   useEffect(() => {
+    // Entrance Animation
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -93,11 +95,12 @@ const LoginScreen = () => {
       }),
     ]).start();
 
-    // Pre-warm DB
+    // Pre-warm DB connection
     warmNeonConnection().catch(() => {});
   }, []);
 
-  // Handle Auto-Sync
+  // --- AUTO-SYNC LOGIC ---
+  // Detects if Clerk already has a session (e.g. recurring user) and syncs them in.
   useEffect(() => {
     if (!isSignedIn || !clerkLoaded || !clerkUser) return;
 
@@ -105,12 +108,13 @@ const LoginScreen = () => {
       setSyncing(true);
       try {
         const id = clerkUser.id;
-        const email = clerkUser.primaryEmailAddress?.emailAddress || '';
+        const userEmail = clerkUser.primaryEmailAddress?.emailAddress || '';
         const fullName = clerkUser.fullName;
 
-        if (id && email) {
-          await handleSyncAndNavigate(id, email, fullName);
+        if (id && userEmail) {
+          await handleSyncAndNavigate(id, userEmail, fullName);
         } else {
+          // Fallback if user data is missing (rare)
           navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
         }
       } catch (e) {
@@ -122,27 +126,38 @@ const LoginScreen = () => {
     processSession();
   }, [isSignedIn, clerkLoaded, clerkUser]);
 
-  // --- LOGIC ---
+  // --- CORE HANDLERS ---
+
+  /**
+   * Orchestrates the sync between Clerk (Auth) and Neon (Database)
+   * then navigates to the main app.
+   */
   const handleSyncAndNavigate = async (
     userId: string,
     userEmail: string,
     userName?: string | null
   ) => {
+    // 1. Optimistic Local Save (Fast)
     try {
       await saveSession(userId, userName || 'User', userEmail);
     } catch (e) {
       console.warn('Local session save failed', e);
     }
 
+    // 2. Background DB Sync (Reliable)
+    // We start this but don't block navigation on it unless absolutely necessary
     const syncPromise = syncClerkUserToNeon({
       id: userId,
       emailAddresses: [{ emailAddress: userEmail }],
       fullName: userName,
     }).catch((err) => console.warn('Background sync failed', err));
 
+    // 3. Navigate
     setSyncing(false);
     setLoading(false);
     navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+
+    // 4. Ensure sync finishes
     await syncPromise;
   };
 
@@ -154,18 +169,36 @@ const LoginScreen = () => {
     setLoading(true);
     try {
       const result = await signIn.create({ identifier: email, password });
+
       if (result.status === 'complete') {
         await setActive({ session: result.createdSessionId });
+        // The useEffect above will handle the sync and navigation
       } else {
-        // Redirect to Register screen verification flow with prefilled email
-        navigation.navigate('Register', { prefillEmail: email, showVerify: true });
+        // Handle cases where 2FA or Email Verification is required
+        if (result.status === 'needs_first_factor' || result.status === 'needs_second_factor') {
+          navigation.navigate('VerifyEmail', { email, mode: 'signin' });
+        } else {
+          Alert.alert(
+            'Verification Required',
+            `Status: ${result.status}. Please check your email.`
+          );
+        }
+        setLoading(false);
       }
     } catch (err: any) {
+      console.error(err);
       const msg = err.errors?.[0]?.message || 'Invalid credentials.';
-      if (err.errors?.[0]?.code === 'strategy_for_user_invalid') {
+      const code = err.errors?.[0]?.code;
+
+      if (code === 'strategy_for_user_invalid') {
         Alert.alert(
           'Wrong Method',
-          'This email uses social login. Please click the buttons below.'
+          'This email uses social login. Please click the Google or GitHub button below.'
+        );
+      } else if (code === 'form_identifier_not_found') {
+        Alert.alert(
+          'Account Not Found',
+          'No account found with this email. Please create an account.'
         );
       } else {
         Alert.alert('Login Failed', msg);
@@ -187,7 +220,9 @@ const LoginScreen = () => {
 
       if (createdSessionId && setSession) {
         await setSession({ session: createdSessionId });
+        // The useEffect above will handle the sync and navigation
       } else {
+        // Flow cancelled by user
         setLoading(false);
       }
     } catch (err: any) {
@@ -291,6 +326,7 @@ const LoginScreen = () => {
                 </View>
               </View>
 
+              {/* Login Button */}
               <TouchableOpacity
                 style={[styles.primaryBtn, loading && styles.disabledBtn]}
                 onPress={onSignInPress}
@@ -412,7 +448,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 16,
     elevation: 20,
-    flex: 1, // Take remaining space
+    flex: 1,
   },
   welcomeText: {
     fontSize: 24,

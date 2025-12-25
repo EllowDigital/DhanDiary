@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -19,19 +19,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSignUp } from '@clerk/clerk-expo';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 
 // --- CUSTOM IMPORTS ---
-import { syncClerkUserToNeon } from '../services/clerkUserSync';
-import { saveSession } from '../db/session';
-import { colors } from '../utils/design'; // Assumed shared colors
+import { colors } from '../utils/design';
 
-const { width, height } = Dimensions.get('window');
+const { height } = Dimensions.get('window');
 
 const RegisterScreen = () => {
   const navigation = useNavigation<any>();
-  const route = useRoute<any>();
-  const { isLoaded, signUp, setActive } = useSignUp();
+  const { isLoaded, signUp } = useSignUp();
 
   // --- STATE ---
   const [firstName, setFirstName] = useState('');
@@ -39,67 +36,40 @@ const RegisterScreen = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-
-  // Verification State
-  const [pendingVerification, setPendingVerification] = useState(false);
-  const [verificationCode, setVerificationCode] = useState('');
-
-  // UI State
   const [loading, setLoading] = useState(false);
-  const [syncing, setSyncing] = useState(false);
 
   // Animations
-  const fadeAnim = React.useRef(new Animated.Value(1)).current;
-  const slideAnim = React.useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(50)).current;
 
-  // --- LOGIC ---
-
-  const animateTransition = (toStep2: boolean) => {
+  // Entrance Animation
+  useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim, {
-        toValue: 0,
-        duration: 200,
+        toValue: 1,
+        duration: 800,
         useNativeDriver: true,
       }),
       Animated.timing(slideAnim, {
-        toValue: toStep2 ? -50 : 50,
-        duration: 200,
+        toValue: 0,
+        duration: 800,
+        easing: Easing.out(Easing.exp),
         useNativeDriver: true,
       }),
-    ]).start(() => {
-      setPendingVerification(toStep2);
-      slideAnim.setValue(toStep2 ? 50 : -50);
-      Animated.parallel([
-        Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
-        Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true }),
-      ]).start();
-    });
-  };
-
-  // If navigated here from Login with an unverified email, prefill and trigger verification
-  React.useEffect(() => {
-    const params = route?.params as any;
-    if (!params) return;
-    if (params.prefillEmail) setEmail(params.prefillEmail);
-    if (params.showVerify && isLoaded) {
-      setPendingVerification(true);
-      // Ensure verification is prepared for existing user
-      try {
-        void signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
-      } catch (e) {
-        console.warn('prepareEmailAddressVerification failed', e);
-      }
-    }
-  }, [route?.params, isLoaded, signUp]);
+    ]).start();
+  }, []);
 
   const onSignUpPress = async () => {
     if (!isLoaded) return;
-    if (!firstName || !email || !password) {
-      return Alert.alert('Missing Fields', 'Please fill in your name, email, and password.');
+
+    // Basic Validation
+    if (!firstName || !lastName || !email || !password) {
+      return Alert.alert('Missing Fields', 'Please fill in all fields to continue.');
     }
 
     setLoading(true);
     try {
+      // 1. Create the user in Clerk
       await signUp.create({
         firstName,
         lastName,
@@ -107,65 +77,38 @@ const RegisterScreen = () => {
         password,
       });
 
-      await signUp.prepareEmailAddressVerification({
-        strategy: 'email_code',
-      });
+      // 2. Prepare the email verification (Send Code)
+      await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
 
-      animateTransition(true); // Move to Step 2
+      // 3. Navigate to Verification Screen
+      // We pass the user details so the Verify screen can sync to DB after success
+      navigation.navigate('VerifyEmail', {
+        email,
+        mode: 'signup',
+        firstName,
+        lastName,
+      });
     } catch (err: any) {
-      console.error(err);
-      const msg = err?.errors?.[0]?.message || err.message || 'Registration failed';
-      Alert.alert('Error', msg);
+      console.error('Registration error:', err);
+
+      const errors = err?.errors || [];
+      const errorMsg = errors.length > 0 ? errors[0].message : err.message;
+
+      // User-friendly error mapping
+      if (errorMsg.includes('already exists')) {
+        Alert.alert('Account Exists', 'That email is already in use. Please log in instead.');
+      } else if (errorMsg.includes('password')) {
+        Alert.alert(
+          'Weak Password',
+          'Please choose a stronger password (min 8 chars, mixed case/numbers).'
+        );
+      } else {
+        Alert.alert('Registration Failed', errorMsg);
+      }
     } finally {
       setLoading(false);
     }
   };
-
-  const onVerifyPress = async () => {
-    if (!isLoaded || !verificationCode) return Alert.alert('Error', 'Please enter the code.');
-
-    setLoading(true);
-    try {
-      const result = await signUp.attemptEmailAddressVerification({
-        code: verificationCode,
-      });
-
-      if (result.status === 'complete') {
-        await setActive({ session: result.createdSessionId });
-
-        // Start Sync
-        setSyncing(true);
-        const fullName = `${firstName} ${lastName}`.trim();
-
-        // 1. Sync to Neon DB
-        const bridgeUser = await syncClerkUserToNeon({
-          id: result.createdUserId!,
-          emailAddresses: [{ emailAddress: email }],
-          fullName: fullName,
-        });
-
-        // 2. Save Local Session
-        await saveSession(bridgeUser.uuid, bridgeUser.name || 'User', bridgeUser.email);
-
-        // 3. Navigate
-        setSyncing(false);
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'Main' }],
-        });
-      } else {
-        throw new Error('Verification status is incomplete.');
-      }
-    } catch (err: any) {
-      console.error(err);
-      const msg = err?.errors?.[0]?.message || err.message || 'Verification failed';
-      Alert.alert('Error', msg);
-      setLoading(false);
-      setSyncing(false);
-    }
-  };
-
-  // --- RENDERERS ---
 
   return (
     <View style={styles.container}>
@@ -183,7 +126,6 @@ const RegisterScreen = () => {
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
         >
           <ScrollView
             contentContainerStyle={styles.scrollContent}
@@ -192,199 +134,124 @@ const RegisterScreen = () => {
           >
             {/* Header */}
             <View style={styles.header}>
-              <TouchableOpacity
-                onPress={() =>
-                  pendingVerification ? animateTransition(false) : navigation.goBack()
-                }
-                style={styles.backBtn}
-              >
+              <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
                 <Ionicons name="arrow-back" size={24} color="#0F172A" />
               </TouchableOpacity>
 
-              {/* Progress Indicator */}
-              <View style={styles.progressContainer}>
-                <View style={[styles.progressDot, !pendingVerification && styles.progressActive]} />
-                <View
-                  style={[styles.progressLine, pendingVerification && styles.progressLineActive]}
-                />
-                <View style={[styles.progressDot, pendingVerification && styles.progressActive]} />
+              {/* Step Indicator */}
+              <View style={styles.stepContainer}>
+                <View style={styles.stepDotActive} />
+                <View style={styles.stepLine} />
+                <View style={styles.stepDotInactive} />
               </View>
             </View>
 
-            <Animated.View style={{ opacity: fadeAnim, transform: [{ translateX: slideAnim }] }}>
-              {!pendingVerification ? (
-                /* --- STEP 1: CREATE ACCOUNT --- */
-                <View>
-                  <Text style={styles.title}>Create Account</Text>
-                  <Text style={styles.subtitle}>Start your financial journey today.</Text>
+            <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+              <Text style={styles.title}>Create Account</Text>
+              <Text style={styles.subtitle}>Start your financial journey today.</Text>
 
-                  <View style={styles.formContainer}>
-                    <View style={styles.row}>
-                      <View style={[styles.inputContainer, { flex: 1 }]}>
-                        <Ionicons
-                          name="person-outline"
-                          size={20}
-                          color="#94A3B8"
-                          style={styles.inputIcon}
-                        />
-                        <TextInput
-                          style={styles.input}
-                          placeholder="First Name"
-                          placeholderTextColor="#94A3B8"
-                          value={firstName}
-                          onChangeText={setFirstName}
-                        />
-                      </View>
-                      <View style={{ width: 12 }} />
-                      <View style={[styles.inputContainer, { flex: 1 }]}>
-                        <TextInput
-                          style={styles.input}
-                          placeholder="Last Name"
-                          placeholderTextColor="#94A3B8"
-                          value={lastName}
-                          onChangeText={setLastName}
-                        />
-                      </View>
-                    </View>
-
-                    <View style={styles.inputContainer}>
-                      <Ionicons
-                        name="mail-outline"
-                        size={20}
-                        color="#94A3B8"
-                        style={styles.inputIcon}
-                      />
-                      <TextInput
-                        style={styles.input}
-                        placeholder="Email Address"
-                        placeholderTextColor="#94A3B8"
-                        value={email}
-                        onChangeText={setEmail}
-                        autoCapitalize="none"
-                        keyboardType="email-address"
-                      />
-                    </View>
-
-                    <View style={styles.inputContainer}>
-                      <Ionicons
-                        name="lock-closed-outline"
-                        size={20}
-                        color="#94A3B8"
-                        style={styles.inputIcon}
-                      />
-                      <TextInput
-                        style={styles.input}
-                        placeholder="Create Password"
-                        placeholderTextColor="#94A3B8"
-                        value={password}
-                        onChangeText={setPassword}
-                        secureTextEntry={!showPassword}
-                      />
-                      <TouchableOpacity
-                        onPress={() => setShowPassword(!showPassword)}
-                        style={styles.eyeBtn}
-                      >
-                        <Ionicons
-                          name={showPassword ? 'eye' : 'eye-off'}
-                          size={20}
-                          color="#94A3B8"
-                        />
-                      </TouchableOpacity>
-                    </View>
-
-                    <TouchableOpacity
-                      style={[styles.primaryBtn, loading && styles.disabledBtn]}
-                      onPress={onSignUpPress}
-                      disabled={loading}
-                    >
-                      {loading ? (
-                        <ActivityIndicator color="#fff" />
-                      ) : (
-                        <Text style={styles.primaryBtnText}>Continue</Text>
-                      )}
-                    </TouchableOpacity>
-                  </View>
-
-                  <View style={styles.footer}>
-                    <Text style={styles.footerText}>Already have an account? </Text>
-                    <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-                      <Text style={styles.linkText}>Log In</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ) : (
-                /* --- STEP 2: VERIFICATION --- */
-                <View style={styles.centerContent}>
-                  <View style={styles.iconCircle}>
-                    <Ionicons name="mail-open" size={32} color="#2563EB" />
-                  </View>
-
-                  <Text style={styles.titleCenter}>Verify Email</Text>
-                  <Text style={styles.subtitleCenter}>
-                    We sent a code to{' '}
-                    <Text style={{ fontWeight: '700', color: '#0F172A' }}>{email}</Text>
-                  </Text>
-
-                  <View style={styles.formContainer}>
-                    <TextInput
-                      style={styles.codeInput}
-                      placeholder="1 2 3 4 5 6"
-                      placeholderTextColor="#CBD5E1"
-                      keyboardType="number-pad"
-                      maxLength={6}
-                      value={verificationCode}
-                      onChangeText={setVerificationCode}
-                      autoFocus
+              <View style={styles.formContainer}>
+                {/* Name Row */}
+                <View style={styles.row}>
+                  <View style={[styles.inputContainer, { flex: 1 }]}>
+                    <Ionicons
+                      name="person-outline"
+                      size={20}
+                      color={colors.muted || '#94A3B8'}
+                      style={styles.inputIcon}
                     />
-
-                    <TouchableOpacity
-                      style={[styles.primaryBtn, loading && styles.disabledBtn]}
-                      onPress={onVerifyPress}
-                      disabled={loading}
-                    >
-                      {loading ? (
-                        <ActivityIndicator color="#fff" />
-                      ) : (
-                        <Text style={styles.primaryBtnText}>Verify & Create</Text>
-                      )}
-                    </TouchableOpacity>
-
-                    <TouchableOpacity style={styles.resendBtn}>
-                      <Text
-                        style={styles.resendText}
-                        onPress={async () => {
-                          try {
-                            setLoading(true);
-                            await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
-                            Alert.alert('Sent', 'We sent a new verification code to your email.');
-                          } catch (e) {
-                            console.error(e);
-                            Alert.alert('Error', 'Failed to resend verification code.');
-                          } finally {
-                            setLoading(false);
-                          }
-                        }}
-                      >
-                        Didn't receive code? Resend
-                      </Text>
-                    </TouchableOpacity>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="First Name"
+                      placeholderTextColor="#94A3B8"
+                      value={firstName}
+                      onChangeText={setFirstName}
+                      autoCapitalize="words"
+                    />
+                  </View>
+                  <View style={{ width: 12 }} />
+                  <View style={[styles.inputContainer, { flex: 1 }]}>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Last Name"
+                      placeholderTextColor="#94A3B8"
+                      value={lastName}
+                      onChangeText={setLastName}
+                      autoCapitalize="words"
+                    />
                   </View>
                 </View>
-              )}
+
+                {/* Email */}
+                <View style={styles.inputContainer}>
+                  <Ionicons
+                    name="mail-outline"
+                    size={20}
+                    color={colors.muted || '#94A3B8'}
+                    style={styles.inputIcon}
+                  />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Email Address"
+                    placeholderTextColor="#94A3B8"
+                    value={email}
+                    onChangeText={setEmail}
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                  />
+                </View>
+
+                {/* Password */}
+                <View style={styles.inputContainer}>
+                  <Ionicons
+                    name="lock-closed-outline"
+                    size={20}
+                    color={colors.muted || '#94A3B8'}
+                    style={styles.inputIcon}
+                  />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Create Password"
+                    placeholderTextColor="#94A3B8"
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry={!showPassword}
+                    autoCapitalize="none"
+                  />
+                  <TouchableOpacity
+                    onPress={() => setShowPassword(!showPassword)}
+                    style={styles.eyeBtn}
+                  >
+                    <Ionicons name={showPassword ? 'eye' : 'eye-off'} size={20} color="#94A3B8" />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Action Button */}
+                <TouchableOpacity
+                  style={[styles.primaryBtn, loading && styles.disabledBtn]}
+                  onPress={onSignUpPress}
+                  disabled={loading}
+                  activeOpacity={0.8}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.primaryBtnText}>Continue</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              {/* Footer */}
+              <View style={styles.footer}>
+                <Text style={styles.footerText}>Already have an account? </Text>
+                <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+                  <Text style={styles.linkText}>Log In</Text>
+                </TouchableOpacity>
+              </View>
             </Animated.View>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
-
-      {/* Full Screen Sync Overlay */}
-      {syncing && (
-        <View style={styles.overlay}>
-          <View style={styles.syncBox}>
-            <ActivityIndicator size="large" color="#2563EB" />
-            <Text style={styles.syncText}>Creating your secure vault...</Text>
-          </View>
-        </View>
-      )}
     </View>
   );
 };
@@ -396,7 +263,7 @@ const styles = StyleSheet.create({
     padding: 24,
   },
 
-  /* HEADER */
+  /* Header */
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -405,9 +272,9 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     backgroundColor: '#fff',
     justifyContent: 'center',
     alignItems: 'center',
@@ -416,54 +283,55 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
   },
-  progressContainer: {
+  stepContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
   },
-  progressDot: {
+  stepDotActive: {
+    width: 24,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.primary || '#2563EB',
+  },
+  stepDotInactive: {
     width: 8,
     height: 8,
     borderRadius: 4,
     backgroundColor: '#CBD5E1',
   },
-  progressActive: {
-    backgroundColor: '#2563EB',
-    width: 12, // slightly larger
-  },
-  progressLine: {
-    width: 24,
+  stepLine: {
+    width: 16,
     height: 2,
     backgroundColor: '#E2E8F0',
   },
-  progressLineActive: {
-    backgroundColor: '#2563EB',
-  },
 
-  /* TEXT */
-  title: { fontSize: 28, fontWeight: '800', color: '#0F172A', marginBottom: 8 },
-  subtitle: { fontSize: 16, color: '#64748B', marginBottom: 32 },
-
-  titleCenter: {
-    fontSize: 24,
+  /* Titles */
+  title: {
+    fontSize: 28,
     fontWeight: '800',
     color: '#0F172A',
     marginBottom: 8,
-    textAlign: 'center',
+    letterSpacing: -0.5,
   },
-  subtitleCenter: {
-    fontSize: 15,
+  subtitle: {
+    fontSize: 16,
     color: '#64748B',
     marginBottom: 32,
-    textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: 24,
   },
-  centerContent: { alignItems: 'center', marginTop: 20 },
 
-  /* FORM */
-  formContainer: { gap: 16, width: '100%' },
-  row: { flexDirection: 'row' },
+  /* Form */
+  formContainer: {
+    gap: 16,
+    marginBottom: 24,
+  },
+  row: {
+    flexDirection: 'row',
+  },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -474,26 +342,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
-  inputIcon: { marginRight: 12 },
-  input: { flex: 1, height: '100%', color: '#0F172A', fontSize: 16, fontWeight: '500' },
-  eyeBtn: { padding: 8 },
-
-  /* CODE INPUT */
-  codeInput: {
-    backgroundColor: '#fff',
-    borderWidth: 2,
-    borderColor: '#E2E8F0',
-    borderRadius: 16,
-    height: 64,
-    fontSize: 24,
-    fontWeight: '700',
-    textAlign: 'center',
-    letterSpacing: 8,
+  inputIcon: {
+    marginRight: 12,
+  },
+  input: {
+    flex: 1,
+    height: '100%',
     color: '#0F172A',
-    marginBottom: 8,
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  eyeBtn: {
+    padding: 8,
   },
 
-  /* BUTTONS */
+  /* Button */
   primaryBtn: {
     backgroundColor: '#2563EB',
     height: 56,
@@ -507,59 +370,31 @@ const styles = StyleSheet.create({
     elevation: 6,
     marginTop: 8,
   },
-  disabledBtn: { opacity: 0.7 },
-  primaryBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-
-  resendBtn: { padding: 12, alignItems: 'center' },
-  resendText: { color: '#64748B', fontSize: 14, fontWeight: '600' },
-
-  /* ICON */
-  iconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#EFF6FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 24,
-    borderWidth: 4,
-    borderColor: '#fff',
-    shadowColor: '#2563EB',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.1,
-    shadowRadius: 16,
-    elevation: 4,
+  disabledBtn: {
+    opacity: 0.7,
+  },
+  primaryBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
   },
 
-  /* FOOTER */
+  /* Footer */
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 32,
-  },
-  footerText: { color: '#64748B', fontSize: 14 },
-  linkText: { color: '#2563EB', fontWeight: '700', fontSize: 14 },
-
-  /* OVERLAY */
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 999,
+    marginTop: 16,
   },
-  syncBox: {
-    backgroundColor: '#fff',
-    padding: 32,
-    borderRadius: 24,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.1,
-    shadowRadius: 24,
-    elevation: 10,
+  footerText: {
+    color: '#64748B',
+    fontSize: 14,
   },
-  syncText: { color: '#0F172A', marginTop: 16, fontSize: 16, fontWeight: '600' },
+  linkText: {
+    color: '#2563EB',
+    fontWeight: '700',
+    fontSize: 14,
+  },
 });
 
 export default RegisterScreen;
