@@ -127,6 +127,8 @@ CREATE TABLE IF NOT EXISTS monthly_summaries (
 CREATE INDEX IF NOT EXISTS idx_monthly_user_year_month ON monthly_summaries(user_id, year, month);
 
 -- Function: Recalculate monthly summary for user and month (idempotent)
+-- Deploy functions/triggers atomically to reduce partial-deploy risks
+BEGIN;
 CREATE OR REPLACE FUNCTION upsert_monthly_summary(p_user_id UUID, p_month_date DATE)
 RETURNS VOID AS $$
 BEGIN
@@ -143,7 +145,7 @@ BEGIN
         AND date >= p_month_date
         AND date < (p_month_date + INTERVAL '1 month')
         AND NOT deleted
-    GROUP BY user_id
+    GROUP BY user_id, EXTRACT(YEAR FROM date), EXTRACT(MONTH FROM date)
     ON CONFLICT (user_id, year, month) DO UPDATE
         SET total_in = EXCLUDED.total_in,
                 total_out = EXCLUDED.total_out,
@@ -151,7 +153,6 @@ BEGIN
                 updated_at = NOW();
 END;
 $$ LANGUAGE plpgsql;
-
 -- Trigger function: maintain daily_summaries and keep monthly in sync
 CREATE OR REPLACE FUNCTION tr_upsert_daily_summary()
 RETURNS TRIGGER AS $$
@@ -272,6 +273,9 @@ DROP TRIGGER IF EXISTS tr_summary_on_cash_entries ON cash_entries;
 CREATE TRIGGER tr_summary_on_cash_entries
     AFTER INSERT OR UPDATE OR DELETE ON cash_entries
     FOR EACH ROW EXECUTE FUNCTION tr_upsert_daily_summary();
+
+COMMIT;
+
 
 -- =====================================================================
 -- 8. BACKFILL / MIGRATION HELPERS

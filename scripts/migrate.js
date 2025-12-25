@@ -174,6 +174,23 @@ const pool = new Pool({ connectionString: NEON_URL });
     } catch (e) {
       console.warn('Could not inspect daily_summaries table (it may not exist yet):', e && e.message ? e.message : e);
     }
+
+    // Log existence of key DB objects (functions/triggers) we expect to be deployed
+    try {
+      const funcs = await pool.query(
+        "SELECT proname FROM pg_proc WHERE proname IN ('upsert_monthly_summary','tr_upsert_daily_summary','update_modified_column','increment_server_version')"
+      );
+      const foundFuncs = (funcs && (funcs.rows || funcs).map ? (funcs.rows || funcs).map((r) => r.proname) : []);
+      console.log('Deployed functions:', foundFuncs.length ? foundFuncs.join(', ') : '(none found)');
+
+      const triggers = await pool.query(
+        "SELECT tgname, (tgrelid::regclass::text) AS table_name FROM pg_trigger WHERE tgname = 'tr_summary_on_cash_entries'"
+      );
+      const foundTriggers = (triggers && (triggers.rows || triggers).map ? (triggers.rows || triggers).map((r) => `${r.tgname}@${r.table_name}`) : []);
+      console.log('Deployed triggers:', foundTriggers.length ? foundTriggers.join(', ') : '(none found)');
+    } catch (logErr) {
+      console.warn('Could not inspect deployed functions/triggers:', logErr && logErr.message ? logErr.message : logErr);
+    }
   } catch (err) {
     console.error('Migration failed:', err);
   } finally {
