@@ -125,6 +125,8 @@ export const syncClerkUserToNeon = async (clerkUser: {
       return await createOfflineFallback(clerkUser.id, email, name);
     }
   }
+  // If we somehow exit the retry loop without returning, fall back to offline.
+  return await createOfflineFallback(clerkUser.id, email, name);
 };
 
 // Separated helper for cleaner code
