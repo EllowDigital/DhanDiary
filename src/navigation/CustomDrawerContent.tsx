@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -6,71 +6,49 @@ import {
   TouchableOpacity,
   Animated,
   Easing,
-  Image,
-  useWindowDimensions,
+  Platform,
 } from 'react-native';
 import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-navigation/drawer';
 import { Text } from '@rneui/themed';
-import { CommonActions } from '@react-navigation/native';
 import { useAuth, useUser } from '@clerk/clerk-expo';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 
+// --- CUSTOM IMPORTS ---
 import { colors, spacing } from '../utils/design';
 import UserAvatar from '../components/UserAvatar';
 import { logout } from '../services/auth';
 import appConfig from '../../app.json';
 
-const BRAND_ICON = require('../../assets/adaptive-icon.png');
-
+// --- DRAWER COMPONENT ---
 const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
   const { signOut } = useAuth();
   const { user } = useUser();
 
-  // Animations
+  // Animation Refs
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
-
-  // Staggered list animations
-  const listAnims = useMemo(
-    () => props.state.routes.map(() => new Animated.Value(0)),
-    [props.state.routes.length]
-  );
 
   useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 600,
+        duration: 500,
         useNativeDriver: true,
-        easing: Easing.out(Easing.cubic),
+        easing: Easing.out(Easing.quad),
       }),
       Animated.spring(slideAnim, {
         toValue: 0,
         useNativeDriver: true,
         damping: 20,
       }),
-      Animated.stagger(
-        50,
-        listAnims.map((anim) =>
-          Animated.timing(anim, {
-            toValue: 1,
-            duration: 400,
-            useNativeDriver: true,
-            easing: Easing.out(Easing.quad),
-          })
-        )
-      ),
     ]).start();
   }, []);
 
   const handleNavigate = (routeName: string) => {
     props.navigation.navigate(routeName);
   };
-
-  const versionLabel = `v${appConfig.expo.version} (${appConfig.expo.android.versionCode})`;
 
   const handleLogout = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
@@ -80,45 +58,12 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
         style: 'destructive',
         onPress: async () => {
           try {
-            try {
-              await signOut(); // Sign out from Clerk
-            } catch (e) {
-              console.warn('Clerk signOut failed', e);
-            }
-
-            try {
-              await logout(); // Clear local DB and session
-            } catch (e) {
-              console.warn('Local logout failed', e);
-            }
-
-            // Close drawer first
-            try {
-              props.navigation.closeDrawer();
-            } catch (e) {}
-
-            // Try to reset the root navigator so auth stack is shown.
-            try {
-              // climb to the top-most navigator
-              let rootNav: any = props.navigation as any;
-              while (rootNav.getParent && rootNav.getParent()) {
-                const p = rootNav.getParent();
-                if (!p || p === rootNav) break;
-                rootNav = p;
-              }
-              // Reset to Auth stack at root
-              if (rootNav && typeof rootNav.reset === 'function') {
-                rootNav.reset({ index: 0, routes: [{ name: 'Auth' }] });
-              } else {
-                // fallback
-                props.navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
-              }
-            } catch (e) {
-              // as a final fallback, navigate to Auth on current navigator
-              try {
-                props.navigation.navigate('Auth');
-              } catch (e2) {}
-            }
+            await signOut(); // Clerk
+            await logout(); // Local Data
+            props.navigation.reset({
+              index: 0,
+              routes: [{ name: 'Auth' }],
+            });
           } catch (e) {
             console.error('Logout failed', e);
           }
@@ -127,158 +72,125 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
     ]);
   };
 
+  const getIconName = (routeName: string): keyof typeof MaterialIcon.glyphMap => {
+    switch (routeName) {
+      case 'Dashboard':
+        return 'dashboard';
+      case 'History':
+        return 'history';
+      case 'Income':
+        return 'arrow-downward';
+      case 'Expenses':
+        return 'arrow-upward';
+      case 'Analytics':
+        return 'bar-chart';
+      case 'My Profile':
+      case 'Account':
+        return 'person';
+      case 'App Settings':
+      case 'Settings':
+        return 'settings';
+      case 'About':
+        return 'info';
+      case 'Export Data':
+      case 'Export':
+        return 'file-download';
+      default:
+        return 'circle';
+    }
+  };
+
+  // Safe Version Access
+  const versionLabel = `v${appConfig?.expo?.version || '1.0.0'} (${appConfig?.expo?.android?.versionCode || '1'})`;
+
   return (
-    <View style={styles.mainContainer}>
+    <View style={styles.container}>
+      {/* Scrollable Area */}
       <DrawerContentScrollView
         {...props}
         contentContainerStyle={{
-          paddingTop: insets.top + spacing(1),
-          paddingBottom: spacing(4),
+          paddingTop: Platform.OS === 'ios' ? 0 : insets.top, // Handle Android status bar
+          paddingBottom: 20,
         }}
         showsVerticalScrollIndicator={false}
       >
-        {/* --- USER PROFILE (moved to top, brand removed) --- */}
-        <Animated.View
-          style={[
-            styles.headerContainer,
-            { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
-          ]}
-        >
+        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+          {/* 1. USER PROFILE HEADER */}
           <TouchableOpacity
-            style={styles.userHeader}
-            activeOpacity={0.8}
-            onPress={() => {
-              try {
-                props.navigation.closeDrawer();
-              } catch (e) {}
-              // slight delay to avoid drawer animation conflicts
-              setTimeout(() => {
-                try {
-                  props.navigation.navigate('Account');
-                } catch (e) {
-                  // best-effort: try to find top-level nav and navigate
-                  try {
-                    let rootNav: any = props.navigation as any;
-                    while (rootNav.getParent && rootNav.getParent()) {
-                      const p = rootNav.getParent();
-                      if (!p || p === rootNav) break;
-                      rootNav = p;
-                    }
-                    if (rootNav && typeof rootNav.navigate === 'function') {
-                      rootNav.navigate('Account');
-                    }
-                  } catch (e2) {}
-                }
-              }, 220);
-            }}
+            style={styles.profileHeader}
+            activeOpacity={0.7}
+            onPress={() => props.navigation.navigate('Account')}
           >
             <UserAvatar
-              size={44}
+              size={52}
               name={user?.fullName || user?.firstName}
-              imageUrl={user?.imageUrl || (user as any)?.image}
+              imageUrl={user?.imageUrl}
             />
-            <View style={styles.userInfo}>
-              <Text style={styles.userName} numberOfLines={1}>
+            <View style={styles.profileInfo}>
+              <Text style={styles.profileName} numberOfLines={1}>
                 {user?.fullName || 'Guest User'}
               </Text>
-              <Text style={styles.userEmail} numberOfLines={1}>
-                {user?.primaryEmailAddress?.emailAddress || ''}
+              <Text style={styles.profileEmail} numberOfLines={1}>
+                {user?.primaryEmailAddress?.emailAddress || 'Not signed in'}
               </Text>
             </View>
+            <MaterialIcon name="chevron-right" size={24} color={colors.muted || '#94A3B8'} />
           </TouchableOpacity>
-          <View style={styles.headerDivider} />
-        </Animated.View>
 
-        <View style={styles.headerDivider} />
-        <View style={styles.menuContainer}>
-          <Text style={styles.sectionLabel}>Navigation</Text>
+          <View style={styles.divider} />
 
-          {props.state.routes.map((route, index) => {
-            const focused = props.state.index === index;
-            const { options } = props.descriptors[route.key];
+          {/* 2. NAVIGATION MENU */}
+          <View style={styles.menuSection}>
+            <Text style={styles.sectionTitle}>NAVIGATION</Text>
+            {props.state.routes.map((route, index) => {
+              const focused = props.state.index === index;
+              const { options } = props.descriptors[route.key];
 
-            // Hide hidden items
-            const flattenedStyle = options.drawerItemStyle
-              ? StyleSheet.flatten(options.drawerItemStyle)
-              : undefined;
-            if (flattenedStyle?.display === 'none') return null;
+              // Skip hidden items if needed
+              if (options.drawerItemStyle && (options.drawerItemStyle as any).display === 'none')
+                return null;
 
-            const label =
-              options.drawerLabel !== undefined
-                ? options.drawerLabel
-                : options.title !== undefined
-                  ? options.title
-                  : route.name;
+              const label = options.title !== undefined ? options.title : route.name;
+              const icon = getIconName(label);
 
-            // Animation values for this item
-            const itemAnim = listAnims[index] || new Animated.Value(1);
-            const itemTranslate = itemAnim.interpolate({
-              inputRange: [0, 1],
-              outputRange: [20, 0],
-            });
-
-            return (
-              <Animated.View
-                key={route.key}
-                style={{ opacity: itemAnim, transform: [{ translateX: itemTranslate }] }}
-              >
+              return (
                 <TouchableOpacity
+                  key={route.key}
                   onPress={() => handleNavigate(route.name)}
                   style={[styles.menuItem, focused && styles.menuItemActive]}
                   activeOpacity={0.7}
                 >
-                  <View style={[styles.iconBox, focused && styles.iconBoxActive]}>
-                    {options.drawerIcon ? (
-                      options.drawerIcon({
-                        focused,
-                        color: focused ? colors.primary : colors.muted,
-                        size: 22,
-                      })
-                    ) : (
-                      <MaterialIcon
-                        name="circle"
-                        size={8}
-                        color={focused ? colors.primary : colors.muted}
-                      />
-                    )}
+                  <View style={[styles.iconContainer, focused && styles.iconContainerActive]}>
+                    <MaterialIcon
+                      name={icon}
+                      size={22}
+                      color={focused ? colors.primary || '#2563EB' : colors.muted || '#64748B'}
+                    />
                   </View>
-
-                  <Text style={[styles.menuLabel, focused && styles.menuLabelActive]}>
-                    {label as string}
-                  </Text>
-
-                  {focused && <View style={styles.activeDot} />}
+                  <Text style={[styles.menuText, focused && styles.menuTextActive]}>{label}</Text>
+                  {focused && <View style={styles.activeIndicator} />}
                 </TouchableOpacity>
-              </Animated.View>
-            );
-          })}
-        </View>
+              );
+            })}
+          </View>
+        </Animated.View>
       </DrawerContentScrollView>
 
-      {/* --- FOOTER (Fixed at bottom) --- */}
+      {/* 3. FOOTER ACTIONS */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}>
-        <View style={styles.footerDivider} />
+        <View style={styles.divider} />
 
         <TouchableOpacity
-          style={styles.footerBtn}
+          style={styles.footerItem}
           onPress={() => props.navigation.navigate('Export')}
-          activeOpacity={0.7}
         >
-          <View style={styles.footerIconBox}>
-            <MaterialIcon name="file-upload" size={20} color={colors.text} />
-          </View>
-          <Text style={styles.footerBtnText}>Export Data</Text>
+          <MaterialIcon name="file-upload" size={20} color={colors.text || '#1E293B'} />
+          <Text style={styles.footerText}>Export Data</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.footerBtn, styles.logoutBtn]}
-          onPress={handleLogout}
-          activeOpacity={0.7}
-        >
-          <View style={styles.footerIconBox}>
-            <MaterialIcon name="logout" size={20} color={colors.accentRed} />
-          </View>
-          <Text style={[styles.footerBtnText, { color: colors.accentRed }]}>Sign Out</Text>
+        <TouchableOpacity style={styles.footerItem} onPress={handleLogout}>
+          <MaterialIcon name="logout" size={20} color="#EF4444" />
+          <Text style={[styles.footerText, { color: '#EF4444' }]}>Sign Out</Text>
         </TouchableOpacity>
 
         <Text style={styles.versionText}>{versionLabel}</Text>
@@ -287,188 +199,115 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   );
 };
 
-export default CustomDrawerContent;
-
-/* --- STYLES --- */
+// --- STYLES ---
 const styles = StyleSheet.create({
-  mainContainer: {
+  container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.background || '#F8FAFC',
   },
 
   /* HEADER */
-  headerContainer: {
-    paddingHorizontal: spacing(3),
-    marginBottom: spacing(2),
-  },
-  brandRow: {
+  profileHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
-  },
-  logoContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  logoImage: {
-    width: 28,
-    height: 28,
-  },
-  brandTextContainer: {
-    flex: 1,
-  },
-  brandTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: colors.text,
-    letterSpacing: -0.5,
-  },
-  brandSubtitle: {
-    fontSize: 13,
-    color: colors.muted,
-    fontWeight: '500',
-  },
-  headerDivider: {
-    height: 1,
-    backgroundColor: 'rgba(0,0,0,0.05)',
-    width: '100%',
-  },
-
-  /* USER HEADER */
-  userHeader: {
     paddingHorizontal: 20,
-    paddingVertical: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
+    paddingVertical: 24,
+    backgroundColor: colors.background || '#F8FAFC',
   },
-  userAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#E2E8F0',
-    marginRight: 16,
-  },
-  userInfo: {
+  profileInfo: {
     flex: 1,
+    marginLeft: 16,
     justifyContent: 'center',
   },
-  userName: {
+  profileName: {
     fontSize: 16,
     fontWeight: '700',
-    color: colors.text,
-    marginBottom: 2,
+    color: colors.text || '#0F172A',
+    marginBottom: 4,
   },
-  userEmail: {
+  profileEmail: {
     fontSize: 12,
-    color: colors.muted,
+    color: colors.muted || '#64748B',
   },
 
-  editButton: {
-    padding: 8,
-    marginLeft: 8,
+  divider: {
+    height: 1,
+    backgroundColor: '#E2E8F0',
+    width: '100%',
+    marginVertical: 8,
   },
 
-  /* MENU */
-  menuContainer: {
-    paddingHorizontal: spacing(2),
+  /* MENU SECTION */
+  menuSection: {
+    paddingHorizontal: 12,
+    marginTop: 16,
   },
-  sectionLabel: {
+  sectionTitle: {
     fontSize: 11,
     fontWeight: '700',
-    color: colors.muted,
-    textTransform: 'uppercase',
+    color: '#94A3B8',
     marginBottom: 12,
-    marginLeft: 12,
-    marginTop: 12,
+    marginLeft: 16,
     letterSpacing: 1,
-    opacity: 0.6,
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
     marginBottom: 4,
   },
   menuItemActive: {
-    backgroundColor: colors.primarySoft || '#EEF2FF',
+    backgroundColor: '#EFF6FF', // Light Blue Tint
   },
-  iconBox: {
-    width: 32,
+  iconContainer: {
+    width: 24,
     alignItems: 'center',
-    justifyContent: 'center',
     marginRight: 12,
   },
-  iconBoxActive: {
-    // Optional: transform scale if desired
+  iconContainerActive: {
+    // Optional: scale up slightly
   },
-  menuLabel: {
+  menuText: {
     fontSize: 15,
-    fontWeight: '600',
-    color: colors.text,
+    fontWeight: '500',
+    color: '#334155',
     flex: 1,
   },
-  menuLabelActive: {
-    color: colors.primary,
+  menuTextActive: {
+    color: colors.primary || '#2563EB',
     fontWeight: '700',
   },
-  activeDot: {
+  activeIndicator: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: colors.primary,
-    marginRight: 4,
+    backgroundColor: colors.primary || '#2563EB',
   },
 
   /* FOOTER */
   footer: {
-    paddingHorizontal: spacing(3),
-    backgroundColor: colors.background,
+    paddingHorizontal: 24,
+    paddingTop: 10,
   },
-  footerDivider: {
-    height: 1,
-    backgroundColor: 'rgba(0,0,0,0.05)',
-    marginBottom: 20,
-  },
-  footerBtn: {
+  footerItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
-    borderRadius: 12,
-    marginBottom: 4,
+    gap: 12,
   },
-  logoutBtn: {
-    marginBottom: 16,
-  },
-  footerIconBox: {
-    width: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  footerBtnText: {
+  footerText: {
     fontSize: 15,
     fontWeight: '600',
-    color: colors.text,
+    color: colors.text || '#1E293B',
   },
   versionText: {
+    marginTop: 20,
     fontSize: 11,
-    color: colors.muted,
+    color: '#CBD5E1',
     textAlign: 'center',
-    opacity: 0.5,
-    fontWeight: '500',
   },
 });
+
+export default CustomDrawerContent;

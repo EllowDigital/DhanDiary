@@ -11,6 +11,7 @@ import {
   StatusBar,
   Linking,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
@@ -26,7 +27,6 @@ import { useToast } from '../context/ToastContext';
 import { colors, spacing } from '../utils/design';
 import ScreenHeader from '../components/ScreenHeader';
 import appConfig from '../../app.json';
-import UserAvatar from '../components/UserAvatar';
 
 // Safe Package Import
 let pkg: { version?: string } = {};
@@ -36,16 +36,61 @@ try {
   pkg = { version: '1.0.0' };
 }
 
+// Optional: try to require expo-haptics if available (avoid hard dependency)
+let Haptics: any = null;
+try {
+  Haptics = require('expo-haptics');
+} catch (e) {
+  Haptics = null;
+}
+
+// --- SUB-COMPONENT: SETTINGS ROW ---
+const SettingsRow = ({
+  icon,
+  label,
+  onPress,
+  lastItem,
+  danger,
+}: {
+  icon: keyof typeof MaterialIcon.glyphMap;
+  label: string;
+  onPress: () => void;
+  lastItem?: boolean;
+  danger?: boolean;
+}) => (
+  <TouchableOpacity
+    style={[styles.row, lastItem && { borderBottomWidth: 0 }]}
+    onPress={onPress}
+    activeOpacity={0.6}
+  >
+    <View style={[styles.rowIcon, danger && styles.rowIconDanger]}>
+      <MaterialIcon name={icon} size={20} color={danger ? colors.accentRed : colors.text} />
+    </View>
+    <Text style={[styles.rowLabel, danger && { color: colors.accentRed }]}>{label}</Text>
+    <MaterialIcon name="chevron-right" size={22} color={colors.border || '#E2E8F0'} />
+  </TouchableOpacity>
+);
+
 const SettingsScreen = () => {
   const navigation = useNavigation<any>();
   const query = useQueryClient();
   const { showToast } = useToast();
   const { user } = useAuth();
 
+  // Clerk Auth (Safe Import)
+  let clerkSignOut: any = null;
+  try {
+    const clerk = require('@clerk/clerk-expo');
+    const auth = clerk.useAuth();
+    clerkSignOut = auth.signOut;
+  } catch (e) {
+    // Clerk not installed or configured, ignore
+  }
+
   // Layout
   const { width } = useWindowDimensions();
   const isTablet = width >= 768;
-  const contentWidth = Math.min(width - (isTablet ? spacing(8) : spacing(4)), 700);
+  const contentWidth = Math.min(width - (isTablet ? spacing(8) : spacing(4)), 600);
 
   // Animations
   const animValues = useRef([...Array(6)].map(() => new Animated.Value(0))).current;
@@ -58,12 +103,12 @@ const SettingsScreen = () => {
     const animations = animValues.map((anim) =>
       Animated.timing(anim, {
         toValue: 1,
-        duration: 600,
+        duration: 500,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       })
     );
-    Animated.stagger(80, animations).start();
+    Animated.stagger(60, animations).start();
   }, []);
 
   const getAnimStyle = (index: number) => ({
@@ -72,7 +117,7 @@ const SettingsScreen = () => {
       {
         translateY: animValues[index].interpolate({
           inputRange: [0, 1],
-          outputRange: [30, 0],
+          outputRange: [20, 0],
         }),
       },
     ],
@@ -81,10 +126,19 @@ const SettingsScreen = () => {
   // Handlers
   const handleManualSync = async () => {
     if (isSyncing) return;
+
+    // Haptic feedback (if available)
+    if (Platform.OS !== 'web' && Haptics && typeof Haptics.impactAsync === 'function') {
+      try {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle?.Medium || 1);
+      } catch (e) {}
+    }
+
     setIsSyncing(true);
     try {
       await syncBothWays();
-      setLastSyncTime('Just now');
+      const now = new Date();
+      setLastSyncTime(`${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`);
       showToast('Sync completed successfully');
     } catch (e) {
       showToast('Sync failed. Please try again.');
@@ -92,8 +146,6 @@ const SettingsScreen = () => {
       setIsSyncing(false);
     }
   };
-
-  const { signOut: clerkSignOut } = require('@clerk/clerk-expo').useAuth();
 
   const handleLogout = () => {
     Alert.alert('Sign Out', 'Are you sure you want to log out?', [
@@ -116,7 +168,10 @@ const SettingsScreen = () => {
             try {
               query.clear();
             } catch (e) {}
+
             if (ok) showToast('Signed out successfully');
+
+            // Force navigation reset
             navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
           } catch (e) {
             console.warn('[Settings] logout failed', e);
@@ -137,6 +192,15 @@ const SettingsScreen = () => {
           text: 'Reset Everything',
           style: 'destructive',
           onPress: async () => {
+            if (
+              Platform.OS !== 'web' &&
+              Haptics &&
+              typeof Haptics.notificationAsync === 'function'
+            ) {
+              try {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType?.Warning || 2);
+              } catch (e) {}
+            }
             await logout();
             query.clear();
             showToast('App has been reset');
@@ -150,8 +214,6 @@ const SettingsScreen = () => {
   const handleContactSupport = () => {
     Linking.openURL('mailto:support@dhandiary.com?subject=App Support');
   };
-
-  const userInitial = user?.name?.charAt(0).toUpperCase() || 'U';
 
   return (
     <View style={styles.mainContainer}>
@@ -171,36 +233,32 @@ const SettingsScreen = () => {
           contentContainerStyle={{ paddingBottom: 100, paddingTop: 10 }}
         >
           <View style={{ width: contentWidth, alignSelf: 'center' }}>
-            {/* Profile card removed as per design — name/email accessible via Account screen */}
-
-            {/* 2. DATA & SYNC */}
+            {/* 1. DATA & SYNC CARD */}
             <Animated.View style={getAnimStyle(1)}>
-              <Text style={styles.sectionLabel}>Cloud Sync</Text>
+              <Text style={styles.sectionLabel}>CLOUD & DATA</Text>
               <View style={styles.card}>
                 <View style={styles.syncHeader}>
-                  <View style={[styles.iconBox, { backgroundColor: '#e0f2fe' }]}>
-                    <MaterialIcon name="cloud-done" size={24} color="#0284c7" />
+                  <View style={[styles.iconBox, { backgroundColor: '#E0F2FE' }]}>
+                    <MaterialIcon name="cloud-queue" size={24} color="#0284C7" />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.cardTitle}>Data is Synchronized</Text>
-                    <Text style={styles.cardSub}>
-                      Your entries are safely backed up to the cloud.
-                    </Text>
+                    <Text style={styles.cardTitle}>Sync Status</Text>
+                    <Text style={styles.cardSub}>Data is backed up automatically.</Text>
                   </View>
                 </View>
 
                 <View style={styles.statGrid}>
                   <View style={styles.statItem}>
-                    <Text style={styles.statLabel}>Status</Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Text style={styles.statLabel}>STATUS</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                       <View
-                        style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#22c55e' }}
+                        style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#22C55E' }}
                       />
                       <Text style={styles.statValue}>Online</Text>
                     </View>
                   </View>
-                  <View style={styles.statItem}>
-                    <Text style={styles.statLabel}>Last Sync</Text>
+                  <View style={[styles.statItem, styles.statBorderLeft]}>
+                    <Text style={styles.statLabel}>LAST SYNC</Text>
                     <Text style={styles.statValue}>{lastSyncTime}</Text>
                   </View>
                 </View>
@@ -209,12 +267,13 @@ const SettingsScreen = () => {
                   style={styles.syncBtn}
                   onPress={handleManualSync}
                   disabled={isSyncing}
+                  activeOpacity={0.8}
                 >
                   {isSyncing ? (
                     <ActivityIndicator size="small" color="#fff" />
                   ) : (
                     <>
-                      <MaterialIcon name="sync" size={16} color="#fff" />
+                      <MaterialIcon name="sync" size={18} color="#fff" style={{ marginRight: 8 }} />
                       <Text style={styles.syncBtnText}>Sync Now</Text>
                     </>
                   )}
@@ -222,14 +281,19 @@ const SettingsScreen = () => {
               </View>
             </Animated.View>
 
-            {/* 3. GENERAL */}
+            {/* 2. GENERAL SETTINGS */}
             <Animated.View style={getAnimStyle(2)}>
-              <Text style={styles.sectionLabel}>General</Text>
+              <Text style={styles.sectionLabel}>GENERAL</Text>
               <View style={styles.card}>
                 <SettingsRow
                   icon="person-outline"
                   label="Account Details"
                   onPress={() => navigation.navigate('Account')}
+                />
+                <SettingsRow
+                  icon="notifications-none" // Placeholder for future feature
+                  label="Notifications"
+                  onPress={() => showToast('Coming soon!')}
                 />
                 <SettingsRow
                   icon="lock-outline"
@@ -250,39 +314,49 @@ const SettingsScreen = () => {
               </View>
             </Animated.View>
 
-            {/* 4. DANGER ZONE */}
+            {/* 3. DANGER ZONE */}
             <Animated.View style={getAnimStyle(3)}>
               <View style={styles.dangerHeaderRow}>
-                <MaterialIcon name="warning-amber" size={18} color={colors.accentRed} />
-                <Text style={styles.dangerLabel}>Danger Zone</Text>
+                <MaterialIcon
+                  name="error-outline"
+                  size={18}
+                  color={colors.accentRed || '#EF4444'}
+                />
+                <Text style={styles.dangerLabel}>DANGER ZONE</Text>
               </View>
 
               <View style={styles.dangerCard}>
-                <Text style={styles.dangerTitle}>Reset Application</Text>
-                <Text style={styles.dangerDesc}>
-                  Signs you out, clears all local cache, and resets app state. Data on the cloud
-                  remains safe.
-                </Text>
-                <TouchableOpacity
-                  style={styles.dangerBtn}
-                  onPress={handleResetApp}
-                  activeOpacity={0.7}
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                  }}
                 >
-                  <MaterialIcon name="refresh" size={18} color={colors.accentRed} />
-                  <Text style={styles.dangerBtnText}>Reset App</Text>
-                </TouchableOpacity>
+                  <View style={{ flex: 1, paddingRight: 10 }}>
+                    <Text style={styles.dangerTitle}>Reset Application</Text>
+                    <Text style={styles.dangerDesc}>Clears local cache & restarts.</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.dangerBtn}
+                    onPress={handleResetApp}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.dangerBtnText}>Reset</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </Animated.View>
 
-            {/* 5. FOOTER */}
-            <Animated.View style={[getAnimStyle(4), { marginTop: 30 }]}>
+            {/* 4. FOOTER */}
+            <Animated.View style={[getAnimStyle(4), { marginTop: 24, marginBottom: 40 }]}>
               <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.7}>
                 <MaterialIcon name="logout" size={20} color={colors.accentRed} />
                 <Text style={styles.logoutText}>Sign Out</Text>
               </TouchableOpacity>
 
               <Text style={styles.versionText}>
-                v{pkg.version} • Build {appConfig.expo.version || '100'}
+                Version {pkg.version} ({appConfig.expo.version || '100'})
               </Text>
             </Animated.View>
           </View>
@@ -292,47 +366,19 @@ const SettingsScreen = () => {
   );
 };
 
-/* --- REUSABLE ROW --- */
-const SettingsRow = ({
-  icon,
-  label,
-  onPress,
-  lastItem,
-}: {
-  icon: any;
-  label: string;
-  onPress: () => void;
-  lastItem?: boolean;
-}) => (
-  <TouchableOpacity
-    style={[styles.row, lastItem && { borderBottomWidth: 0 }]}
-    onPress={onPress}
-    activeOpacity={0.6}
-  >
-    <View style={styles.rowIcon}>
-      <MaterialIcon name={icon} size={20} color={colors.text} />
-    </View>
-    <Text style={styles.rowLabel}>{label}</Text>
-    <MaterialIcon name="chevron-right" size={22} color={colors.border} />
-  </TouchableOpacity>
-);
-
-export default SettingsScreen;
-
 /* --- STYLES --- */
 const styles = StyleSheet.create({
-  mainContainer: { flex: 1, backgroundColor: colors.background },
+  mainContainer: { flex: 1, backgroundColor: colors.background || '#F8FAFC' },
   safeArea: { flex: 1 },
 
   sectionLabel: {
     fontSize: 12,
     fontWeight: '700',
-    color: colors.muted,
+    color: colors.muted || '#64748B',
     marginBottom: 8,
     marginTop: 24,
     marginLeft: 4,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
+    letterSpacing: 1,
   },
 
   /* CARDS */
@@ -340,101 +386,85 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 16,
     padding: 16,
-    shadowColor: '#000',
+    // Soft Shadow
+    shadowColor: '#64748B',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
+    shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.03)',
-  },
-
-  /* PROFILE */
-  profileCard: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.04)',
-    marginTop: 8,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  profileRow: { flexDirection: 'row', alignItems: 'center' },
-  avatarContainer: {
-    width: 52,
-    height: 52,
-    borderRadius: 18,
-    backgroundColor: '#eff6ff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 14,
-    borderWidth: 1,
-    borderColor: '#dbeafe',
-  },
-  avatarText: { fontSize: 20, fontWeight: '700', color: colors.primary },
-  profileInfo: { flex: 1, justifyContent: 'center' },
-  profileName: { fontSize: 17, fontWeight: '700', color: colors.text, marginBottom: 2 },
-  profileEmail: { fontSize: 13, color: colors.muted },
-  editButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: '#f8fafc',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: '#F1F5F9',
   },
 
   /* SYNC */
   syncHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   iconBox: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: 14,
   },
-  cardTitle: { fontSize: 15, fontWeight: '700', color: colors.text },
-  cardSub: { fontSize: 12, color: colors.muted, marginTop: 2, lineHeight: 16 },
+  cardTitle: { fontSize: 16, fontWeight: '700', color: colors.text || '#1E293B' },
+  cardSub: { fontSize: 13, color: colors.muted || '#64748B', marginTop: 2 },
 
   statGrid: {
     flexDirection: 'row',
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#F8FAFC',
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: '#E2E8F0',
+    marginBottom: 16,
   },
-  statItem: { flex: 1, gap: 4 },
-  statLabel: { fontSize: 10, color: colors.muted, fontWeight: '700', textTransform: 'uppercase' },
-  statValue: { fontSize: 13, fontWeight: '600', color: colors.text },
+  statItem: { flex: 1, alignItems: 'center', gap: 4 },
+  statBorderLeft: { borderLeftWidth: 1, borderLeftColor: '#E2E8F0' },
+  statLabel: {
+    fontSize: 10,
+    color: colors.muted || '#64748B',
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  statValue: { fontSize: 14, fontWeight: '600', color: colors.text || '#1E293B' },
 
-  /* ROWS */
+  syncBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0284C7', // Strong Blue
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  syncBtnText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+
+  /* ROW ITEMS */
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
+    borderBottomColor: '#F1F5F9',
   },
   rowIcon: {
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: '#f1f5f9',
+    backgroundColor: '#F8FAFC',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
-  rowLabel: { flex: 1, fontSize: 15, color: colors.text, fontWeight: '500' },
+  rowIconDanger: {
+    backgroundColor: '#FEF2F2',
+  },
+  rowLabel: { flex: 1, fontSize: 15, color: colors.text || '#1E293B', fontWeight: '500' },
 
-  /* DANGER */
+  /* DANGER ZONE */
   dangerHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -446,36 +476,33 @@ const styles = StyleSheet.create({
   dangerLabel: {
     fontSize: 12,
     fontWeight: '700',
-    color: colors.accentRed,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    color: colors.accentRed || '#EF4444',
+    letterSpacing: 1,
   },
   dangerCard: {
-    backgroundColor: '#fef2f2',
+    backgroundColor: '#FEF2F2',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#fee2e2',
+    borderColor: '#FECACA',
     padding: 16,
   },
-  dangerTitle: { fontSize: 15, fontWeight: '700', color: '#991b1b', marginBottom: 6 },
-  dangerDesc: { fontSize: 13, color: '#b91c1c', opacity: 0.8, marginBottom: 16, lineHeight: 18 },
+  dangerTitle: { fontSize: 15, fontWeight: '700', color: '#991B1B', marginBottom: 2 },
+  dangerDesc: { fontSize: 13, color: '#B91C1C', opacity: 0.8 },
   dangerBtn: {
     backgroundColor: '#fff',
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: 10,
-    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#fecaca',
-    shadowColor: '#ef4444',
-    shadowOffset: { width: 0, height: 2 },
+    borderColor: '#FECACA',
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
-    shadowRadius: 4,
     elevation: 1,
   },
-  dangerBtnText: { color: colors.accentRed, fontWeight: '700', fontSize: 13 },
+  dangerBtnText: { color: colors.accentRed || '#EF4444', fontWeight: '700', fontSize: 13 },
 
   /* FOOTER */
   logoutBtn: {
@@ -486,7 +513,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: '#E2E8F0',
     gap: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -494,29 +521,14 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 1,
   },
-  logoutText: { color: colors.accentRed, fontWeight: '600', fontSize: 15 },
+  logoutText: { color: colors.accentRed || '#EF4444', fontWeight: '600', fontSize: 15 },
   versionText: {
     textAlign: 'center',
-    color: colors.muted,
-    fontSize: 11,
+    color: colors.muted || '#94A3B8',
+    fontSize: 12,
     marginTop: 16,
-    opacity: 0.6,
-  },
-
-  /* SYNC BUTTON */
-  syncBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#0284c7', // Sky blue
-    paddingVertical: 10,
-    borderRadius: 8,
-    marginTop: 12,
-    gap: 8,
-  },
-  syncBtnText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 13,
+    fontWeight: '500',
   },
 });
+
+export default SettingsScreen;

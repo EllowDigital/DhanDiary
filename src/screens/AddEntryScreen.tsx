@@ -14,7 +14,6 @@ import {
   TextInput,
   LayoutAnimation,
   Keyboard,
-  TouchableWithoutFeedback,
   UIManager,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,18 +21,25 @@ import { Button, Text } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { v4 as uuidv4 } from 'uuid';
+import dayjs from 'dayjs';
+
+// --- CUSTOM IMPORTS ---
 import { useEntries } from '../hooks/useEntries';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../context/ToastContext';
 import runInBackground from '../utils/background';
 import CategoryPickerModal from '../components/CategoryPickerModal';
-import { v4 as uuidv4 } from 'uuid';
-import { colors, spacing, shadows } from '../utils/design';
+import { colors } from '../utils/design';
 import { ALLOWED_CATEGORIES, DEFAULT_CATEGORY, ensureCategory } from '../constants/categories';
 import ScreenHeader from '../components/ScreenHeader';
-import dayjs from 'dayjs';
 
-// layout animations are enabled centrally in App initialization
+// Enable LayoutAnimation for Android
+if (Platform.OS === 'android') {
+  if (UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+  }
+}
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -41,7 +47,7 @@ const typeConfigs = [
   {
     value: 'out',
     label: 'Expense',
-    color: colors.accentRed, // #EF4444
+    color: '#EF4444', // Red
     bg: '#FEF2F2',
     border: '#FECACA',
     icon: 'arrow-outward',
@@ -49,7 +55,7 @@ const typeConfigs = [
   {
     value: 'in',
     label: 'Income',
-    color: colors.accentGreen, // #10B981
+    color: '#10B981', // Green
     bg: '#ECFDF5',
     border: '#A7F3D0',
     icon: 'arrow-downward',
@@ -63,9 +69,10 @@ const AddEntryScreen: React.FC = () => {
   const scrollRef = useRef<ScrollView>(null);
 
   const { user } = useAuth();
-  // FIXED: user.uid -> user.id
   const { addEntry, entries, updateEntry } = useEntries(user?.id);
   const { showToast } = useToast();
+
+  // Params
   const editingParamId = route?.params?.local_id;
   const initialType = route?.params?.type === 'in' ? 1 : 0;
 
@@ -88,10 +95,10 @@ const AddEntryScreen: React.FC = () => {
 
   const activeType = typeConfigs[typeIndex];
 
-  // Colors Interpolation
+  // Dynamic Theme Interpolation
   const themeColor = colorAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [colors.accentRed, colors.accentGreen],
+    outputRange: ['#EF4444', '#10B981'],
   });
 
   const themeBg = colorAnim.interpolate({
@@ -105,6 +112,7 @@ const AddEntryScreen: React.FC = () => {
   });
 
   useEffect(() => {
+    // Entrance Animation
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -116,12 +124,12 @@ const AddEntryScreen: React.FC = () => {
     ]).start();
   }, []);
 
-  // Animate Color Change
+  // Trigger Color Animation on Type Change
   useEffect(() => {
     Animated.timing(colorAnim, {
       toValue: typeIndex,
       duration: 300,
-      useNativeDriver: false, // Color interp requires false
+      useNativeDriver: false, // Required for color interpolation
     }).start();
   }, [typeIndex]);
 
@@ -134,7 +142,9 @@ const AddEntryScreen: React.FC = () => {
         setNote(found.note ?? '');
         setTypeIndex(found.type === 'in' ? 1 : 0);
         setCategory(ensureCategory(found.category));
-        setDate(new Date(found.date || found.created_at));
+        // Handle various date formats safely
+        const d = found.date || found.created_at;
+        setDate(d ? new Date(d) : new Date());
         setEditingLocalId(found.local_id);
       }
     }
@@ -142,20 +152,22 @@ const AddEntryScreen: React.FC = () => {
 
   // --- HANDLERS ---
   const handleSave = () => {
-    // FIXED: user.uid -> user.id
     if (!user?.id) {
-      showToast('Please sign in to save entries.');
+      showToast('Please sign in to save transactions.');
       return;
     }
 
-    const parsed = parseFloat(amount.replace(/,/g, ''));
-    if (!amount.trim() || isNaN(parsed) || parsed <= 0) {
-      Alert.alert('Invalid Amount', 'Please enter a value greater than 0.');
+    // Clean Amount Input (remove commas, spaces)
+    const cleanAmount = amount.replace(/,/g, '').trim();
+    const parsedAmount = parseFloat(cleanAmount);
+
+    if (!cleanAmount || isNaN(parsedAmount) || parsedAmount <= 0) {
+      Alert.alert('Invalid Amount', 'Please enter a valid amount greater than 0.');
       return;
     }
 
     const payload = {
-      amount: parsed,
+      amount: parsedAmount,
       type: activeType.value as 'in' | 'out',
       category: ensureCategory(category),
       note: note.trim(),
@@ -163,7 +175,7 @@ const AddEntryScreen: React.FC = () => {
       date: date.toISOString(),
     };
 
-    showToast(editingLocalId ? 'Updating...' : 'Saving...');
+    showToast(editingLocalId ? 'Updating transaction...' : 'Saving transaction...');
     navigation.goBack();
 
     runInBackground(async () => {
@@ -173,16 +185,18 @@ const AddEntryScreen: React.FC = () => {
           showToast('Updated successfully');
         } else {
           await addEntry({ local_id: uuidv4(), ...payload });
-          showToast('Added successfully');
+          showToast('Transaction saved');
         }
       } catch (err) {
-        showToast('Failed to save');
+        console.error(err);
+        showToast('Failed to save. Please try again.');
       }
     });
   };
 
   const handleDateChange = (event: any, selectedDate?: Date) => {
     setShowDatePicker(false);
+    if (event.type === 'dismissed') return;
     if (selectedDate) setDate(selectedDate);
   };
 
@@ -227,7 +241,7 @@ const AddEntryScreen: React.FC = () => {
                         <MaterialIcon
                           name={cfg.icon as any}
                           size={20}
-                          color={isActive ? cfg.color : colors.muted}
+                          color={isActive ? cfg.color : colors.muted || '#94A3B8'}
                         />
                         <Text
                           style={[
@@ -276,18 +290,18 @@ const AddEntryScreen: React.FC = () => {
                       {category}
                     </Text>
                   </View>
-                  <MaterialIcon name="chevron-right" size={24} color={colors.border} />
+                  <MaterialIcon name="chevron-right" size={24} color={colors.border || '#E2E8F0'} />
                 </Pressable>
 
                 <Pressable style={styles.gridCard} onPress={() => setShowDatePicker(true)}>
-                  <View style={[styles.gridIconBg, { backgroundColor: '#eff6ff' }]}>
-                    <MaterialIcon name="event" size={22} color={colors.accentBlue} />
+                  <View style={[styles.gridIconBg, { backgroundColor: '#EFF6FF' }]}>
+                    <MaterialIcon name="event" size={22} color="#3B82F6" />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.gridLabel}>Date</Text>
                     <Text style={styles.gridValue}>{dayjs(date).format('DD MMM YYYY')}</Text>
                   </View>
-                  <MaterialIcon name="chevron-right" size={24} color={colors.border} />
+                  <MaterialIcon name="chevron-right" size={24} color={colors.border || '#E2E8F0'} />
                 </Pressable>
               </View>
 
@@ -299,14 +313,14 @@ const AddEntryScreen: React.FC = () => {
                     value={note}
                     onChangeText={setNote}
                     placeholder="What is this transaction for?"
-                    placeholderTextColor={colors.muted}
+                    placeholderTextColor={colors.muted || '#94A3B8'}
                     multiline
                     style={styles.noteInput}
                   />
                   <MaterialIcon
                     name="edit"
                     size={18}
-                    color={colors.muted}
+                    color={colors.muted || '#94A3B8'}
                     style={styles.noteIcon}
                   />
                 </View>
@@ -329,7 +343,10 @@ const AddEntryScreen: React.FC = () => {
                         borderColor: activeType.color,
                       },
                     ]}
-                    onPress={() => setCategory(cat)}
+                    onPress={() => {
+                      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                      setCategory(cat);
+                    }}
                   >
                     <Text style={[styles.chipText, category === cat && { color: 'white' }]}>
                       {cat}
@@ -340,8 +357,13 @@ const AddEntryScreen: React.FC = () => {
             </Animated.View>
           </ScrollView>
 
-          {/* FOOTER */}
-          <View style={[styles.footerContainer, { paddingBottom: Platform.OS === 'ios' ? 0 : 20 }]}>
+          {/* FOOTER BUTTON */}
+          <View
+            style={[
+              styles.footerContainer,
+              { paddingBottom: Platform.OS === 'ios' ? insets.bottom : 20 },
+            ]}
+          >
             <Button
               title={editingLocalId ? 'Update Transaction' : 'Save Transaction'}
               onPress={handleSave}
@@ -371,6 +393,7 @@ const AddEntryScreen: React.FC = () => {
           mode="date"
           display={Platform.OS === 'ios' ? 'spinner' : 'default'}
           onChange={handleDateChange}
+          maximumDate={new Date()} // Prevent future dates
         />
       )}
     </SafeAreaView>
@@ -380,7 +403,7 @@ const AddEntryScreen: React.FC = () => {
 export default AddEntryScreen;
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: colors.background },
+  safeArea: { flex: 1, backgroundColor: colors.background || '#F8FAFC' },
   contentWrapper: { flex: 1, justifyContent: 'space-between' },
   scrollContent: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 40 },
 
@@ -388,7 +411,7 @@ const styles = StyleSheet.create({
   toggleWrapper: { alignItems: 'center', marginBottom: 20 },
   toggleContainer: {
     flexDirection: 'row',
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: '#F1F5F9',
     borderRadius: 16,
     padding: 4,
     width: '100%',
@@ -404,14 +427,14 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   toggleBtnActive: {
-    backgroundColor: colors.card,
+    backgroundColor: '#fff',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
   },
-  toggleText: { fontSize: 14, fontWeight: '600', color: colors.muted },
+  toggleText: { fontSize: 14, fontWeight: '600', color: colors.muted || '#64748B' },
 
   /* AMOUNT CARD */
   amountCard: {
@@ -431,37 +454,37 @@ const styles = StyleSheet.create({
   gridCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.card,
+    backgroundColor: '#fff',
     padding: 16,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: '#E2E8F0',
     gap: 16,
   },
   gridIconBg: {
     width: 44,
     height: 44,
     borderRadius: 12,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: '#F3F4F6',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  gridLabel: { fontSize: 12, color: colors.muted, marginBottom: 2 },
-  gridValue: { fontSize: 16, fontWeight: '600', color: colors.text },
+  gridLabel: { fontSize: 12, color: colors.muted || '#64748B', marginBottom: 2 },
+  gridValue: { fontSize: 16, fontWeight: '600', color: colors.text || '#1E293B' },
 
   /* NOTE INPUT */
   noteSection: { marginBottom: 24 },
   sectionTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: colors.text,
+    color: colors.text || '#1E293B',
     marginBottom: 10,
     marginLeft: 4,
   },
   noteInputWrapper: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: '#F1F5F9', // Muted Surface
     borderRadius: 16,
     padding: 14,
     borderWidth: 1,
@@ -471,7 +494,7 @@ const styles = StyleSheet.create({
   noteInput: {
     flex: 1,
     fontSize: 15,
-    color: colors.text,
+    color: colors.text || '#1E293B',
     textAlignVertical: 'top',
     paddingTop: 0,
     height: '100%',
@@ -484,17 +507,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 12,
-    backgroundColor: colors.card,
+    backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: '#E2E8F0',
   },
-  chipText: { fontSize: 13, fontWeight: '600', color: colors.text },
+  chipText: { fontSize: 13, fontWeight: '600', color: colors.text || '#1E293B' },
 
   /* FOOTER */
   footerContainer: {
     paddingHorizontal: 20,
     paddingTop: 10,
-    backgroundColor: colors.background,
+    backgroundColor: colors.background || '#F8FAFC',
     borderTopWidth: 1,
     borderTopColor: 'rgba(0,0,0,0.05)',
   },

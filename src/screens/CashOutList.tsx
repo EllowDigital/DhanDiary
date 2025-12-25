@@ -10,6 +10,8 @@ import {
   StatusBar,
   LayoutAnimation,
   Alert,
+  Platform,
+  UIManager,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, Button } from '@rneui/themed';
@@ -17,6 +19,7 @@ import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { getIconForCategory } from '../constants/categories';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Swipeable } from 'react-native-gesture-handler';
+import dayjs from 'dayjs';
 
 // Custom Hooks & Components
 import { useEntries } from '../hooks/useEntries';
@@ -33,7 +36,13 @@ import {
   summarizeEntries,
 } from '../utils/entryFilters';
 import { colors } from '../utils/design';
-import dayjs from 'dayjs';
+
+// Enable LayoutAnimation for Android
+if (Platform.OS === 'android') {
+  if (UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+  }
+}
 
 // --- CONSTANTS ---
 const TIME_FILTERS = [
@@ -49,7 +58,7 @@ const SORT_OPTIONS = [
 
 // --- SUB-COMPONENTS ---
 
-const FilterPill = ({ label, active, onPress }: any) => (
+const FilterPill = React.memo(({ label, active, onPress }: any) => (
   <TouchableOpacity
     onPress={onPress}
     activeOpacity={0.7}
@@ -57,9 +66,9 @@ const FilterPill = ({ label, active, onPress }: any) => (
   >
     <Text style={[styles.pillText, active && styles.pillTextActive]}>{label}</Text>
   </TouchableOpacity>
-);
+));
 
-const ExpenseSummaryCard = ({ summary, fadeAnim, slideAnim }: any) => (
+const ExpenseSummaryCard = React.memo(({ summary, fadeAnim, slideAnim }: any) => (
   <Animated.View
     style={[styles.heroCard, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
   >
@@ -96,7 +105,7 @@ const ExpenseSummaryCard = ({ summary, fadeAnim, slideAnim }: any) => (
       </View>
     </View>
   </Animated.View>
-);
+));
 
 // --- SWIPEABLE COMPACT ROW ---
 const SwipeableExpenseItem = React.memo(({ item, onEdit, onDelete }: any) => {
@@ -243,7 +252,12 @@ const CashOutList = () => {
   );
 
   // --- HANDLERS ---
-  const handleEdit = (item: any) => navigation.navigate('History', { edit_item: item });
+  const handleEdit = (item: any) => {
+    navigation.navigate('AddEntry', {
+      local_id: item.local_id,
+      type: 'out', // Explicitly tell editor this is an expense
+    });
+  };
 
   const handleDelete = (id: string) => {
     Alert.alert('Delete Expense', 'Are you sure you want to remove this record?', [
