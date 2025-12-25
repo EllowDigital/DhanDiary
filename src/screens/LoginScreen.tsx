@@ -298,6 +298,9 @@ const LoginScreen = () => {
                     onChangeText={setEmail}
                     autoCapitalize="none"
                     keyboardType="email-address"
+                    textContentType="username"
+                    autoComplete="email"
+                    importantForAutofill="yes"
                   />
                 </View>
 
@@ -316,6 +319,9 @@ const LoginScreen = () => {
                     onChangeText={setPassword}
                     secureTextEntry={!showPassword}
                     autoCapitalize="none"
+                    textContentType="password"
+                    autoComplete="password"
+                    importantForAutofill="yes"
                   />
                   <TouchableOpacity
                     onPress={() => setShowPassword(!showPassword)}
