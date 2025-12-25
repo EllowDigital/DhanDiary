@@ -107,7 +107,7 @@ const ExpandableCard = ({
           <Text
             style={[
               styles.cardTitle,
-              item.id === 'delete' && { color: colors.danger || '#EF4444' },
+              item.id === 'delete' && { color: (colors as any).accentRed || '#EF4444' },
             ]}
           >
             {item.title}
