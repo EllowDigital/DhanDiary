@@ -3,7 +3,11 @@ require('dotenv').config();
 const { Pool } = require('@neondatabase/serverless');
 
 const raw = process.env.NEON_URL || process.env.EXPO_PUBLIC_NEON_URL || '';
-const NEON_URL = raw ? String(raw).trim().replace(/^'+|'+$|^"+|"+$/g, '') : '';
+const NEON_URL = raw
+  ? String(raw)
+      .trim()
+      .replace(/^'+|'+$|^"+|"+$/g, '')
+  : '';
 if (!NEON_URL) {
   console.error('NEON_URL not set in env');
   process.exit(2);
@@ -31,7 +35,7 @@ const pool = new Pool({ connectionString: NEON_URL });
     const clientId = `cli-${ts}`;
     const amount = 12.34;
     const res = await pool.query(
-      `INSERT INTO cash_entries (user_id, client_id, type, amount, category, note, currency, created_at, updated_at, date) VALUES ($1,$2,$3,$4,$5,$6,$7,NOW(),NOW(),NOW()) RETURNING id` ,
+      `INSERT INTO cash_entries (user_id, client_id, type, amount, category, note, currency, created_at, updated_at, date) VALUES ($1,$2,$3,$4,$5,$6,$7,NOW(),NOW(),NOW()) RETURNING id`,
       [userId, clientId, 'in', amount, 'integration', 'test insert', 'INR']
     );
     entryId = res && (res.rows ? res.rows[0].id : res[0].id);
@@ -41,7 +45,10 @@ const pool = new Pool({ connectionString: NEON_URL });
     await new Promise((r) => setTimeout(r, 500));
 
     // Check daily_summaries
-    const daily = await pool.query(`SELECT total_in, total_out, count FROM daily_summaries WHERE user_id = $1 AND date = CURRENT_DATE LIMIT 1`, [userId]);
+    const daily = await pool.query(
+      `SELECT total_in, total_out, count FROM daily_summaries WHERE user_id = $1 AND date = CURRENT_DATE LIMIT 1`,
+      [userId]
+    );
     const dr = daily && (daily.rows ? daily.rows[0] : daily[0]);
     console.log('daily summary row:', dr || null);
 
@@ -49,14 +56,19 @@ const pool = new Pool({ connectionString: NEON_URL });
       throw new Error('daily_summaries row not found for inserted entry');
     }
     if (Number(dr.total_in) < amount) {
-      throw new Error(`daily_summaries total_in (${dr.total_in}) is less than inserted amount ${amount}`);
+      throw new Error(
+        `daily_summaries total_in (${dr.total_in}) is less than inserted amount ${amount}`
+      );
     }
     if (Number(dr.count) < 1) {
       throw new Error(`daily_summaries count (${dr.count}) is incorrect`);
     }
 
     // Check monthly_summaries
-    const month = await pool.query(`SELECT total_in, total_out, count FROM monthly_summaries WHERE user_id = $1 AND year = EXTRACT(YEAR FROM CURRENT_DATE)::int AND month = EXTRACT(MONTH FROM CURRENT_DATE)::int LIMIT 1`, [userId]);
+    const month = await pool.query(
+      `SELECT total_in, total_out, count FROM monthly_summaries WHERE user_id = $1 AND year = EXTRACT(YEAR FROM CURRENT_DATE)::int AND month = EXTRACT(MONTH FROM CURRENT_DATE)::int LIMIT 1`,
+      [userId]
+    );
     const mr = month && (month.rows ? month.rows[0] : month[0]);
     console.log('monthly summary row:', mr || null);
 
@@ -64,7 +76,9 @@ const pool = new Pool({ connectionString: NEON_URL });
       throw new Error('monthly_summaries row not found for inserted entry');
     }
     if (Number(mr.total_in) < amount) {
-      throw new Error(`monthly_summaries total_in (${mr.total_in}) is less than inserted amount ${amount}`);
+      throw new Error(
+        `monthly_summaries total_in (${mr.total_in}) is less than inserted amount ${amount}`
+      );
     }
 
     console.log('Integration test succeeded.');
@@ -80,10 +94,15 @@ const pool = new Pool({ connectionString: NEON_URL });
         await pool.query('DELETE FROM users WHERE id = $1', [userId]);
       }
     } catch (cleanupErr) {
-      console.warn('Cleanup after failure also failed:', cleanupErr && cleanupErr.message ? cleanupErr.message : cleanupErr);
+      console.warn(
+        'Cleanup after failure also failed:',
+        cleanupErr && cleanupErr.message ? cleanupErr.message : cleanupErr
+      );
     }
     process.exit(3);
   } finally {
-    try { await pool.end(); } catch (e) {}
+    try {
+      await pool.end();
+    } catch (e) {}
   }
 })();

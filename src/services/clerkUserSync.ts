@@ -45,29 +45,29 @@ export const syncClerkUserToNeon = async (clerkUser: {
   while (attempt < maxAttempts) {
     attempt += 1;
     try {
-    // 1. FAST PATH: Check if we already know this Clerk ID
-    // This handles the vast majority of logins for existing users.
-    const existingUsers = await query<DbUser>(
-      'SELECT id, clerk_id, email, name FROM users WHERE clerk_id = $1 LIMIT 1',
-      [clerkUser.id]
-    );
+      // 1. FAST PATH: Check if we already know this Clerk ID
+      // This handles the vast majority of logins for existing users.
+      const existingUsers = await query<DbUser>(
+        'SELECT id, clerk_id, email, name FROM users WHERE clerk_id = $1 LIMIT 1',
+        [clerkUser.id]
+      );
 
-    if (existingUsers && existingUsers.length > 0) {
-      const u = existingUsers[0];
-      return {
-        uuid: u.id,
-        clerk_id: u.clerk_id,
-        email: u.email,
-        name: u.name,
-        server_version: 0,
-      };
-    }
+      if (existingUsers && existingUsers.length > 0) {
+        const u = existingUsers[0];
+        return {
+          uuid: u.id,
+          clerk_id: u.clerk_id,
+          email: u.email,
+          name: u.name,
+          server_version: 0,
+        };
+      }
 
-    // 2. ATOMIC UPSERT: Handle New User OR Legacy Account Merge
-    // If email exists: Update it with the new clerk_id (Merge).
-    // If email does not exist: Insert a new row (Create).
-    // We use ON CONFLICT to make this race-condition proof.
-    const upsertSql = `
+      // 2. ATOMIC UPSERT: Handle New User OR Legacy Account Merge
+      // If email exists: Update it with the new clerk_id (Merge).
+      // If email does not exist: Insert a new row (Create).
+      // We use ON CONFLICT to make this race-condition proof.
+      const upsertSql = `
       INSERT INTO users (email, clerk_id, name, password_hash, status)
       VALUES ($1, $2, $3, 'clerk_managed', 'active')
       ON CONFLICT (email) 
@@ -76,30 +76,30 @@ export const syncClerkUserToNeon = async (clerkUser: {
         updated_at = NOW()
       RETURNING id, email, name, clerk_id
     `;
-    // perform upsert with normalized email
-    await query(upsertSql, [email, clerkUser.id, name]);
+      // perform upsert with normalized email
+      await query(upsertSql, [email, clerkUser.id, name]);
 
-    // Read authoritative record back from DB to ensure we don't overwrite
-    // any existing name that may have been edited directly in Neon.
-    const finalRows = await query<DbUser>(
-      'SELECT id, clerk_id, email, name FROM users WHERE lower(email) = $1 LIMIT 1',
-      [email]
-    );
-    const user = finalRows && finalRows.length ? finalRows[0] : null;
+      // Read authoritative record back from DB to ensure we don't overwrite
+      // any existing name that may have been edited directly in Neon.
+      const finalRows = await query<DbUser>(
+        'SELECT id, clerk_id, email, name FROM users WHERE lower(email) = $1 LIMIT 1',
+        [email]
+      );
+      const user = finalRows && finalRows.length ? finalRows[0] : null;
 
-    if (!user) {
-      // Fallback to generated offline record if select failed
-      return await createOfflineFallback(clerkUser.id, email, name);
-    }
+      if (!user) {
+        // Fallback to generated offline record if select failed
+        return await createOfflineFallback(clerkUser.id, email, name);
+      }
 
-    return {
-      uuid: user.id,
-      clerk_id: user.clerk_id,
-      email: user.email,
-      name: user.name,
-      server_version: 0,
-      isOfflineFallback: false,
-    };
+      return {
+        uuid: user.id,
+        clerk_id: user.clerk_id,
+        email: user.email,
+        name: user.name,
+        server_version: 0,
+        isOfflineFallback: false,
+      };
     } catch (err: any) {
       // Determine if error is transient
       const msg = String(err?.message || err || '').toLowerCase();
@@ -121,7 +121,10 @@ export const syncClerkUserToNeon = async (clerkUser: {
       }
 
       // Non-transient or exhausted attempts: fallback to offline
-      console.warn('[Bridge] Database unreachable or permanent error, falling back to offline session', err);
+      console.warn(
+        '[Bridge] Database unreachable or permanent error, falling back to offline session',
+        err
+      );
       return await createOfflineFallback(clerkUser.id, email, name);
     }
   }

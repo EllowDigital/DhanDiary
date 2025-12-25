@@ -14,6 +14,7 @@
     "postinstall": "node ./scripts/postinstall-fixes.js",
     "postprebuild": "node ./scripts/postprebuild-fixes.js",
     "migrate": "node ./scripts/migrate.js",
+    "test:integration": "node ./scripts/integration/test_summaries.js",
     "neon:migrate": "node ./scripts/run-neon-migrations.js",
     "format": "prettier --write .",
     "lint": "eslint ./ --ext .js,.jsx,.ts,.tsx",

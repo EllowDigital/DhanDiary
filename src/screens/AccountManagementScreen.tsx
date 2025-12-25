@@ -306,9 +306,9 @@ const AccountManagementScreen = () => {
 
                 <View style={styles.heroInfo}>
                   <Text style={styles.heroName}>{user?.fullName || 'User'}</Text>
-                    <Text style={styles.heroEmail}>
-                      {user?.primaryEmailAddress?.emailAddress || 'No email linked'}
-                    </Text>
+                  <Text style={styles.heroEmail}>
+                    {user?.primaryEmailAddress?.emailAddress || 'No email linked'}
+                  </Text>
                   <Text style={styles.authMethod}>
                     {hasPassword ? 'Password Authenticated' : 'Social Login'}
                   </Text>
