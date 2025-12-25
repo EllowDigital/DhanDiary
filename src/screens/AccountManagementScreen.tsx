@@ -124,7 +124,6 @@ const AccountManagementScreen = () => {
   const [activeCard, setActiveCard] = useState<string | null>(null);
 
   // --- FORM STATE ---
-  const [username, setUsername] = useState(user?.fullName || '');
 
   // NOTE: Clerk handles email updates via a verification flow.
   // Simple update isn't always allowed without verifying new email.
@@ -149,7 +148,6 @@ const AccountManagementScreen = () => {
   const hasPassword = user?.passwordEnabled;
 
   // Loaders
-  const [savingUsername, setSavingUsername] = useState(false);
   const [savingPasswordState, setSavingPasswordState] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
 
@@ -166,9 +164,7 @@ const AccountManagementScreen = () => {
     checkBiometrics();
   }, []);
 
-  useEffect(() => {
-    if (user && user.fullName) setUsername(user.fullName);
-  }, [user]);
+  // name is not editable from the app UI
 
   const checkBiometrics = async () => {
     const hasHw = await LocalAuthentication.hasHardwareAsync();
@@ -201,28 +197,7 @@ const AccountManagementScreen = () => {
   };
 
   // --- HANDLERS ---
-  const handleSaveUsername = useCallback(async () => {
-    if (!username.trim()) return Alert.alert('Validation', 'Name cannot be empty');
-    if (!user) return;
-
-    setSavingUsername(true);
-    try {
-      // Update Clerk + Neon via shared helper so both backends stay consistent.
-      try {
-        const { updateProfileWithClerk } = require('../services/auth');
-        await updateProfileWithClerk({ clerkUser: user, updates: { name: username } });
-      } catch (e) {
-        console.warn('[Account] updateProfileWithClerk failed', e);
-      }
-
-      showToast('Name updated successfully');
-      toggleCard('');
-    } catch (err: any) {
-      Alert.alert('Error', err.errors ? err.errors[0]?.message : err.message);
-    } finally {
-      setSavingUsername(false);
-    }
-  }, [username, user]);
+  // name update handled outside the app; no UI to edit name here
 
   const handlePasswordSave = useCallback(async () => {
     if (!newPass || !confirmPass)
@@ -331,47 +306,16 @@ const AccountManagementScreen = () => {
 
                 <View style={styles.heroInfo}>
                   <Text style={styles.heroName}>{user?.fullName || 'User'}</Text>
-                  <Text style={styles.heroEmail}>
-                    {user?.primaryEmailAddress?.emailAddress || 'No email linked'}
-                  </Text>
-                  <Text style={styles.emailNote}>
-                    Changing your email requires verification via Clerk — you'll receive a
-                    verification email and the change will take effect after confirmation.
-                  </Text>
+                    <Text style={styles.heroEmail}>
+                      {user?.primaryEmailAddress?.emailAddress || 'No email linked'}
+                    </Text>
                   <Text style={styles.authMethod}>
                     {hasPassword ? 'Password Authenticated' : 'Social Login'}
                   </Text>
                 </View>
               </View>
 
-              {/* 1. NAME SECTION */}
-              <ExpandableCard
-                item={{
-                  id: 'username',
-                  title: 'Personal Info',
-                  description: 'Update display name',
-                  icon: 'person-outline',
-                  bgColor: '#EEF2FF',
-                  iconColor: colors.primary,
-                }}
-                isExpanded={activeCard === 'username'}
-                onToggle={() => toggleCard('username')}
-              >
-                <CustomInput
-                  label="Display Name"
-                  value={username}
-                  onChangeText={setUsername}
-                  placeholder="Your Name"
-                  leftIcon={<MaterialIcon name="badge" size={20} color={colors.muted} />}
-                />
-                <Button
-                  title="Save Changes"
-                  loading={savingUsername}
-                  onPress={handleSaveUsername}
-                  buttonStyle={styles.primaryBtn}
-                  titleStyle={styles.btnText}
-                />
-              </ExpandableCard>
+              {/* Name editing hidden in UI by request */}
 
               {/* 2. PASSWORD SECTION */}
               <ExpandableCard
@@ -584,11 +528,8 @@ const styles = StyleSheet.create({
     color: colors.muted,
   },
   emailNote: {
-    color: colors.muted,
-    fontSize: 12,
-    marginTop: 8,
-    lineHeight: 16,
-    maxWidth: '92%',
+    // removed: email note text hidden from UI
+    display: 'none',
   },
   authMethod: {
     fontSize: 12,
