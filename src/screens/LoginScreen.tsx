@@ -157,8 +157,8 @@ const LoginScreen = () => {
       if (result.status === 'complete') {
         await setActive({ session: result.createdSessionId });
       } else {
-        Alert.alert('Verification Required', 'Please check your email to verify your account.');
-        setLoading(false);
+        // Redirect to Register screen verification flow with prefilled email
+        navigation.navigate('Register', { prefillEmail: email, showVerify: true });
       }
     } catch (err: any) {
       const msg = err.errors?.[0]?.message || 'Invalid credentials.';

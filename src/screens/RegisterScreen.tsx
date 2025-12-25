@@ -19,7 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSignUp } from '@clerk/clerk-expo';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 
 // --- CUSTOM IMPORTS ---
 import { syncClerkUserToNeon } from '../services/clerkUserSync';
@@ -30,6 +30,7 @@ const { width, height } = Dimensions.get('window');
 
 const RegisterScreen = () => {
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
   const { isLoaded, signUp, setActive } = useSignUp();
 
   // --- STATE ---
@@ -74,6 +75,22 @@ const RegisterScreen = () => {
       ]).start();
     });
   };
+
+  // If navigated here from Login with an unverified email, prefill and trigger verification
+  React.useEffect(() => {
+    const params = route?.params as any;
+    if (!params) return;
+    if (params.prefillEmail) setEmail(params.prefillEmail);
+    if (params.showVerify && isLoaded) {
+      setPendingVerification(true);
+      // Ensure verification is prepared for existing user
+      try {
+        void signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
+      } catch (e) {
+        console.warn('prepareEmailAddressVerification failed', e);
+      }
+    }
+  }, [route?.params, isLoaded, signUp]);
 
   const onSignUpPress = async () => {
     if (!isLoaded) return;
@@ -333,7 +350,23 @@ const RegisterScreen = () => {
                     </TouchableOpacity>
 
                     <TouchableOpacity style={styles.resendBtn}>
-                      <Text style={styles.resendText}>Didn't receive code? Resend</Text>
+                      <Text
+                        style={styles.resendText}
+                        onPress={async () => {
+                          try {
+                            setLoading(true);
+                            await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
+                            Alert.alert('Sent', 'We sent a new verification code to your email.');
+                          } catch (e) {
+                            console.error(e);
+                            Alert.alert('Error', 'Failed to resend verification code.');
+                          } finally {
+                            setLoading(false);
+                          }
+                        }}
+                      >
+                        Didn't receive code? Resend
+                      </Text>
                     </TouchableOpacity>
                   </View>
                 </View>
