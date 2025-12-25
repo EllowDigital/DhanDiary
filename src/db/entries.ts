@@ -183,8 +183,24 @@ export async function* fetchEntriesGenerator(userId: string, pageSize: number = 
 }
 
 export const getSummary = async (period: 'daily' | 'monthly', key: string) => {
-  // Minimal implementation: return zeroed summary
-  return { total: 0 };
+  try {
+    const rows = await query(
+      period === 'daily'
+        ? 'SELECT total_in, total_out, count FROM daily_summaries WHERE user_id = $1 AND date = $2 LIMIT 1'
+        : 'SELECT total_in, total_out, count FROM monthly_summaries WHERE user_id = $1 AND year = $2 AND month = $3 LIMIT 1',
+      period === 'daily' ? [key.split(':')[0], key.split(':')[1]] : [key.split(':')[0], Number(key.split(':')[1]), Number(key.split(':')[2])]
+    );
+    const r = rows && rows[0];
+    if (!r) return null;
+    return {
+      totalIn: Number(r.total_in || 0),
+      totalOut: Number(r.total_out || 0),
+      count: Number(r.count || 0),
+    };
+  } catch (e) {
+    console.warn('entries.getSummary failed', e);
+    return null;
+  }
 };
 
 export const markLocalDeletedByRemoteId = async (remoteId: string) => {

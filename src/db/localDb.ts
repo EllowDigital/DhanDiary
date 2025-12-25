@@ -73,6 +73,31 @@ export const getSummary = async (..._args: any[]): Promise<any | null> => {
         return null;
       }
     }
+    // monthly key is YYYY-MM or YYYY-MM-01 etc.
+    if (_args.length >= 2 && _args[0] === 'monthly') {
+      const key = _args[1];
+      try {
+        // Parse year/month
+        const m = String(key).split('-');
+        const year = Number(m[0]);
+        const month = Number(m[1]);
+        if (!year || !month) return null;
+        const rows = await query(
+          'SELECT total_in, total_out, count FROM monthly_summaries WHERE user_id = $1 AND year = $2 AND month = $3 LIMIT 1',
+          [userId, year, month]
+        );
+        const r = rows && rows[0];
+        if (!r) return null;
+        return {
+          totalInCents: Math.round(Number(r.total_in || 0) * 100),
+          totalOutCents: Math.round(Number(r.total_out || 0) * 100),
+          count: Number(r.count || 0),
+        };
+      } catch (e) {
+        console.warn('Failed to query monthly_summaries', e);
+        return null;
+      }
+    }
     return null;
   } catch (e) {
     return null;
