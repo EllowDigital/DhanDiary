@@ -12,11 +12,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
 import { useNavigation } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 
-// Types and Utils (Mocked based on your context)
-import { RootStackParamList } from '../types/navigation';
+// --- CUSTOM IMPORTS ---
 import { colors } from '../utils/design';
 import { markOnboardingComplete } from '../utils/onboarding';
 
@@ -73,11 +71,13 @@ const OnboardingItem = ({
   index: number;
   scrollX: Animated.Value;
 }) => {
-  const { width, height } = useWindowDimensions();
+  const { width } = useWindowDimensions();
 
   // Responsive sizing logic
   const isSmallScreen = width < 380;
   const isTablet = width > 700;
+  
+  // Circle Sizing
   const circleSize = isTablet ? 360 : isSmallScreen ? 240 : 280;
   const iconSize = isTablet ? 80 : 56;
 
@@ -191,7 +191,10 @@ const Paginator = ({ data, scrollX }: { data: typeof SLIDES; scrollX: Animated.V
         });
 
         return (
-          <Animated.View key={i.toString()} style={[styles.dot, { width: dotWidth, opacity }]} />
+          <Animated.View 
+            key={i.toString()} 
+            style={[styles.dot, { width: dotWidth, opacity }]} 
+          />
         );
       })}
     </View>
@@ -200,13 +203,12 @@ const Paginator = ({ data, scrollX }: { data: typeof SLIDES; scrollX: Animated.V
 
 // --- MAIN SCREEN ---
 const OnboardingScreen = () => {
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'Onboarding'>>();
+  const navigation = useNavigation<any>();
   const [currentIndex, setCurrentIndex] = useState(0);
   const scrollX = useRef(new Animated.Value(0)).current;
   const listRef = useRef<FlatList>(null);
   const [completing, setCompleting] = useState(false);
-  const { width } = useWindowDimensions();
-
+  
   // Optimizing FlatList updates
   const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
     if (viewableItems && viewableItems.length > 0) {
@@ -223,7 +225,7 @@ const OnboardingScreen = () => {
     // Use reset to prevent going back to onboarding
     navigation.reset({
       index: 0,
-      routes: [{ name: 'Auth' }], // Assuming 'Auth' is the login/signup screen
+      routes: [{ name: 'Auth' }], 
     });
   };
 
@@ -237,7 +239,7 @@ const OnboardingScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background || '#F9FAFB'} />
 
       {/* Header: Skip Button */}
       <View style={styles.header}>
@@ -297,7 +299,7 @@ const OnboardingScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background || '#F9FAFB', // Fallback color
+    backgroundColor: colors.background || '#F9FAFB', 
     alignItems: 'center',
     justifyContent: 'center',
   },

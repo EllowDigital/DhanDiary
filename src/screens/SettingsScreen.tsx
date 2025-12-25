@@ -39,7 +39,6 @@ try {
 // Optional: try to require expo-haptics if available (avoid hard dependency)
 let Haptics: any = null;
 try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
   Haptics = require('expo-haptics');
 } catch (e) {
   Haptics = null;
@@ -81,10 +80,9 @@ const SettingsScreen = () => {
   // Clerk Auth (Safe Import)
   let clerkSignOut: any = null;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const clerk = require('@clerk/clerk-expo');
-    const auth = clerk.useAuth();
-    clerkSignOut = auth.signOut;
+  const clerk = require('@clerk/clerk-expo');
+  const auth = clerk.useAuth();
+  clerkSignOut = auth.signOut;
   } catch (e) {
     // Clerk not installed or configured, ignore
   }
