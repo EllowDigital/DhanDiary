@@ -38,6 +38,7 @@ const VerifyEmailScreen = () => {
   const mode = (params.mode as 'signup' | 'signin') || 'signin';
   const firstName = params.firstName as string | undefined;
   const lastName = params.lastName as string | undefined;
+  const emailAddressIdParam = params.emailAddressId as string | undefined;
 
   // Clerk Hooks
   const { isLoaded: signInLoaded, signIn, setActive: setActiveSignIn } = useSignIn();
@@ -49,7 +50,7 @@ const VerifyEmailScreen = () => {
   const [resendDisabled, setResendDisabled] = useState(false);
   const [countdown, setCountdown] = useState(30);
 
-  const resendTimer = useRef<NodeJS.Timeout | null>(null);
+  const resendTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -99,10 +100,12 @@ const VerifyEmailScreen = () => {
 
           if (factor) {
             const { emailAddressId } = factor as any;
-            await signIn.prepareFirstFactor({ strategy: factorStrategy, emailAddressId });
+            await signIn.prepareFirstFactor({ strategy: factorStrategy, emailAddressId } as any);
+          } else if (emailAddressIdParam) {
+            await signIn.prepareFirstFactor({ strategy: factorStrategy, emailAddressId: emailAddressIdParam } as any);
           } else {
-            // Fallback for generic identifier
-            await signIn.prepareFirstFactor({ strategy: factorStrategy, identifier: email });
+            // Fallback: call with minimal body and let Clerk infer (cast to any to satisfy TS)
+            await signIn.prepareFirstFactor({ strategy: factorStrategy } as any);
           }
         }
       } catch (err: any) {
@@ -132,7 +135,7 @@ const VerifyEmailScreen = () => {
     resendTimer.current = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
-          clearInterval(resendTimer.current!);
+          if (resendTimer.current) clearInterval(resendTimer.current);
           setResendDisabled(false);
           return 0;
         }
