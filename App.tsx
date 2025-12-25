@@ -14,6 +14,7 @@ import OnboardingScreen from './src/screens/OnboardingScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
 import VerifyEmailScreen from './src/screens/VerifyEmailScreen';
+import ForgotPasswordScreen from './src/screens/ForgotPasswordScreen';
 import PrivacyPolicyScreen from './src/screens/PrivacyPolicyScreen';
 import TermsScreen from './src/screens/TermsScreen';
 import EulaScreen from './src/screens/EulaScreen';
@@ -66,6 +67,7 @@ const AuthNavigator = () => (
     <AuthStack.Screen name="Login" component={LoginScreen} />
     <AuthStack.Screen name="Register" component={RegisterScreen} />
     <AuthStack.Screen name="VerifyEmail" component={VerifyEmailScreen} />
+    <AuthStack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
     <AuthStack.Screen name="Terms" component={TermsScreen} />
     <AuthStack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
     <AuthStack.Screen name="Eula" component={EulaScreen} />

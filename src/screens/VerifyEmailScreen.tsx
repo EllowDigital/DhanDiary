@@ -102,7 +102,10 @@ const VerifyEmailScreen = () => {
             const { emailAddressId } = factor as any;
             await signIn.prepareFirstFactor({ strategy: factorStrategy, emailAddressId } as any);
           } else if (emailAddressIdParam) {
-            await signIn.prepareFirstFactor({ strategy: factorStrategy, emailAddressId: emailAddressIdParam } as any);
+            await signIn.prepareFirstFactor({
+              strategy: factorStrategy,
+              emailAddressId: emailAddressIdParam,
+            } as any);
           } else {
             // Fallback: call with minimal body and let Clerk infer (cast to any to satisfy TS)
             await signIn.prepareFirstFactor({ strategy: factorStrategy } as any);

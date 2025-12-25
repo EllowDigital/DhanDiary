@@ -20,7 +20,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSignIn, useOAuth, useUser, useAuth } from '@clerk/clerk-expo';
-import { Ionicons, FontAwesome } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
 import { useNavigation } from '@react-navigation/native';
@@ -100,7 +100,6 @@ const LoginScreen = () => {
   }, []);
 
   // --- AUTO-SYNC LOGIC ---
-  // Detects if Clerk already has a session (e.g. recurring user) and syncs them in.
   useEffect(() => {
     if (!isSignedIn || !clerkLoaded || !clerkUser) return;
 
@@ -114,7 +113,6 @@ const LoginScreen = () => {
         if (id && userEmail) {
           await handleSyncAndNavigate(id, userEmail, fullName);
         } else {
-          // Fallback if user data is missing (rare)
           navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
         }
       } catch (e) {
@@ -128,36 +126,26 @@ const LoginScreen = () => {
 
   // --- CORE HANDLERS ---
 
-  /**
-   * Orchestrates the sync between Clerk (Auth) and Neon (Database)
-   * then navigates to the main app.
-   */
   const handleSyncAndNavigate = async (
     userId: string,
     userEmail: string,
     userName?: string | null
   ) => {
-    // 1. Optimistic Local Save (Fast)
     try {
       await saveSession(userId, userName || 'User', userEmail);
     } catch (e) {
       console.warn('Local session save failed', e);
     }
 
-    // 2. Background DB Sync (Reliable)
-    // We start this but don't block navigation on it unless absolutely necessary
     const syncPromise = syncClerkUserToNeon({
       id: userId,
       emailAddresses: [{ emailAddress: userEmail }],
       fullName: userName,
     }).catch((err) => console.warn('Background sync failed', err));
 
-    // 3. Navigate
     setSyncing(false);
     setLoading(false);
     navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
-
-    // 4. Ensure sync finishes
     await syncPromise;
   };
 
@@ -172,9 +160,7 @@ const LoginScreen = () => {
 
       if (result.status === 'complete') {
         await setActive({ session: result.createdSessionId });
-        // The useEffect above will handle the sync and navigation
       } else {
-        // Handle cases where 2FA or Email Verification is required
         if (result.status === 'needs_first_factor' || result.status === 'needs_second_factor') {
           navigation.navigate('VerifyEmail', { email, mode: 'signin' });
         } else {
@@ -186,21 +172,21 @@ const LoginScreen = () => {
         setLoading(false);
       }
     } catch (err: any) {
-      console.error('Sign-in error', err);
-      const firstErr = err?.errors?.[0] || {};
-      const code = firstErr.code;
-      const rawMsg = firstErr.message || err.message || '';
+      const msg = err.errors?.[0]?.message || 'Invalid credentials.';
+      const code = err.errors?.[0]?.code;
 
-      // Friendly messages for common cases
       if (code === 'strategy_for_user_invalid') {
-        Alert.alert('Wrong Method', 'This email is registered via Google/GitHub. Use the social buttons.');
+        Alert.alert(
+          'Wrong Method',
+          'This email uses social login. Please click the Google or GitHub button below.'
+        );
       } else if (code === 'form_identifier_not_found') {
-        Alert.alert('Account Not Found', 'No account exists for this email — please sign up.');
-      } else if (rawMsg.toLowerCase().includes('password') || rawMsg.toLowerCase().includes('credentials')) {
-        Alert.alert('Incorrect Password', 'The password you entered is incorrect. Please try again or reset your password.');
+        Alert.alert(
+          'Account Not Found',
+          'No account found with this email. Please create an account.'
+        );
       } else {
-        // Generic fallback; include Clerk message when available for debugging
-        Alert.alert('Login Failed', rawMsg || 'Unable to sign in. Please try again.');
+        Alert.alert('Login Failed', msg);
       }
       setLoading(false);
     }
@@ -219,9 +205,7 @@ const LoginScreen = () => {
 
       if (createdSessionId && setSession) {
         await setSession({ session: createdSessionId });
-        // The useEffect above will handle the sync and navigation
       } else {
-        // Flow cancelled by user
         setLoading(false);
       }
     } catch (err: any) {
@@ -297,9 +281,6 @@ const LoginScreen = () => {
                     onChangeText={setEmail}
                     autoCapitalize="none"
                     keyboardType="email-address"
-                    textContentType="username"
-                    autoComplete="email"
-                    importantForAutofill="yes"
                   />
                 </View>
 
@@ -318,9 +299,6 @@ const LoginScreen = () => {
                     onChangeText={setPassword}
                     secureTextEntry={!showPassword}
                     autoCapitalize="none"
-                    textContentType="password"
-                    autoComplete="password"
-                    importantForAutofill="yes"
                   />
                   <TouchableOpacity
                     onPress={() => setShowPassword(!showPassword)}
@@ -343,6 +321,14 @@ const LoginScreen = () => {
                 ) : (
                   <Text style={styles.primaryBtnText}>Sign In</Text>
                 )}
+              </TouchableOpacity>
+
+              {/* Forgot Password Link - ADDED HERE */}
+              <TouchableOpacity
+                style={styles.forgotPasswordContainer}
+                onPress={() => navigation.navigate('ForgotPassword', { email })}
+              >
+                <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
               </TouchableOpacity>
 
               {/* Divider */}
@@ -516,6 +502,18 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '700',
+  },
+
+  /* FORGOT PASSWORD */
+  forgotPasswordContainer: {
+    alignItems: 'center',
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  forgotPasswordText: {
+    color: '#64748B',
+    fontSize: 14,
+    fontWeight: '600',
   },
 
   /* DIVIDER */
