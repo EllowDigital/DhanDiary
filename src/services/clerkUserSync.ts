@@ -37,7 +37,14 @@ export const syncClerkUserToNeon = async (clerkUser: {
   const email = String(rawEmail).trim().toLowerCase();
   const name = (clerkUser.fullName || 'User')?.toString().trim() || 'User';
 
-  try {
+  // Retry transient failures a few times to avoid creating offline fallbacks unnecessarily
+  let attempt = 0;
+  const maxAttempts = 3;
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  while (attempt < maxAttempts) {
+    attempt += 1;
+    try {
     // 1. FAST PATH: Check if we already know this Clerk ID
     // This handles the vast majority of logins for existing users.
     const existingUsers = await query<DbUser>(
@@ -93,12 +100,30 @@ export const syncClerkUserToNeon = async (clerkUser: {
       server_version: 0,
       isOfflineFallback: false,
     };
-  } catch (err: any) {
-    // 3. OFFLINE FALLBACK
-    // If the database connection fails (network error, timeout),
-    // we generate a temporary local session so the user can still use the app.
-    console.warn('[Bridge] Database unreachable, falling back to offline session', err);
-    return await createOfflineFallback(clerkUser.id, email, name);
+    } catch (err: any) {
+      // Determine if error is transient
+      const msg = String(err?.message || err || '').toLowerCase();
+      const isTransient =
+        msg.includes('timeout') ||
+        msg.includes('connection') ||
+        msg.includes('network') ||
+        msg.includes('econnreset') ||
+        msg.includes('enotfound') ||
+        msg.includes('502') ||
+        msg.includes('503') ||
+        msg.includes('fetch');
+
+      if (attempt < maxAttempts && isTransient) {
+        const backoff = 500 * attempt;
+        console.warn(`[Bridge] transient error, retrying in ${backoff}ms`, err);
+        await sleep(backoff);
+        continue;
+      }
+
+      // Non-transient or exhausted attempts: fallback to offline
+      console.warn('[Bridge] Database unreachable or permanent error, falling back to offline session', err);
+      return await createOfflineFallback(clerkUser.id, email, name);
+    }
   }
 };
 
