@@ -514,11 +514,20 @@ const StatsScreen = () => {
                 <Text style={styles.sectionTitle}>Spending Trend</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   {stats.dailyTrend?.length > 0 ? (
-                    <DailyTrendChart
-                      data={stats.dailyTrend}
-                      width={Math.max(width - 70, stats.dailyTrend.length * 40)}
-                      currency={currencySymbol}
-                    />
+                    (() => {
+                      // Ensure the chart library has at least two points to render a visible line/area
+                      const trendData =
+                        stats.dailyTrend.length === 1
+                          ? [stats.dailyTrend[0], { ...stats.dailyTrend[0], label: '' }]
+                          : stats.dailyTrend;
+                      return (
+                        <DailyTrendChart
+                          data={trendData}
+                          width={Math.max(width - 70, trendData.length * 40)}
+                          currency={currencySymbol}
+                        />
+                      );
+                    })()
                   ) : (
                     <View style={styles.emptyState}>
                       <Text style={styles.emptyText}>No transactions in this period</Text>

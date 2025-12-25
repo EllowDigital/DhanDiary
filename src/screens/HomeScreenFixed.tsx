@@ -74,10 +74,10 @@ const getGreeting = () => {
 // 1. WAVE CHART
 const WaveChart = React.memo(({ data, width }: { data: number[]; width: number }) => {
   const safeData = data.length >= 2 ? data : [0, 0, 0, 0, 0, 50, 100];
-  const chartWidth = width + 40;
+  const chartWidth = Math.max(width + 20, 300);
 
   return (
-    <View style={{ marginLeft: -25, marginRight: -10, marginBottom: -10, overflow: 'hidden' }}>
+    <View style={{ marginLeft: -10, marginRight: -10, marginBottom: 0, overflow: 'hidden' }}>
       <LineChart
         data={{
           labels: safeData.map(() => ''),
@@ -127,15 +127,15 @@ const CustomPieChart = React.memo(({ data, width }: { data: any[]; width: number
     <View style={styles.pieContainer}>
       <PieChart
         data={data}
-        width={width}
-        height={220}
+        width={Math.max(width, 240)}
+        height={180}
         chartConfig={{
           color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
           decimalPlaces: 0,
         }}
         accessor="population"
         backgroundColor="transparent"
-        paddingLeft={String(width / 4)}
+        paddingLeft={0}
         center={[0, 0]}
         absolute={false}
         hasLegend={false}
@@ -504,6 +504,23 @@ const HomeScreen = () => {
           {chartType === 'pie' && <CustomPieChart data={chartData.pie} width={CHART_WIDTH} />}
           {chartType === 'list' && <RankList data={chartData.pie} total={stats.out} />}
         </View>
+        {/* Small explanatory caption and legend to help users understand the widget */}
+        <View style={styles.chartCaptionContainer}>
+          <Text style={styles.chartCaptionText}>
+            This chart shows your spending over the selected period. The blue area represents daily
+            expenses; switch to the pie view to see category distribution.
+          </Text>
+          <View style={styles.chartLegendRow}>
+            <View style={styles.legendItemSmall}>
+              <View style={[styles.legendDot, { backgroundColor: colors.primary }]} />
+              <Text style={styles.legendLabelSmall}>Daily expenses</Text>
+            </View>
+            <View style={styles.legendItemSmall}>
+              <View style={[styles.legendDot, { backgroundColor: '#10B981' }]} />
+              <Text style={styles.legendLabelSmall}>Income (when visible)</Text>
+            </View>
+          </View>
+        </View>
       </View>
 
       {/* 5. RECENT HEADER */}
@@ -563,6 +580,11 @@ const styles = StyleSheet.create({
   headerContainer: { paddingHorizontal: 20, paddingTop: 10 },
   centerBox: { alignItems: 'center', justifyContent: 'center', padding: 20 },
   emptyText: { color: colors.subText, fontStyle: 'italic' },
+  chartCaptionContainer: { marginTop: 8, paddingHorizontal: 8 },
+  chartCaptionText: { color: colors.subText, fontSize: fontScale(12), lineHeight: 18 },
+  chartLegendRow: { flexDirection: 'row', marginTop: 8, gap: 16 },
+  legendItemSmall: { flexDirection: 'row', alignItems: 'center' },
+  legendLabelSmall: { color: colors.subText, marginLeft: 8, fontSize: fontScale(12) },
 
   // Header
   topBar: {
