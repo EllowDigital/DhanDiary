@@ -142,7 +142,11 @@ export const aggregateWithPreferSummary = async (
            GROUP BY COALESCE(category,'Uncategorized') ORDER BY value DESC LIMIT 8`,
           [userId, start.format('YYYY-MM-DD'), end.format('YYYY-MM-DD')]
         );
-        pie = (catRows || []).map((r: any) => ({ name: r.category, value: Number(r.value || 0), count: Number(r.cnt || 0) }));
+        pie = (catRows || []).map((r: any) => ({
+          name: r.category,
+          value: Number(r.value || 0),
+          count: Number(r.cnt || 0),
+        }));
 
         // Compute maxima and averages
         try {
@@ -168,7 +172,10 @@ export const aggregateWithPreferSummary = async (
         try {
           const days = Math.max(1, end.diff(start, 'day') + 1);
           avgPerDay = days > 0 ? Number(totalOut) / days : 0;
-          savingsRate = Number(totalIn) > 0 ? ((Number(totalIn) - Number(totalOut)) / Number(totalIn)) * 100 : 0;
+          savingsRate =
+            Number(totalIn) > 0
+              ? ((Number(totalIn) - Number(totalOut)) / Number(totalIn)) * 100
+              : 0;
         } catch (e) {
           avgPerDay = 0;
           savingsRate = 0;

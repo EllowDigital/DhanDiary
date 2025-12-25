@@ -16,32 +16,37 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
-import { useEntries } from '../hooks/useEntries'; // Ensure this path is correct
-import { useAuth } from '../hooks/useAuth'; // Ensure this path is correct
-import dayjs from 'dayjs';
-import { colors } from '../utils/design'; // Ensure this path is correct
-import ScreenHeader from '../components/ScreenHeader'; // Ensure this path is correct
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
-import DailyTrendChart from '../components/charts/DailyTrendChart'; // Ensure this path is correct
-import { LocalEntry } from '../db/entries';
-import asyncAggregator from '../utils/asyncAggregator'; // Ensure this path is correct
-import { aggregateWithPreferSummary } from '../services/aggregates';
 import { PieChart } from 'react-native-chart-kit';
+import dayjs from 'dayjs';
 
-// Enable LayoutAnimation for Android
-try {
-  // layout animations are enabled centrally in App initialization
-} catch (e) {}
+// --- CUSTOM IMPORTS (Assumed based on your context) ---
+import { useEntries } from '../hooks/useEntries';
+import { useAuth } from '../hooks/useAuth';
+import { colors } from '../utils/design';
+import ScreenHeader from '../components/ScreenHeader';
+import DailyTrendChart from '../components/charts/DailyTrendChart';
+import { LocalEntry } from '../db/entries';
+import asyncAggregator from '../utils/asyncAggregator';
+import { aggregateWithPreferSummary } from '../services/aggregates';
+
+// --- ANIMATION SETUP ---
+if (Platform.OS === 'android') {
+  if (UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+  }
+}
 
 // --- CONSTANTS ---
 const FILTERS = ['Day', 'Week', '7 Days', '30 Days', 'This Month', 'This Year', 'All'];
 const PIE_COLORS = ['#FF6B6B', '#4ECDC4', '#FFD93D', '#6C5CE7', '#A8E6CF', '#FD79A8'];
 const CHART_CONFIG = {
-  backgroundGradientFrom: '#1E2923',
+  backgroundGradientFrom: '#ffffff',
   backgroundGradientFromOpacity: 0,
-  backgroundGradientTo: '#08130D',
-  backgroundGradientToOpacity: 0.5,
-  color: (opacity = 1) => `rgba(26, 255, 146, ${opacity})`,
+  backgroundGradientTo: '#ffffff',
+  backgroundGradientToOpacity: 0,
+  color: (opacity = 1) => `rgba(37, 99, 235, ${opacity})`, // Primary Blue color
+  strokeWidth: 2,
 };
 
 // --- UTILS ---
@@ -56,53 +61,41 @@ const formatCompact = (val: number, currency: string = 'INR') => {
   if (currency === 'INR' || currency === '₹') {
     if (abs >= 10000000) return prefix + (val / 10000000).toFixed(2) + 'Cr';
     if (abs >= 100000) return prefix + (val / 100000).toFixed(2) + 'L';
-    // For typical amounts (including 1,000), show full localized number instead of compact 'k'
-    return prefix + Math.round(val).toLocaleString();
+    return prefix + Math.round(val).toLocaleString('en-IN');
   } else {
     if (abs >= 1000000000) return prefix + (val / 1000000000).toFixed(2) + 'B';
     if (abs >= 1000000) return prefix + (val / 1000000).toFixed(2) + 'M';
+    if (abs >= 1000) return prefix + (val / 1000).toFixed(1) + 'k';
+    return prefix + Math.round(val).toLocaleString();
   }
-
-  // For other currencies, keep previous compacting behavior for very large numbers,
-  // but prefer readable localized numbers for typical values.
-  if (abs >= 1000) return prefix + Math.round(val).toLocaleString();
-  return prefix + Math.round(val).toLocaleString();
 };
 
-// --- SUB-COMPONENTS (Memoized for Performance) ---
+// --- SUB-COMPONENTS (Memoized) ---
 
-const MetricCard = memo(
-  ({
-    title,
-    value,
-    icon,
-    colorBg,
-    colorIcon,
-    subTitle,
-    style,
-  }: {
-    title: string;
-    value: string;
-    icon: any;
-    colorBg: string;
-    colorIcon: string;
-    subTitle?: string;
-    style?: any;
-  }) => (
-    <View style={[styles.gridCard, style]}>
-      <View style={[styles.iconBox, { backgroundColor: colorBg }]}>
-        <MaterialIcon name={icon} size={20} color={colorIcon} />
-      </View>
-      <View style={{ flex: 1, alignItems: 'center' }}>
-        <Text style={styles.gridLabel}>{title}</Text>
-        <Text style={styles.gridValue} numberOfLines={1} adjustsFontSizeToFit>
-          {value}
-        </Text>
-        {subTitle && <Text style={styles.gridSubLabel}>{subTitle}</Text>}
-      </View>
+interface MetricCardProps {
+  title: string;
+  value: string;
+  icon: any;
+  colorBg: string;
+  colorIcon: string;
+  subTitle?: string;
+  style?: any;
+}
+
+const MetricCard = memo(({ title, value, icon, colorBg, colorIcon, subTitle, style }: MetricCardProps) => (
+  <View style={[styles.gridCard, style]}>
+    <View style={[styles.iconBox, { backgroundColor: colorBg }]}>
+      <MaterialIcon name={icon} size={20} color={colorIcon} />
     </View>
-  )
-);
+    <View style={{ flex: 1, alignItems: 'center' }}>
+      <Text style={styles.gridLabel}>{title}</Text>
+      <Text style={styles.gridValue} numberOfLines={1} adjustsFontSizeToFit>
+        {value}
+      </Text>
+      {subTitle && <Text style={styles.gridSubLabel}>{subTitle}</Text>}
+    </View>
+  </View>
+));
 
 const CategoryRow = memo(({ item, currency }: { item: any; currency: string }) => (
   <View style={styles.catRow}>
@@ -135,11 +128,13 @@ const StatsScreen = () => {
   const [computing, setComputing] = useState(false);
   const [stats, setStats] = useState<any>(null);
 
-  // --- RESPONSIVE CALCS ---
-  const isTablet = width > 600;
+  // --- RESPONSIVE LAYOUT ---
   const maxContentWidth = 600;
-  const containerStyle: any = { width: Math.min(width - 32, maxContentWidth), alignSelf: 'center' };
-  const donutSize = Math.min(width * 0.5, 220); // Responsive chart size
+  const contentWidth = Math.min(width - 32, maxContentWidth);
+  const containerStyle: any = { width: contentWidth, alignSelf: 'center' };
+  
+  // Chart Sizing
+  const donutSize = Math.min(contentWidth * 0.55, 220); 
 
   // --- 1. DATA PREPARATION (Memoized) ---
   const { availableMonths, availableYears } = useMemo(() => {
@@ -216,7 +211,7 @@ const StatsScreen = () => {
     return { rangeStart: start, rangeEnd: end };
   }, [filter, activeMonthKey, activeYear]);
 
-  // --- 3. ROBUST ANALYSIS ENGINE ---
+  // --- 3. ANALYSIS ENGINE ---
   const runAnalysis = async () => {
     // 1. Cancel previous runs
     if (abortControllerRef.current) abortControllerRef.current.abort();
@@ -224,50 +219,46 @@ const StatsScreen = () => {
     abortControllerRef.current = controller;
 
     setComputing(true);
-    setStats(null); // Reset stats for skeleton loader effect
+    // Note: We don't nullify stats immediately to prevent UI flashing, we let it be stale for a moment
 
-    // 2. Wait for interactions/animations to finish
     await new Promise((r) => InteractionManager.runAfterInteractions(() => r(null)));
 
     try {
       let result;
-      // Handle Massive Data (Trillion Scale Logic)
-      // Prefer server-side precomputed summaries; fall back to streaming aggregation
+      // Prefer server-side summary if user is synced, otherwise calculate locally
       if (user?.id) {
         result = await aggregateWithPreferSummary(user.id, rangeStart, rangeEnd, {
           signal: controller.signal,
         });
-      } else if (filter === 'All' || entries.length > 10000) {
-        // Stream entries in pages from in-memory `entries` (online-only).
+      } else if (filter === 'All' || entries.length > 5000) {
+        // Stream entries in pages for heavy loads (Offline mode)
         async function* pagesFromEntries(items: LocalEntry[], pageSize: number) {
           for (let i = 0; i < items.length; i += pageSize) {
-            // Respect abort signal by yielding in microtasks
             const slice = items.slice(i, i + pageSize);
             yield slice;
-            await Promise.resolve();
+            await Promise.resolve(); // Yield to JS event loop
           }
         }
-
         const pages = pagesFromEntries(entries as LocalEntry[], 1000);
         result = await asyncAggregator.aggregateFromPages(pages, rangeStart, rangeEnd, {
           signal: controller.signal,
         });
       } else {
+        // Standard in-memory calculation
         result = await asyncAggregator.aggregateForRange(entries, rangeStart, rangeEnd, {
           signal: controller.signal,
         });
       }
 
       if (result && !controller.signal.aborted) {
-        // Safe Number Parsing
-        const totalIn = Number(result.totalIn);
-        const totalOut = Number(result.totalOut);
+        const totalIn = Number(result.totalIn || 0);
+        const totalOut = Number(result.totalOut || 0);
         const savingsRate = totalIn > 0 ? ((totalIn - totalOut) / totalIn) * 100 : 0;
         const daysDiff = Math.max(1, rangeEnd.diff(rangeStart, 'day') + 1);
 
-        // --- ANDROID CRASH PROTECTION: PIE CHART ---
-        // Android SVG cannot handle too many paths. Limit to Top 4 + Others.
+        // --- Pie Chart Safe Data Construction ---
         let pieDataSafe = result.pieData || [];
+        // Limit to Top 4 categories + "Others"
         if (pieDataSafe.length > 4) {
           const top4 = pieDataSafe.slice(0, 4);
           const othersValue = pieDataSafe
@@ -299,25 +290,23 @@ const StatsScreen = () => {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         setStats(finalStats);
 
-        // Run Entry Animation
         Animated.parallel([
           Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
           Animated.spring(slideAnim, { toValue: 0, damping: 12, useNativeDriver: true }),
         ]).start();
       }
-    } catch (e) {
-      if ((e as any)?.message !== 'Aborted') console.warn('Analysis Error:', e);
+    } catch (e: any) {
+      if (e?.message !== 'Aborted') console.warn('Analysis Error:', e);
     } finally {
       if (abortControllerRef.current === controller) setComputing(false);
     }
   };
 
   useEffect(() => {
-    // Depend on stable primitives only to avoid re-creating the effect when
-    // array/object identities change across renders (prevents update loops).
-    const shouldRun = true;
-    if (!shouldRun) return;
     runAnalysis();
+    return () => {
+       if (abortControllerRef.current) abortControllerRef.current.abort();
+    };
   }, [filter, rangeStart?.valueOf(), rangeEnd?.valueOf(), entries?.length, user?.id]);
 
   // --- RENDER HELPERS ---
@@ -514,20 +503,11 @@ const StatsScreen = () => {
                 <Text style={styles.sectionTitle}>Spending Trend</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   {stats.dailyTrend?.length > 0 ? (
-                    (() => {
-                      // Ensure the chart library has at least two points to render a visible line/area
-                      const trendData =
-                        stats.dailyTrend.length === 1
-                          ? [stats.dailyTrend[0], { ...stats.dailyTrend[0], label: '' }]
-                          : stats.dailyTrend;
-                      return (
-                        <DailyTrendChart
-                          data={trendData}
-                          width={Math.max(width - 70, trendData.length * 40)}
-                          currency={currencySymbol}
-                        />
-                      );
-                    })()
+                    <DailyTrendChart
+                      data={stats.dailyTrend.length === 1 ? [stats.dailyTrend[0], {...stats.dailyTrend[0], label: ''}] : stats.dailyTrend}
+                      width={Math.max(contentWidth - 60, stats.dailyTrend.length * 40)}
+                      currency={currencySymbol}
+                    />
                   ) : (
                     <View style={styles.emptyState}>
                       <Text style={styles.emptyText}>No transactions in this period</Text>
@@ -545,17 +525,17 @@ const StatsScreen = () => {
                     <View style={styles.chartWrapper}>
                       <PieChart
                         data={stats.pieData}
-                        width={donutSize + 60} // Add padding for labels
+                        width={donutSize + 60} // Padding for labels
                         height={donutSize}
                         chartConfig={CHART_CONFIG}
                         accessor="population"
                         backgroundColor="transparent"
                         paddingLeft="15"
                         hasLegend={false}
-                        center={[donutSize / 4, 0]}
+                        center={[donutSize / 4, 0]} // Correct centering for library
                         absolute
                       />
-                      {/* Responsive Hole Overlay */}
+                      {/* Hole Overlay */}
                       <View
                         style={[
                           styles.donutHole,
@@ -563,7 +543,8 @@ const StatsScreen = () => {
                             width: donutSize * 0.6,
                             height: donutSize * 0.6,
                             borderRadius: (donutSize * 0.6) / 2,
-                            left: donutSize / 4 + donutSize * 0.2 + 15, // Mathematical centering for react-native-chart-kit weirdness
+                            // Dynamic centering relative to the library's quirks
+                            left: (donutSize / 4) + (donutSize * 0.2) + 15,
                           },
                         ]}
                       >
@@ -655,7 +636,6 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     padding: 20,
     marginBottom: 16,
-    // Robust Shadows
     elevation: 3,
     shadowColor: '#64748B',
     shadowOpacity: 0.1,
@@ -688,7 +668,7 @@ const styles = StyleSheet.create({
   badgeText: { fontSize: fontScale(10), fontWeight: '800', textTransform: 'uppercase' },
 
   // --- GRIDS ---
-  gridContainer: { flexDirection: 'row', gap: 12, marginBottom: 16 }, // Modern 'gap' works on newer RN, falls back gracefully usually
+  gridContainer: { flexDirection: 'row', gap: 12, marginBottom: 16 },
   gridCard: {
     backgroundColor: '#FFF',
     borderRadius: 20,
@@ -719,7 +699,7 @@ const styles = StyleSheet.create({
 
   // --- CHARTS & CATS ---
   sectionTitle: { fontSize: fontScale(16), fontWeight: '800', color: '#1E293B', marginBottom: 12 },
-  dualChartContainer: { gap: 16 }, // Will stack vertically
+  dualChartContainer: { gap: 16 },
   chartWrapper: { alignItems: 'center', justifyContent: 'center', position: 'relative' },
   donutHole: {
     position: 'absolute',

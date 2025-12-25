@@ -8,42 +8,56 @@ import {
   Text,
   Platform,
   Animated,
-  Easing,
   KeyboardAvoidingView,
   StatusBar,
   Keyboard,
   LayoutAnimation,
   UIManager,
-  Switch, // Added Switch
+  Switch,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Input, Button } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useUser } from '@clerk/clerk-expo';
 import { useNavigation } from '@react-navigation/native';
-import * as SecureStore from 'expo-secure-store'; // Added
-import * as LocalAuthentication from 'expo-local-authentication'; // Added
+import * as SecureStore from 'expo-secure-store';
+import * as LocalAuthentication from 'expo-local-authentication';
 
-// Logic Imports
-import { useAuth as useOfflineAuth } from '../hooks/useAuth'; // renaming to avoid confusion if needed, though we use Clerk mostly
+// --- CUSTOM HOOKS & SERVICES (Assumed paths) ---
 import { useToast } from '../context/ToastContext';
 import { colors } from '../utils/design';
 import ScreenHeader from '../components/ScreenHeader';
 import { deleteAccount } from '../services/auth';
-import { syncClerkUserToNeon } from '../services/clerkUserSync';
 import UserAvatar from '../components/UserAvatar';
 
-// layout animations are enabled centrally in App initialization
+// Enable LayoutAnimation for Android
+if (Platform.OS === 'android') {
+  if (UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+  }
+}
+
+// --- TYPES ---
+interface CardItem {
+  id: string;
+  title: string;
+  description: string;
+  icon: keyof typeof MaterialIcon.glyphMap;
+  bgColor: string;
+  iconColor: string;
+}
 
 // --- SUB-COMPONENT: CUSTOM INPUT ---
 const CustomInput = ({ containerStyle, ...props }: any) => (
   <Input
     {...props}
+    autoCapitalize="none"
     containerStyle={[styles.inputContainer, containerStyle]}
     inputContainerStyle={styles.inputField}
     inputStyle={styles.inputText}
     labelStyle={styles.inputLabel}
-    placeholderTextColor={colors.muted}
+    placeholderTextColor={colors.muted || '#94A3B8'}
     selectionColor={colors.primary}
     renderErrorMessage={false}
   />
@@ -56,28 +70,23 @@ const ExpandableCard = ({
   onToggle,
   children,
 }: {
-  item: any;
+  item: CardItem;
   isExpanded: boolean;
   onToggle: () => void;
   children: React.ReactNode;
 }) => {
-  const animatedController = useRef(new Animated.Value(0)).current;
+  // We use Animated for the arrow rotation, but LayoutAnimation for height (smoother)
+  const rotateAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.timing(animatedController, {
+    Animated.timing(rotateAnim, {
       toValue: isExpanded ? 1 : 0,
-      duration: 300,
-      useNativeDriver: false,
-      easing: Easing.bezier(0.4, 0.0, 0.2, 1),
+      duration: 250,
+      useNativeDriver: true,
     }).start();
   }, [isExpanded]);
 
-  const bodyHeight = animatedController.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 600],
-  });
-
-  const arrowRotation = animatedController.interpolate({
+  const arrowRotation = rotateAnim.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '180deg'],
   });
@@ -95,41 +104,36 @@ const ExpandableCard = ({
           <MaterialIcon name={item.icon} size={22} color={item.iconColor} />
         </View>
         <View style={styles.headerTextContainer}>
-          <Text style={[styles.cardTitle, item.id === 'delete' && { color: colors.accentRed }]}>
+          <Text style={[styles.cardTitle, item.id === 'delete' && { color: colors.danger || '#EF4444' }]}>
             {item.title}
           </Text>
           <Text style={styles.cardDesc}>{item.description}</Text>
         </View>
         <Animated.View style={{ transform: [{ rotate: arrowRotation }] }}>
-          <MaterialIcon name="keyboard-arrow-down" size={24} color={colors.muted} />
+          <MaterialIcon name="keyboard-arrow-down" size={24} color={colors.muted || '#64748B'} />
         </Animated.View>
       </TouchableOpacity>
 
-      <Animated.View
-        style={{ maxHeight: bodyHeight, overflow: 'hidden', opacity: animatedController }}
-      >
-        <View style={styles.cardBody}>{children}</View>
-      </Animated.View>
+      {isExpanded && (
+        <View style={styles.cardBody}>
+          {children}
+        </View>
+      )}
     </View>
   );
 };
 
+// --- MAIN SCREEN ---
 const AccountManagementScreen = () => {
   const { user, isLoaded } = useUser();
   const navigation = useNavigation<any>();
   const { showToast } = useToast();
 
+  // State
   const [activeCard, setActiveCard] = useState<string | null>(null);
+  const [isLoadingBiometrics, setIsLoadingBiometrics] = useState(true);
 
-  // --- FORM STATE ---
-
-  // NOTE: Clerk handles email updates via a verification flow.
-  // Simple update isn't always allowed without verifying new email.
-  // For now, we will disable email editing or show it as read-only/info.
-  // Or keep it if we want to implement the flow (but it's complex).
-  // Let's keep it primarily read-only for now to avoid complexity in this step.
-
-  // Password State
+  // Password Form State
   const [curPass, setCurPass] = useState('');
   const [newPass, setNewPass] = useState('');
   const [confirmPass, setConfirmPass] = useState('');
@@ -140,10 +144,7 @@ const AccountManagementScreen = () => {
   // Biometric State
   const [biometricsEnabled, setBiometricsEnabled] = useState(false);
   const [hasBiometricHardware, setHasBiometricHardware] = useState(false);
-
-  // Users from OAuth might not have a password.
-  // Clerk provides `user.passwordEnabled` boolean.
-  const hasPassword = user?.passwordEnabled;
+  const [biometricType, setBiometricType] = useState<string>('Biometrics');
 
   // Loaders
   const [savingPasswordState, setSavingPasswordState] = useState(false);
@@ -151,83 +152,106 @@ const AccountManagementScreen = () => {
 
   // Animation for Entrance
   const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  // Has Password check (Clerk specific)
+  const hasPassword = user?.passwordEnabled;
+
   useEffect(() => {
+    // Entrance Animation
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 600,
       useNativeDriver: true,
     }).start();
 
-    // Check Biometrics on mount
     checkBiometrics();
   }, []);
 
-  // name is not editable from the app UI
-
   const checkBiometrics = async () => {
-    const hasHw = await LocalAuthentication.hasHardwareAsync();
-    const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-    setHasBiometricHardware(hasHw && isEnrolled);
+    try {
+      const hasHw = await LocalAuthentication.hasHardwareAsync();
+      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+      
+      setHasBiometricHardware(hasHw && isEnrolled);
 
-    if (hasHw) {
-      const enabled = await SecureStore.getItemAsync('BIOMETRIC_ENABLED');
-      setBiometricsEnabled(enabled === 'true');
+      if (hasHw && isEnrolled) {
+        // Determine type (FaceID vs TouchID) for better UI text
+        const types = await LocalAuthentication.supportedAuthenticationTypesAsync();
+        if (types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) {
+          setBiometricType('Face ID');
+        } else if (types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) {
+          setBiometricType('Fingerprint');
+        }
+
+        const enabled = await SecureStore.getItemAsync('BIOMETRIC_ENABLED');
+        setBiometricsEnabled(enabled === 'true');
+      }
+    } catch (e) {
+      console.log('Biometric check error', e);
+    } finally {
+      setIsLoadingBiometrics(false);
     }
   };
 
   const toggleBiometrics = async (val: boolean) => {
-    if (val) {
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Confirm Identity',
-      });
-      if (!result.success) return;
+    try {
+      if (val) {
+        // If turning ON, verify identity first
+        const result = await LocalAuthentication.authenticateAsync({
+          promptMessage: `Enable ${biometricType}`,
+          fallbackLabel: 'Use Passcode',
+        });
+        if (!result.success) return;
+      }
+      
+      setBiometricsEnabled(val);
+      if (val) {
+        await SecureStore.setItemAsync('BIOMETRIC_ENABLED', 'true');
+        showToast(`${biometricType} Enabled`);
+      } else {
+        await SecureStore.deleteItemAsync('BIOMETRIC_ENABLED');
+        showToast(`${biometricType} Disabled`);
+      }
+    } catch (e) {
+      showToast('Failed to update security settings');
     }
-    setBiometricsEnabled(val);
-    await SecureStore.setItemAsync('BIOMETRIC_ENABLED', String(val));
-    if (!val) await SecureStore.deleteItemAsync('BIOMETRIC_ENABLED');
-    showToast(val ? 'App Lock Enabled' : 'App Lock Disabled');
   };
 
   const toggleCard = (id: string) => {
+    // Configure LayoutAnimation for smooth expand/collapse
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setActiveCard((prev) => (prev === id ? null : id));
     if (activeCard !== id) Keyboard.dismiss();
   };
 
-  // --- HANDLERS ---
-  // name update handled outside the app; no UI to edit name here
-
   const handlePasswordSave = useCallback(async () => {
-    if (!newPass || !confirmPass)
-      return Alert.alert('Missing Fields', 'Please fill in the new password fields.');
+    if (!newPass || !confirmPass) return Alert.alert('Missing Fields', 'Please fill in the new password fields.');
     if (newPass !== confirmPass) return Alert.alert('Mismatch', 'New passwords do not match');
     if (newPass.length < 8) return Alert.alert('Weak Password', 'Minimum 8 characters required');
-    if (hasPassword && !curPass)
-      return Alert.alert('Missing Field', 'Current password is required.');
+    if (hasPassword && !curPass) return Alert.alert('Missing Field', 'Current password is required.');
 
     if (!user) return;
 
     setSavingPasswordState(true);
     try {
       if (hasPassword) {
-        // Change Password
         await user.updatePassword({
           currentPassword: curPass,
           newPassword: newPass,
         });
         showToast('Password changed successfully');
       } else {
-        // Set Password (for OAuth users)
         await user.updatePassword({
           newPassword: newPass,
         });
         showToast('Password set successfully!');
       }
 
+      // Reset form
       setCurPass('');
       setNewPass('');
       setConfirmPass('');
-      toggleCard('');
+      toggleCard(''); // Close card
     } catch (err: any) {
       Alert.alert('Error', err.errors ? err.errors[0]?.message : err.message);
     } finally {
@@ -236,32 +260,40 @@ const AccountManagementScreen = () => {
   }, [curPass, newPass, confirmPass, hasPassword, user]);
 
   const handleDelete = useCallback(async () => {
-    Alert.alert('Delete Account?', 'This is permanent. All your data will be wiped.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete Forever',
-        style: 'destructive',
-        onPress: async () => {
-          if (!user) return;
-          setDeletingAccount(true);
-          try {
-            await user.delete(); // Clerk delete
-            await deleteAccount(); // Clean up Neon/Local data (auth.ts helper)
-
-            showToast('Account deleted');
-            // Navigation handled by auth state change usually, but explicit reset good too
-            navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
-          } catch (err: any) {
-            Alert.alert('Error', err.errors ? err.errors[0]?.message : err.message);
-          } finally {
-            setDeletingAccount(false);
-          }
+    Alert.alert(
+      'Delete Account?',
+      'This action is irreversible. All your data will be permanently wiped.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Forever',
+          style: 'destructive',
+          onPress: async () => {
+            if (!user) return;
+            setDeletingAccount(true);
+            try {
+              await user.delete(); // Clerk
+              await deleteAccount(); // Local DB cleanup
+              showToast('Account deleted');
+              navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
+            } catch (err: any) {
+              Alert.alert('Error', err.errors ? err.errors[0]?.message : err.message);
+            } finally {
+              setDeletingAccount(false);
+            }
+          },
         },
-      },
-    ]);
+      ]
+    );
   }, [user]);
 
-  const userInitial = user?.firstName?.trim().charAt(0).toUpperCase() || 'U';
+  if (!isLoaded) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.mainContainer}>
@@ -285,21 +317,21 @@ const AccountManagementScreen = () => {
             keyboardShouldPersistTaps="handled"
           >
             <Animated.View style={{ opacity: fadeAnim }}>
-              {/* HERO PROFILE ROW */}
+              
+              {/* 1. HERO PROFILE ROW */}
               <View style={styles.heroRow}>
-                <View style={[styles.heroAvatar, { width: 56, height: 56, borderRadius: 28 }]}>
-                  <View style={{ position: 'relative' }}>
-                    <UserAvatar
-                      size={48}
-                      name={user?.fullName || user?.firstName}
-                      imageUrl={user?.imageUrl || (user as any)?.image}
-                    />
-                    {user?.emailAddresses.some((e) => e.verification.status === 'verified') && (
-                      <View style={styles.verifiedBadge}>
-                        <MaterialIcon name="check" size={12} color="white" />
-                      </View>
-                    )}
-                  </View>
+                <View style={styles.heroAvatar}>
+                  <UserAvatar
+                    size={48}
+                    name={user?.fullName || user?.firstName}
+                    imageUrl={user?.imageUrl || (user as any)?.image}
+                  />
+                  {/* Verified Badge */}
+                  {user?.emailAddresses.some((e) => e.verification.status === 'verified') && (
+                    <View style={styles.verifiedBadge}>
+                      <MaterialIcon name="check" size={12} color="white" />
+                    </View>
+                  )}
                 </View>
 
                 <View style={styles.heroInfo}>
@@ -307,23 +339,29 @@ const AccountManagementScreen = () => {
                   <Text style={styles.heroEmail}>
                     {user?.primaryEmailAddress?.emailAddress || 'No email linked'}
                   </Text>
-                  <Text style={styles.authMethod}>
-                    {hasPassword ? 'Password Authenticated' : 'Social Login'}
-                  </Text>
+                  <View style={styles.authMethodContainer}>
+                    <MaterialIcon 
+                      name={hasPassword ? "lock" : "public"} 
+                      size={12} 
+                      color={colors.primary} 
+                      style={{ marginRight: 4 }}
+                    />
+                    <Text style={styles.authMethodText}>
+                      {hasPassword ? 'Password Secured' : 'Social Login'}
+                    </Text>
+                  </View>
                 </View>
               </View>
-
-              {/* Name editing hidden in UI by request */}
 
               {/* 2. PASSWORD SECTION */}
               <ExpandableCard
                 item={{
                   id: 'password',
                   title: hasPassword ? 'Change Password' : 'Set Password',
-                  description: hasPassword ? 'Update security' : 'Add password login',
+                  description: hasPassword ? 'Update your login password' : 'Secure account with a password',
                   icon: hasPassword ? 'lock-outline' : 'lock-open',
-                  bgColor: '#FEF3C7',
-                  iconColor: colors.accentOrange,
+                  bgColor: '#FFF7ED', // Orange Tint
+                  iconColor: '#EA580C',
                 }}
                 isExpanded={activeCard === 'password'}
                 onToggle={() => toggleCard('password')}
@@ -331,6 +369,7 @@ const AccountManagementScreen = () => {
                 {hasPassword && (
                   <CustomInput
                     label="Current Password"
+                    placeholder="Enter current password"
                     secureTextEntry={!showCur}
                     value={curPass}
                     onChangeText={setCurPass}
@@ -346,6 +385,7 @@ const AccountManagementScreen = () => {
                 )}
                 <CustomInput
                   label="New Password"
+                  placeholder="Min 8 characters"
                   secureTextEntry={!showNew}
                   value={newPass}
                   onChangeText={setNewPass}
@@ -359,7 +399,8 @@ const AccountManagementScreen = () => {
                   }
                 />
                 <CustomInput
-                  label="Confirm New Password"
+                  label="Confirm Password"
+                  placeholder="Re-enter new password"
                   secureTextEntry={!showConfirm}
                   value={confirmPass}
                   onChangeText={setConfirmPass}
@@ -382,23 +423,25 @@ const AccountManagementScreen = () => {
               </ExpandableCard>
 
               {/* 3. APP SECURITY (BIOMETRICS) */}
-              {hasBiometricHardware && (
+              {!isLoadingBiometrics && hasBiometricHardware && (
                 <ExpandableCard
                   item={{
                     id: 'app_security',
-                    title: 'App Lock',
-                    description: 'Biometric security',
-                    icon: 'shield',
-                    bgColor: '#E0E7FF',
+                    title: 'App Security',
+                    description: `Secure using ${biometricType}`,
+                    icon: 'fingerprint',
+                    bgColor: '#EFF6FF', // Blue Tint
                     iconColor: colors.primary,
                   }}
                   isExpanded={activeCard === 'app_security'}
                   onToggle={() => toggleCard('app_security')}
                 >
                   <View style={styles.switchRow}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.switchLabel}>Biometric Unlock</Text>
-                      <Text style={styles.switchDesc}>Require FaceID/TouchID to open app</Text>
+                    <View style={{ flex: 1, paddingRight: 10 }}>
+                      <Text style={styles.switchLabel}>Enable {biometricType}</Text>
+                      <Text style={styles.switchDesc}>
+                        Require {biometricType} authentication to open the app.
+                      </Text>
                     </View>
                     <Switch
                       value={biometricsEnabled}
@@ -415,36 +458,31 @@ const AccountManagementScreen = () => {
                 item={{
                   id: 'delete',
                   title: 'Delete Account',
-                  description: 'Permanently remove data',
+                  description: 'Permanently remove all data',
                   icon: 'delete-outline',
-                  bgColor: '#FEE2E2',
-                  iconColor: colors.accentRed,
+                  bgColor: '#FEF2F2', // Red Tint
+                  iconColor: '#EF4444',
                 }}
                 isExpanded={activeCard === 'delete'}
                 onToggle={() => toggleCard('delete')}
               >
                 <View style={styles.dangerZone}>
-                  <Text style={styles.dangerText}>
-                    Warning: This action is irreversible. All your transactions, settings, and data
-                    will be permanently deleted.
-                  </Text>
+                  <View style={styles.dangerAlert}>
+                    <MaterialIcon name="warning" size={20} color="#991B1B" style={{ marginBottom: 8 }} />
+                    <Text style={styles.dangerText}>
+                      This action will permanently delete your account, transactions, and settings. This cannot be undone.
+                    </Text>
+                  </View>
                   <Button
-                    title="Delete Forever"
+                    title="Delete Account Forever"
                     buttonStyle={styles.destructiveBtn}
                     onPress={handleDelete}
                     loading={deletingAccount}
-                    icon={
-                      <MaterialIcon
-                        name="delete-forever"
-                        size={20}
-                        color="white"
-                        style={{ marginRight: 8 }}
-                      />
-                    }
                   />
                 </View>
               </ExpandableCard>
 
+              {/* Bottom Spacer */}
               <View style={{ height: 100 }} />
             </Animated.View>
           </ScrollView>
@@ -458,10 +496,15 @@ const AccountManagementScreen = () => {
 const styles = StyleSheet.create({
   mainContainer: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.background || '#F8FAFC',
   },
   safeArea: {
     flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   scrollContent: {
     padding: 20,
@@ -472,45 +515,33 @@ const styles = StyleSheet.create({
   heroRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.card,
+    backgroundColor: '#fff',
     borderRadius: 20,
     padding: 20,
     marginBottom: 24,
-    borderWidth: 1,
-    borderColor: colors.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 8,
-    elevation: 2,
+    // Soft Shadow
+    shadowColor: '#64748B',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
   },
   heroAvatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#EEF2FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 16,
     position: 'relative',
-  },
-  heroAvatarText: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: colors.primary,
+    marginRight: 16,
   },
   verifiedBadge: {
     position: 'absolute',
-    bottom: 0,
-    right: 0,
-    backgroundColor: colors.primary,
+    bottom: -2,
+    right: -2,
+    backgroundColor: colors.primary || '#3B82F6',
     borderRadius: 10,
     width: 20,
     height: 20,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: colors.card,
+    borderColor: '#fff',
   },
   heroInfo: {
     flex: 1,
@@ -518,28 +549,27 @@ const styles = StyleSheet.create({
   heroName: {
     fontSize: 20,
     fontWeight: '700',
-    color: colors.text,
+    color: colors.text || '#1E293B',
     marginBottom: 4,
   },
   heroEmail: {
     fontSize: 14,
-    color: colors.muted,
+    color: colors.muted || '#64748B',
+    marginBottom: 8,
   },
-  emailNote: {
-    // removed: email note text hidden from UI
-    display: 'none',
-  },
-  authMethod: {
-    fontSize: 12,
-    color: colors.primary,
-    fontWeight: '600',
-    marginTop: 6,
-    backgroundColor: '#EEF2FF',
+  authMethodContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
     alignSelf: 'flex-start',
     paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-    overflow: 'hidden',
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  authMethodText: {
+    fontSize: 12,
+    color: colors.primary || '#3B82F6',
+    fontWeight: '600',
   },
 
   /* SECURITY TOGGLE */
@@ -547,30 +577,38 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingVertical: 4,
   },
   switchLabel: {
     fontSize: 16,
     fontWeight: '600',
-    color: colors.text,
-    marginBottom: 2,
+    color: colors.text || '#1E293B',
+    marginBottom: 4,
   },
   switchDesc: {
     fontSize: 13,
-    color: colors.muted,
+    color: colors.muted || '#64748B',
+    lineHeight: 18,
   },
 
   /* CARDS */
   card: {
-    backgroundColor: colors.card,
+    backgroundColor: '#fff',
     borderRadius: 16,
     marginBottom: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    // Slight shadow
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
   },
   cardExpanded: {
-    borderColor: colors.primary, // Highlight border when open
-    backgroundColor: '#fff',
+    borderColor: colors.primary || '#3B82F6',
+    elevation: 2,
   },
   cardDanger: {
     borderColor: '#FECACA',
@@ -594,18 +632,18 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: colors.text,
+    color: colors.text || '#1E293B',
     marginBottom: 2,
   },
   cardDesc: {
     fontSize: 13,
-    color: colors.muted,
+    color: colors.muted || '#64748B',
   },
   cardBody: {
     paddingHorizontal: 16,
     paddingBottom: 20,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopColor: '#F1F5F9',
     paddingTop: 16,
   },
 
@@ -615,25 +653,27 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   inputField: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#F8FAFC',
     borderBottomWidth: 0,
     borderRadius: 12,
     paddingHorizontal: 12,
     height: 50,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   inputText: {
     fontSize: 15,
-    color: colors.text,
+    color: colors.text || '#1E293B',
   },
   inputLabel: {
     fontSize: 13,
-    color: colors.text,
+    color: colors.text || '#1E293B',
     fontWeight: '600',
     marginBottom: 6,
     marginLeft: 4,
   },
   primaryBtn: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primary || '#3B82F6',
     borderRadius: 12,
     paddingVertical: 14,
     marginTop: 8,
@@ -647,19 +687,25 @@ const styles = StyleSheet.create({
   dangerZone: {
     alignItems: 'center',
   },
+  dangerAlert: {
+    backgroundColor: '#FEF2F2',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 16,
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
   dangerText: {
-    color: '#7f1d1d',
+    color: '#991B1B',
     textAlign: 'center',
     fontSize: 13,
-    marginBottom: 16,
-    backgroundColor: '#FEF2F2',
-    padding: 12,
-    borderRadius: 8,
-    width: '100%',
     lineHeight: 20,
+    fontWeight: '500',
   },
   destructiveBtn: {
-    backgroundColor: colors.accentRed,
+    backgroundColor: '#EF4444',
     paddingVertical: 12,
     borderRadius: 12,
     width: '100%',
