@@ -150,6 +150,18 @@ const AddEntryScreen: React.FC = () => {
     }
   }, [editingParamId, entries]);
 
+  // Reset form when opened in Add mode (no editing param)
+  useEffect(() => {
+    if (!editingParamId) {
+      setEditingLocalId(null);
+      setAmount('');
+      setNote('');
+      setTypeIndex(route?.params?.type === 'in' ? 1 : 0);
+      setCategory(DEFAULT_CATEGORY);
+      setDate(new Date());
+    }
+  }, [editingParamId]);
+
   // --- HANDLERS ---
   const handleSave = () => {
     if (!user?.id) {
