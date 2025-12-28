@@ -1,67 +1,68 @@
-# 📘 DhanDiary – Simple Personal Finance Tracker
+# 📘 DhanDiary – Personal Finance Tracker
 
-**DhanDiary** is a clean, fast, and offline-first **income & expense manager** built using **React Native (Expo)**.  
-Manage your daily finances effortlessly with a beautiful dashboard, history tracking, categories, and secure cloud backup.
+**DhanDiary** is a robust, offline-first **income & expense manager** built using **React Native (Expo)**. Designed for simplicity and performance, it allows users to manage daily finances effortlessly through an intuitive dashboard, comprehensive history tracking, and secure cloud synchronization.
 
 <div align="center">
 
-<a href="https://sourceforge.net/projects/dhandiary/files/latest/download">
-  <img alt="Download DhanDiary" src="https://a.fsdn.com/con/app/sf-download-button" width=276 height=48>
-</a>
+[![Download on Indus Appstore](https://img.shields.io/badge/Download_on-Indus_Appstore-orange?style=for-the-badge&logo=android)](https://www.indusappstore.com/apps/finance/dhandiary/com.ellowdigital.dhandiary/?page=details&id=com.ellowdigital.dhandiary)
 
 </div>
 
 ---
 
-## ✨ Features
+## ✨ Key Features
 
-- 🧾 **Smart Tracking:** Track income & expenses with notes.
-- 📊 **Analytics:** Clean analytics & spending overview.
-- 💾 **Offline-First:** Works offline with auto-sync when online.
-- 🔐 **Secure:** Encrypted cloud backup via NeonDB.
-- 📚 **History:** Full transaction history log.
-- ⚡ **Performance:** Lightweight, smooth & beginner-friendly UI.
+- **🧾 Smart Transaction Tracking:** Easily record income and expenses with detailed notes.
+- **📊 Insightful Analytics:** Visualize spending habits with clean charts and overviews.
+- **💾 Offline Capability:** Full functionality without internet access; auto-syncs when online.
+- **🔐 Secure Cloud Backup:** Optional, encrypted cloud backups powered by NeonDB.
+- **📚 Comprehensive History:** Access detailed logs of all past transactions.
+- **⚡ Optimized Performance:** Lightweight architecture ensuring a smooth user experience.
 
 ---
 
-## 🛠️ Tech Stack
+## 🛠️ Technical Stack
 
 - **Framework:** React Native (Expo)
 - **Routing:** Expo Router
-- **Database:** NeonDB (Cloud Backup)
-- **Local Storage:** Async Storage
+- **Database (Cloud):** NeonDB (PostgreSQL)
+- **Local Storage:** SQLite / Async Storage
 - **Language:** TypeScript / JavaScript
 
 ---
 
-## 🔒 Privacy
+## 🔒 Privacy & Security
 
-Your privacy is our priority:
+User privacy is the cornerstone of DhanDiary:
 
-- **User data is encrypted.**
-- **No ads, no trackers.**
-- Cloud backup is optional & secure.
-- **Privacy Policy:** [Add your link here]
-
----
-
-## 📥 Download APK
-
-You can download the latest stable APK directly from the link below or via SourceForge above.
-
-👉 **[Download via GitHub](https://github.com/EllowDigital/DhanDiary/blob/master/shareapp-link.txt)**
+- **End-to-End Encryption:** User data is encrypted for maximum security.
+- **Ad-Free Experience:** No advertisements or third-party trackers.
+- **Optional Cloud Sync:** Users retain full control over whether their data is backed up to the cloud.
 
 ---
 
-## 👨‍💻 Developer
+## 📥 Installation
 
-**Sarwan – EllowDigital**
+You can download the latest stable version of DhanDiary directly from the Indus Appstore or access the APK via GitHub.
 
-- 📧 **Developer Email:** sarwanyadav6174@gmail.com
-- 📧 **Team Email:** ellowdigitalindia@gmail.com
+### **[👉 Download on Indus Appstore](https://www.indusappstore.com/apps/finance/dhandiary/com.ellowdigital.dhandiary/?page=details&id=com.ellowdigital.dhandiary)**
+
+*Alternative:*
+[Download APK via GitHub](https://github.com/EllowDigital/DhanDiary/blob/master/shareapp-link.txt)
 
 ---
 
-## ⭐ Support
+## 👨‍💻 Contact & Support
 
-If you like this project and find it useful, please consider giving it a ⭐ **star on GitHub!**
+**Developed by Sarwan – EllowDigital**
+
+For inquiries, feedback, or support, please reach out via email:
+
+- **Developer:** [sarwanyadav6174@gmail.com](mailto:sarwanyadav6174@gmail.com)
+- **Team:** [ellowdigitalindia@gmail.com](mailto:ellowdigitalindia@gmail.com)
+
+---
+
+## ⭐ Contribute & Support
+
+If you find this project useful, please consider giving it a ⭐ **star on GitHub** to support development!
