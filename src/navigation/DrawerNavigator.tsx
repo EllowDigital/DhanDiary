@@ -200,6 +200,8 @@ const DrawerNavigator = () => {
         }}
       />
 
+      {/* Notifications screen unregistered — feature hidden */}
+
       <Drawer.Screen
         name="Terms"
         component={TermsScreen}

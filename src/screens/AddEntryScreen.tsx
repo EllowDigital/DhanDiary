@@ -19,7 +19,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Text } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { v4 as uuidv4 } from 'uuid';
 import dayjs from 'dayjs';
@@ -83,6 +83,7 @@ const AddEntryScreen: React.FC = () => {
   const [typeIndex, setTypeIndex] = useState(initialType);
   const [category, setCategory] = useState(DEFAULT_CATEGORY);
   const [date, setDate] = useState<Date>(new Date());
+  const [saving, setSaving] = useState(false);
 
   // Modals
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
@@ -150,8 +151,37 @@ const AddEntryScreen: React.FC = () => {
     }
   }, [editingParamId, entries]);
 
+  // Reset form when opened in Add mode (no editing param)
+  useEffect(() => {
+    if (!editingParamId) {
+      setEditingLocalId(null);
+      setAmount('');
+      setNote('');
+      setTypeIndex(route?.params?.type === 'in' ? 1 : 0);
+      setCategory(DEFAULT_CATEGORY);
+      setDate(new Date());
+      setSaving(false);
+    }
+  }, [editingParamId]);
+
+  // Clear params / editing state when the screen loses focus to avoid stale edit mode
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        try {
+          if ((navigation as any).setParams) {
+            (navigation as any).setParams({ local_id: undefined });
+          }
+        } catch (e) {}
+        setEditingLocalId(null);
+        setSaving(false);
+      };
+    }, [navigation])
+  );
+
   // --- HANDLERS ---
   const handleSave = () => {
+    if (saving) return;
     if (!user?.id) {
       showToast('Please sign in to save transactions.');
       return;
@@ -176,6 +206,7 @@ const AddEntryScreen: React.FC = () => {
     };
 
     showToast(editingLocalId ? 'Updating transaction...' : 'Saving transaction...');
+    setSaving(true);
     navigation.goBack();
 
     runInBackground(async () => {
@@ -365,8 +396,10 @@ const AddEntryScreen: React.FC = () => {
             ]}
           >
             <Button
-              title={editingLocalId ? 'Update Transaction' : 'Save Transaction'}
+              title={editingLocalId ? 'Update Transaction' : 'Add Transaction'}
               onPress={handleSave}
+              loading={saving}
+              disabled={saving}
               icon={
                 <MaterialIcon name="check" size={22} color="white" style={{ marginRight: 8 }} />
               }

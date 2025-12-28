@@ -31,7 +31,7 @@ try {
   pkg = { version: '1.0.0' };
 }
 
-type RouteName = 'Settings' | 'About' | 'Account' | 'Stats' | string;
+type RouteName = 'Settings' | 'About' | 'Account' | 'Analytics' | string;
 
 interface MenuItem {
   icon: keyof typeof MaterialIcon.glyphMap;
@@ -93,7 +93,7 @@ const MoreScreen: React.FC = () => {
         icon: 'bar-chart',
         label: 'Analytics',
         description: 'Spending trends & reports',
-        action: () => navigateParent('Stats'),
+        action: () => navigateParent('Analytics'),
         color: colors.accentOrange,
       },
       {
