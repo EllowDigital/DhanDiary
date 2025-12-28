@@ -47,7 +47,7 @@ You can download the latest stable version of DhanDiary directly from the Indus 
 
 ### **[👉 Download on Indus Appstore](https://www.indusappstore.com/apps/finance/dhandiary/com.ellowdigital.dhandiary/?page=details&id=com.ellowdigital.dhandiary)**
 
-*Alternative:*
+_Alternative:_
 [Download APK via GitHub](https://github.com/EllowDigital/DhanDiary/blob/master/shareapp-link.txt)
 
 ---

@@ -52,11 +52,17 @@ const NotificationMessageScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={["top"]}>
-      <ScreenHeader title="Notifications" subtitle="Developer messages" useSafeAreaPadding={false} />
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <ScreenHeader
+        title="Notifications"
+        subtitle="Developer messages"
+        useSafeAreaPadding={false}
+      />
       <View style={styles.content}>
         <Text style={styles.label}>Message from developer</Text>
-        <Text style={styles.help}>Show a short announcement about last changes and improvements.</Text>
+        <Text style={styles.help}>
+          Show a short announcement about last changes and improvements.
+        </Text>
 
         <TextInput
           value={message}

@@ -21,7 +21,7 @@ const AUTH_GRACE_MS = 60 * 1000; // 1 minute grace period (adjust as needed)
 export const BiometricAuth = () => {
   const { user } = useAuth();
   const appState = useRef(AppState.currentState);
-  
+
   // State
   const [isLocked, setIsLocked] = useState(false);
   const [biometricType, setBiometricType] = useState<LocalAuthentication.AuthenticationType[]>([]);
@@ -45,21 +45,23 @@ export const BiometricAuth = () => {
       // NOTE: We assume 'true' string in SecureStore means enabled
       const enabledSetting = await SecureStore.getItemAsync(BIOMETRIC_KEY);
       const isEnabled = enabledSetting === 'true';
-      
+
       if (mounted) {
         setIsBiometricEnabled(isEnabled);
         isEnabledRef.current = isEnabled;
 
         // If enabled and user is logged in, perform initial lock check
         if (isEnabled && user) {
-           checkInitialLock();
+          checkInitialLock();
         }
       }
     };
 
     init();
 
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, [user]);
 
   // 2. AppState Listener: Handle Background/Foreground transitions
@@ -73,7 +75,7 @@ export const BiometricAuth = () => {
     const backAction = () => {
       if (isLocked) {
         // If locked, prevent back button from doing anything (or minimize app)
-        BackHandler.exitApp(); 
+        BackHandler.exitApp();
         return true;
       }
       return false;
@@ -84,13 +86,13 @@ export const BiometricAuth = () => {
   }, [isLocked]);
 
   const checkInitialLock = () => {
-      // Don't lock if we are within the grace period (e.g. just reloaded bundle)
-      const now = Date.now();
-      if (lastAuthAt.current && now - lastAuthAt.current < AUTH_GRACE_MS) {
-        return;
-      }
-      setIsLocked(true);
-      authenticate();
+    // Don't lock if we are within the grace period (e.g. just reloaded bundle)
+    const now = Date.now();
+    if (lastAuthAt.current && now - lastAuthAt.current < AUTH_GRACE_MS) {
+      return;
+    }
+    setIsLocked(true);
+    authenticate();
   };
 
   const handleAppStateChange = (nextAppState: AppStateStatus) => {
@@ -98,22 +100,22 @@ export const BiometricAuth = () => {
 
     // GOING TO BACKGROUND
     if (appState.current === 'active' && nextAppState.match(/inactive|background/)) {
-       // Immediately lock the UI (obscure content) so app switcher sees the lock screen
-       setIsLocked(true);
+      // Immediately lock the UI (obscure content) so app switcher sees the lock screen
+      setIsLocked(true);
     }
 
     // COMING TO FOREGROUND
     if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
-       // If logic dictates we should still be locked, trigger the prompt
-       const now = Date.now();
-       const inGracePeriod = lastAuthAt.current && (now - lastAuthAt.current < AUTH_GRACE_MS);
-       
-       if (!inGracePeriod) {
-         authenticate();
-       } else {
-         // Auto-unlock if within grace period
-         setIsLocked(false);
-       }
+      // If logic dictates we should still be locked, trigger the prompt
+      const now = Date.now();
+      const inGracePeriod = lastAuthAt.current && now - lastAuthAt.current < AUTH_GRACE_MS;
+
+      if (!inGracePeriod) {
+        authenticate();
+      } else {
+        // Auto-unlock if within grace period
+        setIsLocked(false);
+      }
     }
 
     appState.current = nextAppState;
@@ -121,16 +123,16 @@ export const BiometricAuth = () => {
 
   const authenticate = async () => {
     if (isAuthInProgress.current) return;
-    
+
     // Safety check: ensure we can actually authenticate
     const hasHardware = await LocalAuthentication.hasHardwareAsync();
     const isEnrolled = await LocalAuthentication.isEnrolledAsync();
 
     if (!hasHardware || !isEnrolled) {
-        // Fallback: If hardware fails/unavailable, just unlock or ask for PIN
-        // For now, we unlock to prevent permanent lockout, or you can route to PIN screen
-        setIsLocked(false); 
-        return;
+      // Fallback: If hardware fails/unavailable, just unlock or ask for PIN
+      // For now, we unlock to prevent permanent lockout, or you can route to PIN screen
+      setIsLocked(false);
+      return;
     }
 
     isAuthInProgress.current = true;
@@ -174,11 +176,9 @@ export const BiometricAuth = () => {
             color={colors.primary}
           />
         </View>
-        
+
         <Text style={styles.title}>DhanDiary Locked</Text>
-        <Text style={styles.subtitle}>
-            Your finance data is secured.
-        </Text>
+        <Text style={styles.subtitle}>Your finance data is secured.</Text>
 
         <Button
           title="Unlock Vault"
@@ -220,7 +220,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 24,
-    shadowColor: "#000",
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 10,
