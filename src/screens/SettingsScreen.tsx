@@ -290,11 +290,7 @@ const SettingsScreen = () => {
                   label="Account Details"
                   onPress={() => navigation.navigate('Account')}
                 />
-                <SettingsRow
-                  icon="notifications-none"
-                  label="Notifications"
-                  onPress={() => navigation.navigate('Notifications')}
-                />
+                {/* Notifications feature hidden */}
                 <SettingsRow
                   icon="lock-outline"
                   label="Privacy Policy"
