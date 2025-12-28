@@ -17,6 +17,7 @@ import ExportScreen from '../screens/ExportScreen';
 import PrivacyPolicyScreen from '../screens/PrivacyPolicyScreen';
 import TermsScreen from '../screens/TermsScreen';
 import EulaScreen from '../screens/EulaScreen';
+import NotificationMessageScreen from '../screens/NotificationMessageScreen';
 
 // --- CUSTOM COMPONENTS ---
 import CustomDrawerContent from './CustomDrawerContent';
@@ -196,6 +197,15 @@ const DrawerNavigator = () => {
         component={PrivacyPolicyScreen}
         options={{
           title: 'Privacy Policy',
+          drawerItemStyle: { display: 'none' },
+        }}
+      />
+
+      <Drawer.Screen
+        name="Notifications"
+        component={NotificationMessageScreen}
+        options={{
+          title: 'Notifications',
           drawerItemStyle: { display: 'none' },
         }}
       />

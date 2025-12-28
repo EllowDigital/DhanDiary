@@ -291,9 +291,9 @@ const SettingsScreen = () => {
                   onPress={() => navigation.navigate('Account')}
                 />
                 <SettingsRow
-                  icon="notifications-none" // Placeholder for future feature
+                  icon="notifications-none"
                   label="Notifications"
-                  onPress={() => showToast('Coming soon!')}
+                  onPress={() => navigation.navigate('Notifications')}
                 />
                 <SettingsRow
                   icon="lock-outline"
