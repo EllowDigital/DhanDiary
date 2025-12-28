@@ -160,6 +160,7 @@ const AddEntryScreen: React.FC = () => {
       setTypeIndex(route?.params?.type === 'in' ? 1 : 0);
       setCategory(DEFAULT_CATEGORY);
       setDate(new Date());
+      setSaving(false);
     }
   }, [editingParamId]);
 
@@ -171,6 +172,7 @@ const AddEntryScreen: React.FC = () => {
           (navigation as any).setParams && (navigation as any).setParams({ local_id: undefined });
         } catch (e) {}
         setEditingLocalId(null);
+        setSaving(false);
       };
     }, [navigation])
   );
@@ -392,7 +394,7 @@ const AddEntryScreen: React.FC = () => {
             ]}
           >
             <Button
-              title={editingLocalId ? 'Update Transaction' : 'Save Transaction'}
+              title={editingLocalId ? 'Update Transaction' : 'Add Transaction'}
               onPress={handleSave}
               loading={saving}
               disabled={saving}
