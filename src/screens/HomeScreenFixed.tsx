@@ -402,7 +402,7 @@ const HomeScreen = () => {
       <View style={styles.actionGrid}>
         {[
           { label: 'Add', icon: 'add', nav: 'AddEntry', primary: true },
-          { label: 'Stats', icon: 'bar-chart', nav: 'Stats', primary: false },
+          { label: 'Stats', icon: 'bar-chart', nav: 'Analytics', primary: false },
           { label: 'Export', icon: 'file-download', nav: 'Export', primary: false },
         ].map((item, idx) => (
           <View key={idx} style={styles.actionWrapper}>
