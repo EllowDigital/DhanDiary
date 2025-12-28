@@ -147,6 +147,7 @@ const EditTransactionModal = React.memo(({ visible, entry, onClose, onSave }: an
   // Pickers
   const [showCatPicker, setShowCatPicker] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   // Initialize state when entry changes
   useEffect(() => {
@@ -160,18 +161,29 @@ const EditTransactionModal = React.memo(({ visible, entry, onClose, onSave }: an
   }, [entry]);
 
   const handleSave = () => {
-    const amt = parseFloat(amount);
-    if (isNaN(amt) || amt <= 0) {
+    if (saving) return;
+    const clean = amount.replace(/,/g, '').trim();
+    const amt = parseFloat(clean);
+    if (!clean || isNaN(amt) || amt <= 0) {
       Alert.alert('Invalid Amount', 'Please enter a valid number.');
       return;
     }
-    onSave(entry.local_id, {
-      amount: amt,
-      category,
-      note,
-      type: typeIndex === 1 ? 'in' : 'out',
-      date,
-    });
+    setSaving(true);
+    try {
+      onSave(entry.local_id, {
+        amount: amt,
+        category,
+        note,
+        type: typeIndex === 1 ? 'in' : 'out',
+        date,
+      });
+      onClose();
+    } finally {
+      // component may unmount after onClose; attempt to reset saving
+      try {
+        setSaving(false);
+      } catch (e) {}
+    }
   };
 
   const quickAmounts = ['100', '500', '1000', '2000'];
@@ -266,6 +278,8 @@ const EditTransactionModal = React.memo(({ visible, entry, onClose, onSave }: an
                 <Button
                   title="Save Changes"
                   onPress={handleSave}
+                  loading={saving}
+                  disabled={saving}
                   buttonStyle={{ backgroundColor: colors.primary, borderRadius: 12, height: 48 }}
                   containerStyle={{ marginTop: 20 }}
                 />
