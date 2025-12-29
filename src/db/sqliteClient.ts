@@ -13,7 +13,8 @@ export type Row = Record<string, any>;
 
 // Interface defining our unified client API
 export interface DatabaseClient {
-  execAsync: (sql: string) => Promise<void>;
+  // execAsync keeps backward-compatible tuple: [tx, result]
+  execAsync: (sql: string, params?: any[]) => Promise<[any, any]>;
   runAsync: (sql: string, params?: any[]) => Promise<RunResult>;
   getAllAsync: <T = Row>(sql: string, params?: any[]) => Promise<T[]>;
   getFirstAsync: <T = Row>(sql: string, params?: any[]) => Promise<T | null>;
@@ -33,7 +34,14 @@ const isJest =
  * Returns empty structures or null to prevent tests from crashing.
  */
 const mockClient: DatabaseClient = {
-  execAsync: async () => {},
+  execAsync: async (_sql: string, _params: any[] = []) => {
+    const emptyResult = {
+      rows: { length: 0, item: (_: number) => null },
+      rowsAffected: 0,
+      insertId: null,
+    };
+    return [null, emptyResult];
+  },
   runAsync: async () => ({ lastInsertRowId: 0, changes: 0 }),
   getAllAsync: async () => [],
   getFirstAsync: async () => null,
@@ -50,12 +58,14 @@ const createDbClient = (): DatabaseClient => {
   let db: any;
   try {
     // @ts-ignore: Check for modern openDatabaseSync (SDK 50+)
-    if (typeof SQLite.openDatabaseSync === 'function') {
-        // @ts-ignore
-        db = SQLite.openDatabaseSync(DB_NAME);
+    if (typeof (SQLite as any).openDatabaseSync === 'function') {
+      // @ts-ignore
+      db = (SQLite as any).openDatabaseSync(DB_NAME);
+    } else if (typeof (SQLite as any).openDatabase === 'function') {
+      // Legacy (SDK 49-)
+      db = (SQLite as any).openDatabase(DB_NAME);
     } else {
-        // Legacy (SDK 49-)
-        db = SQLite.openDatabase(DB_NAME);
+      throw new Error('No compatible openDatabase found on expo-sqlite');
     }
   } catch (e) {
     console.warn('Error opening DB, falling back to mock:', e);
@@ -66,10 +76,12 @@ const createDbClient = (): DatabaseClient => {
   // If the database object has the new methods natively, pass them through.
   if (db && typeof db.getAllAsync === 'function') {
     return {
-      execAsync: (sql) => db.execAsync(sql),
-      runAsync: (sql, params = []) => db.runAsync(sql, params),
-      getAllAsync: (sql, params = []) => db.getAllAsync(sql, params),
-      getFirstAsync: (sql, params = []) => db.getFirstAsync(sql, params),
+      execAsync: (sql: string, params: any[] = []) => {
+        return (db.execAsync(sql, params) as Promise<any>).then((res: any) => [null, res]);
+      },
+      runAsync: (sql: string, params: any[] = []) => db.runAsync(sql, params),
+      getAllAsync: (sql: string, params: any[] = []) => db.getAllAsync(sql, params),
+      getFirstAsync: (sql: string, params: any[] = []) => db.getFirstAsync(sql, params),
     };
   }
 
@@ -95,9 +107,10 @@ const createDbClient = (): DatabaseClient => {
 
   return {
     // execAsync is for batch execution strings in modern API
-    execAsync: async (sql: string) => {
-      // In legacy, we just run it as a standard SQL command
-      await executeSql(sql, []); 
+    execAsync: async (sql: string, params: any[] = []) => {
+      // In legacy, run and return tuple similar to modern API
+      const res = await executeSql(sql, params);
+      return [null, res];
     },
 
     runAsync: async (sql: string, params: any[] = []) => {

@@ -80,7 +80,8 @@ export async function getTransactionsByUser(userId: string) {
   const [, res] = await executeSqlAsync(sql, [userId]);
   const rows: TransactionRow[] = [];
   for (let i = 0; i < res.rows.length; i++) {
-    rows.push(res.rows.item(i));
+    const item = res.rows.item(i);
+    if (item) rows.push(item as TransactionRow);
   }
   return rows;
 }
@@ -90,7 +91,8 @@ export async function getUnsyncedTransactions() {
   const [, res] = await executeSqlAsync(sql, []);
   const rows: TransactionRow[] = [];
   for (let i = 0; i < res.rows.length; i++) {
-    rows.push(res.rows.item(i));
+    const item = res.rows.item(i);
+    if (item) rows.push(item as TransactionRow);
   }
   return rows;
 }

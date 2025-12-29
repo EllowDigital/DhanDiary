@@ -1,4 +1,4 @@
-import sqliteClient, { execAsync as executeSqlAsync } from './sqliteClient';
+import sqliteClient, { runAsync, getAllAsync } from './sqliteClient';
 
 /**
  * Ensure the required tables exist. This function is async-safe and idempotent.
@@ -39,6 +39,43 @@ export async function initDB(): Promise<void> {
   }
 }
 
-export { executeSqlAsync };
+/**
+ * Compatibility wrapper: emulate the old `executeSqlAsync` return shape
+ * used across the codebase: Promise<[tx, result]> where `result.rows`
+ * provides `length` and `item(i)` access. Prefer `runAsync`/`getAllAsync`
+ * under the hood for modern drivers.
+ */
+export async function executeSqlAsync(sql: string, params: any[] = []) {
+  const sqlTrim = sql.trim().toUpperCase();
+  // Heuristic: use SELECT detection for queries returning rows
+  const isSelect = sqlTrim.startsWith('SELECT');
+
+  if (isSelect) {
+    const rows = await getAllAsync(sql, params);
+    const result = {
+      rows: {
+        length: rows.length,
+        item: (i: number) => rows[i],
+        _array: rows,
+      },
+      rowsAffected: 0,
+      insertId: null,
+    };
+    return [null, result] as const;
+  }
+
+  // Non-select — use runAsync and map to legacy result shape
+  const runRes = await runAsync(sql, params);
+  const result = {
+    rows: {
+      length: 0,
+      item: (_: number) => null,
+      _array: [],
+    },
+    rowsAffected: runRes.changes ?? 0,
+    insertId: runRes.lastInsertRowId ?? null,
+  };
+  return [null, result] as const;
+}
 
 export default sqliteClient;

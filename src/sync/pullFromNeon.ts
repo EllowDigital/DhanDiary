@@ -19,9 +19,14 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
   const lastSyncRow = await executeSqlAsync('SELECT value FROM meta WHERE key = ? LIMIT 1;', [
     'last_sync_timestamp',
   ]);
-  const lastSyncVal = lastSyncRow && lastSyncRow[1] && lastSyncRow[1].rows && lastSyncRow[1].rows.length
-    ? lastSyncRow[1].rows.item(0).value
-    : null;
+  let lastSyncVal: string | null = null;
+  if (lastSyncRow && lastSyncRow[1]) {
+    const res = lastSyncRow[1];
+    if (res.rows && res.rows.length && res.rows.length > 0) {
+      const v = res.rows.item(0);
+      lastSyncVal = v ? v.value : null;
+    }
+  }
   const lastSync = lastSyncVal ? parseInt(lastSyncVal, 10) : 0;
 
   if (__DEV__) console.log('[sync] pullFromNeon: lastSync', lastSync);
@@ -44,10 +49,14 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
         'SELECT updated_at FROM transactions WHERE id = ? LIMIT 1;',
         [remote.id]
       );
-      const localUpdatedAt =
-        localRow && localRow[1] && localRow[1].rows && localRow[1].rows.length
-          ? Number(localRow[1].rows.item(0).updated_at || 0)
-          : 0;
+      let localUpdatedAt = 0;
+      if (localRow && localRow[1]) {
+        const r = localRow[1];
+        if (r.rows && r.rows.length && r.rows.length > 0) {
+          const it = r.rows.item(0);
+          localUpdatedAt = it ? Number(it.updated_at || 0) : 0;
+        }
+      }
 
       // Conflict rule: only apply remote change if it's newer
       if (remoteUpdatedAt > localUpdatedAt) {
