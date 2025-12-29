@@ -104,6 +104,8 @@ $$ LANGUAGE plpgsql;
 -- 6. SUMMARY CALCULATION FUNCTIONS
 -- =====================================================
 
+-- Ensure we can replace the monthly upsert function (drop if signature differs)
+DROP FUNCTION IF EXISTS upsert_monthly_summary(uuid, date);
 CREATE OR REPLACE FUNCTION upsert_monthly_summary(p_user_id uuid, p_date date)
 RETURNS void AS $$
 BEGIN

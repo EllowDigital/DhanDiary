@@ -74,7 +74,7 @@ const AddEntryScreen: React.FC = () => {
 
   // Params
   const editingParamId = route?.params?.local_id;
-  const { isIncome } = require('../utils/transactionType');
+  const { isIncome, toCanonical } = require('../utils/transactionType');
   const initialType = isIncome(route?.params?.type) ? 1 : 0;
 
   // --- STATE ---
@@ -199,7 +199,7 @@ const AddEntryScreen: React.FC = () => {
 
     const payload = {
       amount: parsedAmount,
-      type: activeType.value as 'in' | 'out',
+      type: toCanonical(activeType.value),
       category: ensureCategory(category),
       note: note.trim(),
       currency: 'INR',

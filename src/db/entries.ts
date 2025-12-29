@@ -73,25 +73,25 @@ export const addLocalEntry = async (entry: any) => {
   // Ensure client_id exists
   const clientId = entry.client_id && uuidValidate(entry.client_id) ? entry.client_id : uuidv4();
 
-  // Normalize timestamp fields: accept ISO strings or numbers (epoch-ms)
-  const createdAtMs = entry.created_at
+  // Normalize timestamp fields: prefer ISO strings for timestamptz columns
+  const createdAtIso = entry.created_at
     ? typeof entry.created_at === 'string'
-      ? Number(new Date(entry.created_at).getTime())
-      : Number(entry.created_at)
-    : null;
-  const updatedAtMs = entry.updated_at
+      ? entry.created_at
+      : new Date(entry.created_at).toISOString()
+    : new Date().toISOString();
+  const updatedAtIso = entry.updated_at
     ? typeof entry.updated_at === 'string'
-      ? Number(new Date(entry.updated_at).getTime())
-      : Number(entry.updated_at)
-    : null;
-  const dateMs = entry.date
+      ? entry.updated_at
+      : new Date(entry.updated_at).toISOString()
+    : new Date().toISOString();
+  const dateIso = entry.date
     ? typeof entry.date === 'string'
-      ? Number(new Date(entry.date).getTime())
-      : Number(entry.date)
-    : null;
+      ? entry.date
+      : new Date(entry.date).toISOString()
+    : new Date().toISOString();
 
   const res = await query(
-    `INSERT INTO transactions (user_id, client_id, type, amount, category, note, currency, created_at, updated_at, date) VALUES ($1,$2,$3,$4::numeric,$5,$6,$7,$8::bigint,$9::bigint,CASE WHEN $10::bigint IS NULL OR $10::bigint = 0 THEN NULL ELSE to_timestamp($10::bigint / 1000) END) RETURNING id, user_id, type, amount, category, note, currency, created_at, updated_at, date, client_id`,
+    `INSERT INTO transactions (user_id, client_id, type, amount, category, note, currency, created_at, updated_at, date) VALUES ($1,$2,$3,$4::numeric,$5,$6,$7,$8::timestamptz,$9::timestamptz,$10::timestamptz) RETURNING id, user_id, type, amount, category, note, currency, created_at, updated_at, date, client_id`,
     [
       userId,
       clientId,
@@ -100,9 +100,9 @@ export const addLocalEntry = async (entry: any) => {
       entry.category,
       entry.note || null,
       entry.currency || 'INR',
-      createdAtMs,
-      updatedAtMs,
-      dateMs,
+      createdAtIso,
+      updatedAtIso,
+      dateIso,
     ]
   );
   const row = res && res[0];
@@ -130,16 +130,15 @@ export const updateLocalEntry = async (localId: string, updates: any) => {
     params.push(updates.note);
   }
   if (updates.date !== undefined) {
-    // Accept epoch-ms or null; convert to timestamptz safely in SQL to avoid passing raw 0
-    fields.push(
-      `date = CASE WHEN $${idx} IS NULL OR $${idx}::bigint = 0 THEN NULL ELSE to_timestamp($${idx}::bigint / 1000) END`
-    );
-    params.push(updates.date);
+    // Accept ISO string, Date, or null; store as timestamptz
+    fields.push(`date = CASE WHEN $${idx} IS NULL THEN NULL ELSE $${idx}::timestamptz END`);
+    const d = updates.date === null ? null : typeof updates.date === 'string' ? updates.date : new Date(updates.date).toISOString();
+    params.push(d);
     idx++;
   }
   if (fields.length === 0) return null;
   params.push(localId);
-  const sql = `UPDATE transactions SET ${fields.join(',')}, updated_at = (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint WHERE id = $${idx} RETURNING id, user_id, type, amount, category, note, currency, created_at, updated_at, date`;
+  const sql = `UPDATE transactions SET ${fields.join(',')}, updated_at = now() WHERE id = $${idx} RETURNING id, user_id, type, amount, category, note, currency, created_at, updated_at, date`;
   const res = await query(sql, params);
   const row = res && res[0];
   return row ? mapRowToLocal(row) : null;
@@ -147,7 +146,7 @@ export const updateLocalEntry = async (localId: string, updates: any) => {
 
 export const markEntryDeleted = async (localId: string) => {
   const res = await query(
-    `UPDATE transactions SET deleted_at = (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint, need_sync = false, updated_at = (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint WHERE id = $1 RETURNING id, user_id, type, amount, category, note, currency, created_at, updated_at, date`,
+    `UPDATE transactions SET deleted_at = now(), need_sync = false, updated_at = now() WHERE id = $1 RETURNING id, user_id, type, amount, category, note, currency, created_at, updated_at, date`,
     [localId]
   );
   const row = res && res[0];

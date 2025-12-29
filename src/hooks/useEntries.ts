@@ -10,6 +10,7 @@ import {
 import { subscribeEntries } from '../utils/dbEvents';
 import { getSession, saveSession } from '../db/session';
 import { ensureCategory, DEFAULT_CATEGORY } from '../constants/categories';
+import { toCanonical } from '../utils/transactionType';
 import { syncBothWays } from '../services/syncManager';
 
 /* ----------------------------------------------------------
@@ -46,7 +47,7 @@ const makeOptimisticEntry = (entry: any, sid: string) => {
     local_id: entry.local_id || `tmp_${Date.now()}`,
     remote_id: entry.remote_id || null,
     user_id: sid,
-    type: entry.type || 'out',
+    type: toCanonical(entry.type || 'out'),
     amount: entry.amount || 0,
     category: ensureCategory(entry.category || DEFAULT_CATEGORY),
     note: entry.note || null,
@@ -123,7 +124,6 @@ export const useEntries = (userId?: string | null) => {
       const now = new Date().toISOString();
 
       const created = normalizeDate((entry as any).date || (entry as any).created_at, now);
-
       const newEntry = {
         ...entry,
         category: ensureCategory(entry.category),
@@ -131,6 +131,7 @@ export const useEntries = (userId?: string | null) => {
         date: created,
         created_at: created,
         updated_at: now,
+        type: toCanonical((entry as any).type),
       };
 
       return await addLocalEntry(newEntry);
@@ -182,6 +183,7 @@ export const useEntries = (userId?: string | null) => {
 
       await updateLocalEntry(local_id, {
         ...updates,
+        type: updates.type !== undefined ? toCanonical(updates.type as any) : undefined,
         category: updates.category !== undefined ? ensureCategory(updates.category) : undefined,
         date: dateVal,
       } as any);
