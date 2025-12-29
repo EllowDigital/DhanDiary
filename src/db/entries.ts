@@ -50,7 +50,7 @@ const mapRowToLocal = (r: any): LocalEntry => ({
 export const getEntries = async (userId: string) => {
   if (!userId || !uuidValidate(userId)) return [];
   const rows = await query(
-    `SELECT id, user_id, type, amount, category, note, currency, created_at, updated_at, date FROM cash_entries WHERE user_id = $1 AND (deleted IS NOT TRUE) ORDER BY updated_at DESC LIMIT 1000`,
+    `SELECT id, user_id, type, amount, category, note, currency, created_at, updated_at, date FROM transactions WHERE user_id = $1 AND (deleted_at IS NULL) ORDER BY updated_at DESC LIMIT 1000`,
     [userId]
   );
   return (rows || []).map(mapRowToLocal);
@@ -74,7 +74,7 @@ export const addLocalEntry = async (entry: any) => {
   const clientId = entry.client_id && uuidValidate(entry.client_id) ? entry.client_id : uuidv4();
 
   const res = await query(
-    `INSERT INTO cash_entries (user_id, client_id, type, amount, category, note, currency, created_at, updated_at, date) VALUES ($1,$2,$3,$4::numeric,$5,$6,$7,$8::timestamptz,$9::timestamptz,$10::timestamptz) RETURNING id, user_id, type, amount, category, note, currency, created_at, updated_at, date, client_id`,
+    `INSERT INTO transactions (user_id, client_id, type, amount, category, note, currency, created_at, updated_at, date) VALUES ($1,$2,$3,$4::numeric,$5,$6,$7,$8::bigint,$9::bigint,$10::timestamptz) RETURNING id, user_id, type, amount, category, note, currency, created_at, updated_at, date, client_id`,
     [
       userId,
       clientId,
@@ -126,7 +126,7 @@ export const updateLocalEntry = async (localId: string, updates: any) => {
 
 export const markEntryDeleted = async (localId: string) => {
   const res = await query(
-    `UPDATE cash_entries SET deleted = true, need_sync = false, updated_at = NOW() WHERE id = $1 RETURNING id, user_id, type, amount, category, note, currency, created_at, updated_at, date`,
+    `UPDATE transactions SET deleted_at = (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint, need_sync = false, updated_at = (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint WHERE id = $1 RETURNING id, user_id, type, amount, category, note, currency, created_at, updated_at, date`,
     [localId]
   );
   const row = res && res[0];
@@ -150,7 +150,7 @@ export const deleteLocalEntry = async (localId: string) => {
 
 export const getEntryByLocalId = async (localId: string) => {
   const res = await query(
-    `SELECT id, user_id, type, amount, category, note, currency, created_at, updated_at, date FROM cash_entries WHERE id = $1 AND (deleted IS NOT TRUE) LIMIT 1`,
+    `SELECT id, user_id, type, amount, category, note, currency, created_at, updated_at, date FROM transactions WHERE id = $1 AND (deleted_at IS NULL) LIMIT 1`,
     [localId]
   );
   const row = res && res[0];
@@ -176,7 +176,7 @@ export const getUnsyncedEntries = async () => [];
 export async function* fetchEntriesGenerator(userId: string, pageSize: number = 1000) {
   if (!userId || !uuidValidate(userId)) return;
   const rows = await query(
-    `SELECT id, user_id, type, amount, category, note, currency, created_at, updated_at, date FROM cash_entries WHERE user_id = $1 AND (deleted IS NOT TRUE) ORDER BY updated_at DESC`,
+    `SELECT id, user_id, type, amount, category, note, currency, created_at, updated_at, date FROM transactions WHERE user_id = $1 AND (deleted_at IS NULL) ORDER BY updated_at DESC`,
     [userId]
   );
   yield (rows || []).map(mapRowToLocal);

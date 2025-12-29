@@ -60,9 +60,9 @@ export const readPrecomputedDaily = async (
         const { query } = require('../api/neonClient');
         // Parameterize date array to avoid many queries. Use Postgres date[] parameter.
         const rows = await query(
-          `SELECT date::date AS date, COALESCE(SUM(CASE WHEN type='in' THEN amount ELSE 0 END),0) AS total_in, COALESCE(SUM(CASE WHEN type='out' THEN amount ELSE 0 END),0) AS total_out, COUNT(*)::int AS count
-           FROM cash_entries
-           WHERE user_id = $1 AND date::date = ANY($2::date[]) AND NOT deleted
+          `SELECT date::date AS date, COALESCE(SUM(CASE WHEN type='income' THEN amount ELSE 0 END),0) AS total_in, COALESCE(SUM(CASE WHEN type='expense' THEN amount ELSE 0 END),0) AS total_out, COUNT(*)::int AS count
+           FROM transactions
+           WHERE user_id = $1 AND date::date = ANY($2::date[]) AND deleted_at IS NULL
            GROUP BY date::date`,
           [userId, missing]
         );
@@ -136,9 +136,9 @@ export const aggregateWithPreferSummary = async (
       try {
         const { query } = require('../api/neonClient');
         const catRows = await query(
-          `SELECT COALESCE(category,'Uncategorized') AS category, COALESCE(SUM(CASE WHEN type='out' THEN amount ELSE 0 END),0) AS value, COUNT(*)::int AS cnt
-           FROM cash_entries
-           WHERE user_id = $1 AND date::date >= $2::date AND date::date <= $3::date AND NOT deleted
+          `SELECT COALESCE(category,'Uncategorized') AS category, COALESCE(SUM(CASE WHEN type='expense' THEN amount ELSE 0 END),0) AS value, COUNT(*)::int AS cnt
+           FROM transactions
+           WHERE user_id = $1 AND date::date >= $2::date AND date::date <= $3::date AND deleted_at IS NULL
            GROUP BY COALESCE(category,'Uncategorized') ORDER BY value DESC LIMIT 8`,
           [userId, start.format('YYYY-MM-DD'), end.format('YYYY-MM-DD')]
         );
@@ -151,7 +151,7 @@ export const aggregateWithPreferSummary = async (
         // Compute maxima and averages
         try {
           const maxInRows = await query(
-            `SELECT COALESCE(MAX(amount),0) AS max_in FROM cash_entries WHERE user_id = $1 AND type = 'in' AND date::date >= $2::date AND date::date <= $3::date AND NOT deleted`,
+            `SELECT COALESCE(MAX(amount),0) AS max_in FROM transactions WHERE user_id = $1 AND type = 'income' AND date::date >= $2::date AND date::date <= $3::date AND deleted_at IS NULL`,
             [userId, start.format('YYYY-MM-DD'), end.format('YYYY-MM-DD')]
           );
           maxIncome = Number((maxInRows && maxInRows[0] && maxInRows[0].max_in) || 0);
@@ -161,7 +161,7 @@ export const aggregateWithPreferSummary = async (
 
         try {
           const maxOutRows = await query(
-            `SELECT COALESCE(MAX(amount),0) AS max_out FROM cash_entries WHERE user_id = $1 AND type = 'out' AND date::date >= $2::date AND date::date <= $3::date AND NOT deleted`,
+            `SELECT COALESCE(MAX(amount),0) AS max_out FROM transactions WHERE user_id = $1 AND type = 'expense' AND date::date >= $2::date AND date::date <= $3::date AND deleted_at IS NULL`,
             [userId, start.format('YYYY-MM-DD'), end.format('YYYY-MM-DD')]
           );
           maxExpense = Number((maxOutRows && maxOutRows[0] && maxOutRows[0].max_out) || 0);
