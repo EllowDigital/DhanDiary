@@ -180,10 +180,18 @@ function AppWithDb() {
     if (holder && typeof holder.setQueryClient === 'function') holder.setQueryClient(queryClient);
   } catch (e) {}
 
-  // App is online-only. Mark DB ready immediately.
+  // Initialize SQLite DB on startup and expose readiness to the app shell.
   const initializeDatabase = useCallback(async () => {
-    setDbReady(true);
-    setDbInitError(null);
+    try {
+      const { initDB } = await import('./src/db/sqlite');
+      await initDB();
+      setDbReady(true);
+      setDbInitError(null);
+    } catch (e: any) {
+      console.warn('[App] DB init failed', e);
+      setDbInitError(String(e?.message || e));
+      setDbReady(false);
+    }
   }, []);
 
   // 1. Initial Config Logging
