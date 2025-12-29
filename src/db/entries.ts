@@ -118,7 +118,7 @@ export const updateLocalEntry = async (localId: string, updates: any) => {
   }
   if (fields.length === 0) return null;
   params.push(localId);
-  const sql = `UPDATE cash_entries SET ${fields.join(',')}, updated_at = NOW() WHERE id = $${idx} RETURNING id, user_id, type, amount, category, note, currency, created_at, updated_at, date`;
+  const sql = `UPDATE transactions SET ${fields.join(',')}, updated_at = (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint WHERE id = $${idx} RETURNING id, user_id, type, amount, category, note, currency, created_at, updated_at, date`;
   const res = await query(sql, params);
   const row = res && res[0];
   return row ? mapRowToLocal(row) : null;
