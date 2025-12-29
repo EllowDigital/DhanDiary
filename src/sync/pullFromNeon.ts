@@ -46,7 +46,7 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
   // Fetch remote rows updated since lastSync (ascending by updated_at)
   let remoteRows: Array<any> = [];
   try {
-    const sql = `SELECT id, user_id, amount, type, category, note, date, updated_at, sync_status
+    const sql = `SELECT id, user_id, amount, type, category, note, date, updated_at, sync_status, deleted_at
       FROM transactions
       WHERE updated_at > $1
       ORDER BY updated_at ASC;`;
@@ -79,6 +79,30 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
           const it = r.rows.item(0);
           localUpdatedAt = it ? Number(it.updated_at || 0) : 0;
         }
+      }
+
+      // Conflict rule: handle remote delete first (if present), then normal upsert.
+      const remoteDeletedAt = remote.deleted_at ? Number(remote.deleted_at || 0) : 0;
+
+      if (
+        remoteDeletedAt &&
+        remoteUpdatedAt >= remoteDeletedAt &&
+        remoteUpdatedAt > localUpdatedAt
+      ) {
+        // Remote indicates this row was deleted. Soft-delete locally (sync_status = 2).
+        try {
+          await executeSqlAsync(
+            'UPDATE transactions SET sync_status = 2, updated_at = ? WHERE id = ?;',
+            [remoteUpdatedAt, remote.id]
+          );
+          pulled += 1;
+          if (remoteUpdatedAt > maxRemoteTs) maxRemoteTs = remoteUpdatedAt;
+        } catch (e) {
+          if (__DEV__)
+            console.warn('[sync] pullFromNeon: failed to apply remote delete', e, remote.id);
+        }
+        // continue to next remote row
+        continue;
       }
 
       // Conflict rule: only apply remote change if it's newer
