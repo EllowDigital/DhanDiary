@@ -32,12 +32,13 @@ export const pullRemoteLegacy = async () => {
 
   try {
     const lastSyncAt = await AsyncStorage.getItem('last_sync_at');
-    const timeParam = lastSyncAt || '1970-01-01T00:00:00.000Z';
+    // store last sync as epoch-ms string; default to 0
+    const timeParam = lastSyncAt || '0';
 
     const rows = await Q(
-      `SELECT id, user_id, type, amount, category, note, currency, created_at, updated_at, deleted, client_id, server_version, date 
-       FROM cash_entries 
-       WHERE user_id = $1 AND updated_at > $2::timestamptz`,
+      `SELECT id, user_id, type, amount, category, note, currency, created_at, updated_at, deleted_at, client_id, server_version, date 
+       FROM transactions 
+       WHERE user_id = $1 AND updated_at > $2::bigint`,
       [session.id, timeParam]
     );
 
@@ -50,7 +51,7 @@ export const pullRemoteLegacy = async () => {
 
     for (const r of rows) {
       try {
-        if (r.deleted) {
+        if (r.deleted_at) {
           let localForDeleted: any = null;
           try {
             localForDeleted = await getLocalByRemoteId(String(r.id));
@@ -69,9 +70,9 @@ export const pullRemoteLegacy = async () => {
           }
 
           if (localForDeleted && (localForDeleted as any).need_sync) {
-            const revivedUpdatedAt = new Date().toISOString();
+            const revivedUpdatedAt = String(Date.now());
             await Q(
-              `UPDATE cash_entries SET deleted = false, need_sync = false, updated_at = $1::timestamptz WHERE id = $2`,
+              `UPDATE transactions SET deleted_at = NULL, need_sync = false, updated_at = $1::bigint WHERE id = $2`,
               [revivedUpdatedAt, r.id]
             );
             try {
@@ -118,14 +119,14 @@ export const pullRemoteLegacy = async () => {
           const localEntry = local as any;
           if (localEntry.need_sync) {
             const localTime = new Date(localEntry.updated_at || 0).getTime();
-            const remoteTime = new Date(r.updated_at || 0).getTime();
+            const remoteTime = Number(r.updated_at || 0);
             if (localTime === remoteTime) {
               try {
                 await markEntrySynced(
                   localEntry.local_id,
                   String(r.id),
                   Number(r.server_version),
-                  r.updated_at
+                  String(r.updated_at)
                 );
               } catch (e: any) {
                 if (isLocalDbDisabledError(e)) {
