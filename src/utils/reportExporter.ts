@@ -45,7 +45,7 @@ const generatePdf = async (data: any[], options: ExportOptions): Promise<string>
   let totalIncome = 0;
   let totalExpense = 0;
 
-    if (groupBy === 'category') {
+  if (groupBy === 'category') {
     const grouped: Record<string, { in: number; out: number; items: any[] }> = {};
 
     data.forEach((item) => {

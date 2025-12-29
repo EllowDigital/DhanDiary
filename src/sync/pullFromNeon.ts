@@ -61,12 +61,33 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
     // This avoids separate introspection calls and keeps the mocked neonQuery
     // usage predictable in tests.
     const sql = `SELECT id, user_id, amount, type, category, note, date,
-      CASE WHEN pg_typeof(updated_at)::text LIKE '%timestamp%' THEN (EXTRACT(EPOCH FROM updated_at) * 1000)::bigint ELSE updated_at END AS updated_at,
+      CASE
+        WHEN pg_typeof(updated_at)::text = 'bigint' THEN updated_at::bigint
+        WHEN pg_typeof(updated_at)::text LIKE '%timestamp%' THEN (EXTRACT(EPOCH FROM updated_at) * 1000)::bigint
+        ELSE NULL
+      END AS updated_at,
       sync_status,
-      CASE WHEN deleted_at IS NULL THEN NULL WHEN pg_typeof(deleted_at)::text LIKE '%timestamp%' THEN (EXTRACT(EPOCH FROM deleted_at) * 1000)::bigint ELSE deleted_at END AS deleted_at
+      CASE
+        WHEN deleted_at IS NULL THEN NULL
+        WHEN pg_typeof(deleted_at)::text = 'bigint' THEN deleted_at::bigint
+        WHEN pg_typeof(deleted_at)::text LIKE '%timestamp%' THEN (EXTRACT(EPOCH FROM deleted_at) * 1000)::bigint
+        ELSE NULL
+      END AS deleted_at
       FROM transactions
-      WHERE CASE WHEN pg_typeof(updated_at)::text LIKE '%timestamp%' THEN (EXTRACT(EPOCH FROM updated_at) * 1000)::bigint ELSE updated_at END > $1
-      ORDER BY CASE WHEN pg_typeof(updated_at)::text LIKE '%timestamp%' THEN (EXTRACT(EPOCH FROM updated_at) * 1000)::bigint ELSE updated_at END ASC;`;
+      WHERE (
+        CASE
+          WHEN pg_typeof(updated_at)::text = 'bigint' THEN updated_at::bigint
+          WHEN pg_typeof(updated_at)::text LIKE '%timestamp%' THEN (EXTRACT(EPOCH FROM updated_at) * 1000)::bigint
+          ELSE NULL
+        END
+      ) > $1
+      ORDER BY (
+        CASE
+          WHEN pg_typeof(updated_at)::text = 'bigint' THEN updated_at::bigint
+          WHEN pg_typeof(updated_at)::text LIKE '%timestamp%' THEN (EXTRACT(EPOCH FROM updated_at) * 1000)::bigint
+          ELSE NULL
+        END
+      ) ASC;`;
     const params = [lastSync || 0];
     remoteRows = (await neonQuery(sql, params)) || [];
   } catch (e: any) {

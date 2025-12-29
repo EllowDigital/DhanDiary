@@ -121,7 +121,7 @@ const SwipeableHistoryItem = React.memo(({ item, onEdit, onDelete }: any) => {
             <Text style={styles.compactCategory} numberOfLines={1}>
               {item.category}
             </Text>
-            <Text style={[styles.compactAmount, { color }]}> 
+            <Text style={[styles.compactAmount, { color }]}>
               {isInc ? '+' : '-'}₹{Number(item.amount).toLocaleString()}
             </Text>
           </View>

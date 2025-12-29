@@ -101,10 +101,7 @@ const TransactionCardInner: React.FC<Props> = ({
           {/* RIGHT SIDE */}
           <View style={styles.rightSide}>
             <Text
-              style={[
-                styles.amountText,
-                { color: isIncome(item.type) ? '#2E7D32' : '#C62828' },
-              ]}
+              style={[styles.amountText, { color: isIncome(item.type) ? '#2E7D32' : '#C62828' }]}
             >
               {isIncome(item.type) ? '+' : '-'}₹{Number(item.amount).toFixed(2)}
             </Text>
