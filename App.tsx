@@ -38,6 +38,8 @@ import {
   startBackgroundFetch,
   stopBackgroundFetch,
 } from './src/services/syncManager';
+import { AppState } from 'react-native';
+import runFullSync, { isSyncRunning } from './src/sync/runFullSync';
 
 // --- Configuration ---
 LogBox.ignoreLogs([
@@ -230,6 +232,16 @@ function AppWithDb() {
   // Start schedulers when DB is ready
   useEffect(() => {
     if (!dbReady) return;
+    // Run a foreground sync once when the DB is ready and app is active.
+    try {
+      const current = AppState.currentState;
+      if (current === 'active') {
+        // call but don't await — safe non-blocking
+        runFullSync().catch((e) => {
+          if (__DEV__) console.warn('[App] initial runFullSync failed', e);
+        });
+      }
+    } catch (e) {}
 
     try {
       startForegroundSyncScheduler(15000);
@@ -249,6 +261,32 @@ function AppWithDb() {
       try {
         stopForegroundSyncScheduler();
         stopBackgroundFetch();
+      } catch (e) {}
+    };
+  }, [dbReady]);
+
+  // Listen for app coming to foreground and trigger a safe sync.
+  useEffect(() => {
+    if (!dbReady) return;
+
+    const handler = (nextState: string) => {
+      if (nextState === 'active') {
+        // Avoid overlapping runs — runFullSync has its own lock but check early too.
+        if (isSyncRunning) return;
+        // Debounce quick state changes
+        setTimeout(() => {
+          runFullSync().catch((e) => {
+            if (__DEV__) console.warn('[App] foreground runFullSync failed', e);
+          });
+        }, 250);
+      }
+    };
+
+    const sub = AppState.addEventListener ? AppState.addEventListener('change', handler) : null;
+    return () => {
+      try {
+        if (sub && typeof sub.remove === 'function') sub.remove();
+        else AppState.removeEventListener && AppState.removeEventListener('change', handler as any);
       } catch (e) {}
     };
   }, [dbReady]);
