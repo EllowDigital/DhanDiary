@@ -282,11 +282,14 @@ function AppWithDb() {
       }
     };
 
-    const sub = AppState.addEventListener ? AppState.addEventListener('change', handler) : null;
+    // Use the modern subscription API and always call `remove()` on cleanup.
+    const sub: any = AppState.addEventListener
+      ? AppState.addEventListener('change', handler)
+      : { remove: () => {} };
+
     return () => {
       try {
         if (sub && typeof sub.remove === 'function') sub.remove();
-        else AppState.removeEventListener && AppState.removeEventListener('change', handler as any);
       } catch (e) {}
     };
   }, [dbReady]);

@@ -357,17 +357,19 @@ const flushPendingProfileUpdates = async () => {
 
 // --- Main Sync Entry Point ---
 
+import runFullSync from '../sync/runFullSync';
+
 export const syncBothWays = async () => {
   if (_syncInProgress) {
     _pendingSyncRequested = true;
-    console.log('Sync already running, scheduling follow-up');
-    return { pushed: 0, updated: 0, deleted: 0, pulled: 0, merged: 0, total: 0 };
+    if (__DEV__) console.log('Sync already running, scheduling follow-up');
+    return { ok: false } as any;
   }
 
   _lastSyncAttemptAt = Date.now();
 
   const state = await NetInfo.fetch();
-  if (!state.isConnected) return;
+  if (!state.isConnected) return { ok: false } as any;
 
   _syncInProgress = true;
   // notify listeners that sync started
@@ -380,71 +382,24 @@ export const syncBothWays = async () => {
   } catch (e) {}
 
   try {
-    // local DB init skipped in online-only mode
-    const session = await getSession();
-    if (!session || !session.id)
-      return { pushed: 0, updated: 0, deleted: 0, pulled: 0, merged: 0, total: 0 };
-    if (!isUuid(session.id)) {
-      console.log('[syncBothWays] session id is not a valid Neon UUID, skipping full sync');
-      return { pushed: 0, updated: 0, deleted: 0, pulled: 0, merged: 0, total: 0 };
-    }
-
-    // --- Optimization: Quick Probe ---
-    // If we haven't synced before, check if remote has ANY data before doing heavy lifting
-    const lastSyncCount = await AsyncStorage.getItem('last_sync_count');
-    if (!lastSyncCount || lastSyncCount === '0') {
-      try {
-        const probe = await query(
-          'SELECT 1 FROM cash_entries WHERE user_id = $1 LIMIT 1',
-          [session.id],
-          { timeoutMs: 2000 }
-        );
-        if (!probe || probe.length === 0) {
-          // Remote is empty, just push.
-          console.log('Remote empty, skipping pull');
-        }
-      } catch (e) {}
-    }
-
-    // 1. Flush Profiles
-    await flushPendingProfileUpdates();
-
-    // 2. Push Local Changes
-    const pushStats = await syncPending();
-
-    // 3. Pull Remote Changes (Delta)
-    const pullStats = await pullRemote();
-
-    const total =
-      (pushStats.pushed || 0) +
-      (pushStats.updated || 0) +
-      (pushStats.deleted || 0) +
-      (pullStats.pulled || 0) +
-      (pullStats.merged || 0);
-
-    // 4. Update Sync Metadata
-    const now = new Date().toISOString();
-    await AsyncStorage.setItem('last_sync_at', now);
-    await AsyncStorage.setItem('last_sync_count', String(total));
+    // Delegate actual sync work to runFullSync (single source of truth)
+    await runFullSync();
 
     _lastSuccessfulSyncAt = Date.now();
     _syncFailureCount = 0;
 
-    // 5. Notify UI
     try {
       const { notifyEntriesChanged } = require('../utils/dbEvents');
       notifyEntriesChanged();
     } catch (e) {}
 
-    return { ...pushStats, ...pullStats, total };
+    return { ok: true } as any;
   } catch (err) {
-    // Log error but do not re-throw to keep auto-sync safe
     try {
       console.error('Sync failed', err);
     } catch (e) {}
-    // Continue to finally block to ensure _syncInProgress is reset
     _syncFailureCount = Math.min(5, _syncFailureCount + 1);
-    return { pushed: 0, updated: 0, deleted: 0, pulled: 0, merged: 0, total: 0 };
+    return { ok: false } as any;
   } finally {
     _syncInProgress = false;
     // notify listeners that sync finished
