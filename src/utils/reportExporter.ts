@@ -3,6 +3,7 @@ import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
 const { documentDirectory, writeAsStringAsync, EncodingType } = FileSystem as any;
 import dayjs from 'dayjs';
+import { isIncome } from './transactionType';
 
 // Types
 type Format = 'pdf' | 'csv' | 'json';
@@ -44,14 +45,13 @@ const generatePdf = async (data: any[], options: ExportOptions): Promise<string>
   let totalIncome = 0;
   let totalExpense = 0;
 
-  if (groupBy === 'category') {
+    if (groupBy === 'category') {
     const grouped: Record<string, { in: number; out: number; items: any[] }> = {};
 
     data.forEach((item) => {
       const cat = item.category || 'Uncategorized';
       if (!grouped[cat]) grouped[cat] = { in: 0, out: 0, items: [] };
       grouped[cat].items.push(item);
-      const { isIncome } = require('./transactionType');
       if (isIncome(item.type)) {
         grouped[cat].in += Number(item.amount);
         totalIncome += Number(item.amount);

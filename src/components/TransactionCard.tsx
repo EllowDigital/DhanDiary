@@ -103,12 +103,10 @@ const TransactionCardInner: React.FC<Props> = ({
             <Text
               style={[
                 styles.amountText,
-                {
-                  color: item.type === 'in' ? '#2E7D32' : '#C62828',
-                },
+                { color: isIncome(item.type) ? '#2E7D32' : '#C62828' },
               ]}
             >
-              {item.type === 'in' ? '+' : '-'}₹{Number(item.amount).toFixed(2)}
+              {isIncome(item.type) ? '+' : '-'}₹{Number(item.amount).toFixed(2)}
             </Text>
 
             <RNText style={styles.dateText}>
@@ -201,10 +199,12 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-                { color: isIncome(item.type) ? '#2E7D32' : '#C62828' },
+  },
+
+  iconContainer: {
     width: 48,
     height: 48,
-              {isIncome(item.type) ? '+' : '-'}₹{Number(item.amount).toFixed(2)}
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 14,

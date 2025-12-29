@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS users (
     clerk_id text UNIQUE,
     email text UNIQUE NOT NULL,
     name text,
+    password_hash text,
     status text DEFAULT 'active',
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
@@ -182,12 +183,15 @@ $$ LANGUAGE plpgsql;
 -- 7. ATTACH TRIGGERS
 -- =====================================================
 
+DROP TRIGGER IF EXISTS tr_users_timestamp ON users;
 CREATE TRIGGER tr_users_timestamp BEFORE UPDATE ON users
     FOR EACH ROW EXECUTE FUNCTION update_timestamp();
 
+DROP TRIGGER IF EXISTS tr_transactions_timestamp ON transactions;
 CREATE TRIGGER tr_transactions_timestamp BEFORE UPDATE ON transactions
     FOR EACH ROW EXECUTE FUNCTION update_timestamp();
 
+DROP TRIGGER IF EXISTS tr_transactions_version ON transactions;
 CREATE TRIGGER tr_transactions_version BEFORE UPDATE ON transactions
     FOR EACH ROW EXECUTE FUNCTION increment_version();
 

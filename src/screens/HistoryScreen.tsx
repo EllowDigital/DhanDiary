@@ -33,6 +33,7 @@ import { DEFAULT_CATEGORY, ensureCategory, getIconForCategory } from '../constan
 import ScreenHeader from '../components/ScreenHeader';
 import dayjs from 'dayjs';
 import { Swipeable } from 'react-native-gesture-handler';
+import { isIncome } from '../utils/transactionType';
 
 // Fix Android Animation Layout
 if (Platform.OS === 'android') {
@@ -45,11 +46,11 @@ const resolveEntryMoment = (entry: any) => dayjs(entry?.date || entry?.created_a
 
 // --- 1. MEMOIZED LIST ITEM (Performance) ---
 const SwipeableHistoryItem = React.memo(({ item, onEdit, onDelete }: any) => {
-  const { isIncome } = require('../utils/transactionType');
-  const color = isIncome ? colors.accentGreen : colors.accentRed;
+  const isInc = isIncome(item.type);
+  const color = isInc ? colors.accentGreen : colors.accentRed;
   // Use category-based icon when available, fall back to type arrows
   const catIcon = getIconForCategory(item.category);
-  const iconName = catIcon || (isIncome ? 'arrow-downward' : 'arrow-upward');
+  const iconName = catIcon || (isInc ? 'arrow-downward' : 'arrow-upward');
   const dateStr = dayjs(item.date || item.created_at).format('MMM D, h:mm A');
   const swipeableRef = useRef<Swipeable>(null);
 
@@ -108,11 +109,11 @@ const SwipeableHistoryItem = React.memo(({ item, onEdit, onDelete }: any) => {
       overshootLeft={false}
     >
       <View style={styles.compactRow}>
-        <View style={[styles.compactIcon, { backgroundColor: isIncome ? '#ecfdf5' : '#fef2f2' }]}>
+        <View style={[styles.compactIcon, { backgroundColor: isInc ? '#ecfdf5' : '#fef2f2' }]}>
           <MaterialIcon
             name={iconName as any}
             size={20}
-            color={isIncome ? colors.accentGreen : colors.accentRed}
+            color={isInc ? colors.accentGreen : colors.accentRed}
           />
         </View>
         <View style={styles.compactContent}>
@@ -120,8 +121,8 @@ const SwipeableHistoryItem = React.memo(({ item, onEdit, onDelete }: any) => {
             <Text style={styles.compactCategory} numberOfLines={1}>
               {item.category}
             </Text>
-            <Text style={[styles.compactAmount, { color }]}>
-              {isIncome ? '+' : '-'}₹{Number(item.amount).toLocaleString()}
+            <Text style={[styles.compactAmount, { color }]}> 
+              {isInc ? '+' : '-'}₹{Number(item.amount).toLocaleString()}
             </Text>
           </View>
           <View style={styles.compactSubRow}>
