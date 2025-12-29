@@ -172,6 +172,55 @@ const run = async () => {
       process.exit(5);
     }
 
+    // Post-schema migration steps: if a legacy `cash_entries` table exists,
+    // perform an idempotent copy of rows into `transactions` (mapping types
+    // and timestamps). Dropping the legacy table is optional and only
+    // performed when DROP_LEGACY_TABLE=1 is set in the environment.
+    console.log('Running post-schema migration checks...');
+    try {
+      const legacy = await sql.query("SELECT to_regclass('public.cash_entries') as exists;");
+      const hasLegacy = !!(legacy && legacy[0] && legacy[0].exists);
+      console.log('legacy cash_entries present:', hasLegacy);
+      if (hasLegacy) {
+        console.log('Copying missing rows from cash_entries -> transactions (idempotent)...');
+        // Map legacy boolean 'deleted' and timestamp columns to new deleted_at bigint, and map type values
+        await sql.query(`
+          INSERT INTO transactions (id, user_id, client_id, type, amount, category, note, currency, created_at, updated_at, date, deleted_at)
+          SELECT
+            ce.id,
+            ce.user_id,
+            ce.client_id,
+            CASE WHEN ce.type = 'in' THEN 'income' WHEN ce.type = 'out' THEN 'expense' ELSE ce.type END,
+            ce.amount,
+            ce.category,
+            ce.note,
+            COALESCE(ce.currency, 'INR'),
+            (EXTRACT(EPOCH FROM ce.created_at) * 1000)::bigint,
+            (EXTRACT(EPOCH FROM ce.updated_at) * 1000)::bigint,
+            ce.date,
+            CASE WHEN ce.deleted THEN (EXTRACT(EPOCH FROM ce.deleted_at) * 1000)::bigint ELSE NULL END
+          FROM cash_entries ce
+          WHERE NOT EXISTS (SELECT 1 FROM transactions t WHERE t.id = ce.id);
+        `);
+        console.log('Copy complete.');
+
+        if (process.env.DROP_LEGACY_TABLE === '1') {
+          console.log('DROP_LEGACY_TABLE=1 provided — dropping legacy triggers and table `cash_entries`');
+          try {
+            await sql.query('DROP TRIGGER IF EXISTS tr_summary_on_cash_entries ON cash_entries;');
+            await sql.query('DROP TABLE IF EXISTS cash_entries;');
+            console.log('Dropped legacy table cash_entries.');
+          } catch (dErr) {
+            console.warn('Failed to drop legacy table or triggers:', dErr.message || dErr);
+          }
+        } else {
+          console.log('To drop legacy table after verification set DROP_LEGACY_TABLE=1 and re-run this script.');
+        }
+      }
+    } catch (mErr) {
+      console.warn('Post-migration copy failed (non-fatal):', mErr.message || mErr);
+    }
+
     // Verification checks
     console.log('Running verification checks...');
     try {
