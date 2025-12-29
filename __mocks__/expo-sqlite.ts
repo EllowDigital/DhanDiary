@@ -7,10 +7,10 @@ function openDatabase() {
         executeSql: (sql: string, params: any[] = [], ok?: any, err?: any) => {
           try {
             const res = makeResult();
-            ok && ok(tx, res);
+            if (ok) ok(tx, res);
             return true;
           } catch (e) {
-            err && err(tx, e);
+            if (err) err(tx, e);
             return false;
           }
         },
