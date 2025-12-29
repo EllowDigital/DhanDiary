@@ -55,6 +55,24 @@ export async function pushToNeon(): Promise<{ pushed: string[]; deleted: string[
             date = EXCLUDED.date,
             updated_at = EXCLUDED.updated_at`;
 
+        // Ensure we pass numeric epoch-ms values for date/updated_at so the
+        // server-side SQL casting ($7::bigint / $8::bigint) doesn't attempt
+        // to cast a timestamp value to bigint (which errors).
+        const normalizeToEpoch = (v: any) => {
+          if (v === null || v === undefined) return null;
+          if (typeof v === 'number') return v;
+          // If it's already a numeric string, coerce to number
+          const asNum = Number(v);
+          if (!Number.isNaN(asNum)) return asNum;
+          // Fallback: parse as Date
+          const d = new Date(v);
+          const t = d.getTime();
+          return Number.isNaN(t) ? null : t;
+        };
+
+        const dateParam = normalizeToEpoch(row.date ?? null);
+        const updatedAtParam = normalizeToEpoch(row.updated_at ?? null);
+
         await neonQuery(sql, [
           row.id,
           row.user_id,
@@ -62,8 +80,8 @@ export async function pushToNeon(): Promise<{ pushed: string[]; deleted: string[
           row.type,
           row.category ?? null,
           row.note ?? null,
-          row.date ?? null,
-          row.updated_at ?? null,
+          dateParam,
+          updatedAtParam,
         ]);
 
         // Mark local row as synced
