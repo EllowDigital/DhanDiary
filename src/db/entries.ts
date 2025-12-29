@@ -132,7 +132,12 @@ export const updateLocalEntry = async (localId: string, updates: any) => {
   if (updates.date !== undefined) {
     // Accept ISO string, Date, or null; store as timestamptz
     fields.push(`date = CASE WHEN $${idx} IS NULL THEN NULL ELSE $${idx}::timestamptz END`);
-    const d = updates.date === null ? null : typeof updates.date === 'string' ? updates.date : new Date(updates.date).toISOString();
+    const d =
+      updates.date === null
+        ? null
+        : typeof updates.date === 'string'
+          ? updates.date
+          : new Date(updates.date).toISOString();
     params.push(d);
     idx++;
   }

@@ -118,7 +118,9 @@ const run = async () => {
       if (!hasDefault) {
         console.log('Setting default for transactions.id to uuid_generate_v4()');
         try {
-          await sql.query('ALTER TABLE transactions ALTER COLUMN id SET DEFAULT uuid_generate_v4();');
+          await sql.query(
+            'ALTER TABLE transactions ALTER COLUMN id SET DEFAULT uuid_generate_v4();'
+          );
         } catch (e) {
           console.warn('Failed to set default on id (non-fatal):', e.message || e);
         }
@@ -126,7 +128,7 @@ const run = async () => {
       if (!dataType.includes('uuid')) {
         console.log('Ensuring transactions.id is of type uuid (attempting safe cast)');
         try {
-          await sql.query("ALTER TABLE transactions ALTER COLUMN id TYPE uuid USING (id::uuid);");
+          await sql.query('ALTER TABLE transactions ALTER COLUMN id TYPE uuid USING (id::uuid);');
         } catch (e) {
           console.warn('Failed to cast id to uuid (non-fatal):', e.message || e);
         }
@@ -315,7 +317,9 @@ const run = async () => {
     console.log('Attaching trigger to transactions...');
     try {
       await sql.query('DROP TRIGGER IF EXISTS tr_summary_on_transactions ON transactions;');
-      await sql.query("CREATE TRIGGER tr_summary_on_transactions AFTER INSERT OR UPDATE OR DELETE ON transactions FOR EACH ROW EXECUTE FUNCTION tr_upsert_daily_summary();");
+      await sql.query(
+        'CREATE TRIGGER tr_summary_on_transactions AFTER INSERT OR UPDATE OR DELETE ON transactions FOR EACH ROW EXECUTE FUNCTION tr_upsert_daily_summary();'
+      );
     } catch (tErr) {
       console.warn('Failed to attach trigger (non-fatal):', tErr.message || tErr);
     }
