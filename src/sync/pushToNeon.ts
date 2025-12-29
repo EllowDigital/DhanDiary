@@ -45,7 +45,7 @@ export async function pushToNeon(): Promise<{ pushed: string[]; deleted: string[
       try {
         const sql = `INSERT INTO transactions
           (id, user_id, amount, type, category, note, date, updated_at)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+          VALUES ($1,$2,$3,$4,$5,$6,CASE WHEN $7::bigint IS NULL OR $7::bigint = 0 THEN NULL ELSE to_timestamp($7::bigint / 1000) END,$8::bigint)
           ON CONFLICT (id) DO UPDATE SET
             user_id = EXCLUDED.user_id,
             amount = EXCLUDED.amount,

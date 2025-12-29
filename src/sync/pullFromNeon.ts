@@ -77,15 +77,20 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
     let sql: string;
     let params: any[];
     if (neonUpdatedAtIsTimestamptz) {
-      sql = `SELECT id, user_id, amount, type, category, note, date, updated_at, sync_status, deleted_at
+      // When the remote column is timestamptz, select epoch-ms aliases so
+      // the client always receives bigint epoch-ms values for comparisons.
+      sql = `SELECT id, user_id, amount, type, category, note, date,
+        (EXTRACT(EPOCH FROM updated_at) * 1000)::bigint AS updated_at,
+        sync_status,
+        (CASE WHEN deleted_at IS NULL THEN NULL ELSE (EXTRACT(EPOCH FROM deleted_at) * 1000)::bigint END) AS deleted_at
         FROM transactions
-        WHERE updated_at > to_timestamp($1::bigint / 1000)
-        ORDER BY updated_at ASC;`;
+        WHERE (EXTRACT(EPOCH FROM updated_at) * 1000) > $1
+        ORDER BY (EXTRACT(EPOCH FROM updated_at) * 1000) ASC;`;
       params = [lastSync || 0];
     } else {
       sql = `SELECT id, user_id, amount, type, category, note, date, updated_at, sync_status, deleted_at
         FROM transactions
-        WHERE updated_at > $1
+        WHERE updated_at > $1::bigint
         ORDER BY updated_at ASC;`;
       params = [lastSync || 0];
     }

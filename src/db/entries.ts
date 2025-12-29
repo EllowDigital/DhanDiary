@@ -73,8 +73,25 @@ export const addLocalEntry = async (entry: any) => {
   // Ensure client_id exists
   const clientId = entry.client_id && uuidValidate(entry.client_id) ? entry.client_id : uuidv4();
 
+  // Normalize timestamp fields: accept ISO strings or numbers (epoch-ms)
+  const createdAtMs = entry.created_at
+    ? typeof entry.created_at === 'string'
+      ? Number(new Date(entry.created_at).getTime())
+      : Number(entry.created_at)
+    : null;
+  const updatedAtMs = entry.updated_at
+    ? typeof entry.updated_at === 'string'
+      ? Number(new Date(entry.updated_at).getTime())
+      : Number(entry.updated_at)
+    : null;
+  const dateMs = entry.date
+    ? typeof entry.date === 'string'
+      ? Number(new Date(entry.date).getTime())
+      : Number(entry.date)
+    : null;
+
   const res = await query(
-    `INSERT INTO transactions (user_id, client_id, type, amount, category, note, currency, created_at, updated_at, date) VALUES ($1,$2,$3,$4::numeric,$5,$6,$7,$8::bigint,$9::bigint,CASE WHEN $10 IS NULL OR $10::bigint = 0 THEN NULL ELSE to_timestamp($10::bigint / 1000) END) RETURNING id, user_id, type, amount, category, note, currency, created_at, updated_at, date, client_id`,
+    `INSERT INTO transactions (user_id, client_id, type, amount, category, note, currency, created_at, updated_at, date) VALUES ($1,$2,$3,$4::numeric,$5,$6,$7,$8::bigint,$9::bigint,CASE WHEN $10::bigint IS NULL OR $10::bigint = 0 THEN NULL ELSE to_timestamp($10::bigint / 1000) END) RETURNING id, user_id, type, amount, category, note, currency, created_at, updated_at, date, client_id`,
     [
       userId,
       clientId,
@@ -83,9 +100,9 @@ export const addLocalEntry = async (entry: any) => {
       entry.category,
       entry.note || null,
       entry.currency || 'INR',
-      entry.created_at,
-      entry.updated_at,
-      entry.date,
+      createdAtMs,
+      updatedAtMs,
+      dateMs,
     ]
   );
   const row = res && res[0];
