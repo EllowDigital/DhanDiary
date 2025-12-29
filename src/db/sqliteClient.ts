@@ -1,77 +1,137 @@
-// Adapter between runtime expo-sqlite and Jest-friendly in-memory mock.
-// Exposes: execAsync, runAsync, getAllAsync, getFirstAsync
+import * as SQLite from 'expo-sqlite';
 
-type ExecResult = { rows: { length: number; item: (i: number) => any } };
+// --- Types ---
 
-const makeEmptyResult = (): ExecResult => ({ rows: { length: 0, item: (_: number) => null } });
-
-const isJest = typeof process !== 'undefined' && typeof (process as any).env !== 'undefined' && (process as any).env.JEST_WORKER_ID !== undefined;
-
-let execAsync: (sql: string, params?: any[]) => Promise<any[]>;
-let runAsync: (sql: string, params?: any[]) => Promise<any>;
-let getAllAsync: (sql: string, params?: any[]) => Promise<any[]>;
-let getFirstAsync: (sql: string, params?: any[]) => Promise<any | null>;
-
-if (isJest) {
-  execAsync = async (_sql: string, _params: any[] = []) => [null, makeEmptyResult()];
-  runAsync = async (_sql: string, _params: any[] = []) => ({ changes: 0 });
-  getAllAsync = async (_sql: string, _params: any[] = []) => [];
-  getFirstAsync = async (_sql: string, _params: any[] = []) => null;
-} else {
-  const SQLite = require('expo-sqlite');
-  const DB_NAME = 'dhandiary.db';
-  const nativeDb = (SQLite as any).openDatabase ? (SQLite as any).openDatabase(DB_NAME) : (SQLite as any).openDatabaseSync(DB_NAME);
-
-  // Use modern native async methods when available (openDatabaseSync on SDK49+)
-  if (nativeDb && typeof nativeDb.execAsync === 'function') {
-    execAsync = (sql: string, params: any[] = []) => nativeDb.execAsync(sql, params);
-    runAsync = (sql: string, params: any[] = []) => nativeDb.runAsync(sql, params);
-    getAllAsync = (sql: string, params: any[] = []) => nativeDb.getAllAsync(sql, params);
-    getFirstAsync = (sql: string, params: any[] = []) => nativeDb.getFirstAsync(sql, params);
-  } else if (nativeDb && typeof nativeDb.transaction === 'function') {
-    // Legacy fallback for older expo-sqlite where transaction/executeSql is available
-    execAsync = (sql: string, params: any[] = []) => {
-      return new Promise<any[]>((resolve, reject) => {
-        try {
-          nativeDb.transaction((tx: any) => {
-            tx.executeSql(
-              sql,
-              params,
-              (_t: any, result: any) => resolve([_t, result]),
-              (_t: any, err: any) => {
-                reject(err);
-                return false;
-              }
-            );
-          });
-        } catch (e) {
-          reject(e);
-        }
-      });
-    };
-
-    runAsync = async (sql: string, params: any[] = []) => {
-      const [, res] = await execAsync(sql, params);
-      return res;
-    };
-
-    getAllAsync = async (sql: string, params: any[] = []) => {
-      const [, res] = await execAsync(sql, params);
-      const rows: any[] = [];
-      for (let i = 0; i < res.rows.length; i++) rows.push(res.rows.item(i));
-      return rows;
-    };
-
-    getFirstAsync = async (sql: string, params: any[] = []) => {
-      const [, res] = await execAsync(sql, params);
-      if (res.rows.length === 0) return null;
-      return res.rows.item(0);
-    };
-  } else {
-    throw new Error('Unsupported expo-sqlite native DB shape: no execAsync or transaction available');
-  }
+// The shape of the result for write operations (INSERT, UPDATE, DELETE)
+export interface RunResult {
+  lastInsertRowId: number;
+  changes: number;
 }
 
-const client = { execAsync, runAsync, getAllAsync, getFirstAsync };
+// Generic interface for database rows
+export type Row = Record<string, any>;
+
+// Interface defining our unified client API
+export interface DatabaseClient {
+  execAsync: (sql: string) => Promise<void>;
+  runAsync: (sql: string, params?: any[]) => Promise<RunResult>;
+  getAllAsync: <T = Row>(sql: string, params?: any[]) => Promise<T[]>;
+  getFirstAsync: <T = Row>(sql: string, params?: any[]) => Promise<T | null>;
+}
+
+const DB_NAME = 'dhandiary.db';
+
+// Check if we are running in a Jest test environment
+const isJest =
+  typeof process !== 'undefined' &&
+  process.env.JEST_WORKER_ID !== undefined;
+
+// --- Implementations ---
+
+/**
+ * 1. JEST / MOCK IMPLEMENTATION
+ * Returns empty structures or null to prevent tests from crashing.
+ */
+const mockClient: DatabaseClient = {
+  execAsync: async () => {},
+  runAsync: async () => ({ lastInsertRowId: 0, changes: 0 }),
+  getAllAsync: async () => [],
+  getFirstAsync: async () => null,
+};
+
+/**
+ * 2. REAL DATABASE IMPLEMENTATION
+ * Factory function to create the correct client based on available Expo methods.
+ */
+const createDbClient = (): DatabaseClient => {
+  if (isJest) return mockClient;
+
+  // Initialize DB. Try modern synchronous open, fall back to legacy.
+  let db: any;
+  try {
+    // @ts-ignore: Check for modern openDatabaseSync (SDK 50+)
+    if (typeof SQLite.openDatabaseSync === 'function') {
+        // @ts-ignore
+        db = SQLite.openDatabaseSync(DB_NAME);
+    } else {
+        // Legacy (SDK 49-)
+        db = SQLite.openDatabase(DB_NAME);
+    }
+  } catch (e) {
+    console.warn('Error opening DB, falling back to mock:', e);
+    return mockClient;
+  }
+
+  // --- A: Modern API (SDK 50+) ---
+  // If the database object has the new methods natively, pass them through.
+  if (db && typeof db.getAllAsync === 'function') {
+    return {
+      execAsync: (sql) => db.execAsync(sql),
+      runAsync: (sql, params = []) => db.runAsync(sql, params),
+      getAllAsync: (sql, params = []) => db.getAllAsync(sql, params),
+      getFirstAsync: (sql, params = []) => db.getFirstAsync(sql, params),
+    };
+  }
+
+  // --- B: Legacy Adapter (SDK 49 & below) ---
+  // Polyfills the new Async API using the old transaction API.
+  console.log('Using Legacy SQLite Adapter');
+
+  const executeSql = (sql: string, params: any[] = []): Promise<any> => {
+    return new Promise((resolve, reject) => {
+      db.transaction((tx: any) => {
+        tx.executeSql(
+          sql,
+          params,
+          (_: any, result: any) => resolve(result),
+          (_: any, error: any) => {
+            reject(error);
+            return false; // Stop transaction
+          }
+        );
+      });
+    });
+  };
+
+  return {
+    // execAsync is for batch execution strings in modern API
+    execAsync: async (sql: string) => {
+      // In legacy, we just run it as a standard SQL command
+      await executeSql(sql, []); 
+    },
+
+    runAsync: async (sql: string, params: any[] = []) => {
+      const res = await executeSql(sql, params);
+      // Map legacy 'rowsAffected' -> modern 'changes'
+      return {
+        lastInsertRowId: res.insertId || 0,
+        changes: res.rowsAffected || 0,
+      };
+    },
+
+    getAllAsync: async <T = Row>(sql: string, params: any[] = []) => {
+      const res = await executeSql(sql, params);
+      // In legacy, rows is an array-like object with an 'item' function
+      const items: T[] = [];
+      for (let i = 0; i < res.rows.length; i++) {
+        items.push(res.rows.item(i));
+      }
+      return items;
+    },
+
+    getFirstAsync: async <T = Row>(sql: string, params: any[] = []) => {
+      const res = await executeSql(sql, params);
+      if (res.rows.length > 0) {
+        return res.rows.item(0) as T;
+      }
+      return null;
+    },
+  };
+};
+
+// Initialize the client singleton
+const client = createDbClient();
+
+// Export the singleton as default and named methods
 export default client;
-export { execAsync, runAsync, getAllAsync, getFirstAsync };
+export const { execAsync, runAsync, getAllAsync, getFirstAsync } = client;
