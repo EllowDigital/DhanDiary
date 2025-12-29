@@ -50,7 +50,7 @@ const mapRowToLocal = (r: any): LocalEntry => ({
 export const getEntries = async (userId: string) => {
   if (!userId || !uuidValidate(userId)) return [];
   const rows = await query(
-    `SELECT id, user_id, type, amount, category, note, currency, created_at, updated_at, date FROM cash_entries WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 1000`,
+    `SELECT id, user_id, type, amount, category, note, currency, created_at, updated_at, date FROM cash_entries WHERE user_id = $1 AND (deleted IS NOT TRUE) ORDER BY updated_at DESC LIMIT 1000`,
     [userId]
   );
   return (rows || []).map(mapRowToLocal);
@@ -150,7 +150,7 @@ export const deleteLocalEntry = async (localId: string) => {
 
 export const getEntryByLocalId = async (localId: string) => {
   const res = await query(
-    `SELECT id, user_id, type, amount, category, note, currency, created_at, updated_at, date FROM cash_entries WHERE id = $1 LIMIT 1`,
+    `SELECT id, user_id, type, amount, category, note, currency, created_at, updated_at, date FROM cash_entries WHERE id = $1 AND (deleted IS NOT TRUE) LIMIT 1`,
     [localId]
   );
   const row = res && res[0];
@@ -176,7 +176,7 @@ export const getUnsyncedEntries = async () => [];
 export async function* fetchEntriesGenerator(userId: string, pageSize: number = 1000) {
   if (!userId || !uuidValidate(userId)) return;
   const rows = await query(
-    `SELECT id, user_id, type, amount, category, note, currency, created_at, updated_at, date FROM cash_entries WHERE user_id = $1 ORDER BY updated_at DESC`,
+    `SELECT id, user_id, type, amount, category, note, currency, created_at, updated_at, date FROM cash_entries WHERE user_id = $1 AND (deleted IS NOT TRUE) ORDER BY updated_at DESC`,
     [userId]
   );
   yield (rows || []).map(mapRowToLocal);
