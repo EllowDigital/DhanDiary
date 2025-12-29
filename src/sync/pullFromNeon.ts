@@ -35,9 +35,9 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
   // If Neon isn't configured, skip pulling for now.
   try {
     const health = getNeonHealth();
-    if (!health.isConfigured) {
+      if (!health.isConfigured) {
       if (__DEV__) console.warn('[sync] pullFromNeon: Neon not configured, skipping pull');
-      return { pulled: 0, lastSync: lastSync || null };
+      return { pulled: 0, lastSync: lastSync || 0 };
     }
   } catch (e) {
     if (__DEV__) console.warn('[sync] pullFromNeon: failed to get neon health', e);
@@ -56,7 +56,7 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
   } catch (e) {
     if (__DEV__) console.warn('[sync] pullFromNeon: neon query failed', e);
     // Return gracefully — do not throw so runFullSync can continue
-    return { pulled: 0, lastSync: lastSync || null };
+    return { pulled: 0, lastSync: lastSync || 0 };
   }
 
   let maxRemoteTs = lastSync;
@@ -117,7 +117,7 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
   }
 
   if (__DEV__) console.log('[sync] pullFromNeon: finished, pulled', pulled);
-  return { pulled, lastSync: maxRemoteTs || null };
+  return { pulled, lastSync: maxRemoteTs || 0 };
 }
 
 export default pullFromNeon;
