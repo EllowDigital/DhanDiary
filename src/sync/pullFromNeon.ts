@@ -84,10 +84,10 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
   // Update last_sync_timestamp if we processed any remote rows
   if (maxRemoteTs && maxRemoteTs > lastSync) {
     try {
-      await executeSqlAsync(
-        'INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?);',
-        ['last_sync_timestamp', String(maxRemoteTs)]
-      );
+      await executeSqlAsync('INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?);', [
+        'last_sync_timestamp',
+        String(maxRemoteTs),
+      ]);
       if (__DEV__) console.log('[sync] pullFromNeon: updated lastSync', maxRemoteTs);
     } catch (e) {
       if (__DEV__) console.warn('[sync] pullFromNeon: failed to update lastSync', e);

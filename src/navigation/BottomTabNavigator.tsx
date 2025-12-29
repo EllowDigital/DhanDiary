@@ -166,7 +166,7 @@ const CustomTabBar = ({ state, descriptors, navigation }: any) => {
           };
 
           let iconName = 'circle';
-          if (route.name === 'Dashboard')
+          if (route.name === 'Home')
             iconName = isFocused ? 'view-dashboard' : 'view-dashboard-outline';
           if (route.name === 'History') iconName = 'history';
           if (route.name === 'More')
@@ -199,7 +199,7 @@ const BottomTabNavigator = () => {
           headerShown: false,
         }}
       >
-        <Tab.Screen name="Dashboard" component={HomeScreen} options={{ tabBarLabel: 'Home' }} />
+        <Tab.Screen name="Home" component={HomeScreen} options={{ tabBarLabel: 'Home' }} />
         <Tab.Screen name="History" component={HistoryScreen} options={{ tabBarLabel: 'History' }} />
         <Tab.Screen name="More" component={MoreScreen} options={{ tabBarLabel: 'Menu' }} />
       </Tab.Navigator>

@@ -13,22 +13,22 @@ function openDatabase() {
             err && err(tx, e);
             return false;
           }
-          },
-        };
-        try {
-          cb(tx);
-        } catch (e) {
-          // noop
-        }
-        return tx;
-      },
-    };
-  }
+        },
+      };
+      try {
+        cb(tx);
+      } catch (e) {
+        // noop
+      }
+      return tx;
+    },
+  };
+}
 
-  function openDatabaseSync() {
-    return openDatabase();
-  }
+function openDatabaseSync() {
+  return openDatabase();
+}
 
-  export { openDatabase, openDatabaseSync };
+export { openDatabase, openDatabaseSync };
 
-  export default { openDatabase, openDatabaseSync };
+export default { openDatabase, openDatabaseSync };

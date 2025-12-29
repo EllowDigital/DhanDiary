@@ -15,7 +15,8 @@ const Q = (sql: string, params: any[] = []) => query(sql, params, { retries: 2, 
 const isUuid = (s: any) =>
   typeof s === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(s);
 
-const isLocalDbDisabledError = (err: any) => String(err?.message || '').includes('Offline/local DB disabled');
+const isLocalDbDisabledError = (err: any) =>
+  String(err?.message || '').includes('Offline/local DB disabled');
 
 export const pullRemoteLegacy = async () => {
   const state = await NetInfo.fetch();

@@ -23,9 +23,7 @@ export interface DatabaseClient {
 const DB_NAME = 'dhandiary.db';
 
 // Check if we are running in a Jest test environment
-const isJest =
-  typeof process !== 'undefined' &&
-  process.env.JEST_WORKER_ID !== undefined;
+const isJest = typeof process !== 'undefined' && process.env.JEST_WORKER_ID !== undefined;
 
 // --- Implementations ---
 
@@ -75,9 +73,23 @@ const createDbClient = (): DatabaseClient => {
   // --- A: Modern API (SDK 50+) ---
   // If the database object has the new methods natively, pass them through.
   if (db && typeof db.getAllAsync === 'function') {
+    if (typeof __DEV__ !== 'undefined' && __DEV__)
+      console.log('[sqliteClient] using modern native async API');
     return {
       execAsync: (sql: string, params: any[] = []) => {
-        return (db.execAsync(sql, params) as Promise<any>).then((res: any) => [null, res]);
+        return (db.execAsync(sql, params) as Promise<any>).then((res: any) => {
+          if (!res) {
+            if (typeof __DEV__ !== 'undefined' && __DEV__)
+              console.warn('[sqliteClient] execAsync returned null/undefined for', sql);
+            const empty = {
+              rows: { length: 0, item: (_: number) => null },
+              rowsAffected: 0,
+              insertId: null,
+            };
+            return [null, empty];
+          }
+          return [null, res];
+        });
       },
       runAsync: (sql: string, params: any[] = []) => db.runAsync(sql, params),
       getAllAsync: (sql: string, params: any[] = []) => db.getAllAsync(sql, params),
@@ -125,6 +137,7 @@ const createDbClient = (): DatabaseClient => {
     getAllAsync: async <T = Row>(sql: string, params: any[] = []) => {
       const res = await executeSql(sql, params);
       // In legacy, rows is an array-like object with an 'item' function
+      if (!res || !res.rows) return [];
       const items: T[] = [];
       for (let i = 0; i < res.rows.length; i++) {
         items.push(res.rows.item(i));
@@ -134,10 +147,8 @@ const createDbClient = (): DatabaseClient => {
 
     getFirstAsync: async <T = Row>(sql: string, params: any[] = []) => {
       const res = await executeSql(sql, params);
-      if (res.rows.length > 0) {
-        return res.rows.item(0) as T;
-      }
-      return null;
+      if (!res || !res.rows || res.rows.length === 0) return null;
+      return res.rows.item(0) as T;
     },
   };
 };

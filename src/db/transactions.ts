@@ -42,7 +42,9 @@ export async function addTransaction(txn: Partial<TransactionRow> & { id: string
   } as TransactionRow;
 }
 
-export async function updateTransaction(txn: Partial<TransactionRow> & { id: string; user_id: string }) {
+export async function updateTransaction(
+  txn: Partial<TransactionRow> & { id: string; user_id: string }
+) {
   const now = Date.now();
   const sql = `UPDATE transactions SET amount = ?, type = ?, category = ?, note = ?, date = ?, updated_at = ?, sync_status = ? WHERE id = ? AND user_id = ?;`;
   // set sync_status to 0 (pending push) on update

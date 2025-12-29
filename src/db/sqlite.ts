@@ -51,7 +51,12 @@ export async function executeSqlAsync(sql: string, params: any[] = []) {
   const isSelect = sqlTrim.startsWith('SELECT');
 
   if (isSelect) {
-    const rows = await getAllAsync(sql, params);
+    let rows = await getAllAsync(sql, params);
+    if (!rows) {
+      if (typeof __DEV__ !== 'undefined' && __DEV__)
+        console.warn('[sqlite] executeSqlAsync: getAllAsync returned null for', sql);
+      rows = [];
+    }
     const result = {
       rows: {
         length: rows.length,
