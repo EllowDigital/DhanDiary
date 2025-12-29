@@ -14,6 +14,7 @@ import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { RectButton } from 'react-native-gesture-handler';
 import dayjs from 'dayjs';
 import AppCard from './AppCard';
+import { isIncome } from '../utils/transactionType';
 import { ensureCategory } from '../constants/categories';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -81,13 +82,13 @@ const TransactionCardInner: React.FC<Props> = ({
           <View
             style={[
               styles.iconContainer,
-              { backgroundColor: item.type === 'in' ? '#E8F5E9' : '#FDECEA' },
+              { backgroundColor: isIncome(item.type) ? '#E8F5E9' : '#FDECEA' },
             ]}
           >
             <MaterialIcon
-              name={item.type === 'in' ? 'arrow-downward' : 'arrow-upward'}
+              name={isIncome(item.type) ? 'arrow-downward' : 'arrow-upward'}
               size={26}
-              color={item.type === 'in' ? '#2E7D32' : '#C62828'}
+              color={isIncome(item.type) ? '#2E7D32' : '#C62828'}
             />
           </View>
 
@@ -200,12 +201,10 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-
-  iconContainer: {
+                { color: isIncome(item.type) ? '#2E7D32' : '#C62828' },
     width: 48,
     height: 48,
-    borderRadius: 14,
+              {isIncome(item.type) ? '+' : '-'}₹{Number(item.amount).toFixed(2)}
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 14,

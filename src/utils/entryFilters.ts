@@ -1,5 +1,6 @@
 import { LocalEntry } from '../db/entries';
 import { ensureCategory, FALLBACK_CATEGORY } from '../constants/categories';
+import { isIncome, isExpense } from './transactionType';
 
 export type EntryTimeframe = 'all' | '7d' | '30d';
 export type EntrySortMode = 'recent' | 'amount';
@@ -29,10 +30,14 @@ export const entryTimestamp = (entry: LocalEntry): number => {
 
 export const selectEntriesByType = (
   entries: LocalEntry[] | undefined,
-  type: 'in' | 'out'
+  type: 'in' | 'out' | 'income' | 'expense'
 ): LocalEntry[] => {
   if (!entries?.length) return [];
-  return entries.filter((entry) => entry.type === type);
+  const wantIncome = isIncome(type as string);
+  return entries.filter((entry) => {
+    if (wantIncome) return isIncome(entry.type);
+    return isExpense(entry.type);
+  });
 };
 
 export const applyTimeframeFilter = (

@@ -51,7 +51,8 @@ const generatePdf = async (data: any[], options: ExportOptions): Promise<string>
       const cat = item.category || 'Uncategorized';
       if (!grouped[cat]) grouped[cat] = { in: 0, out: 0, items: [] };
       grouped[cat].items.push(item);
-      if (item.type === 'in') {
+      const { isIncome } = require('./transactionType');
+      if (isIncome(item.type)) {
         grouped[cat].in += Number(item.amount);
         totalIncome += Number(item.amount);
       } else {
@@ -88,7 +89,7 @@ const generatePdf = async (data: any[], options: ExportOptions): Promise<string>
   } else {
     // Linear list calculation
     data.forEach((item) => {
-      if (item.type === 'in') totalIncome += Number(item.amount);
+      if (isIncome(item.type)) totalIncome += Number(item.amount);
       else totalExpense += Number(item.amount);
     });
   }
@@ -110,8 +111,8 @@ const generatePdf = async (data: any[], options: ExportOptions): Promise<string>
                 <td style="padding: 6px;">${dayjs(item.date).format('DD MMM YYYY')}</td>
                 <td style="padding: 6px;">${item.category}</td>
                 <td style="padding: 6px; color: #64748b;">${item.note || ''}</td>
-                <td style="padding: 6px; text-align: right; color: ${item.type === 'in' ? '#166534' : '#991B1B'}; font-weight: 600;">
-                    ${item.type === 'in' ? '+' : '-'} ${formatMoney(item.amount, item.currency)}
+                <td style="padding: 6px; text-align: right; color: ${isIncome(item.type) ? '#166534' : '#991B1B'}; font-weight: 600;">
+                  ${isIncome(item.type) ? '+' : '-'} ${formatMoney(item.amount, item.currency)}
                 </td>
             </tr>
         `

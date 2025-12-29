@@ -74,7 +74,8 @@ const AddEntryScreen: React.FC = () => {
 
   // Params
   const editingParamId = route?.params?.local_id;
-  const initialType = route?.params?.type === 'in' ? 1 : 0;
+  const { isIncome } = require('../utils/transactionType');
+  const initialType = isIncome(route?.params?.type) ? 1 : 0;
 
   // --- STATE ---
   const [editingLocalId, setEditingLocalId] = useState<string | null>(null);
@@ -141,7 +142,7 @@ const AddEntryScreen: React.FC = () => {
       if (found) {
         setAmount(String(found.amount));
         setNote(found.note ?? '');
-        setTypeIndex(found.type === 'in' ? 1 : 0);
+        setTypeIndex(isIncome(found.type) ? 1 : 0);
         setCategory(ensureCategory(found.category));
         // Handle various date formats safely
         const d = found.date || found.created_at;
@@ -157,7 +158,7 @@ const AddEntryScreen: React.FC = () => {
       setEditingLocalId(null);
       setAmount('');
       setNote('');
-      setTypeIndex(route?.params?.type === 'in' ? 1 : 0);
+      setTypeIndex(isIncome(route?.params?.type) ? 1 : 0);
       setCategory(DEFAULT_CATEGORY);
       setDate(new Date());
       setSaving(false);

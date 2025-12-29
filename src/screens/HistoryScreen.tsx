@@ -45,7 +45,7 @@ const resolveEntryMoment = (entry: any) => dayjs(entry?.date || entry?.created_a
 
 // --- 1. MEMOIZED LIST ITEM (Performance) ---
 const SwipeableHistoryItem = React.memo(({ item, onEdit, onDelete }: any) => {
-  const isIncome = item.type === 'in';
+  const { isIncome } = require('../utils/transactionType');
   const color = isIncome ? colors.accentGreen : colors.accentRed;
   // Use category-based icon when available, fall back to type arrows
   const catIcon = getIconForCategory(item.category);
@@ -155,7 +155,7 @@ const EditTransactionModal = React.memo(({ visible, entry, onClose, onSave }: an
       setAmount(String(entry.amount));
       setCategory(ensureCategory(entry.category));
       setNote(entry.note || '');
-      setTypeIndex(entry.type === 'in' ? 1 : 0);
+      setTypeIndex(isIncome(entry.type) ? 1 : 0);
       setDate(new Date(entry.date || entry.created_at));
     }
   }, [entry]);
@@ -349,7 +349,7 @@ const HistoryScreen = () => {
     let net = 0;
     filtered.forEach((e) => {
       const val = Number(e.amount) || 0;
-      net += e.type === 'in' ? val : -val;
+      net += isIncome(e.type) ? val : -val;
     });
     return { net, count: filtered.length };
   }, [filtered]);

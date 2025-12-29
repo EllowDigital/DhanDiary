@@ -272,7 +272,10 @@ const HomeScreen = () => {
       };
 
     const inVal = entries
-      .filter((e) => e.type === 'in')
+      .filter((e) => {
+        const { isIncome } = require('../utils/transactionType');
+        return isIncome(e.type);
+      })
       .reduce((acc, c) => acc + Number(c.amount), 0);
     const outVal = entries
       .filter((e) => e.type === 'out')
