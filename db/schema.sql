@@ -8,6 +8,26 @@
 -- Enable UUID extension for unique IDs
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- Canonical transactions table
+CREATE TABLE IF NOT EXISTS transactions (
+    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id uuid NOT NULL,
+    client_id uuid,
+    type text CHECK (type IN ('income','expense')),
+    amount numeric(18,2) NOT NULL,
+    category text,
+    note text,
+    currency text DEFAULT 'INR',
+    -- sync columns used by client and sync machinery
+    sync_status integer DEFAULT 0,
+    need_sync boolean DEFAULT false,
+    created_at bigint,
+    updated_at bigint,
+    deleted_at bigint,
+    date timestamptz,
+    server_version bigint DEFAULT 0
+);
+
 -- 1. USERS TABLE
 CREATE OR REPLACE FUNCTION upsert_monthly_summary(p_user_id UUID, p_month_date DATE)
 RETURNS VOID AS $$

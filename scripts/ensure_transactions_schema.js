@@ -106,6 +106,36 @@ const run = async () => {
     console.log('Column checks complete.');
   }
 
+  // Ensure `id` column has a UUID type and a default generator
+  try {
+    const idInfo = await sql.query(
+      "SELECT column_name, data_type, column_default FROM information_schema.columns WHERE table_name='transactions' AND column_name='id';"
+    );
+    if (idInfo && idInfo[0]) {
+      const col = idInfo[0];
+      const dataType = String(col.data_type || '').toLowerCase();
+      const hasDefault = !!col.column_default;
+      if (!hasDefault) {
+        console.log('Setting default for transactions.id to uuid_generate_v4()');
+        try {
+          await sql.query('ALTER TABLE transactions ALTER COLUMN id SET DEFAULT uuid_generate_v4();');
+        } catch (e) {
+          console.warn('Failed to set default on id (non-fatal):', e.message || e);
+        }
+      }
+      if (!dataType.includes('uuid')) {
+        console.log('Ensuring transactions.id is of type uuid (attempting safe cast)');
+        try {
+          await sql.query("ALTER TABLE transactions ALTER COLUMN id TYPE uuid USING (id::uuid);");
+        } catch (e) {
+          console.warn('Failed to cast id to uuid (non-fatal):', e.message || e);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to verify/repair id column (non-fatal):', e.message || e);
+  }
+
   // Ensure currency column exists and is text
   try {
     await sql.query(
