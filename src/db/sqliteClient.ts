@@ -54,7 +54,7 @@ const createDbClient = (): DatabaseClient => {
 
   // Initialize DB. Try modern synchronous open, fall back to legacy.
   let db: any;
-    try {
+  try {
     // Check for modern openDatabaseSync (SDK 50+)
     if (typeof (SQLite as any).openDatabaseSync === 'function') {
       // runtime method may not exist in older Expo SDK typings
