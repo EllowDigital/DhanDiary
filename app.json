@@ -43,6 +43,7 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "expo-sqlite",
       "expo-updates",
       "expo-web-browser",
       "expo-font",
