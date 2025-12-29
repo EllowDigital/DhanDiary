@@ -22,15 +22,17 @@ const defaultIsTransient = (err: unknown) => {
   );
 };
 
+// Robust check for Jest environment that works in RN and Node
+const isTest = typeof process !== 'undefined' && !!process.env?.JEST_WORKER_ID;
+
 export async function retryWithBackoff<T>(
   fn: () => Promise<T>,
   opts: RetryOptions = {}
 ): Promise<T> {
   const { maxRetries = 3, baseDelayMs = 500, isTransient = defaultIsTransient } = opts;
-  const isTest =
-    typeof process !== 'undefined' && !!process.env && process.env.JEST_WORKER_ID !== undefined;
 
   function sleep(ms: number) {
+    // Skip waiting during tests to keep them fast
     if (isTest) return Promise.resolve();
     return new Promise((res) => setTimeout(res, ms));
   }
@@ -44,8 +46,11 @@ export async function retryWithBackoff<T>(
     } catch (err) {
       lastErr = err;
       const transient = isTransient(err);
+
+      // If error is permanent (not transient), fail immediately
       if (!transient) {
-        if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        // Log only if in Dev mode AND NOT in a test
+        if (typeof __DEV__ !== 'undefined' && __DEV__ && !isTest) {
           console.warn('[retry] non-transient error, not retrying', err);
         }
         throw err;
@@ -53,14 +58,14 @@ export async function retryWithBackoff<T>(
 
       if (attempt === maxRetries) break;
 
-      // exponential backoff base delay then apply full jitter
+      // Exponential backoff with full jitter
       const delay = baseDelayMs * Math.pow(2, attempt);
       const jittered = Math.round(Math.random() * delay);
 
-      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      if (typeof __DEV__ !== 'undefined' && __DEV__ && !isTest) {
         console.log(
           `[retry] attempt ${attempt + 1}/${maxRetries}, waiting ${jittered}ms (base ${delay}ms)`,
-          err?.toString?.() || err
+          err instanceof Error ? err.message : String(err)
         );
       }
 
@@ -69,7 +74,7 @@ export async function retryWithBackoff<T>(
     }
   }
 
-  if (typeof __DEV__ !== 'undefined' && __DEV__) {
+  if (typeof __DEV__ !== 'undefined' && __DEV__ && !isTest) {
     console.warn('[retry] exhausted retries', lastErr);
   }
   throw lastErr;
