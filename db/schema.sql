@@ -9,130 +9,6 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- 1. USERS TABLE
--- Stores authentication details and profile info
-CREATE TABLE IF NOT EXISTS users (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    email TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
-    name TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    last_login TIMESTAMPTZ,
-    status TEXT DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'deleted')),
-    clerk_id TEXT UNIQUE -- Link to Clerk Authentication
-);
-
--- Index for fast Clerk lookups
-CREATE UNIQUE INDEX IF NOT EXISTS idx_users_clerk_id ON users(clerk_id);
-
--- Canonical `transactions` table used by mobile app and sync code.
--- Use epoch-milliseconds for created_at/updated_at/deleted_at so client and server
--- can compare integers without timezone conversions.
-CREATE TABLE IF NOT EXISTS transactions (
-    id TEXT PRIMARY KEY NOT NULL,
-    client_id TEXT,
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-
-    -- Transaction Details
-    type TEXT CHECK (type IN ('income','expense')),
-    amount NUMERIC(15,2) NOT NULL,
-    category TEXT,
-    note TEXT,
-    date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-
-    -- Sync & Versioning Fields
-    server_version INTEGER DEFAULT 1,
-    sync_status INTEGER DEFAULT 0,
-    deleted_at BIGINT NULL,
-    created_at BIGINT DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint,
-    updated_at BIGINT DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint
-);
-
-CREATE INDEX IF NOT EXISTS idx_transactions_user_date ON transactions(user_id, date DESC);
-CREATE INDEX IF NOT EXISTS idx_transactions_updated_at ON transactions(updated_at);
-
-
--- 3. SUMMARIES TABLE (For Performance)
--- Pre-computed daily totals to avoid expensive aggregation queries on mobile
-CREATE TABLE IF NOT EXISTS daily_summaries (
-    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    date DATE NOT NULL,
-    
-    total_in NUMERIC(15, 2) DEFAULT 0,
-    total_out NUMERIC(15, 2) DEFAULT 0,
-    count INTEGER DEFAULT 0,
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    
-    UNIQUE(user_id, date) -- One summary per user per day
-);
-
--- 4. INDEXES (Performance Optimization)
-CREATE INDEX IF NOT EXISTS idx_entries_user_date ON transactions(user_id, date DESC);
-CREATE INDEX IF NOT EXISTS idx_entries_updated_at ON transactions(updated_at);
--- client_id is already unique index
-CREATE INDEX IF NOT EXISTS idx_summaries_user_date ON daily_summaries(user_id, date);
-
--- 5. AUTOMATIC TIMESTAMP UPDATER
-CREATE OR REPLACE FUNCTION update_modified_column()
-RETURNS TRIGGER AS $$
-BEGIN
-    -- store updated_at as epoch milliseconds to match mobile client
-    NEW.updated_at = (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint;
-    RETURN NEW;
-END;
-$$ language 'plpgsql';
-
--- Apply triggers
-DROP TRIGGER IF EXISTS update_users_modtime ON users;
-CREATE TRIGGER update_users_modtime
-    BEFORE UPDATE ON users
-    FOR EACH ROW
-    EXECUTE FUNCTION update_modified_column();
-
-DROP TRIGGER IF EXISTS update_entries_modtime ON transactions;
-CREATE TRIGGER update_entries_modtime
-    BEFORE UPDATE ON transactions
-    FOR EACH ROW
-    EXECUTE FUNCTION update_modified_column();
-
--- 6. VERSION INCREMENTER (For Sync)
-CREATE OR REPLACE FUNCTION increment_server_version()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.server_version = COALESCE(OLD.server_version, 0) + 1;
-    RETURN NEW;
-END;
-$$ language 'plpgsql';
-
-DROP TRIGGER IF EXISTS increment_entry_version ON transactions;
-CREATE TRIGGER increment_entry_version
-    BEFORE UPDATE ON transactions
-    FOR EACH ROW
-    EXECUTE FUNCTION increment_server_version();
-
--- =====================================================================
--- 7. PRECOMPUTED SUMMARIES: DAILY + MONTHLY + TRIGGERS
--- =====================================================================
-
--- Monthly summaries table (for faster month-level queries)
-CREATE TABLE IF NOT EXISTS monthly_summaries (
-        id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        year INTEGER NOT NULL,
-        month INTEGER NOT NULL,
-        total_in NUMERIC(18, 2) DEFAULT 0,
-        total_out NUMERIC(18, 2) DEFAULT 0,
-        count INTEGER DEFAULT 0,
-        updated_at TIMESTAMPTZ DEFAULT NOW(),
-        UNIQUE(user_id, year, month)
-);
-
-CREATE INDEX IF NOT EXISTS idx_monthly_user_year_month ON monthly_summaries(user_id, year, month);
-
--- Function: Recalculate monthly summary for user and month (idempotent)
--- Deploy functions/triggers atomically to reduce partial-deploy risks
-BEGIN;
 CREATE OR REPLACE FUNCTION upsert_monthly_summary(p_user_id UUID, p_month_date DATE)
 RETURNS VOID AS $$
 BEGIN
@@ -140,15 +16,15 @@ BEGIN
     SELECT user_id,
                  EXTRACT(YEAR FROM date)::INT AS yr,
                  EXTRACT(MONTH FROM date)::INT AS mn,
-                 COALESCE(SUM(CASE WHEN type = 'in' THEN amount ELSE 0 END), 0)::numeric(18,2) AS total_in,
-                 COALESCE(SUM(CASE WHEN type = 'out' THEN amount ELSE 0 END), 0)::numeric(18,2) AS total_out,
+                 COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0)::numeric(18,2) AS total_in,
+                 COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0)::numeric(18,2) AS total_out,
                  COUNT(*)::INT AS cnt,
                  NOW()
-    FROM cash_entries
+    FROM transactions
     WHERE user_id = p_user_id
         AND date >= p_month_date
         AND date < (p_month_date + INTERVAL '1 month')
-        AND NOT deleted
+        AND deleted_at IS NULL
     GROUP BY user_id, EXTRACT(YEAR FROM date), EXTRACT(MONTH FROM date)
     ON CONFLICT (user_id, year, month) DO UPDATE
         SET total_in = EXCLUDED.total_in,
@@ -156,6 +32,130 @@ BEGIN
                 count = EXCLUDED.count,
                 updated_at = NOW();
 END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger function: maintain daily_summaries and keep monthly in sync
+CREATE OR REPLACE FUNCTION tr_upsert_daily_summary()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_old_date DATE;
+    v_new_date DATE;
+BEGIN
+    -- INSERT
+    IF (TG_OP = 'INSERT') THEN
+        IF (NEW.deleted_at IS NOT NULL) THEN
+            RETURN NEW;
+        END IF;
+        v_new_date := NEW.date::date;
+        IF (NEW.type = 'income') THEN
+            INSERT INTO daily_summaries(user_id, date, total_in, total_out, count, updated_at)
+            VALUES (NEW.user_id, v_new_date, NEW.amount::numeric, 0, 1, NOW())
+            ON CONFLICT (user_id, date) DO UPDATE
+                SET total_in = daily_summaries.total_in + EXCLUDED.total_in,
+                        count = daily_summaries.count + 1,
+                        updated_at = NOW();
+        ELSE
+            INSERT INTO daily_summaries(user_id, date, total_in, total_out, count, updated_at)
+            VALUES (NEW.user_id, v_new_date, 0, NEW.amount::numeric, 1, NOW())
+            ON CONFLICT (user_id, date) DO UPDATE
+                SET total_out = daily_summaries.total_out + EXCLUDED.total_out,
+                        count = daily_summaries.count + 1,
+                        updated_at = NOW();
+        END IF;
+
+        -- maintain monthly aggregate for the new row's month
+        PERFORM upsert_monthly_summary(NEW.user_id, date_trunc('month', NEW.date)::date);
+        RETURN NEW;
+    END IF;
+
+    -- UPDATE
+    IF (TG_OP = 'UPDATE') THEN
+        v_old_date := OLD.date::date;
+        v_new_date := NEW.date::date;
+
+        -- If row transitioned from not-deleted -> deleted: subtract OLD
+        IF (OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL) THEN
+            IF (OLD.type = 'income') THEN
+                UPDATE daily_summaries
+                SET total_in = GREATEST(total_in - OLD.amount, 0), count = GREATEST(count - 1, 0), updated_at = NOW()
+                WHERE user_id = OLD.user_id AND date = v_old_date;
+            ELSE
+                UPDATE daily_summaries
+                SET total_out = GREATEST(total_out - OLD.amount, 0), count = GREATEST(count - 1, 0), updated_at = NOW()
+                WHERE user_id = OLD.user_id AND date = v_old_date;
+            END IF;
+
+            PERFORM upsert_monthly_summary(OLD.user_id, date_trunc('month', OLD.date)::date);
+            RETURN NEW;
+        END IF;
+
+        -- If the OLD row existed (not deleted) subtract its contribution
+        IF (OLD.deleted_at IS NULL) THEN
+            IF (OLD.type = 'income') THEN
+                UPDATE daily_summaries
+                SET total_in = GREATEST(total_in - OLD.amount, 0), count = GREATEST(count - 1, 0), updated_at = NOW()
+                WHERE user_id = OLD.user_id AND date = v_old_date;
+            ELSE
+                UPDATE daily_summaries
+                SET total_out = GREATEST(total_out - OLD.amount, 0), count = GREATEST(count - 1, 0), updated_at = NOW()
+                WHERE user_id = OLD.user_id AND date = v_old_date;
+            END IF;
+        END IF;
+
+        -- If the NEW row is not deleted, add its contribution
+        IF (NEW.deleted_at IS NULL) THEN
+            IF (NEW.type = 'income') THEN
+                INSERT INTO daily_summaries(user_id, date, total_in, total_out, count, updated_at)
+                VALUES (NEW.user_id, v_new_date, NEW.amount::numeric, 0, 1, NOW())
+                ON CONFLICT (user_id, date) DO UPDATE
+                    SET total_in = daily_summaries.total_in + EXCLUDED.total_in,
+                            count = daily_summaries.count + 1,
+                            updated_at = NOW();
+            ELSE
+                INSERT INTO daily_summaries(user_id, date, total_in, total_out, count, updated_at)
+                VALUES (NEW.user_id, v_new_date, 0, NEW.amount::numeric, 1, NOW())
+                ON CONFLICT (user_id, date) DO UPDATE
+                    SET total_out = daily_summaries.total_out + EXCLUDED.total_out,
+                            count = daily_summaries.count + 1,
+                            updated_at = NOW();
+            END IF;
+        END IF;
+
+        -- Recompute monthly summaries for any affected months
+        PERFORM upsert_monthly_summary(OLD.user_id, date_trunc('month', OLD.date)::date);
+        PERFORM upsert_monthly_summary(NEW.user_id, date_trunc('month', NEW.date)::date);
+        RETURN NEW;
+    END IF;
+
+    -- DELETE
+    IF (TG_OP = 'DELETE') THEN
+        IF (OLD.deleted_at IS NULL) THEN
+            IF (OLD.type = 'income') THEN
+                UPDATE daily_summaries
+                SET total_in = GREATEST(total_in - OLD.amount, 0), count = GREATEST(count - 1, 0), updated_at = NOW()
+                WHERE user_id = OLD.user_id AND date = OLD.date::date;
+            ELSE
+                UPDATE daily_summaries
+                SET total_out = GREATEST(total_out - OLD.amount, 0), count = GREATEST(count - 1, 0), updated_at = NOW()
+                WHERE user_id = OLD.user_id AND date = OLD.date::date;
+            END IF;
+        END IF;
+
+        PERFORM upsert_monthly_summary(OLD.user_id, date_trunc('month', OLD.date)::date);
+        RETURN OLD;
+    END IF;
+
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Attach the trigger to transactions
+DROP TRIGGER IF EXISTS tr_summary_on_transactions ON transactions;
+CREATE TRIGGER tr_summary_on_transactions
+    AFTER INSERT OR UPDATE OR DELETE ON transactions
+    FOR EACH ROW EXECUTE FUNCTION tr_upsert_daily_summary();
+
+COMMIT;
 $$ LANGUAGE plpgsql;
 -- Trigger function: maintain daily_summaries and keep monthly in sync
 CREATE OR REPLACE FUNCTION tr_upsert_daily_summary()
@@ -304,6 +304,25 @@ COMMIT;
 --       count = EXCLUDED.count,
 --       updated_at = NOW();
 -- COMMIT;
+-- Backfill daily_summaries from existing transactions (idempotent upsert)
+-- Run this in the Neon SQL editor once during migration
+--
+-- BEGIN;
+-- INSERT INTO daily_summaries (user_id, date, total_in, total_out, count, updated_at)
+-- SELECT user_id, date::date,
+--   COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END),0)::numeric(18,2),
+--   COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END),0)::numeric(18,2),
+--   COUNT(*)::int,
+--   NOW()
+-- FROM transactions
+-- WHERE deleted_at IS NULL
+-- GROUP BY user_id, date::date
+-- ON CONFLICT (user_id, date) DO UPDATE
+--   SET total_in = EXCLUDED.total_in,
+--       total_out = EXCLUDED.total_out,
+--       count = EXCLUDED.count,
+--       updated_at = NOW();
+-- COMMIT;
 
 -- Backfill monthly summaries (optional)
 -- BEGIN;
@@ -317,6 +336,25 @@ COMMIT;
 --   NOW()
 -- FROM cash_entries
 -- WHERE NOT deleted
+-- GROUP BY user_id, EXTRACT(YEAR FROM date), EXTRACT(MONTH FROM date)
+-- ON CONFLICT (user_id, year, month) DO UPDATE
+--   SET total_in = EXCLUDED.total_in,
+--       total_out = EXCLUDED.total_out,
+--       count = EXCLUDED.count,
+--       updated_at = NOW();
+-- COMMIT;
+-- Backfill monthly summaries (optional)
+-- BEGIN;
+-- INSERT INTO monthly_summaries (user_id, year, month, total_in, total_out, count, updated_at)
+-- SELECT user_id,
+--   EXTRACT(YEAR FROM date)::INT,
+--   EXTRACT(MONTH FROM date)::INT,
+--   COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END),0)::numeric(18,2),
+--   COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END),0)::numeric(18,2),
+--   COUNT(*)::int,
+--   NOW()
+-- FROM transactions
+-- WHERE deleted_at IS NULL
 -- GROUP BY user_id, EXTRACT(YEAR FROM date), EXTRACT(MONTH FROM date)
 -- ON CONFLICT (user_id, year, month) DO UPDATE
 --   SET total_in = EXCLUDED.total_in,
