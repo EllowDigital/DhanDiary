@@ -6,6 +6,7 @@ import { query as neonQuery, getNeonHealth } from '../api/neonClient';
 // repeatedly attempting the same query during this app session which
 // floods the logs. This is a best-effort session guard only.
 let neonMissingTransactionsTable = false;
+let neonUpdatedAtIsTimestamptz: boolean | null = null;
 
 /**
  * pullFromNeon
@@ -55,13 +56,40 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
     return { pulled: 0, lastSync: lastSync || 0 };
   }
   try {
-    const sql = `SELECT id, user_id, amount, type, category, note, date, updated_at, sync_status, deleted_at
-      FROM transactions
-      WHERE updated_at > $1
-      ORDER BY updated_at ASC;`;
-    // neonQuery returns an array of rows
-    // Use $1 parameter for lastSync
-    remoteRows = (await neonQuery(sql, [lastSync || 0])) || [];
+    // Detect remote column type for updated_at once per session so we can
+    // compare correctly when the column is either bigint (epoch-ms) or
+    // timestamptz (Postgres timestamp with timezone). If it's timestamptz,
+    // comparing it to raw 0 will cause "date/time field value out of range: '0'".
+    if (neonUpdatedAtIsTimestamptz === null) {
+      try {
+        const info = await neonQuery(
+          "SELECT data_type, udt_name FROM information_schema.columns WHERE table_name='transactions' AND column_name='updated_at' LIMIT 1"
+        );
+        const row = (info && info[0]) || null;
+        const udt = row && (row.udt_name || row.data_type);
+        neonUpdatedAtIsTimestamptz = !!(udt && String(udt).toLowerCase().includes('timestamp'));
+      } catch (er) {
+        // If introspection fails, assume bigint to preserve previous behavior.
+        neonUpdatedAtIsTimestamptz = false;
+      }
+    }
+
+    let sql: string;
+    let params: any[];
+    if (neonUpdatedAtIsTimestamptz) {
+      sql = `SELECT id, user_id, amount, type, category, note, date, updated_at, sync_status, deleted_at
+        FROM transactions
+        WHERE updated_at > to_timestamp($1::bigint / 1000)
+        ORDER BY updated_at ASC;`;
+      params = [lastSync || 0];
+    } else {
+      sql = `SELECT id, user_id, amount, type, category, note, date, updated_at, sync_status, deleted_at
+        FROM transactions
+        WHERE updated_at > $1
+        ORDER BY updated_at ASC;`;
+      params = [lastSync || 0];
+    }
+    remoteRows = (await neonQuery(sql, params)) || [];
   } catch (e: any) {
     // If the remote database doesn't have the transactions table, the
     // Neon client will raise an error like: relation "transactions" does not exist
