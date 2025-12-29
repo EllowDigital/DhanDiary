@@ -24,6 +24,7 @@ import Svg, { Defs, LinearGradient, Stop, Rect, Circle } from 'react-native-svg'
 import { LineChart, PieChart } from 'react-native-chart-kit';
 import dayjs from 'dayjs';
 import { subscribeSyncStatus } from '../services/syncManager';
+import { isExpense as isExpenseType, isIncome as isIncomeType } from '../utils/transactionType';
 
 // --- CRASH PROOF ANIMATION SETUP ---
 const setupLayoutAnimation = () => {
@@ -178,7 +179,7 @@ const RankList = React.memo(({ data, total }: { data: any[]; total: number }) =>
 
 // 4. TRANSACTION ITEM
 const TransactionItem = React.memo(({ item, onPress }: { item: any; onPress: () => void }) => {
-  const isExpense = item.type === 'out';
+  const isExpense = isExpenseType(item.type);
   const category = item.category || 'Other';
   const color = CATEGORY_COLORS[category] || colors.subText;
 
