@@ -72,4 +72,33 @@ describe('runFullSync', () => {
 
     await expect(runFullSync()).resolves.not.toThrow();
   });
+
+  test('retries transient push failures and succeeds', async () => {
+    const calls: string[] = [];
+    pushToNeon.mockImplementationOnce(async () => {
+      calls.push('first');
+      throw new Error('timeout');
+    });
+    pushToNeon.mockImplementationOnce(async () => {
+      calls.push('second');
+      return { pushed: ['a'] };
+    });
+    pullFromNeon.mockImplementation(async () => ({ pulled: 0 }));
+
+    await runFullSync();
+    expect(calls).toEqual(['first', 'second']);
+    expect(pullFromNeon).toHaveBeenCalled();
+  });
+
+  test('does not retry non-transient push errors', async () => {
+    pushToNeon.mockImplementation(async () => {
+      throw new Error('validation error');
+    });
+    pullFromNeon.mockImplementation(async () => ({ pulled: 0 }));
+
+    await runFullSync();
+    // push should have been called exactly once (no retry)
+    expect(pushToNeon).toHaveBeenCalledTimes(1);
+    expect(pullFromNeon).toHaveBeenCalled();
+  });
 });

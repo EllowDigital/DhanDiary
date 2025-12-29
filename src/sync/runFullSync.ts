@@ -1,5 +1,6 @@
 import pushToNeon from './pushToNeon';
 import pullFromNeon from './pullFromNeon';
+import retryWithBackoff from './retry';
 
 /**
  * Simple lock to prevent overlapping syncs. Exported so callers can query state.
@@ -47,21 +48,29 @@ export async function runFullSync(): Promise<{ pushed?: any; pulled?: any } | nu
 
   try {
     try {
-      pushResult = await pushToNeon();
+      // Retry transient push failures with exponential backoff
+      pushResult = await retryWithBackoff(() => pushToNeon(), {
+        maxRetries: 3,
+        baseDelayMs: 500,
+      });
       if (__DEV__) console.log('[sync] runFullSync: push result', pushResult);
     } catch (pushErr) {
       if (__DEV__ && typeof process !== 'undefined' && process.env.JEST_WORKER_ID === undefined) {
-        console.warn('[sync] runFullSync: push failed', pushErr);
+        console.warn('[sync] runFullSync: push failed after retries', pushErr);
       }
       // continue to pull
     }
 
     try {
-      pullResult = await pullFromNeon();
+      // Retry transient pull failures with exponential backoff
+      pullResult = await retryWithBackoff(() => pullFromNeon(), {
+        maxRetries: 3,
+        baseDelayMs: 500,
+      });
       if (__DEV__) console.log('[sync] runFullSync: pull result', pullResult);
     } catch (pullErr) {
       if (__DEV__ && typeof process !== 'undefined' && process.env.JEST_WORKER_ID === undefined) {
-        console.warn('[sync] runFullSync: pull failed', pullErr);
+        console.warn('[sync] runFullSync: pull failed after retries', pullErr);
       }
     }
   } finally {

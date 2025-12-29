@@ -2,6 +2,11 @@ import { executeSqlAsync } from '../db/sqlite';
 import { upsertTransactionFromRemote } from '../db/transactions';
 import { query as neonQuery, getNeonHealth } from '../api/neonClient';
 
+// If the remote Neon DB doesn't have the `transactions` table, avoid
+// repeatedly attempting the same query during this app session which
+// floods the logs. This is a best-effort session guard only.
+let neonMissingTransactionsTable = false;
+
 /**
  * pullFromNeon
  * - Reads `last_sync_timestamp` from `meta` table
@@ -45,6 +50,10 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
 
   // Fetch remote rows updated since lastSync (ascending by updated_at)
   let remoteRows: Array<any> = [];
+  if (neonMissingTransactionsTable) {
+    if (__DEV__) console.log('[sync] pullFromNeon: skipping pull — remote table missing (cached)');
+    return { pulled: 0, lastSync: lastSync || 0 };
+  }
   try {
     const sql = `SELECT id, user_id, amount, type, category, note, date, updated_at, sync_status, deleted_at
       FROM transactions
@@ -53,7 +62,16 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
     // neonQuery returns an array of rows
     // Use $1 parameter for lastSync
     remoteRows = (await neonQuery(sql, [lastSync || 0])) || [];
-  } catch (e) {
+  } catch (e: any) {
+    // If the remote database doesn't have the transactions table, the
+    // Neon client will raise an error like: relation "transactions" does not exist
+    const msg = (e && (e.message || String(e))).toLowerCase();
+    if (msg.includes('relation') && msg.includes('transactions') && msg.includes('does not exist')) {
+      neonMissingTransactionsTable = true;
+      if (__DEV__) console.warn('[sync] pullFromNeon: remote "transactions" table missing, skipping pulls until restart');
+      return { pulled: 0, lastSync: lastSync || 0 };
+    }
+
     if (__DEV__) console.warn('[sync] pullFromNeon: neon query failed', e);
     // Return gracefully — do not throw so runFullSync can continue
     return { pulled: 0, lastSync: lastSync || 0 };
