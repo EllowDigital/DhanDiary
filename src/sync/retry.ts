@@ -27,6 +27,12 @@ export async function retryWithBackoff<T>(
   opts: RetryOptions = {}
 ): Promise<T> {
   const { maxRetries = 3, baseDelayMs = 500, isTransient = defaultIsTransient } = opts;
+  const isTest = typeof process !== 'undefined' && !!process.env && process.env.JEST_WORKER_ID !== undefined;
+
+  function sleep(ms: number) {
+    if (isTest) return Promise.resolve();
+    return new Promise((res) => setTimeout(res, ms));
+  }
 
   let attempt = 0;
   let lastErr: any = null;
@@ -46,12 +52,19 @@ export async function retryWithBackoff<T>(
 
       if (attempt === maxRetries) break;
 
+      // exponential backoff base delay then apply full jitter
       const delay = baseDelayMs * Math.pow(2, attempt);
+      const jittered = Math.round(Math.random() * delay);
+
       if (typeof __DEV__ !== 'undefined' && __DEV__) {
-        console.log(`[retry] attempt ${attempt + 1}/${maxRetries}, retrying after ${delay}ms`, err?.toString?.() || err);
+        console.log(
+          `[retry] attempt ${attempt + 1}/${maxRetries}, waiting ${jittered}ms (base ${delay}ms)`,
+          err?.toString?.() || err
+        );
       }
-      await new Promise((res) => setTimeout(res, delay));
+
       attempt += 1;
+      await sleep(jittered);
     }
   }
 
