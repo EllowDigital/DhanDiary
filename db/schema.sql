@@ -8,12 +8,26 @@
 -- Enable UUID extension for unique IDs
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- Users table (used by auth, clerk sync, and admin scripts)
+CREATE TABLE IF NOT EXISTS users (
+    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    clerk_id text,
+    email text UNIQUE NOT NULL,
+    name text,
+    password_hash text,
+    status text DEFAULT 'active',
+    created_at timestamptz DEFAULT NOW(),
+    updated_at timestamptz DEFAULT NOW(),
+    server_version bigint DEFAULT 0
+);
+
 -- Canonical transactions table
 CREATE TABLE IF NOT EXISTS transactions (
     id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id uuid NOT NULL,
     client_id uuid,
-    type text CHECK (type IN ('income','expense')),
+    -- support legacy values 'in'/'out' as well as 'income'/'expense'
+    type text CHECK (type IN ('income','expense','in','out')),
     amount numeric(18,2) NOT NULL,
     category text,
     note text,
@@ -26,6 +40,48 @@ CREATE TABLE IF NOT EXISTS transactions (
     deleted_at bigint,
     date timestamptz,
     server_version bigint DEFAULT 0
+);
+
+-- Normalize legacy `type` values ('in' -> 'income', 'out' -> 'expense')
+CREATE OR REPLACE FUNCTION tr_normalize_transaction_type()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.type IS NULL THEN
+        NEW.type := 'expense';
+    ELSIF NEW.type = 'in' THEN
+        NEW.type := 'income';
+    ELSIF NEW.type = 'out' THEN
+        NEW.type := 'expense';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS tr_normalize_type ON transactions;
+CREATE TRIGGER tr_normalize_type
+    BEFORE INSERT OR UPDATE ON transactions
+    FOR EACH ROW EXECUTE FUNCTION tr_normalize_transaction_type();
+
+-- Summary tables used by triggers/functions
+CREATE TABLE IF NOT EXISTS daily_summaries (
+    user_id uuid NOT NULL,
+    date date NOT NULL,
+    total_in numeric(18,2) DEFAULT 0,
+    total_out numeric(18,2) DEFAULT 0,
+    count int DEFAULT 0,
+    updated_at timestamptz DEFAULT NOW(),
+    PRIMARY KEY (user_id, date)
+);
+
+CREATE TABLE IF NOT EXISTS monthly_summaries (
+    user_id uuid NOT NULL,
+    year int NOT NULL,
+    month int NOT NULL,
+    total_in numeric(18,2) DEFAULT 0,
+    total_out numeric(18,2) DEFAULT 0,
+    count int DEFAULT 0,
+    updated_at timestamptz DEFAULT NOW(),
+    PRIMARY KEY (user_id, year, month)
 );
 
 -- 1. USERS TABLE
