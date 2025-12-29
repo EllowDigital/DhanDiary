@@ -145,6 +145,154 @@ const run = async () => {
     console.warn('Timestamp conversion check failed (non-fatal):', e.message || e);
   }
 
+  // Ensure summary tables and trigger functions exist
+  try {
+    console.log('Ensuring daily_summaries and monthly_summaries tables...');
+    await sql.query(`
+      CREATE TABLE IF NOT EXISTS daily_summaries (
+        user_id uuid NOT NULL,
+        date date NOT NULL,
+        total_in numeric(18,2) DEFAULT 0,
+        total_out numeric(18,2) DEFAULT 0,
+        count int DEFAULT 0,
+        updated_at timestamptz DEFAULT NOW(),
+        PRIMARY KEY (user_id, date)
+      );
+    `);
+
+    await sql.query(`
+      CREATE TABLE IF NOT EXISTS monthly_summaries (
+        user_id uuid NOT NULL,
+        year int NOT NULL,
+        month int NOT NULL,
+        total_in numeric(18,2) DEFAULT 0,
+        total_out numeric(18,2) DEFAULT 0,
+        count int DEFAULT 0,
+        updated_at timestamptz DEFAULT NOW(),
+        PRIMARY KEY (user_id, year, month)
+      );
+    `);
+
+    console.log('Creating upsert_monthly_summary and tr_upsert_daily_summary functions...');
+    await sql.query(`
+      CREATE OR REPLACE FUNCTION upsert_monthly_summary(p_user_id UUID, p_month_date DATE)
+      RETURNS VOID AS $$
+      BEGIN
+        INSERT INTO monthly_summaries (user_id, year, month, total_in, total_out, count, updated_at)
+        SELECT user_id,
+               EXTRACT(YEAR FROM date)::INT AS yr,
+               EXTRACT(MONTH FROM date)::INT AS mn,
+               COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0)::numeric(18,2) AS total_in,
+               COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0)::numeric(18,2) AS total_out,
+               COUNT(*)::INT AS cnt,
+               NOW()
+        FROM transactions
+        WHERE user_id = p_user_id
+          AND date >= p_month_date
+          AND date < (p_month_date + INTERVAL '1 month')
+          AND (deleted_at IS NULL)
+        GROUP BY user_id, EXTRACT(YEAR FROM date), EXTRACT(MONTH FROM date)
+        ON CONFLICT (user_id, year, month) DO UPDATE
+          SET total_in = EXCLUDED.total_in,
+              total_out = EXCLUDED.total_out,
+              count = EXCLUDED.count,
+              updated_at = NOW();
+      END;
+      $$ LANGUAGE plpgsql;
+    `);
+
+    await sql.query(`
+      CREATE OR REPLACE FUNCTION tr_upsert_daily_summary()
+      RETURNS TRIGGER AS $$
+      DECLARE
+        v_old_date DATE;
+        v_new_date DATE;
+      BEGIN
+        IF (TG_OP = 'INSERT') THEN
+          IF (NEW.deleted_at IS NOT NULL) THEN RETURN NEW; END IF;
+          v_new_date := NEW.date::date;
+          IF (NEW.type = 'income') THEN
+            INSERT INTO daily_summaries(user_id, date, total_in, total_out, count, updated_at)
+            VALUES (NEW.user_id, v_new_date, NEW.amount::numeric, 0, 1, NOW())
+            ON CONFLICT (user_id, date) DO UPDATE
+              SET total_in = daily_summaries.total_in + EXCLUDED.total_in,
+                  count = daily_summaries.count + 1,
+                  updated_at = NOW();
+          ELSE
+            INSERT INTO daily_summaries(user_id, date, total_in, total_out, count, updated_at)
+            VALUES (NEW.user_id, v_new_date, 0, NEW.amount::numeric, 1, NOW())
+            ON CONFLICT (user_id, date) DO UPDATE
+              SET total_out = daily_summaries.total_out + EXCLUDED.total_out,
+                  count = daily_summaries.count + 1,
+                  updated_at = NOW();
+          END IF;
+          PERFORM upsert_monthly_summary(NEW.user_id, date_trunc('month', NEW.date)::date);
+          RETURN NEW;
+        END IF;
+
+        IF (TG_OP = 'UPDATE') THEN
+          v_old_date := OLD.date::date;
+          v_new_date := NEW.date::date;
+          IF (OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL) THEN
+            IF (OLD.type = 'income') THEN
+              UPDATE daily_summaries SET total_in = GREATEST(total_in - OLD.amount,0), count = GREATEST(count - 1,0), updated_at = NOW() WHERE user_id = OLD.user_id AND date = v_old_date;
+            ELSE
+              UPDATE daily_summaries SET total_out = GREATEST(total_out - OLD.amount,0), count = GREATEST(count - 1,0), updated_at = NOW() WHERE user_id = OLD.user_id AND date = v_old_date;
+            END IF;
+            PERFORM upsert_monthly_summary(OLD.user_id, date_trunc('month', OLD.date)::date);
+            RETURN NEW;
+          END IF;
+          IF (OLD.deleted_at IS NULL) THEN
+            IF (OLD.type = 'income') THEN
+              UPDATE daily_summaries SET total_in = GREATEST(total_in - OLD.amount,0), count = GREATEST(count - 1,0), updated_at = NOW() WHERE user_id = OLD.user_id AND date = v_old_date;
+            ELSE
+              UPDATE daily_summaries SET total_out = GREATEST(total_out - OLD.amount,0), count = GREATEST(count - 1,0), updated_at = NOW() WHERE user_id = OLD.user_id AND date = v_old_date;
+            END IF;
+          END IF;
+          IF (NEW.deleted_at IS NULL) THEN
+            IF (NEW.type = 'income') THEN
+              INSERT INTO daily_summaries(user_id, date, total_in, total_out, count, updated_at)
+              VALUES (NEW.user_id, v_new_date, NEW.amount::numeric, 0, 1, NOW())
+              ON CONFLICT (user_id, date) DO UPDATE SET total_in = daily_summaries.total_in + EXCLUDED.total_in, count = daily_summaries.count + 1, updated_at = NOW();
+            ELSE
+              INSERT INTO daily_summaries(user_id, date, total_in, total_out, count, updated_at)
+              VALUES (NEW.user_id, v_new_date, 0, NEW.amount::numeric, 1, NOW())
+              ON CONFLICT (user_id, date) DO UPDATE SET total_out = daily_summaries.total_out + EXCLUDED.total_out, count = daily_summaries.count + 1, updated_at = NOW();
+            END IF;
+          END IF;
+          PERFORM upsert_monthly_summary(OLD.user_id, date_trunc('month', OLD.date)::date);
+          PERFORM upsert_monthly_summary(NEW.user_id, date_trunc('month', NEW.date)::date);
+          RETURN NEW;
+        END IF;
+
+        IF (TG_OP = 'DELETE') THEN
+          IF (OLD.deleted_at IS NULL) THEN
+            IF (OLD.type = 'income') THEN
+              UPDATE daily_summaries SET total_in = GREATEST(total_in - OLD.amount,0), count = GREATEST(count - 1,0), updated_at = NOW() WHERE user_id = OLD.user_id AND date = OLD.date::date;
+            ELSE
+              UPDATE daily_summaries SET total_out = GREATEST(total_out - OLD.amount,0), count = GREATEST(count - 1,0), updated_at = NOW() WHERE user_id = OLD.user_id AND date = OLD.date::date;
+            END IF;
+          END IF;
+          PERFORM upsert_monthly_summary(OLD.user_id, date_trunc('month', OLD.date)::date);
+          RETURN OLD;
+        END IF;
+
+        RETURN NULL;
+      END;
+      $$ LANGUAGE plpgsql;
+    `);
+
+    console.log('Attaching trigger to transactions...');
+    try {
+      await sql.query('DROP TRIGGER IF EXISTS tr_summary_on_transactions ON transactions;');
+      await sql.query("CREATE TRIGGER tr_summary_on_transactions AFTER INSERT OR UPDATE OR DELETE ON transactions FOR EACH ROW EXECUTE FUNCTION tr_upsert_daily_summary();");
+    } catch (tErr) {
+      console.warn('Failed to attach trigger (non-fatal):', tErr.message || tErr);
+    }
+  } catch (sErr) {
+    console.warn('Summary creation failed (non-fatal):', sErr.message || sErr);
+  }
+
   console.log('Done. Please re-run your migration and verify triggers if needed.');
   process.exit(0);
 };
