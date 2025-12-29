@@ -160,8 +160,29 @@ const run = async () => {
     console.log('Parsed', statements.length, 'statements');
     try {
       for (let idx = 0; idx < statements.length; idx++) {
-        const stmt = statements[idx];
+        let stmt = statements[idx];
+        // Remove block comments and line comments for detection
+        // Remove block comments and line comments (handle CRLF and LF)
+        const cleaned = stmt
+          .replace(/\/\*[\s\S]*?\*\//g, '')
+          .replace(/(^|\r?\n)\s*--.*(?=\r?\n|$)/g, '\n')
+          .trim();
+        if (!cleaned) {
+          // Nothing but comments/whitespace — skip executing this statement.
+          if (process.env.DEBUG) console.log(`Skipping comment-only statement ${idx + 1}`);
+          continue;
+        }
         const preview = stmt.replace(/\n+/g, ' ').slice(0, 120);
+        // Only execute statements that begin with known SQL verbs to avoid
+        // sending stray text or documentation comments to the Neon HTTP API.
+        const firstToken = (cleaned.split(/\s+/)[0] || '').toUpperCase();
+        const allowed = new Set([
+          'CREATE', 'ALTER', 'DROP', 'INSERT', 'UPDATE', 'DELETE', 'BEGIN', 'COMMIT', 'GRANT', 'REVOKE', 'COMMENT', 'SET', 'DO', 'SELECT', 'WITH', 'REPLACE', 'TRUNCATE'
+        ]);
+        if (!allowed.has(firstToken)) {
+          console.log(`Skipping non-SQL statement ${idx + 1}/${statements.length}:`, preview);
+          continue;
+        }
         console.log(`Executing statement ${idx + 1}/${statements.length}:`, preview);
         await sql.query(stmt);
       }
@@ -183,25 +204,34 @@ const run = async () => {
       console.log('legacy cash_entries present:', hasLegacy);
       if (hasLegacy) {
         console.log('Copying missing rows from cash_entries -> transactions (idempotent)...');
-        // Map legacy boolean 'deleted' and timestamp columns to new deleted_at bigint, and map type values
-        await sql.query(`
-          INSERT INTO transactions (id, user_id, client_id, type, amount, category, note, currency, created_at, updated_at, date, deleted_at)
-          SELECT
-            ce.id,
-            ce.user_id,
-            ce.client_id,
+        // Introspect which legacy columns exist, then build a safe copy query.
+        const cols = await sql.query("SELECT column_name FROM information_schema.columns WHERE table_name='cash_entries';");
+        const exists = (name) => cols.some((c) => c && c.column_name === name);
+
+        const createdExpr = exists('created_at')
+          ? "(EXTRACT(EPOCH FROM ce.created_at) * 1000)::bigint"
+          : "NULL";
+        const updatedExpr = exists('updated_at')
+          ? "(EXTRACT(EPOCH FROM ce.updated_at) * 1000)::bigint"
+          : "NULL";
+        // deleted can be boolean (legacy) or deleted_at timestamp
+        let deletedExpr = 'NULL';
+        if (exists('deleted_at')) {
+          deletedExpr = "(EXTRACT(EPOCH FROM ce.deleted_at) * 1000)::bigint";
+        } else if (exists('deleted')) {
+          // If only boolean flag exists, set deleted_at to epoch of now for deleted rows, else NULL
+          deletedExpr = "CASE WHEN ce.deleted THEN (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint ELSE NULL END";
+        }
+
+        const copySql = `INSERT INTO transactions (id, user_id, client_id, type, amount, category, note, currency, created_at, updated_at, date, deleted_at)
+          SELECT ce.id, ce.user_id, ce.client_id,
             CASE WHEN ce.type = 'in' THEN 'income' WHEN ce.type = 'out' THEN 'expense' ELSE ce.type END,
-            ce.amount,
-            ce.category,
-            ce.note,
-            COALESCE(ce.currency, 'INR'),
-            (EXTRACT(EPOCH FROM ce.created_at) * 1000)::bigint,
-            (EXTRACT(EPOCH FROM ce.updated_at) * 1000)::bigint,
-            ce.date,
-            CASE WHEN ce.deleted THEN (EXTRACT(EPOCH FROM ce.deleted_at) * 1000)::bigint ELSE NULL END
+            ce.amount, ce.category, ce.note, COALESCE(ce.currency, 'INR'),
+            ${createdExpr}, ${updatedExpr}, ce.date, ${deletedExpr}
           FROM cash_entries ce
-          WHERE NOT EXISTS (SELECT 1 FROM transactions t WHERE t.id = ce.id);
-        `);
+          WHERE NOT EXISTS (SELECT 1 FROM transactions t WHERE t.id::text = ce.id::text);`;
+
+        await sql.query(copySql);
         console.log('Copy complete.');
 
         if (process.env.DROP_LEGACY_TABLE === '1') {

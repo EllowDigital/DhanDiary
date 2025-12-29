@@ -109,6 +109,32 @@ const run = async () => {
     // ignore if fails
   }
 
+  // Convert existing timestamp columns to bigint epoch-ms if necessary
+  try {
+    const info = await sql.query("SELECT column_name, data_type, udt_name FROM information_schema.columns WHERE table_name='transactions' AND column_name IN ('created_at','updated_at','deleted_at');");
+    for (const col of info) {
+      const name = col.column_name;
+      const udt = String(col.udt_name || col.data_type).toLowerCase();
+      if (udt.includes('timestamp') || udt.includes('timestamptz')) {
+        console.log(`Converting column ${name} from timestamp -> bigint (epoch-ms)`);
+        try {
+          // If the column has a default that can't be cast, DROP it first.
+          try {
+            await sql.query(`ALTER TABLE transactions ALTER COLUMN ${name} DROP DEFAULT;`);
+          } catch (e) {
+            // ignore
+          }
+          await sql.query(`ALTER TABLE transactions ALTER COLUMN ${name} TYPE bigint USING (CASE WHEN ${name} IS NULL THEN NULL ELSE (EXTRACT(EPOCH FROM ${name}) * 1000)::bigint END);`);
+          console.log(`Converted ${name} to bigint.`);
+        } catch (e) {
+          console.warn(`Failed to convert ${name}:`, e.message || e);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Timestamp conversion check failed (non-fatal):', e.message || e);
+  }
+
   console.log('Done. Please re-run your migration and verify triggers if needed.');
   process.exit(0);
 };
