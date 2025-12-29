@@ -74,7 +74,7 @@ export const addLocalEntry = async (entry: any) => {
   const clientId = entry.client_id && uuidValidate(entry.client_id) ? entry.client_id : uuidv4();
 
   const res = await query(
-    `INSERT INTO transactions (user_id, client_id, type, amount, category, note, currency, created_at, updated_at, date) VALUES ($1,$2,$3,$4::numeric,$5,$6,$7,$8::bigint,$9::bigint,$10::timestamptz) RETURNING id, user_id, type, amount, category, note, currency, created_at, updated_at, date, client_id`,
+    `INSERT INTO transactions (user_id, client_id, type, amount, category, note, currency, created_at, updated_at, date) VALUES ($1,$2,$3,$4::numeric,$5,$6,$7,$8::bigint,$9::bigint,CASE WHEN $10 IS NULL OR $10::bigint = 0 THEN NULL ELSE to_timestamp($10::bigint / 1000) END) RETURNING id, user_id, type, amount, category, note, currency, created_at, updated_at, date, client_id`,
     [
       userId,
       clientId,
@@ -113,8 +113,10 @@ export const updateLocalEntry = async (localId: string, updates: any) => {
     params.push(updates.note);
   }
   if (updates.date !== undefined) {
-    fields.push(`date = $${idx++}::timestamptz`);
+    // Accept epoch-ms or null; convert to timestamptz safely in SQL to avoid passing raw 0
+    fields.push(`date = CASE WHEN $${idx} IS NULL OR $${idx}::bigint = 0 THEN NULL ELSE to_timestamp($${idx}::bigint / 1000) END`);
     params.push(updates.date);
+    idx++;
   }
   if (fields.length === 0) return null;
   params.push(localId);
