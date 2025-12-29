@@ -36,9 +36,21 @@ export const pullRemoteLegacy = async () => {
     const timeParam = lastSyncAt || '0';
 
     const rows = await Q(
-      `SELECT id, user_id, type, amount, category, note, currency, created_at, updated_at, deleted_at, client_id, server_version, date 
-       FROM transactions 
-       WHERE user_id = $1 AND updated_at > $2::bigint`,
+      `SELECT id, user_id, type, amount, category, note, currency, created_at,
+         CASE WHEN pg_typeof(updated_at)::text = 'bigint' THEN updated_at::bigint
+              WHEN pg_typeof(updated_at)::text LIKE '%timestamp%' THEN (EXTRACT(EPOCH FROM updated_at) * 1000)::bigint
+              ELSE NULL END AS updated_at,
+         CASE WHEN deleted_at IS NULL THEN NULL
+              WHEN pg_typeof(deleted_at)::text = 'bigint' THEN deleted_at::bigint
+              WHEN pg_typeof(deleted_at)::text LIKE '%timestamp%' THEN (EXTRACT(EPOCH FROM deleted_at) * 1000)::bigint
+              ELSE NULL END AS deleted_at,
+         client_id, server_version, date
+       FROM transactions
+       WHERE user_id = $1 AND (
+         CASE WHEN pg_typeof(updated_at)::text = 'bigint' THEN updated_at::bigint
+              WHEN pg_typeof(updated_at)::text LIKE '%timestamp%' THEN (EXTRACT(EPOCH FROM updated_at) * 1000)::bigint
+              ELSE NULL END
+       ) > $2::bigint`,
       [session.id, timeParam]
     );
 
