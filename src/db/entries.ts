@@ -114,7 +114,9 @@ export const updateLocalEntry = async (localId: string, updates: any) => {
   }
   if (updates.date !== undefined) {
     // Accept epoch-ms or null; convert to timestamptz safely in SQL to avoid passing raw 0
-    fields.push(`date = CASE WHEN $${idx} IS NULL OR $${idx}::bigint = 0 THEN NULL ELSE to_timestamp($${idx}::bigint / 1000) END`);
+    fields.push(
+      `date = CASE WHEN $${idx} IS NULL OR $${idx}::bigint = 0 THEN NULL ELSE to_timestamp($${idx}::bigint / 1000) END`
+    );
     params.push(updates.date);
     idx++;
   }

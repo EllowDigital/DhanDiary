@@ -27,7 +27,8 @@ export async function retryWithBackoff<T>(
   opts: RetryOptions = {}
 ): Promise<T> {
   const { maxRetries = 3, baseDelayMs = 500, isTransient = defaultIsTransient } = opts;
-  const isTest = typeof process !== 'undefined' && !!process.env && process.env.JEST_WORKER_ID !== undefined;
+  const isTest =
+    typeof process !== 'undefined' && !!process.env && process.env.JEST_WORKER_ID !== undefined;
 
   function sleep(ms: number) {
     if (isTest) return Promise.resolve();

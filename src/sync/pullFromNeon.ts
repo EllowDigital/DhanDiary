@@ -94,9 +94,16 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
     // If the remote database doesn't have the transactions table, the
     // Neon client will raise an error like: relation "transactions" does not exist
     const msg = (e && (e.message || String(e))).toLowerCase();
-    if (msg.includes('relation') && msg.includes('transactions') && msg.includes('does not exist')) {
+    if (
+      msg.includes('relation') &&
+      msg.includes('transactions') &&
+      msg.includes('does not exist')
+    ) {
       neonMissingTransactionsTable = true;
-      if (__DEV__) console.warn('[sync] pullFromNeon: remote "transactions" table missing, skipping pulls until restart');
+      if (__DEV__)
+        console.warn(
+          '[sync] pullFromNeon: remote "transactions" table missing, skipping pulls until restart'
+        );
       return { pulled: 0, lastSync: lastSync || 0 };
     }
 

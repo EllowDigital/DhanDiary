@@ -177,7 +177,23 @@ const run = async () => {
         // sending stray text or documentation comments to the Neon HTTP API.
         const firstToken = (cleaned.split(/\s+/)[0] || '').toUpperCase();
         const allowed = new Set([
-          'CREATE', 'ALTER', 'DROP', 'INSERT', 'UPDATE', 'DELETE', 'BEGIN', 'COMMIT', 'GRANT', 'REVOKE', 'COMMENT', 'SET', 'DO', 'SELECT', 'WITH', 'REPLACE', 'TRUNCATE'
+          'CREATE',
+          'ALTER',
+          'DROP',
+          'INSERT',
+          'UPDATE',
+          'DELETE',
+          'BEGIN',
+          'COMMIT',
+          'GRANT',
+          'REVOKE',
+          'COMMENT',
+          'SET',
+          'DO',
+          'SELECT',
+          'WITH',
+          'REPLACE',
+          'TRUNCATE',
         ]);
         if (!allowed.has(firstToken)) {
           console.log(`Skipping non-SQL statement ${idx + 1}/${statements.length}:`, preview);
@@ -205,22 +221,25 @@ const run = async () => {
       if (hasLegacy) {
         console.log('Copying missing rows from cash_entries -> transactions (idempotent)...');
         // Introspect which legacy columns exist, then build a safe copy query.
-        const cols = await sql.query("SELECT column_name FROM information_schema.columns WHERE table_name='cash_entries';");
+        const cols = await sql.query(
+          "SELECT column_name FROM information_schema.columns WHERE table_name='cash_entries';"
+        );
         const exists = (name) => cols.some((c) => c && c.column_name === name);
 
         const createdExpr = exists('created_at')
-          ? "(EXTRACT(EPOCH FROM ce.created_at) * 1000)::bigint"
-          : "NULL";
+          ? '(EXTRACT(EPOCH FROM ce.created_at) * 1000)::bigint'
+          : 'NULL';
         const updatedExpr = exists('updated_at')
-          ? "(EXTRACT(EPOCH FROM ce.updated_at) * 1000)::bigint"
-          : "NULL";
+          ? '(EXTRACT(EPOCH FROM ce.updated_at) * 1000)::bigint'
+          : 'NULL';
         // deleted can be boolean (legacy) or deleted_at timestamp
         let deletedExpr = 'NULL';
         if (exists('deleted_at')) {
-          deletedExpr = "(EXTRACT(EPOCH FROM ce.deleted_at) * 1000)::bigint";
+          deletedExpr = '(EXTRACT(EPOCH FROM ce.deleted_at) * 1000)::bigint';
         } else if (exists('deleted')) {
           // If only boolean flag exists, set deleted_at to epoch of now for deleted rows, else NULL
-          deletedExpr = "CASE WHEN ce.deleted THEN (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint ELSE NULL END";
+          deletedExpr =
+            'CASE WHEN ce.deleted THEN (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint ELSE NULL END';
         }
 
         const copySql = `INSERT INTO transactions (id, user_id, client_id, type, amount, category, note, currency, created_at, updated_at, date, deleted_at)
@@ -235,7 +254,9 @@ const run = async () => {
         console.log('Copy complete.');
 
         if (process.env.DROP_LEGACY_TABLE === '1') {
-          console.log('DROP_LEGACY_TABLE=1 provided — dropping legacy triggers and table `cash_entries`');
+          console.log(
+            'DROP_LEGACY_TABLE=1 provided — dropping legacy triggers and table `cash_entries`'
+          );
           try {
             await sql.query('DROP TRIGGER IF EXISTS tr_summary_on_cash_entries ON cash_entries;');
             await sql.query('DROP TABLE IF EXISTS cash_entries;');
@@ -244,7 +265,9 @@ const run = async () => {
             console.warn('Failed to drop legacy table or triggers:', dErr.message || dErr);
           }
         } else {
-          console.log('To drop legacy table after verification set DROP_LEGACY_TABLE=1 and re-run this script.');
+          console.log(
+            'To drop legacy table after verification set DROP_LEGACY_TABLE=1 and re-run this script.'
+          );
         }
       }
     } catch (mErr) {

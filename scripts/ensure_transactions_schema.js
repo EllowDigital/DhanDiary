@@ -78,19 +78,23 @@ const run = async () => {
     `);
     console.log('Created transactions table.');
   } else {
-    console.log('Ensuring required columns exist (id, user_id, client_id, type, amount, category, note, currency, created_at, updated_at, deleted_at, date, server_version)...');
+    console.log(
+      'Ensuring required columns exist (id, user_id, client_id, type, amount, category, note, currency, created_at, updated_at, deleted_at, date, server_version)...'
+    );
     const alters = [];
-    alters.push("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS client_id uuid;");
-    alters.push("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS type text;");
-    alters.push("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS amount numeric(18,2);");
-    alters.push("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS category text;");
-    alters.push("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS note text;");
+    alters.push('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS client_id uuid;');
+    alters.push('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS type text;');
+    alters.push('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS amount numeric(18,2);');
+    alters.push('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS category text;');
+    alters.push('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS note text;');
     alters.push("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS currency text DEFAULT 'INR';");
-    alters.push("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS created_at bigint;");
-    alters.push("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS updated_at bigint;");
-    alters.push("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS deleted_at bigint;");
-    alters.push("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS date timestamptz;");
-    alters.push("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS server_version bigint DEFAULT 0;");
+    alters.push('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS created_at bigint;');
+    alters.push('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS updated_at bigint;');
+    alters.push('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS deleted_at bigint;');
+    alters.push('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS date timestamptz;');
+    alters.push(
+      'ALTER TABLE transactions ADD COLUMN IF NOT EXISTS server_version bigint DEFAULT 0;'
+    );
 
     for (const a of alters) {
       try {
@@ -104,14 +108,18 @@ const run = async () => {
 
   // Ensure currency column exists and is text
   try {
-    await sql.query("ALTER TABLE transactions ALTER COLUMN currency TYPE text USING currency::text;");
+    await sql.query(
+      'ALTER TABLE transactions ALTER COLUMN currency TYPE text USING currency::text;'
+    );
   } catch (e) {
     // ignore if fails
   }
 
   // Convert existing timestamp columns to bigint epoch-ms if necessary
   try {
-    const info = await sql.query("SELECT column_name, data_type, udt_name FROM information_schema.columns WHERE table_name='transactions' AND column_name IN ('created_at','updated_at','deleted_at');");
+    const info = await sql.query(
+      "SELECT column_name, data_type, udt_name FROM information_schema.columns WHERE table_name='transactions' AND column_name IN ('created_at','updated_at','deleted_at');"
+    );
     for (const col of info) {
       const name = col.column_name;
       const udt = String(col.udt_name || col.data_type).toLowerCase();
@@ -124,7 +132,9 @@ const run = async () => {
           } catch (e) {
             // ignore
           }
-          await sql.query(`ALTER TABLE transactions ALTER COLUMN ${name} TYPE bigint USING (CASE WHEN ${name} IS NULL THEN NULL ELSE (EXTRACT(EPOCH FROM ${name}) * 1000)::bigint END);`);
+          await sql.query(
+            `ALTER TABLE transactions ALTER COLUMN ${name} TYPE bigint USING (CASE WHEN ${name} IS NULL THEN NULL ELSE (EXTRACT(EPOCH FROM ${name}) * 1000)::bigint END);`
+          );
           console.log(`Converted ${name} to bigint.`);
         } catch (e) {
           console.warn(`Failed to convert ${name}:`, e.message || e);
