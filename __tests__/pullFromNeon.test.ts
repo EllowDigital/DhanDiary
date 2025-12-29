@@ -1,5 +1,9 @@
 jest.mock('../src/api/neonClient', () => {
-  return { __esModule: true, query: jest.fn(), getNeonHealth: jest.fn(() => ({ isConfigured: true })) };
+  return {
+    __esModule: true,
+    query: jest.fn(),
+    getNeonHealth: jest.fn(() => ({ isConfigured: true })),
+  };
 });
 
 jest.mock('../src/db/sqlite', () => ({ executeSqlAsync: jest.fn() }));

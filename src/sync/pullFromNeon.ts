@@ -35,7 +35,7 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
   // If Neon isn't configured, skip pulling for now.
   try {
     const health = getNeonHealth();
-      if (!health.isConfigured) {
+    if (!health.isConfigured) {
       if (__DEV__) console.warn('[sync] pullFromNeon: Neon not configured, skipping pull');
       return { pulled: 0, lastSync: lastSync || 0 };
     }
