@@ -1,5 +1,6 @@
 import { getUnsyncedTransactions } from '../db/transactions';
 import { executeSqlAsync } from '../db/sqlite';
+import { query as neonQuery, getNeonHealth } from '../api/neonClient';
 
 /**
  * pushToNeon
@@ -24,39 +25,74 @@ export async function pushToNeon(): Promise<{ pushed: string[]; deleted: string[
   const toPush = rows.filter((r) => r.sync_status === 0);
   const toDelete = rows.filter((r) => r.sync_status === 2);
 
-  // TODO: Batch and POST `toPush` to Neon (create/update endpoint)
-  // TODO: Batch and POST `toDelete` to Neon (delete endpoint)
-  // For now we simulate success and mark local rows as synced.
-
   const pushedIds: string[] = [];
   const deletedIds: string[] = [];
 
+  // If Neon isn't configured, bail early (will be retried later).
   try {
-    if (toPush.length > 0) {
-      // Simulate push success for new/updated rows
-      const ids = toPush.map((r) => r.id);
-      const placeholders = ids.map(() => '?').join(',');
-      const sql = `UPDATE transactions SET sync_status = 1 WHERE id IN (${placeholders});`;
-      await executeSqlAsync(sql, ids);
-      pushedIds.push(...ids);
-      if (__DEV__) console.log('[sync] pushToNeon: marked pushed', ids.length);
+    const health = getNeonHealth();
+    if (!health.isConfigured) {
+      if (__DEV__) console.warn('[sync] pushToNeon: Neon not configured, skipping push');
+      return { pushed: [], deleted: [] };
+    }
+  } catch (e) {
+    if (__DEV__) console.warn('[sync] pushToNeon: failed to check neon health', e);
+  }
+
+  // Push (upsert) each changed row to Neon using SQL client.
+  try {
+    for (const row of toPush) {
+      try {
+        const sql = `INSERT INTO transactions
+          (id, user_id, amount, type, category, note, date, updated_at)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+          ON CONFLICT (id) DO UPDATE SET
+            user_id = EXCLUDED.user_id,
+            amount = EXCLUDED.amount,
+            type = EXCLUDED.type,
+            category = EXCLUDED.category,
+            note = EXCLUDED.note,
+            date = EXCLUDED.date,
+            updated_at = EXCLUDED.updated_at`;
+
+        await neonQuery(sql, [
+          row.id,
+          row.user_id,
+          row.amount,
+          row.type,
+          row.category ?? null,
+          row.note ?? null,
+          row.date ?? null,
+          row.updated_at ?? null,
+        ]);
+
+        // Mark local row as synced
+        await executeSqlAsync('UPDATE transactions SET sync_status = 1 WHERE id = ?;', [row.id]);
+        pushedIds.push(row.id);
+      } catch (err) {
+        if (__DEV__) console.warn('[sync] pushToNeon: failed to push row', row.id, err);
+        // continue with other rows
+      }
     }
 
-    if (toDelete.length > 0) {
-      // Simulate delete success: mark deleted rows as synced (1).
-      const ids = toDelete.map((r) => r.id);
-      const placeholders = ids.map(() => '?').join(',');
-      const sql = `UPDATE transactions SET sync_status = 1 WHERE id IN (${placeholders});`;
-      await executeSqlAsync(sql, ids);
-      deletedIds.push(...ids);
-      if (__DEV__) console.log('[sync] pushToNeon: marked deleted synced', ids.length);
+    for (const row of toDelete) {
+      try {
+        await neonQuery('DELETE FROM transactions WHERE id = $1', [row.id]);
+        await executeSqlAsync('UPDATE transactions SET sync_status = 1 WHERE id = ?;', [row.id]);
+        deletedIds.push(row.id);
+      } catch (err) {
+        if (__DEV__) console.warn('[sync] pushToNeon: failed to delete row', row.id, err);
+      }
     }
   } catch (e) {
     if (__DEV__) console.warn('[sync] pushToNeon error', e);
-    // Do not throw — keep failures local and retry later
   }
 
-  if (__DEV__) console.log('[sync] pushToNeon: finished');
+  if (__DEV__)
+    console.log('[sync] pushToNeon: finished', {
+      pushed: pushedIds.length,
+      deleted: deletedIds.length,
+    });
   return { pushed: pushedIds, deleted: deletedIds };
 }
 
