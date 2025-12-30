@@ -48,7 +48,7 @@ export async function updateTransaction(
   const now = Date.now();
   const sql = `UPDATE transactions SET amount = ?, type = ?, category = ?, note = ?, date = ?, updated_at = ?, sync_status = ? WHERE id = ? AND user_id = ?;`;
   // set sync_status to 0 (pending push) on update
-  await executeSqlAsync(sql, [
+  const [, res] = await executeSqlAsync(sql, [
     txn.amount ?? 0,
     txn.type ?? 'expense',
     txn.category ?? null,
@@ -60,7 +60,32 @@ export async function updateTransaction(
     txn.user_id,
   ]);
 
-  if (__DEV__) console.log('[transactions] update', txn.id);
+  // If no rows were updated (rowsAffected === 0), fall back to inserting the row.
+  // This can happen if the local DB doesn't yet have the row (new device, id mismatch),
+  // and ensures offline edits are preserved locally.
+  try {
+    const affected = Number(res?.rowsAffected || 0);
+    if (affected === 0) {
+      const insertSql = `INSERT OR REPLACE INTO transactions(id, user_id, amount, type, category, note, date, updated_at, sync_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`;
+      await executeSqlAsync(insertSql, [
+        txn.id,
+        txn.user_id,
+        txn.amount ?? 0,
+        txn.type ?? 'expense',
+        txn.category ?? null,
+        txn.note ?? null,
+        txn.date ?? null,
+        now,
+        0,
+      ]);
+      if (__DEV__) console.log('[transactions] update -> inserted fallback', txn.id);
+    } else {
+      if (__DEV__) console.log('[transactions] update', txn.id);
+    }
+  } catch (e) {
+    if (__DEV__) console.warn('[transactions] update fallback insert failed', e, txn.id);
+  }
+
   return {
     ...txn,
     updated_at: now,

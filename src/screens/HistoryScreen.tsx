@@ -216,7 +216,7 @@ const EditTransactionModal = React.memo(({ visible, entry, onClose, onSave }: an
       // component may unmount after onClose; attempt to reset saving
       try {
         setSaving(false);
-      } catch (e) {}
+      } catch (e) { }
     }
   };
 
