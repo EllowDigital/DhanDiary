@@ -26,7 +26,6 @@ import appConfig from '../../app.json';
 let pkg: { version?: string } = {};
 try {
   // Safe require for Metro bundler
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
   pkg = require('../../package.json');
 } catch (e) {
   pkg = { version: '1.0.0' };

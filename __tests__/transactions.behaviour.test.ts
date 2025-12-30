@@ -14,7 +14,7 @@ describe('transactions DB behavior', () => {
     const { upsertTransactionFromRemote } = require('../src/db/transactions');
 
     // First call (checkSql) should return a row with sync_status = 2
-    sqlite.executeSqlAsync.mockImplementationOnce(async (sql, params) => {
+    sqlite.executeSqlAsync.mockImplementationOnce(async (sql: any, params: any) => {
       if (sql.includes('SELECT sync_status')) {
         return [null, { rows: { length: 1, item: () => ({ sync_status: 2 }) } }];
       }
@@ -33,7 +33,7 @@ describe('transactions DB behavior', () => {
     const { updateTransaction } = require('../src/db/transactions');
 
     // Mock update result to indicate 1 row affected
-    sqlite.executeSqlAsync.mockImplementation(async (sql, params) => {
+    sqlite.executeSqlAsync.mockImplementation(async (sql: any, params: any) => {
       // For the UPDATE call return a result with rowsAffected = 1 in second element
       if (sql.trim().toUpperCase().startsWith('UPDATE TRANSACTIONS')) {
         return [null, { rowsAffected: 1 }];
@@ -49,9 +49,7 @@ describe('transactions DB behavior', () => {
 
     // Find the UPDATE call and assert date param used
     const calls = sqlite.executeSqlAsync.mock.calls;
-    const updateCall = calls.find(
-      (c) => typeof c[0] === 'string' && c[0].includes('UPDATE transactions')
-    );
+    const updateCall = calls.find((c: any) => typeof c[0] === 'string' && c[0].includes('UPDATE transactions'));
     expect(updateCall).toBeDefined();
     const params = updateCall[1];
     // params order: amount, type, category, note, date, updated_at, sync_status, id, user_id

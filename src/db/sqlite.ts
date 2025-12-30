@@ -62,6 +62,33 @@ export async function ensureLocalSchemaUpgrades(): Promise<void> {
         if (__DEV__) console.warn('[sqlite] failed to add server_version column', e);
       }
     }
+    // Add missing columns introduced in later schema versions
+    if (!names.includes('currency')) {
+      try {
+        await executeSqlAsync("ALTER TABLE transactions ADD COLUMN currency TEXT DEFAULT 'INR';");
+        if (__DEV__) console.log('[sqlite] added currency column');
+      } catch (e) {
+        if (__DEV__) console.warn('[sqlite] failed to add currency column', e);
+      }
+    }
+
+    if (!names.includes('created_at')) {
+      try {
+        await executeSqlAsync('ALTER TABLE transactions ADD COLUMN created_at TEXT DEFAULT NULL;');
+        if (__DEV__) console.log('[sqlite] added created_at column');
+      } catch (e) {
+        if (__DEV__) console.warn('[sqlite] failed to add created_at column', e);
+      }
+    }
+
+    if (!names.includes('deleted_at')) {
+      try {
+        await executeSqlAsync('ALTER TABLE transactions ADD COLUMN deleted_at TEXT DEFAULT NULL;');
+        if (__DEV__) console.log('[sqlite] added deleted_at column');
+      } catch (e) {
+        if (__DEV__) console.warn('[sqlite] failed to add deleted_at column', e);
+      }
+    }
   } catch (e) {
     if (__DEV__) console.warn('[sqlite] ensureLocalSchemaUpgrades error', e);
   }

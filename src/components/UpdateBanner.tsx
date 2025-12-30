@@ -42,7 +42,7 @@ const UpdateBanner: React.FC<Props> = ({
 
   // Auto-dismiss logic
   useEffect(() => {
-    let timeoutRef: NodeJS.Timeout;
+    let timeoutRef: ReturnType<typeof setTimeout> | null = null;
 
     if (visible && duration > 0) {
       timeoutRef = setTimeout(() => {
@@ -51,7 +51,7 @@ const UpdateBanner: React.FC<Props> = ({
     }
 
     return () => {
-      if (timeoutRef) clearTimeout(timeoutRef);
+      if (timeoutRef !== null) clearTimeout(timeoutRef as any);
     };
   }, [visible, duration, onClose]);
 

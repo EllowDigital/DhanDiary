@@ -21,8 +21,8 @@ export type TransactionRow = {
   need_sync?: number; // boolean stored as 0/1 in SQLite
 
   // Timestamps
-  created_at: string; // timestamptz
-  updated_at: string; // timestamptz
+  created_at: string | number; // timestamptz (ISO string or epoch ms)
+  updated_at: number; // epoch ms
   deleted_at?: string | null; // timestamptz
 };
 
@@ -214,9 +214,8 @@ export async function upsertTransactionFromRemote(txn: TransactionRow) {
       // If local is pending push (dirty), strictly speaking we have a conflict.
       // Simple strategy: Server Wins (overwrite local), unless you want sophisticated conflict resolution.
 
-      // OPTIONAL: If local has higher server_version (impossible if pulled from server)
-      // or if we want to preserve local deletion:
-      if (existing.deleted_at && existing.sync_status === 0) {
+      // OPTIONAL: If local has a pending deletion (deleted_at set and sync_status === 0), keep local tombstone.
+      if (existing && existing.deleted_at && existing.sync_status === 0) {
         if (__DEV__)
           console.log('[transactions] skipping remote upsert, local pending delete exists', txn.id);
         return;

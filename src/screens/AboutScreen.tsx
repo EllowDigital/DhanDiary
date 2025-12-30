@@ -32,7 +32,6 @@ const getLatestShareLink = async () => 'https://www.ellowdigital.space';
 // Safe package import
 let pkg: { version: string } = { version: '1.0.0' };
 try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
   pkg = require('../../package.json');
 } catch (e) {
   console.warn('Failed to load package.json', e);
