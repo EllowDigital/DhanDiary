@@ -428,19 +428,35 @@ const HistoryScreen = () => {
 
   // Attempt to start edit flow with sync-state checks
   const attemptEdit = useCallback(
-    (item: any) => {
+    async (item: any) => {
       if (!item) return;
       // If tombstone / pending delete — disallow edit
       if (item.sync_status === 2) {
         showToast('This transaction is pending deletion and cannot be edited.', 'error');
         return;
       }
-      // Allow editing for local/pending rows (offline edits are permitted).
-      // If the row is not yet synced, show a non-blocking hint to the user.
-      if (item.sync_status !== 1) {
-        showToast('This entry has local changes; editing will modify local copy.', 'info');
+
+      // If not yet synced, confirm with the user but allow editing on confirmation
+      if (item.sync_status === 0) {
+        const confirmed = await new Promise<boolean>((resolve) => {
+          try {
+            Alert.alert(
+              'Pending changes',
+              'This entry has local changes that are not yet synced. Edit anyway?',
+              [
+                { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+                { text: 'Edit', onPress: () => resolve(true) },
+              ],
+              { cancelable: true }
+            );
+          } catch (e) {
+            resolve(false);
+          }
+        });
+        if (!confirmed) return;
       }
-      // Open editor for all non-deleted rows
+
+      // Normal: open editor
       setEditingEntry(item);
     },
     [showToast]

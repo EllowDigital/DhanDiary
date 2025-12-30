@@ -173,7 +173,7 @@ const AddEntryScreen: React.FC = () => {
           if ((navigation as any).setParams) {
             (navigation as any).setParams({ local_id: undefined });
           }
-        } catch (e) {}
+        } catch (e) { }
         setEditingLocalId(null);
         setSaving(false);
       };
@@ -235,8 +235,8 @@ const AddEntryScreen: React.FC = () => {
 
     showToast(editingLocalId ? 'Updating transaction...' : 'Saving transaction...');
     setSaving(true);
-    navigation.goBack();
 
+    // Perform the write in background; navigate back only after the local write completes
     runInBackground(async () => {
       try {
         if (editingLocalId) {
@@ -249,6 +249,13 @@ const AddEntryScreen: React.FC = () => {
       } catch (err) {
         console.error(err);
         showToast('Failed to save. Please try again.');
+      } finally {
+        try {
+          setSaving(false);
+        } catch (e) { }
+        try {
+          navigation.goBack();
+        } catch (e) { }
       }
     });
   };

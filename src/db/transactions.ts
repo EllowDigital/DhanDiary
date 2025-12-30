@@ -66,6 +66,8 @@ export async function updateTransaction(
   try {
     const affected = Number(res?.rowsAffected || 0);
     if (affected === 0) {
+      if (__DEV__)
+        console.warn('[transactions] update affected 0 rows, falling back to insert', txn.id);
       const insertSql = `INSERT OR REPLACE INTO transactions(id, user_id, amount, type, category, note, date, updated_at, sync_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`;
       await executeSqlAsync(insertSql, [
         txn.id,
