@@ -189,7 +189,7 @@ const TransactionItem = React.memo(({ item, onPress }: { item: Transaction; onPr
   const isInc = isIncomeType(item.type);
   const category = item.category || 'Uncategorized';
   const amount = Number(item.amount) || 0;
-  
+
   // Dynamic Icon Logic
   let iconName = getIconForCategory(category);
   if (!iconName) iconName = isInc ? 'arrow-downward' : 'arrow-upward';
@@ -225,7 +225,7 @@ const TransactionItem = React.memo(({ item, onPress }: { item: Transaction; onPr
         >
           {isInc ? '+' : '-'}₹{amount.toLocaleString()}
         </Text>
-        <Text style={styles.txnDate}>{dayjs(item.date).format('h:mm A')}</Text>
+        <Text style={styles.txnDate}>{dayjsFrom(item.date).format('h:mm A')}</Text>
       </View>
     </TouchableOpacity>
   );
@@ -236,11 +236,11 @@ const HomeScreen = () => {
   const navigation = useNavigation<any>();
   const { user } = useAuth();
   const { entries, isLoading, refetch } = useEntries(user?.id);
-  
+
   // Use slightly longer delay for loading spinner to avoid flicker
   const showLoading = useDelayedLoading(Boolean(isLoading), 300);
   const { width: screenWidth } = useWindowDimensions();
-  
+
   // Constants for Chart
   const CHART_PADDING = 40; // Inner card padding
   const SCREEN_PADDING = 32; // Outer screen padding
@@ -251,14 +251,18 @@ const HomeScreen = () => {
   const [period, setPeriod] = useState<'week' | 'month'>('month');
   const [chartType, setChartType] = useState<'wave' | 'pie' | 'list'>('wave');
   const [isSyncing, setIsSyncing] = useState(false);
-  
+
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }).start();
     const unsub = subscribeSyncStatus((s) => setIsSyncing(s === 'syncing'));
-    return () => unsub && unsub();
+    return () => {
+      try {
+        if (unsub) unsub();
+      } catch (e) { }
+    };
   }, [fadeAnim]);
 
   const animateLayout = () => {
@@ -283,7 +287,7 @@ const HomeScreen = () => {
     const inVal = rawEntries
       .filter((e) => isIncomeType(e.type))
       .reduce((acc, c) => acc + Number(c.amount), 0);
-    
+
     const outVal = rawEntries
       .filter((e) => isExpenseType(e.type))
       .reduce((acc, c) => acc + Number(c.amount), 0);
@@ -293,20 +297,20 @@ const HomeScreen = () => {
     const chartEntries = rawEntries.filter((e) => dayjsFrom(e.date).isAfter(cutOff));
 
     // Wave Data
-    const wavePoints = period === 'week' 
-      ? new Array(7).fill(0) 
+    const wavePoints = period === 'week'
+      ? new Array(7).fill(0)
       : new Array(dayjs().daysInMonth()).fill(0);
-      
+
     chartEntries
       .filter((e) => isExpenseType(e.type))
       .forEach((e) => {
         const d = dayjsFrom(e.date);
-        const idx = period === 'week' 
+        const idx = period === 'week'
           ? 6 - dayjs().diff(d, 'day') // 0 = today, 6 = 7 days ago reversed? No, standard array: 0..6
           : d.date() - 1;
-        
+
         // Reverse index for week to make left=oldest, right=newest
-        const weekIdx = 6 - dayjs().diff(d, 'day'); 
+        const weekIdx = 6 - dayjs().diff(d, 'day');
         // Logic: if diff is 0 (today), index 6. If diff is 6, index 0.
         const targetIdx = period === 'week' ? weekIdx : d.date() - 1;
 
@@ -336,7 +340,7 @@ const HomeScreen = () => {
 
     // 3. Recent Transactions (SORTING FIX)
     const sortedRecent = [...rawEntries]
-      .sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf()) // Newest first
+      .sort((a, b) => dayjsFrom(b.date).valueOf() - dayjsFrom(a.date).valueOf()) // Newest first
       .slice(0, 7); // Show a few more
 
     return {
@@ -349,7 +353,7 @@ const HomeScreen = () => {
   // --- RENDER HEADER ---
   const renderHeader = () => (
     <View style={styles.headerContainer}>
-      
+
       {/* 1. Top Bar */}
       <View style={styles.topBar}>
         <View style={styles.userInfoRow}>
@@ -364,8 +368,8 @@ const HomeScreen = () => {
             <Text style={styles.userName}>{user?.name || 'User'}</Text>
           </View>
         </View>
-        <TouchableOpacity 
-          onPress={() => navigation.openDrawer()} 
+        <TouchableOpacity
+          onPress={() => navigation.openDrawer()}
           style={styles.menuBtn}
           accessibilityLabel="Open Menu"
         >
@@ -387,11 +391,11 @@ const HomeScreen = () => {
           <Circle cx="85%" cy="15%" r="80" fill="white" fillOpacity="0.1" />
           <Circle cx="10%" cy="90%" r="50" fill="white" fillOpacity="0.08" />
         </Svg>
-        
+
         <View style={styles.cardInner}>
           <View style={styles.cardHeader}>
             <Text style={styles.balanceLabel}>Total Balance</Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => setShowBalance(!showBalance)}
               style={styles.eyeBtn}
             >
@@ -402,7 +406,7 @@ const HomeScreen = () => {
               />
             </TouchableOpacity>
           </View>
-          
+
           <View style={styles.balanceRow}>
             <Text style={styles.currencySymbol}>₹</Text>
             <Text style={styles.balanceAmount} numberOfLines={1} adjustsFontSizeToFit>
@@ -423,9 +427,9 @@ const HomeScreen = () => {
                 </Text>
               </View>
             </View>
-            
+
             <View style={styles.statDivider} />
-            
+
             {/* Expense */}
             <View style={styles.statItem}>
               <View style={[styles.statIcon, { backgroundColor: 'rgba(239, 68, 68, 0.2)' }]}>
@@ -493,7 +497,7 @@ const HomeScreen = () => {
               </TouchableOpacity>
             ))}
           </View>
-          
+
           {/* Time Period Switch */}
           <View style={styles.periodSwitch}>
             {['week', 'month'].map((p) => (
@@ -531,7 +535,7 @@ const HomeScreen = () => {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-        
+
         {/* Loading Overlay */}
         {showLoading && (
           <View style={styles.loadingOverlay}>
@@ -561,7 +565,7 @@ const HomeScreen = () => {
             !isLoading ? (
               <View style={styles.emptyList}>
                 <Text style={styles.emptyText}>No recent transactions found.</Text>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.emptyBtn}
                   onPress={() => navigation.navigate('AddEntry')}
                 >
@@ -587,7 +591,7 @@ const styles = StyleSheet.create({
     paddingTop: 150,
     backgroundColor: 'rgba(248, 250, 252, 0.5)',
   },
-  
+
   // Header
   headerContainer: { paddingHorizontal: 20, paddingTop: 12 },
   topBar: {
@@ -599,12 +603,12 @@ const styles = StyleSheet.create({
   userInfoRow: { flexDirection: 'row', alignItems: 'center' },
   greetingText: { fontSize: 12, color: COLORS.textSub, fontWeight: '500' },
   userName: { fontSize: 18, fontWeight: '700', color: COLORS.textMain },
-  menuBtn: { 
-    padding: 8, 
-    borderRadius: 12, 
-    backgroundColor: COLORS.card, 
-    borderWidth: 1, 
-    borderColor: COLORS.border 
+  menuBtn: {
+    padding: 8,
+    borderRadius: 12,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border
   },
 
   // Hero Card
@@ -628,13 +632,12 @@ const styles = StyleSheet.create({
   balanceRow: { flexDirection: 'row', alignItems: 'flex-start' },
   currencySymbol: { fontSize: 24, color: 'rgba(255,255,255,0.8)', fontWeight: '600', marginTop: 6, marginRight: 2 },
   balanceAmount: { fontSize: 40, color: '#fff', fontWeight: '800' },
-  
+
   statsContainer: {
     flexDirection: 'row',
     backgroundColor: 'rgba(0,0,0,0.2)',
     borderRadius: 16,
     padding: 12,
-    backdropFilter: 'blur(10px)', // iOS only
   },
   statItem: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
   statIcon: {
@@ -695,7 +698,7 @@ const styles = StyleSheet.create({
   periodBtnActive: { backgroundColor: COLORS.card, elevation: 1 },
   periodText: { fontSize: 11, fontWeight: '600', color: COLORS.textSub },
   periodTextActive: { color: COLORS.primary },
-  
+
   chartBody: { alignItems: 'center', justifyContent: 'center', minHeight: 180 },
   chartContainer: { alignItems: 'center', justifyContent: 'center' },
 
@@ -759,7 +762,7 @@ const styles = StyleSheet.create({
   txnRight: { alignItems: 'flex-end' },
   txnAmount: { fontSize: 15, fontWeight: '700', marginBottom: 2 },
   txnDate: { fontSize: 11, color: COLORS.textSub },
-  
+
   // Empty States
   emptyList: { alignItems: 'center', padding: 40, gap: 10 },
   emptyText: { color: COLORS.textSub, fontSize: 14 },
