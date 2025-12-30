@@ -273,13 +273,10 @@ const HomeScreen = () => {
       };
 
     const inVal = entries
-      .filter((e) => {
-        const { isIncome } = require('../utils/transactionType');
-        return isIncome(e.type);
-      })
+      .filter((e) => isIncomeType(e.type))
       .reduce((acc, c) => acc + Number(c.amount), 0);
     const outVal = entries
-      .filter((e) => e.type === 'out')
+      .filter((e) => isExpenseType(e.type))
       .reduce((acc, c) => acc + Number(c.amount), 0);
     const cutOff = period === 'week' ? dayjs().subtract(6, 'day') : dayjs().startOf('month');
     const filtered = entries.filter((e) => dayjs(e.date).isAfter(cutOff));
@@ -288,7 +285,7 @@ const HomeScreen = () => {
     const wavePoints =
       period === 'week' ? new Array(7).fill(0) : new Array(dayjs().daysInMonth()).fill(0);
     filtered
-      .filter((e) => e.type === 'out')
+      .filter((e) => isExpenseType(e.type))
       .forEach((e) => {
         const idx =
           period === 'week' ? 6 - dayjs().diff(dayjs(e.date), 'day') : dayjs(e.date).date() - 1;
@@ -298,7 +295,7 @@ const HomeScreen = () => {
     // Pie
     const catMap: Record<string, number> = {};
     filtered
-      .filter((e) => e.type === 'out')
+      .filter((e) => isExpenseType(e.type))
       .forEach((e) => {
         const c = e.category || 'Other';
         catMap[c] = (catMap[c] || 0) + Number(e.amount);
