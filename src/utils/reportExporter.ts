@@ -2,7 +2,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
 const { documentDirectory, writeAsStringAsync, EncodingType } = FileSystem as any;
-import dayjs from 'dayjs';
+import { formatDate } from './date';
 import { isIncome } from './transactionType';
 
 // Types

@@ -153,12 +153,15 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
       }
 
       // CASE B: Handle Remote Update/Insert
-      // Respect local pending changes/deletes: if local has a pending delete (2) or
-      // pending update (0) that is newer than or equal to remote, skip applying remote.
-      const localHasPending = localSyncStatus === 0 || localSyncStatus === 2;
-      if (localHasPending && localUpdatedAt >= remoteUpdatedAt) {
-        // prefer local pending change; skip
-      } else if (remoteUpdatedAt > localUpdatedAt) {
+      // Respect local pending changes/deletes: if local has a pending delete (2) we always
+      // prefer the local tombstone and skip applying remote rows to avoid resurrecting deletes.
+      if (localSyncStatus === 2) {
+        // local tombstone present -> skip remote upsert
+      } else {
+        const localHasPending = localSyncStatus === 0;
+        if (localHasPending && localUpdatedAt >= remoteUpdatedAt) {
+          // prefer local pending change; skip
+        } else if (remoteUpdatedAt > localUpdatedAt) {
         await upsertTransactionFromRemote({
           id: remote.id,
           user_id: remote.user_id,
@@ -172,6 +175,8 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
         });
         pulled += 1;
         if (remoteUpdatedAt > maxRemoteTs) maxRemoteTs = remoteUpdatedAt;
+        }
+      }
       }
     } catch (e) {
       if (__DEV__) console.warn('[sync] pullFromNeon: row upsert failed', e, remote && remote.id);
