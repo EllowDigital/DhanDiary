@@ -32,6 +32,7 @@ export const exportToFile = async (
   options: ExportOptions
 ): Promise<string | null> => {
   try {
+    console.log(`Starting export for format: ${format}`);
     switch (format) {
       case 'pdf':
         return await generatePdf(data, options);
@@ -55,6 +56,7 @@ export const shareFile = async (filePath: string) => {
   if (!isAvailable) {
     throw new Error('Sharing is not available on this device');
   }
+
   await Sharing.shareAsync(filePath, {
     mimeType: filePath.endsWith('.xlsx')
       ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -66,31 +68,36 @@ export const shareFile = async (filePath: string) => {
 // --- Helpers ---
 
 /**
- * Standard robust file writer using Expo FileSystem.
- * FIX: Replaced EncodingType Enum with string literals 'utf8' | 'base64' to prevent runtime crashes.
+ * Robust file writer.
+ * Improvements:
+ * 1. Fallback to cacheDirectory if documentDirectory is null (common Android issue).
+ * 2. Uses string literals for encoding to avoid "undefined property" crashes.
  */
 const writeFile = async (
   fileName: string,
   contents: string,
   encoding: 'utf8' | 'base64' = 'utf8'
 ): Promise<string> => {
-  // Ensure we have a valid directory path. Cast to any to avoid SDK type mismatches.
-  const dir = (FileSystem as any).documentDirectory || (FileSystem as any).documentDirectory;
+  // Try documentDirectory first, then cacheDirectory
+  const dir = FileSystem.documentDirectory || FileSystem.cacheDirectory;
+
   if (!dir) {
-    // If no documentDirectory (e.g., some runtimes), fall back to current working directory URI-ish placeholder
-    // Use Print fallback later if write fails.
-    throw new Error('FileSystem.documentDirectory is not available');
+    throw new Error(
+      'No writable directory available (documentDirectory and cacheDirectory are null). Try rebuilding the app: npx expo run:android'
+    );
   }
 
   const fileUri = `${dir}${fileName}`;
-  // Use runtime method if available
-  if (typeof (FileSystem as any).writeAsStringAsync === 'function') {
-    await (FileSystem as any).writeAsStringAsync(fileUri, contents, { encoding });
-  } else {
-    // Let higher-level callers handle fallback via Print or other strategy
-    throw new Error('writeAsStringAsync is not available on FileSystem');
+
+  try {
+    await FileSystem.writeAsStringAsync(fileUri, contents, { encoding });
+    return fileUri;
+  } catch (e) {
+    console.error('FileSystem Write Error:', e);
+    throw new Error(
+      `Failed to write file to ${fileUri}. System error: ${e instanceof Error ? e.message : String(e)}`
+    );
   }
-  return fileUri;
 };
 
 const formatMoney = (amount: number, currency = 'INR') => {
@@ -233,14 +240,13 @@ const generatePdf = async (data: TransactionItem[], options: ExportOptions): Pro
 const generateCsv = async (data: TransactionItem[], options: ExportOptions): Promise<string> => {
   const headers = ['Date', 'Type', 'Category', 'Amount', 'Currency', 'Note', 'CreatedAt'];
 
-  // Use map for faster array processing
   const rows = data.map((item) => {
     const date = formatDate(item.date, 'YYYY-MM-DD');
     const type = item.type || '';
     const category = item.category || '';
     const amount = item.amount ?? 0;
     const currency = item.currency || 'INR';
-    const note = (item.note || '').replace(/"/g, '""'); // Escape double quotes
+    const note = (item.note || '').replace(/"/g, '""');
     const created = item.created_at || '';
 
     return [date, type, category, amount, currency, `"${note}"`, created].join(',');
@@ -249,13 +255,13 @@ const generateCsv = async (data: TransactionItem[], options: ExportOptions): Pro
   const csvContent = [headers.join(','), ...rows].join('\n');
   const fileName = `${sanitizeFilename(options.title)}.csv`;
 
-  // FIX: Explicitly pass 'utf8' string to avoid undefined Enum error
+  // FIX: Explicit string 'utf8'
   return await writeFile(fileName, csvContent, 'utf8');
 };
 
-// 3. EXCEL GENERATOR (Using XLSX Library)
+// 3. EXCEL GENERATOR
 const generateExcel = async (data: TransactionItem[], options: ExportOptions): Promise<string> => {
-  // 1. Prepare Data for Sheet
+  // 1. Prepare Data
   const sheetData = data.map((item) => ({
     Date: formatDate(item.date, 'YYYY-MM-DD'),
     Type: item.type,
@@ -266,18 +272,16 @@ const generateExcel = async (data: TransactionItem[], options: ExportOptions): P
     CreatedAt: item.created_at || '',
   }));
 
-  // 2. Create Workbook and Worksheet
+  // 2. Create Workbook
   const ws = XLSX.utils.json_to_sheet(sheetData);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Transactions');
 
-  // 3. Generate Base64 output
+  // 3. Generate Base64
   const wbout = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
 
-  // 4. Write to file
+  // 4. Write to file using explicit 'base64' string
   const fileName = `${sanitizeFilename(options.title)}.xlsx`;
-
-  // FIX: Explicitly pass 'base64' string to avoid undefined Enum error
   return await writeFile(fileName, wbout, 'base64');
 };
 
@@ -297,6 +301,5 @@ const generateJson = async (data: TransactionItem[], options: ExportOptions): Pr
   );
 
   const fileName = `${sanitizeFilename(options.title)}.json`;
-  // FIX: Explicitly pass 'utf8' string
   return await writeFile(fileName, jsonContent, 'utf8');
 };
