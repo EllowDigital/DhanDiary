@@ -89,9 +89,46 @@ export const useEntries = (userId?: string | null) => {
       if (syncKickRef.current) clearTimeout(syncKickRef.current);
       syncKickRef.current = setTimeout(() => {
         syncKickRef.current = null;
-        syncBothWays().catch((err) => {
-          console.warn('Background sync after mutation failed', err);
-        });
+        (async () => {
+          try {
+            const NetInfo = require('@react-native-community/netinfo');
+            const net = await NetInfo.fetch();
+            if (net.isConnected) {
+              // If online, push local changes immediately and then pull remote updates.
+              try {
+                const pushMod = await import('../sync/pushToNeon');
+                const pullMod = await import('../sync/pullFromNeon');
+                try {
+                  await pushMod.default();
+                } catch (e) {
+                  if (__DEV__) console.warn('Immediate push failed', e);
+                }
+                try {
+                  await pullMod.default();
+                } catch (e) {
+                  if (__DEV__) console.warn('Immediate pull failed', e);
+                }
+              } catch (e) {
+                // fallback to the full sync manager when dynamic import fails
+                try {
+                  const { syncBothWays } = require('../services/syncManager');
+                  await syncBothWays();
+                } catch (ee) {
+                  if (__DEV__) console.warn('Fallback sync failed', ee);
+                }
+              }
+            } else {
+              // Offline: queue sync for later via sync manager (auto-sync listener will trigger)
+              try {
+                const { syncBothWays } = require('../services/syncManager');
+                // this will no-op if offline and run when connection resumes
+                void syncBothWays();
+              } catch (e) {}
+            }
+          } catch (e) {
+            if (__DEV__) console.warn('requestSync failed', e);
+          }
+        })();
       }, 400);
     } catch (e) {}
   }, [syncBothWays]);

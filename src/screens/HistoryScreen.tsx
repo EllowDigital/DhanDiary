@@ -435,19 +435,12 @@ const HistoryScreen = () => {
         showToast('This transaction is pending deletion and cannot be edited.', 'error');
         return;
       }
-      // If not yet synced, warn user before editing
+      // Allow editing for local/pending rows (offline edits are permitted).
+      // If the row is not yet synced, show a non-blocking hint to the user.
       if (item.sync_status !== 1) {
-        Alert.alert(
-          'Pending changes',
-          'This entry has local changes that are not yet synced. Edit anyway?',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Edit', onPress: () => setEditingEntry(item) },
-          ]
-        );
-        return;
+        showToast('This entry has local changes; editing will modify local copy.', 'info');
       }
-      // Normal: open editor
+      // Open editor for all non-deleted rows
       setEditingEntry(item);
     },
     [showToast]

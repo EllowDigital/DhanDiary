@@ -209,3 +209,43 @@ export const useAuth = () => {
 
   return { user, loading };
 };
+
+// When user identity changes (e.g., login on a new device), ensure local DB is populated.
+// If local SQLite has no transactions for this user, attempt an immediate pull from Neon.
+// This helps new devices bootstrap the user's data.
+export const useAuthSyncOnLogin = (user: any) => {
+  // no-op hook wrapper; kept for possible explicit use elsewhere
+};
+
+// Side-effect: trigger bootstrap pull when user becomes available
+// Note: we deliberately do this outside the main hook to avoid re-running during initial load.
+try {
+  // runtime-only: subscribe to session events and run bootstrap when session is updated
+  const { subscribeSession } = require('../utils/sessionEvents');
+  subscribeSession(async (s: any) => {
+    try {
+      if (!s || !s.id) return;
+      const NetInfo = require('@react-native-community/netinfo');
+      const net = await NetInfo.fetch();
+      if (!net.isConnected) return;
+      // check local rows
+      try {
+        const { getTransactionsByUser } = require('../db/transactions');
+        const rows = await getTransactionsByUser(s.id);
+        if (!rows || rows.length === 0) {
+          // bootstrap from server
+          try {
+            const pull = await import('../sync/pullFromNeon');
+            await pull.default();
+          } catch (e) {
+            // fallback to sync manager
+            try {
+              const { syncBothWays } = require('../services/syncManager');
+              await syncBothWays();
+            } catch (ee) {}
+          }
+        }
+      } catch (e) {}
+    } catch (e) {}
+  });
+} catch (e) {}
