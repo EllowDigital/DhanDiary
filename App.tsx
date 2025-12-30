@@ -31,6 +31,7 @@ import { syncClerkUserToNeon } from './src/services/clerkUserSync';
 import { saveSession as saveLocalSession } from './src/db/session';
 import { BiometricAuth } from './src/components/BiometricAuth';
 import tokenCache from './src/utils/tokenCache';
+import SyncStatusBanner from './src/components/SyncStatusBanner';
 
 import {
   startForegroundSyncScheduler,

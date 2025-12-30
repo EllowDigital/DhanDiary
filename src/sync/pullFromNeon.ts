@@ -153,8 +153,8 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
       }
 
       // CASE B: Handle Remote Update/Insert
-      // Respect local pending changes/deletes: if local has a pending delete (2) we always
-      // prefer the local tombstone and skip applying remote rows to avoid resurrecting deletes.
+      // Respect local pending changes/deletes: local tombstones always win; local pending
+      // edits (sync_status = 0) win when newer or equal to remote.
       if (localSyncStatus === 2) {
         // local tombstone present -> skip remote upsert
       } else {
@@ -162,21 +162,21 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
         if (localHasPending && localUpdatedAt >= remoteUpdatedAt) {
           // prefer local pending change; skip
         } else if (remoteUpdatedAt > localUpdatedAt) {
-        await upsertTransactionFromRemote({
-          id: remote.id,
-          user_id: remote.user_id,
-          amount: remote.amount,
-          type: remote.type,
-          category: remote.category ?? null,
-          note: remote.note ?? null,
-          date: remote.date ?? null,
-          updated_at: remoteUpdatedAt,
-          sync_status: 1, // 1 = Synced
-        });
-        pulled += 1;
-        if (remoteUpdatedAt > maxRemoteTs) maxRemoteTs = remoteUpdatedAt;
+          // apply remote row
+          await upsertTransactionFromRemote({
+            id: remote.id,
+            user_id: remote.user_id,
+            amount: remote.amount,
+            type: remote.type,
+            category: remote.category ?? null,
+            note: remote.note ?? null,
+            date: remote.date ?? null,
+            updated_at: remoteUpdatedAt,
+            sync_status: 1, // 1 = Synced
+          });
+          pulled += 1;
+          if (remoteUpdatedAt > maxRemoteTs) maxRemoteTs = remoteUpdatedAt;
         }
-      }
       }
     } catch (e) {
       if (__DEV__) console.warn('[sync] pullFromNeon: row upsert failed', e, remote && remote.id);
