@@ -26,7 +26,7 @@ import { syncBothWays } from '../services/syncManager';
 interface TransactionRow {
   id: string;
   user_id: string;
-  type: 'in' | 'out';
+  type: 'income' | 'expense';
   amount: number;
   category: string;
   note?: string | null;
@@ -387,8 +387,7 @@ export const useEntries = (userId?: string | null) => {
         id: local_id,
         user_id: sid,
         amount: updates.amount !== undefined ? Number(updates.amount) : undefined,
-        type:
-          updates.type !== undefined ? (isIncome(updates.type as any) ? 'in' : 'out') : undefined,
+        type: updates.type !== undefined ? toCanonical(updates.type as any) : undefined,
         category: updates.category !== undefined ? ensureCategory(updates.category) : undefined,
         note: updates.note !== undefined ? updates.note : undefined,
         date: dateVal,

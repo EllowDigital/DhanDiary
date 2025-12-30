@@ -96,7 +96,7 @@ const TabButton = ({
       opacity: focusValue.value,
       transform: [
         { translateY: interpolate(focusValue.value, [0, 1], [4, 0]) },
-        { scale: interpolate(focusValue.value, [0, 1], [0.8, 1]) }
+        { scale: interpolate(focusValue.value, [0, 1], [0.8, 1]) },
       ],
     };
   });
@@ -130,10 +130,10 @@ const TabButton = ({
 const CustomTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => {
   const insets = useSafeAreaInsets();
   const { width: screenWidth } = Dimensions.get('window');
-  
+
   // Calculate tab width based on screen width directly to avoid layout jumping
   const tabWidth = screenWidth / state.routes.length;
-  
+
   const translateX = useSharedValue(0);
 
   // Update position when index changes
@@ -218,24 +218,16 @@ const BottomTabNavigator = () => {
         screenOptions={{
           headerShown: false,
           // Optimization: Don't unmount inactive screens to keep state
-          tabBarHideOnKeyboard: true, 
+          tabBarHideOnKeyboard: true,
         }}
       >
-        <Tab.Screen 
-          name="Home" 
-          component={HomeScreen} 
-          options={{ tabBarLabel: 'Home' }} 
+        <Tab.Screen name="Home" component={HomeScreen} options={{ tabBarLabel: 'Home' }} />
+        <Tab.Screen
+          name="History"
+          component={HistoryScreen}
+          options={{ tabBarLabel: 'Activity' }}
         />
-        <Tab.Screen 
-          name="History" 
-          component={HistoryScreen} 
-          options={{ tabBarLabel: 'Activity' }} 
-        />
-        <Tab.Screen 
-          name="More" 
-          component={MoreScreen} 
-          options={{ tabBarLabel: 'Menu' }} 
-        />
+        <Tab.Screen name="More" component={MoreScreen} options={{ tabBarLabel: 'Menu' }} />
       </Tab.Navigator>
     </View>
   );
@@ -260,7 +252,7 @@ const styles = StyleSheet.create({
   },
   tabBarContainer: {
     backgroundColor: colors.card,
-    
+
     // --- Modern Rounded Top ---
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
@@ -274,7 +266,7 @@ const styles = StyleSheet.create({
 
     borderTopWidth: 1,
     borderTopColor: 'rgba(0,0,0,0.03)', // Subtle border for definition
-    
+
     justifyContent: 'flex-start',
   },
   tabBarContent: {

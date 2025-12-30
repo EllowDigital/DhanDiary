@@ -71,7 +71,7 @@ const DrawerNavigator = () => {
     drawerActiveTintColor: colors.primary || '#2563EB',
     drawerInactiveTintColor: colors.text || '#1E293B',
     drawerActiveBackgroundColor: colors.primarySoft || 'rgba(37, 99, 235, 0.1)',
-    
+
     drawerLabelStyle: {
       fontSize: 14,
       fontWeight: '600',

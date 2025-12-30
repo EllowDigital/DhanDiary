@@ -12,14 +12,13 @@ import {
   Alert,
   Platform,
   UIManager,
+  ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, Button } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Swipeable } from 'react-native-gesture-handler';
-import dayjs from 'dayjs';
-import { formatDate, dayjsFrom } from '../utils/date';
 
 // Custom Hooks & Components
 import { useEntries } from '../hooks/useEntries';
@@ -37,6 +36,7 @@ import {
 } from '../utils/entryFilters';
 import { colors } from '../utils/design';
 import { getIconForCategory } from '../constants/categories';
+import { formatDate } from '../utils/date';
 
 // Enable LayoutAnimation for Android
 if (Platform.OS === 'android') {
@@ -114,7 +114,7 @@ const SwipeableIncomeItem = React.memo(({ item, onEdit, onDelete }: any) => {
   const dateStr = formatDate(item.date || item.created_at);
 
   // Render Right Actions (Swipe Left -> Edit)
-  const renderRightActions = (progress: any, dragX: any) => {
+  const renderRightActions = (_progress: any, dragX: any) => {
     const scale = dragX.interpolate({
       inputRange: [-80, 0],
       outputRange: [1, 0],
@@ -129,7 +129,7 @@ const SwipeableIncomeItem = React.memo(({ item, onEdit, onDelete }: any) => {
           onEdit();
         }}
       >
-        <Animated.View style={{ transform: [{ scale }] }}>
+        <Animated.View style={{ transform: [{ scale }], alignItems: 'center' }}>
           <MaterialIcon name="edit" size={24} color="white" />
           <Text style={styles.actionText}>Edit</Text>
         </Animated.View>
@@ -138,7 +138,7 @@ const SwipeableIncomeItem = React.memo(({ item, onEdit, onDelete }: any) => {
   };
 
   // Render Left Actions (Swipe Right -> Delete)
-  const renderLeftActions = (progress: any, dragX: any) => {
+  const renderLeftActions = (_progress: any, dragX: any) => {
     const scale = dragX.interpolate({
       inputRange: [0, 80],
       outputRange: [0, 1],
@@ -153,7 +153,7 @@ const SwipeableIncomeItem = React.memo(({ item, onEdit, onDelete }: any) => {
           onDelete();
         }}
       >
-        <Animated.View style={{ transform: [{ scale }] }}>
+        <Animated.View style={{ transform: [{ scale }], alignItems: 'center' }}>
           <MaterialIcon name="delete" size={24} color="white" />
           <Text style={styles.actionText}>Delete</Text>
         </Animated.View>
@@ -167,10 +167,13 @@ const SwipeableIncomeItem = React.memo(({ item, onEdit, onDelete }: any) => {
       renderRightActions={renderRightActions}
       renderLeftActions={renderLeftActions}
       containerStyle={styles.swipeContainer}
+      friction={2}
+      overshootRight={false}
+      overshootLeft={false}
     >
       <View style={styles.compactRow}>
         <View style={[styles.compactIcon, { backgroundColor: '#ecfdf5' }]}>
-          <MaterialIcon name={getIconForCategory(item.category) as any} size={18} color="#15803d" />
+          <MaterialIcon name={getIconForCategory(item.category) as any} size={20} color="#15803d" />
         </View>
         <View style={styles.compactContent}>
           <View style={styles.compactHeader}>
@@ -199,7 +202,7 @@ const CashInList = () => {
 
   // Data Fetching
   const { entries, deleteEntry, isLoading, refetch } = useEntries(user?.id);
-  const showLoading = useDelayedLoading(Boolean(isLoading), 200);
+  const showLoading = useDelayedLoading(Boolean(isLoading), 300);
 
   // Local State
   const [timeFilter, setTimeFilter] = useState<EntryTimeframe>('all');
@@ -221,14 +224,14 @@ const CashInList = () => {
         useNativeDriver: true,
         easing: Easing.out(Easing.cubic),
       }),
-      Animated.timing(slideAnim, {
+      Animated.spring(slideAnim, {
         toValue: 0,
-        duration: 700,
         useNativeDriver: true,
-        easing: Easing.out(Easing.cubic),
+        damping: 20,
+        stiffness: 90,
       }),
     ]).start();
-  }, []);
+  }, [fadeAnim, slideAnim]);
 
   useFocusEffect(
     useCallback(() => {
@@ -253,75 +256,91 @@ const CashInList = () => {
   );
 
   // --- HANDLERS ---
-  const handleEdit = (item: any) => {
-    // If you have a dedicated edit screen or modal, navigate there
-    navigation.navigate('AddEntry', {
-      local_id: item.local_id,
-      type: 'in', // Ensure the editor knows it's an Income
-    });
-  };
+  const handleEdit = useCallback(
+    (item: any) => {
+      navigation.navigate('AddEntry', {
+        local_id: item.local_id,
+        type: 'in', // Ensure the editor knows it's an Income
+      });
+    },
+    [navigation]
+  );
 
-  const handleDelete = (id: string) => {
-    Alert.alert('Delete Income', 'Are you sure you want to remove this record?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await deleteEntry(id);
-          } catch (err) {
-            console.warn(err);
-          }
+  const handleDelete = useCallback(
+    (id: string) => {
+      Alert.alert('Delete Income', 'Are you sure you want to remove this record?', [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteEntry(id);
+            } catch (err) {
+              console.warn(err);
+            }
+          },
         },
-      },
-    ]);
-  };
+      ]);
+    },
+    [deleteEntry]
+  );
 
-  const handleFilterChange = (type: 'time' | 'sort', value: any) => {
+  const handleFilterChange = useCallback((type: 'time' | 'sort', value: any) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     if (type === 'time') setTimeFilter(value);
     else setSortMode(value);
-  };
+  }, []);
 
   // --- RENDER HELPERS ---
-  const renderHeader = () => (
-    <View>
-      <IncomeSummaryCard summary={summary} fadeAnim={fadeAnim} slideAnim={slideAnim} />
+  const renderHeader = useMemo(
+    () => (
+      <View>
+        <IncomeSummaryCard summary={summary} fadeAnim={fadeAnim} slideAnim={slideAnim} />
 
-      <View style={styles.filterSection}>
-        <FlatList
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          data={[...TIME_FILTERS, ...SORT_OPTIONS]}
-          keyExtractor={(item) => item.label}
-          renderItem={({ item }) => {
-            const isActive = item.value === timeFilter || item.value === sortMode;
-            const isSort = ['recent', 'amount'].includes(item.value);
-            return (
-              <FilterPill
-                label={item.label}
-                active={isActive}
-                onPress={() => handleFilterChange(isSort ? 'sort' : 'time', item.value)}
-              />
-            );
-          }}
-          contentContainerStyle={{ gap: 8, paddingHorizontal: 4 }}
-        />
-      </View>
-
-      <View style={styles.listHeaderRow}>
-        <Text style={styles.listSectionTitle}>Recent Transactions</Text>
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>{entryView.filteredEntries.length}</Text>
+        <View style={styles.filterSection}>
+          <FlatList
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            data={[...TIME_FILTERS, ...SORT_OPTIONS]}
+            keyExtractor={(item) => item.label}
+            renderItem={({ item }) => {
+              const isActive = item.value === timeFilter || item.value === sortMode;
+              const isSort = ['recent', 'amount'].includes(item.value);
+              return (
+                <FilterPill
+                  label={item.label}
+                  active={isActive}
+                  onPress={() => handleFilterChange(isSort ? 'sort' : 'time', item.value)}
+                />
+              );
+            }}
+            contentContainerStyle={{ gap: 8, paddingHorizontal: 4 }}
+          />
         </View>
-      </View>
 
-      {/* Swipe Hint */}
-      {entryView.filteredEntries.length > 0 && (
-        <Text style={styles.swipeHint}>Swipe left to edit, right to delete</Text>
-      )}
-    </View>
+        <View style={styles.listHeaderRow}>
+          <Text style={styles.listSectionTitle}>Recent Transactions</Text>
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>{entryView.filteredEntries.length}</Text>
+          </View>
+        </View>
+
+        {/* Swipe Hint */}
+        {entryView.filteredEntries.length > 0 && (
+          <Text style={styles.swipeHint}>Swipe left to edit, right to delete</Text>
+        )}
+      </View>
+    ),
+    [
+      summary,
+      fadeAnim,
+      slideAnim,
+      timeFilter,
+      sortMode,
+      entryView.filteredEntries.length,
+      handleFilterChange,
+    ]
   );
 
   const renderEmpty = () =>
@@ -367,7 +386,7 @@ const CashInList = () => {
         )}
         contentContainerStyle={{
           paddingHorizontal: isTablet ? 0 : 20,
-          paddingTop: 20,
+          paddingTop: 10,
           paddingBottom: insets.bottom + 80,
           width: '100%',
           maxWidth: MAX_WIDTH,
@@ -378,6 +397,7 @@ const CashInList = () => {
         ListEmptyComponent={renderEmpty}
         initialNumToRender={10}
         windowSize={10}
+        removeClippedSubviews={Platform.OS === 'android'} // Perf optimization
       />
 
       <FullScreenSpinner visible={showLoading} />
@@ -390,7 +410,7 @@ export default CashInList;
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.background || '#F8FAFC',
   },
   /* COMPACT ROW STYLES */
   swipeContainer: {
@@ -401,16 +421,16 @@ const styles = StyleSheet.create({
   compactRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.card,
+    backgroundColor: colors.card || '#FFFFFF',
     padding: 12,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.04)',
-    height: 70, // Fixed height for consistent swipes
+    height: 72, // Fixed height for consistent swipes
   },
   compactIcon: {
-    width: 38,
-    height: 38,
+    width: 40,
+    height: 40,
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
@@ -428,7 +448,7 @@ const styles = StyleSheet.create({
   compactCategory: {
     fontSize: 15,
     fontWeight: '600',
-    color: colors.text,
+    color: colors.text || '#1E293B',
     flex: 1,
     marginRight: 8,
   },
@@ -443,13 +463,13 @@ const styles = StyleSheet.create({
   },
   compactNote: {
     fontSize: 12,
-    color: colors.muted,
+    color: colors.muted || '#94A3B8',
     flex: 1,
     marginRight: 8,
   },
   compactDate: {
     fontSize: 11,
-    color: '#94a3b8',
+    color: '#94A3B8',
   },
   /* SWIPE ACTIONS */
   leftAction: {
@@ -459,7 +479,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: '100%',
     borderRadius: 14,
-    marginRight: 10, // Creates a gap between action and item
+    marginRight: 8, // Creates a gap between action and item
   },
   rightAction: {
     backgroundColor: '#3b82f6',
@@ -468,7 +488,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: '100%',
     borderRadius: 14,
-    marginLeft: 10, // Creates a gap
+    marginLeft: 8, // Creates a gap
   },
   actionText: {
     color: 'white',
@@ -479,17 +499,17 @@ const styles = StyleSheet.create({
 
   /* HERO CARD */
   heroCard: {
-    backgroundColor: '#f0fdf4',
+    backgroundColor: '#F0FDF4',
     borderRadius: 24,
     padding: 24,
     marginBottom: 24,
-    shadowColor: '#16a34a',
+    shadowColor: '#16A34A',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.1,
     shadowRadius: 16,
     elevation: 3,
     borderWidth: 1,
-    borderColor: '#bbf7d0',
+    borderColor: '#BBF7D0',
     position: 'relative',
     overflow: 'hidden',
   },
@@ -500,7 +520,7 @@ const styles = StyleSheet.create({
     width: 150,
     height: 150,
     borderRadius: 75,
-    backgroundColor: '#dcfce7',
+    backgroundColor: '#DCFCE7',
     opacity: 0.5,
   },
   heroTopRow: {
@@ -517,24 +537,24 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   heroValue: {
-    fontSize: 36,
+    fontSize: 32,
     fontWeight: '800',
-    color: '#14532d',
+    color: '#14532D',
     letterSpacing: -1,
   },
   heroIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 18,
-    backgroundColor: '#ffffff',
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#bbf7d0',
+    borderColor: '#BBF7D0',
   },
   divider: {
     height: 1,
-    backgroundColor: '#bbf7d0',
+    backgroundColor: '#BBF7D0',
     marginVertical: 20,
   },
   statsRow: {
@@ -548,7 +568,7 @@ const styles = StyleSheet.create({
   verticalDivider: {
     width: 1,
     height: 24,
-    backgroundColor: '#bbf7d0',
+    backgroundColor: '#BBF7D0',
     marginHorizontal: 12,
   },
   statLabel: {
@@ -560,7 +580,7 @@ const styles = StyleSheet.create({
   statNum: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#14532d',
+    color: '#14532D',
   },
   /* FILTERS */
   filterSection: {
@@ -570,19 +590,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 12,
-    backgroundColor: colors.card,
+    backgroundColor: colors.card || '#FFFFFF',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.border || '#E2E8F0',
     marginRight: 8,
   },
   pillActive: {
-    backgroundColor: '#15803d',
-    borderColor: '#15803d',
+    backgroundColor: '#15803D',
+    borderColor: '#15803D',
   },
   pillText: {
     fontSize: 13,
     fontWeight: '600',
-    color: colors.muted,
+    color: colors.muted || '#94A3B8',
   },
   pillTextActive: {
     color: '#fff',
@@ -597,11 +617,11 @@ const styles = StyleSheet.create({
   listSectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: colors.text,
+    color: colors.text || '#1E293B',
     marginLeft: 4,
   },
   badge: {
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: colors.surfaceMuted || '#F1F5F9',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
@@ -609,11 +629,11 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 12,
     fontWeight: '700',
-    color: colors.text,
+    color: colors.text || '#1E293B',
   },
   swipeHint: {
     fontSize: 12,
-    color: colors.muted,
+    color: colors.muted || '#94A3B8',
     marginLeft: 4,
     marginBottom: 16,
     fontStyle: 'italic',
@@ -629,30 +649,30 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#f0fdf4',
+    backgroundColor: '#F0FDF4',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#bbf7d0',
+    borderColor: '#BBF7D0',
   },
   emptyTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: colors.text,
+    color: colors.text || '#1E293B',
     marginBottom: 8,
   },
   emptyText: {
     fontSize: 14,
-    color: colors.muted,
+    color: colors.muted || '#94A3B8',
     textAlign: 'center',
     lineHeight: 20,
   },
   addBtn: {
-    backgroundColor: '#15803d',
+    backgroundColor: '#15803D',
     borderRadius: 14,
     paddingVertical: 14,
-    shadowColor: '#15803d',
+    shadowColor: '#15803D',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,

@@ -112,7 +112,7 @@ const CleanWaveChart = React.memo(({ data, width }: { data: number[]; width: num
 
 // 2. PIE CHART (With Custom Legend)
 const CleanPieChart = React.memo(({ data, width }: { data: any[]; width: number }) => {
-  if (!data || data.length === 0 || data.every(d => d.population === 0)) {
+  if (!data || data.length === 0 || data.every((d) => d.population === 0)) {
     return (
       <View style={styles.emptyChartBox}>
         <MaterialIcon name="donut-large" size={48} color={COLORS.border} />
@@ -141,7 +141,9 @@ const CleanPieChart = React.memo(({ data, width }: { data: any[]; width: number 
         {data.slice(0, 5).map((item, i) => (
           <View key={i} style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: item.color }]} />
-            <Text style={styles.legendText} numberOfLines={1}>{item.name}</Text>
+            <Text style={styles.legendText} numberOfLines={1}>
+              {item.name}
+            </Text>
           </View>
         ))}
       </View>
@@ -153,7 +155,9 @@ const CleanPieChart = React.memo(({ data, width }: { data: any[]; width: number 
 const RankList = React.memo(({ data, total }: { data: any[]; total: number }) => (
   <View style={styles.rankContainer}>
     {data.length === 0 ? (
-      <Text style={[styles.emptyText, { textAlign: 'center', marginVertical: 20 }]}>No data available</Text>
+      <Text style={[styles.emptyText, { textAlign: 'center', marginVertical: 20 }]}>
+        No data available
+      </Text>
     ) : (
       data.slice(0, 5).map((item, index) => {
         const percent = total > 0 ? (item.population / total) * 100 : 0;
@@ -166,7 +170,10 @@ const RankList = React.memo(({ data, total }: { data: any[]; total: number }) =>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
                 <Text style={styles.rankPercent}>{Math.round(percent)}%</Text>
-                <Text style={styles.rankAmt}> (₹{Math.round(item.population).toLocaleString()})</Text>
+                <Text style={styles.rankAmt}>
+                  {' '}
+                  (₹{Math.round(item.population).toLocaleString()})
+                </Text>
               </View>
             </View>
             <View style={styles.progressBarBg}>
@@ -185,51 +192,53 @@ const RankList = React.memo(({ data, total }: { data: any[]; total: number }) =>
 ));
 
 // 4. TRANSACTION ITEM
-const TransactionItem = React.memo(({ item, onPress }: { item: Transaction; onPress: () => void }) => {
-  const isInc = isIncomeType(item.type);
-  const category = item.category || 'Uncategorized';
-  const amount = Number(item.amount) || 0;
+const TransactionItem = React.memo(
+  ({ item, onPress }: { item: Transaction; onPress: () => void }) => {
+    const isInc = isIncomeType(item.type);
+    const category = item.category || 'Uncategorized';
+    const amount = Number(item.amount) || 0;
 
-  // Dynamic Icon Logic
-  let iconName = getIconForCategory(category);
-  if (!iconName) iconName = isInc ? 'arrow-downward' : 'arrow-upward';
+    // Dynamic Icon Logic
+    let iconName = getIconForCategory(category);
+    if (!iconName) iconName = isInc ? 'arrow-downward' : 'arrow-upward';
 
-  return (
-    <TouchableOpacity style={styles.txnCard} onPress={onPress} activeOpacity={0.7}>
-      <View
-        style={[
-          styles.txnIconBox,
-          { backgroundColor: isInc ? COLORS.successBg : COLORS.dangerBg },
-        ]}
-      >
-        <MaterialIcon
-          name={iconName as any}
-          size={22}
-          color={isInc ? COLORS.success : COLORS.danger}
-        />
-      </View>
-      <View style={styles.txnContent}>
-        <Text style={styles.txnTitle} numberOfLines={1}>
-          {category}
-        </Text>
-        <Text style={styles.txnSubtitle} numberOfLines={1}>
-          {item.note || formatDate(item.date)}
-        </Text>
-      </View>
-      <View style={styles.txnRight}>
-        <Text
+    return (
+      <TouchableOpacity style={styles.txnCard} onPress={onPress} activeOpacity={0.7}>
+        <View
           style={[
-            styles.txnAmount,
-            { color: isInc ? COLORS.success : COLORS.textMain }, // Expenses just dark, Income Green
+            styles.txnIconBox,
+            { backgroundColor: isInc ? COLORS.successBg : COLORS.dangerBg },
           ]}
         >
-          {isInc ? '+' : '-'}₹{amount.toLocaleString()}
-        </Text>
-        <Text style={styles.txnDate}>{dayjsFrom(item.date).format('h:mm A')}</Text>
-      </View>
-    </TouchableOpacity>
-  );
-});
+          <MaterialIcon
+            name={iconName as any}
+            size={22}
+            color={isInc ? COLORS.success : COLORS.danger}
+          />
+        </View>
+        <View style={styles.txnContent}>
+          <Text style={styles.txnTitle} numberOfLines={1}>
+            {category}
+          </Text>
+          <Text style={styles.txnSubtitle} numberOfLines={1}>
+            {item.note || formatDate(item.date)}
+          </Text>
+        </View>
+        <View style={styles.txnRight}>
+          <Text
+            style={[
+              styles.txnAmount,
+              { color: isInc ? COLORS.success : COLORS.textMain }, // Expenses just dark, Income Green
+            ]}
+          >
+            {isInc ? '+' : '-'}₹{amount.toLocaleString()}
+          </Text>
+          <Text style={styles.txnDate}>{dayjsFrom(item.date).format('h:mm A')}</Text>
+        </View>
+      </TouchableOpacity>
+    );
+  }
+);
 
 // --- MAIN SCREEN ---
 const HomeScreen = () => {
@@ -261,7 +270,7 @@ const HomeScreen = () => {
     return () => {
       try {
         if (unsub) unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, [fadeAnim]);
 
@@ -297,17 +306,17 @@ const HomeScreen = () => {
     const chartEntries = rawEntries.filter((e) => dayjsFrom(e.date).isAfter(cutOff));
 
     // Wave Data
-    const wavePoints = period === 'week'
-      ? new Array(7).fill(0)
-      : new Array(dayjs().daysInMonth()).fill(0);
+    const wavePoints =
+      period === 'week' ? new Array(7).fill(0) : new Array(dayjs().daysInMonth()).fill(0);
 
     chartEntries
       .filter((e) => isExpenseType(e.type))
       .forEach((e) => {
         const d = dayjsFrom(e.date);
-        const idx = period === 'week'
-          ? 6 - dayjs().diff(d, 'day') // 0 = today, 6 = 7 days ago reversed? No, standard array: 0..6
-          : d.date() - 1;
+        const idx =
+          period === 'week'
+            ? 6 - dayjs().diff(d, 'day') // 0 = today, 6 = 7 days ago reversed? No, standard array: 0..6
+            : d.date() - 1;
 
         // Reverse index for week to make left=oldest, right=newest
         const weekIdx = 6 - dayjs().diff(d, 'day');
@@ -353,7 +362,6 @@ const HomeScreen = () => {
   // --- RENDER HEADER ---
   const renderHeader = () => (
     <View style={styles.headerContainer}>
-
       {/* 1. Top Bar */}
       <View style={styles.topBar}>
         <View style={styles.userInfoRow}>
@@ -395,10 +403,7 @@ const HomeScreen = () => {
         <View style={styles.cardInner}>
           <View style={styles.cardHeader}>
             <Text style={styles.balanceLabel}>Total Balance</Text>
-            <TouchableOpacity
-              onPress={() => setShowBalance(!showBalance)}
-              style={styles.eyeBtn}
-            >
+            <TouchableOpacity onPress={() => setShowBalance(!showBalance)} style={styles.eyeBtn}>
               <MaterialIcon
                 name={showBalance ? 'visibility' : 'visibility-off'}
                 size={18}
@@ -535,7 +540,6 @@ const HomeScreen = () => {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-
         {/* Loading Overlay */}
         {showLoading && (
           <View style={styles.loadingOverlay}>
@@ -549,7 +553,11 @@ const HomeScreen = () => {
           keyExtractor={(item) => item.local_id || Math.random().toString()}
           ListHeaderComponent={renderHeader}
           refreshControl={
-            <RefreshControl refreshing={isLoading && isSyncing} onRefresh={refetch} tintColor={COLORS.primary} />
+            <RefreshControl
+              refreshing={isLoading && isSyncing}
+              onRefresh={refetch}
+              tintColor={COLORS.primary}
+            />
           }
           renderItem={({ item }) => (
             <View style={styles.itemWrapper}>
@@ -608,7 +616,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: COLORS.card,
     borderWidth: 1,
-    borderColor: COLORS.border
+    borderColor: COLORS.border,
   },
 
   // Hero Card
@@ -630,7 +638,13 @@ const styles = StyleSheet.create({
   balanceLabel: { color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: '500' },
   eyeBtn: { padding: 4 },
   balanceRow: { flexDirection: 'row', alignItems: 'flex-start' },
-  currencySymbol: { fontSize: 24, color: 'rgba(255,255,255,0.8)', fontWeight: '600', marginTop: 6, marginRight: 2 },
+  currencySymbol: {
+    fontSize: 24,
+    color: 'rgba(255,255,255,0.8)',
+    fontWeight: '600',
+    marginTop: 6,
+    marginRight: 2,
+  },
   balanceAmount: { fontSize: 40, color: '#fff', fontWeight: '800' },
 
   statsContainer: {
@@ -704,7 +718,13 @@ const styles = StyleSheet.create({
 
   // Pie
   pieContainer: { alignItems: 'center', width: '100%' },
-  legendContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 12, marginTop: 12 },
+  legendContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 12,
+    marginTop: 12,
+  },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendText: { fontSize: 11, fontWeight: '500', color: COLORS.textSub },
@@ -766,7 +786,13 @@ const styles = StyleSheet.create({
   // Empty States
   emptyList: { alignItems: 'center', padding: 40, gap: 10 },
   emptyText: { color: COLORS.textSub, fontSize: 14 },
-  emptyBtn: { marginTop: 10, paddingVertical: 10, paddingHorizontal: 20, backgroundColor: COLORS.primary, borderRadius: 20 },
+  emptyBtn: {
+    marginTop: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    backgroundColor: COLORS.primary,
+    borderRadius: 20,
+  },
   emptyBtnText: { color: '#fff', fontWeight: '600' },
 });
 

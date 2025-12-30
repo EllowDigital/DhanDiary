@@ -70,7 +70,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
         onPress: async () => {
           try {
             await signOut(); // Clerk
-            await logout();  // Local storage clean up
+            await logout(); // Local storage clean up
 
             // Reset nav stack to prevent going back
             props.navigation.reset({
@@ -87,26 +87,46 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   };
 
   // Icon Helper
-  const getIconName = (routeName: string): string => {
-    const materialMap = {
-      'Dashboard': 'dashboard',
-      'History': 'history',
-      'Income': 'arrow-downward',
-      'Expenses': 'arrow-upward',
-      'Analytics': 'bar-chart',
-      'Account': 'person',
-      'Settings': 'settings',
-      'About': 'info',
-      'Export': 'file-download',
-    } as Record<string, string>;
+  const getIconName = (routeName: string, label?: string): string => {
+    const key = (routeName || '').toString();
+    const lookup: Record<string, string> = {
+      Dashboard: 'dashboard',
+      DashboardStack: 'dashboard',
+      Home: 'home',
+      HomeStack: 'home',
+      History: 'history',
+      Income: 'arrow-downward',
+      Expenses: 'arrow-upward',
+      Analytics: 'bar-chart',
+      Account: 'person',
+      Profile: 'person',
+      Settings: 'settings',
+      About: 'info',
+      Export: 'file-download',
+      ExportData: 'file-download',
+      PrivacyPolicy: 'shield',
+      AddEntry: 'add',
+    };
 
-    return materialMap[routeName] || 'circle';
+    if (lookup[key]) return lookup[key];
+
+    const labelKey = (label || '').toLowerCase();
+    if (labelKey.includes('export') || labelKey.includes('backup')) return 'file-download';
+    if (labelKey.includes('history')) return 'history';
+    if (labelKey.includes('income')) return 'arrow-downward';
+    if (labelKey.includes('expense') || labelKey.includes('expenses')) return 'arrow-upward';
+    if (labelKey.includes('analytics') || labelKey.includes('stats')) return 'bar-chart';
+    if (labelKey.includes('account') || labelKey.includes('profile')) return 'person';
+    if (labelKey.includes('settings')) return 'settings';
+    if (labelKey.includes('about')) return 'info';
+
+    return 'circle';
   };
 
   // Safe Version Access
   const appVersion = Constants.expoConfig?.version || '1.0.0';
-  const buildVersion = Constants.expoConfig?.android?.versionCode ||
-    Constants.expoConfig?.ios?.buildNumber || '1';
+  const buildVersion =
+    Constants.expoConfig?.android?.versionCode || Constants.expoConfig?.ios?.buildNumber || '1';
   const versionLabel = `v${appVersion} (${buildVersion})`;
 
   return (
@@ -162,35 +182,34 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
               if (isHidden) return null;
 
               const label = options.title !== undefined ? options.title : route.name;
-              const iconName = getIconName(label.toString());
+              const iconName = getIconName(route.name, String(label));
 
               return (
                 <TouchableOpacity
                   key={route.key}
                   onPress={() => handleNavigate(route.name)}
-                  style={[
-                    styles.menuItem,
-                    focused && styles.menuItemActive
-                  ]}
+                  style={[styles.menuItem, focused && styles.menuItemActive]}
                   activeOpacity={0.7}
                   accessibilityRole="button"
                   accessibilityState={{ selected: focused }}
                 >
-                  <View style={styles.iconContainer}>
-                    <MaterialIcon
-                      name={iconName as any}
-                      size={24}
-                      color={focused ? ACTIVE_COLOR : INACTIVE_COLOR}
-                    />
+                  <View style={styles.iconWrapper}>
+                    <View
+                      style={[
+                        styles.iconCircle,
+                        focused
+                          ? { backgroundColor: ACTIVE_COLOR }
+                          : { backgroundColor: '#E6EEF8' },
+                      ]}
+                    >
+                      <MaterialIcon
+                        name={iconName as any}
+                        size={18}
+                        color={focused ? '#fff' : INACTIVE_COLOR}
+                      />
+                    </View>
                   </View>
-                  <Text
-                    style={[
-                      styles.menuText,
-                      focused && styles.menuTextActive
-                    ]}
-                  >
-                    {label}
-                  </Text>
+                  <Text style={[styles.menuText, focused && styles.menuTextActive]}>{label}</Text>
 
                   {/* Active Pill Indicator */}
                   {focused && <View style={styles.activeIndicator} />}
@@ -210,23 +229,17 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
           onPress={() => handleNavigate('Export')}
           activeOpacity={0.7}
         >
-          <View style={styles.iconContainer}>
+          <View style={styles.iconWrapper}>
             <MaterialIcon name="cloud-download" size={22} color={colors.text || '#334155'} />
           </View>
           <Text style={styles.footerText}>Backup & Export</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.footerItem}
-          onPress={handleLogout}
-          activeOpacity={0.7}
-        >
-          <View style={styles.iconContainer}>
+        <TouchableOpacity style={styles.footerItem} onPress={handleLogout} activeOpacity={0.7}>
+          <View style={styles.iconWrapper}>
             <MaterialIcon name="logout" size={22} color={DANGER_COLOR} />
           </View>
-          <Text style={[styles.footerText, { color: DANGER_COLOR }]}>
-            Sign Out
-          </Text>
+          <Text style={[styles.footerText, { color: DANGER_COLOR }]}>Sign Out</Text>
         </TouchableOpacity>
 
         <Text style={styles.versionText}>{versionLabel}</Text>
@@ -302,10 +315,13 @@ const styles = StyleSheet.create({
   menuItemActive: {
     backgroundColor: colors.primarySoft || 'rgba(37, 99, 235, 0.08)',
   },
-  iconContainer: {
-    width: 28,
-    alignItems: 'flex-start',
-    marginRight: 12,
+  iconWrapper: { width: 44, alignItems: 'center', marginRight: 12 },
+  iconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   menuText: {
     fontSize: 15,

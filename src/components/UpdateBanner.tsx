@@ -7,11 +7,11 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 // --- Theme Configuration (Replace with your actual design system import) ---
 const theme = {
   colors: {
-    bg: '#1F2937',        // Dark Grey/Slate
-    surface: '#374151',   // Lighter Grey for icon bg
+    bg: '#1F2937', // Dark Grey/Slate
+    surface: '#374151', // Lighter Grey for icon bg
     textPrimary: '#F9FAFB',
     textSecondary: '#D1D5DB',
-    accent: '#10B981',    // Emerald Green
+    accent: '#10B981', // Emerald Green
     white: '#FFFFFF',
     shadow: '#000000',
   },
@@ -78,10 +78,10 @@ const UpdateBanner: React.FC<Props> = ({
       >
         {/* Icon */}
         <View style={styles.iconWrapper}>
-          <MaterialCommunityIcons 
-            name="arrow-up-bold-circle-outline" 
-            size={24} 
-            color={theme.colors.accent} 
+          <MaterialCommunityIcons
+            name="arrow-up-bold-circle-outline"
+            size={24}
+            color={theme.colors.accent}
           />
         </View>
 
@@ -107,18 +107,11 @@ const UpdateBanner: React.FC<Props> = ({
               onClose();
             }}
             hitSlop={12}
-            style={({ pressed }) => [
-              styles.closeButton,
-              pressed && { opacity: 0.5 },
-            ]}
+            style={({ pressed }) => [styles.closeButton, pressed && { opacity: 0.5 }]}
             accessibilityRole="button"
             accessibilityLabel="Dismiss update notification"
           >
-            <MaterialCommunityIcons 
-              name="close" 
-              size={20} 
-              color={theme.colors.textSecondary} 
-            />
+            <MaterialCommunityIcons name="close" size={20} color={theme.colors.textSecondary} />
           </Pressable>
         )}
       </Pressable>
@@ -139,14 +132,14 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.bg,
     borderRadius: theme.borderRadius,
     padding: theme.spacing.m,
-    
+
     // Modern Shadow
     shadowColor: theme.colors.shadow,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.2,
     shadowRadius: 12,
     elevation: 8,
-    
+
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.05)', // Subtle border for definition
   },
