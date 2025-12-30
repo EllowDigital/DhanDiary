@@ -123,6 +123,13 @@ const ExportScreen = () => {
   const { targetEntries, count } = useMemo(() => {
     if (!entries.length) return { targetEntries: [], count: 0 };
 
+    if (__DEV__) {
+      try {
+        console.log('[ExportScreen] entries.len=', entries.length, 'mode=', mode, 'pivot=', pivotDate.format());
+        console.log('[ExportScreen] sample entries=', entries.slice(0, 3));
+      } catch (e) { }
+    }
+
     let startUnix = -Infinity;
     let endUnix = Infinity;
 
@@ -162,7 +169,16 @@ const ExportScreen = () => {
     for (let i = 0; i < entries.length; i++) {
       const e = entries[i];
       // Check date field first, fallbacks if missing
-      const t = getUnix(e.date || e.created_at);
+      const t = getUnix((e as any).date || (e as any).created_at || (e as any).updated_at);
+      if (!Number.isFinite(t)) {
+        if (__DEV__) console.warn('[ExportScreen] invalid date for entry', e && ((e as any).local_id || (e as any).id), (e as any).date);
+        // If user selected ALL, include rows with unparseable dates so they can be exported.
+        if (mode === 'All') {
+          filtered.push(e);
+        }
+        continue;
+      }
+
       if (t >= startUnix && t <= endUnix) {
         filtered.push(e);
       }

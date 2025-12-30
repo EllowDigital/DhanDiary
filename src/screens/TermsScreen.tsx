@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Alert,
   useWindowDimensions,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
@@ -15,13 +16,20 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import ScreenHeader from '../components/ScreenHeader';
 import { colors, spacing } from '../utils/design';
 
-// --- Configuration ---
+// --- CONFIGURATION ---
 const LAST_UPDATED = 'December 14, 2025';
 const CONTACT_EMAIL_PRIMARY = 'ellowdigitalindia@gmail.com';
 const CONTACT_EMAIL_SECONDARY = 'sarwanyadav6174@gmail.com';
 
-// --- Data ---
-const sections = [
+// --- TYPES ---
+interface TermSectionData {
+  id: string;
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  title: string;
+  body: string;
+}
+
+const SECTIONS: TermSectionData[] = [
   {
     id: 'usage',
     icon: 'file-document-edit-outline',
@@ -60,12 +68,13 @@ const sections = [
   },
 ];
 
-// --- Component for individual sections ---
-const TermSection = ({ item }: { item: (typeof sections)[0] }) => (
+// --- SUB-COMPONENTS ---
+
+const TermCard = ({ item }: { item: TermSectionData }) => (
   <View style={styles.card}>
     <View style={styles.cardHeader}>
       <View style={styles.iconContainer}>
-        <MaterialCommunityIcons name={item.icon as any} size={20} color={colors.primary} />
+        <MaterialCommunityIcons name={item.icon} size={20} color={colors.primary || '#2563EB'} />
       </View>
       <Text style={styles.cardTitle}>{item.title}</Text>
     </View>
@@ -76,20 +85,26 @@ const TermSection = ({ item }: { item: (typeof sections)[0] }) => (
 const TermsScreen = () => {
   const { width } = useWindowDimensions();
   const isTablet = width >= 768;
-  const contentWidth = Math.min(width - (isTablet ? spacing(8) : spacing(4)), 700);
+  const contentMaxWidth = 700;
 
   const handleEmailPress = async (email: string) => {
     const url = `mailto:${email}`;
-    const supported = await Linking.canOpenURL(url);
-    if (supported) await Linking.openURL(url);
-    else Alert.alert('Error', 'Could not open email client');
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) await Linking.openURL(url);
+      else Alert.alert('Error', 'Could not open email client.');
+    } catch (err) {
+      console.warn(err);
+    }
   };
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-      <SafeAreaView style={styles.safeArea}>
-        <View style={{ width: contentWidth, alignSelf: 'center' }}>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background || '#F8FAFC'} />
+      
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+        {/* Header constrained to max width */}
+        <View style={{ width: '100%', maxWidth: contentMaxWidth, alignSelf: 'center', paddingHorizontal: isTablet ? 0 : 16 }}>
           <ScreenHeader
             title="Terms of Use"
             subtitle="Rights & Responsibilities"
@@ -100,47 +115,61 @@ const TermsScreen = () => {
 
         <ScrollView
           style={styles.scroll}
-          contentContainerStyle={[styles.contentContainer, { paddingBottom: 60 }]}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingHorizontal: isTablet ? 0 : 16, width: '100%', maxWidth: contentMaxWidth, alignSelf: 'center' }
+          ]}
           showsVerticalScrollIndicator={false}
         >
-          <View style={{ width: contentWidth, alignSelf: 'center' }}>
-            {/* Intro Text */}
-            <Text style={styles.leadText}>
-              Please read these Terms carefully before using{' '}
-              <Text style={styles.bold}>DhanDiary</Text>. By creating an account or continuing to
-              use the app, you agree to the rules below.
+          {/* Intro Text */}
+          <Text style={styles.leadText}>
+            Please read these Terms carefully before using <Text style={styles.bold}>DhanDiary</Text>. 
+            By creating an account or continuing to use the app, you agree to the rules below.
+          </Text>
+
+          {/* Sections */}
+          {SECTIONS.map((section) => (
+            <TermCard key={section.id} item={section} />
+          ))}
+
+          {/* Contact Section */}
+          <View style={[styles.card, styles.contactCard]}>
+            <View style={styles.cardHeader}>
+              <View style={[styles.iconContainer, styles.contactIconBg]}>
+                <MaterialCommunityIcons name="email-fast-outline" size={20} color="#0284C7" />
+              </View>
+              <Text style={styles.cardTitle}>Contact Us</Text>
+            </View>
+            
+            <Text style={styles.cardBody}>
+              Have questions regarding these terms? We'll get back to you within a few business days.
             </Text>
 
-            {/* Mapped Sections */}
-            {sections.map((section) => (
-              <TermSection key={section.id} item={section} />
-            ))}
-
-            {/* Contact Section */}
-            <View style={[styles.card, styles.contactCard]}>
-              <View style={styles.cardHeader}>
-                <View style={[styles.iconContainer, { backgroundColor: '#e0f2fe' }]}>
-                  <MaterialCommunityIcons name="email-fast-outline" size={20} color="#0284c7" />
-                </View>
-                <Text style={styles.cardTitle}>Contact Us</Text>
-              </View>
-              <Text style={styles.cardBody}>
-                Have questions? We'll get back to you within a few business days.
-              </Text>
-
-              <TouchableOpacity onPress={() => handleEmailPress(CONTACT_EMAIL_PRIMARY)}>
+            <View style={styles.contactLinks}>
+              <TouchableOpacity 
+                onPress={() => handleEmailPress(CONTACT_EMAIL_PRIMARY)}
+                activeOpacity={0.7}
+                style={styles.emailButton}
+              >
+                <MaterialCommunityIcons name="email-outline" size={18} color={colors.primary || '#2563EB'} />
                 <Text style={styles.linkText}>{CONTACT_EMAIL_PRIMARY}</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity onPress={() => handleEmailPress(CONTACT_EMAIL_SECONDARY)}>
-                <Text style={styles.secondaryEmail}>{CONTACT_EMAIL_SECONDARY}</Text>
+              <TouchableOpacity 
+                onPress={() => handleEmailPress(CONTACT_EMAIL_SECONDARY)}
+                activeOpacity={0.7}
+                style={styles.emailButton}
+              >
+                <MaterialCommunityIcons name="shield-account-outline" size={18} color={colors.muted || '#64748B'} />
+                <Text style={styles.secondaryEmail}>Alt: {CONTACT_EMAIL_SECONDARY}</Text>
               </TouchableOpacity>
             </View>
+          </View>
 
-            {/* Footer */}
-            <View style={styles.footer}>
-              <Text style={styles.footerText}>Last updated: {LAST_UPDATED}</Text>
-            </View>
+          {/* Footer */}
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>Last updated: {LAST_UPDATED}</Text>
+            <Text style={styles.footerSubText}>© {new Date().getFullYear()} EllowDigital</Text>
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -153,7 +182,7 @@ export default TermsScreen;
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.background || '#F8FAFC',
   },
   safeArea: {
     flex: 1,
@@ -161,87 +190,111 @@ const styles = StyleSheet.create({
   scroll: {
     flex: 1,
   },
-  contentContainer: {
-    paddingTop: spacing(2),
-    gap: spacing(2),
+  scrollContent: {
+    paddingBottom: 60,
+    paddingTop: 10,
   },
   leadText: {
     fontSize: 15,
     lineHeight: 24,
-    color: colors.text,
-    marginBottom: spacing(2),
-    opacity: 0.8,
+    color: colors.text || '#1E293B',
+    marginBottom: spacing(3),
+    opacity: 0.9,
   },
   bold: {
     fontWeight: '700',
-    color: colors.primary,
+    color: colors.primary || '#2563EB',
   },
-  // Card Styling
+  
+  // Card Styles
   card: {
-    backgroundColor: '#fff',
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
+    padding: spacing(2.5),
+    marginBottom: spacing(2),
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.04)',
-    // Shadow for depth
+    borderColor: 'rgba(0,0,0,0.05)',
+    // Shadow
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
+    shadowOpacity: 0.04,
     shadowRadius: 8,
     elevation: 2,
   },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
-    gap: 12,
+    marginBottom: spacing(1.5),
+    gap: spacing(1.5),
   },
   iconContainer: {
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: '#f0fdf4', // Light green default, overridden for contact
+    backgroundColor: '#F0FDF4', // Light green default
     alignItems: 'center',
     justifyContent: 'center',
   },
   cardTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: colors.text,
+    color: colors.text || '#1E293B',
+    flex: 1,
   },
   cardBody: {
     fontSize: 14,
     lineHeight: 22,
-    color: colors.muted,
+    color: colors.muted || '#64748B',
   },
+
   // Contact Specifics
   contactCard: {
-    backgroundColor: '#f8fafc',
-    borderColor: '#e2e8f0',
+    backgroundColor: '#F8FAFC',
+    borderColor: '#E2E8F0',
+    marginTop: 8,
+  },
+  contactIconBg: {
+    backgroundColor: '#E0F2FE', // Light Sky Blue
+  },
+  contactLinks: {
+    marginTop: spacing(2),
+    gap: 12,
+  },
+  emailButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 4,
   },
   linkText: {
     fontSize: 15,
-    color: colors.primary,
     fontWeight: '600',
-    marginTop: 16,
+    color: colors.primary || '#2563EB',
   },
   secondaryEmail: {
-    fontSize: 13,
-    color: colors.muted,
-    marginTop: 6,
+    fontSize: 14,
+    color: colors.muted || '#64748B',
     textDecorationLine: 'underline',
   },
+
   // Footer
   footer: {
-    marginTop: 20,
+    marginTop: spacing(2),
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: spacing(4),
   },
   footerText: {
-    fontSize: 12,
-    color: colors.muted,
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.muted || '#94A3B8',
     textAlign: 'center',
-    opacity: 0.7,
+    opacity: 0.8,
+  },
+  footerSubText: {
+    fontSize: 12,
+    color: colors.muted || '#94A3B8',
+    textAlign: 'center',
+    marginTop: 4,
+    opacity: 0.6,
   },
 });

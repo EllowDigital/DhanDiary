@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Alert,
   useWindowDimensions,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
@@ -15,13 +16,13 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import ScreenHeader from '../components/ScreenHeader';
 import { colors, spacing } from '../utils/design';
 
-// Configuration
+// --- CONFIGURATION ---
 const COMPANY_NAME = 'EllowDigital';
 const SUPPORT_EMAIL_PRIMARY = 'ellowdigitalindia@gmail.com';
 const SUPPORT_EMAIL_SECONDARY = 'sarwanyadav6174@gmail.com';
 const LAST_UPDATED = 'December 14, 2025';
 
-// Data Model
+// --- TYPES ---
 interface SectionData {
   id: string;
   icon: keyof typeof MaterialCommunityIcons.glyphMap;
@@ -29,7 +30,7 @@ interface SectionData {
   body: string;
 }
 
-const sections: SectionData[] = [
+const SECTIONS: SectionData[] = [
   {
     id: 'collect',
     icon: 'database-arrow-down-outline',
@@ -62,36 +63,43 @@ const sections: SectionData[] = [
   },
 ];
 
-// Reusable Section Component
-const PolicySection = ({ item }: { item: SectionData }) => (
-  <View style={styles.sectionContainer}>
-    <View style={styles.sectionHeader}>
+// --- SUB-COMPONENTS ---
+
+const PolicyCard = ({ item }: { item: SectionData }) => (
+  <View style={styles.card}>
+    <View style={styles.cardHeader}>
       <View style={styles.iconContainer}>
-        <MaterialCommunityIcons name={item.icon} size={20} color={colors.primary} />
+        <MaterialCommunityIcons name={item.icon} size={20} color={colors.primary || '#2563EB'} />
       </View>
-      <Text style={styles.sectionTitle}>{item.title}</Text>
+      <Text style={styles.cardTitle}>{item.title}</Text>
     </View>
-    <Text style={styles.sectionBody}>{item.body}</Text>
+    <Text style={styles.cardBody}>{item.body}</Text>
   </View>
 );
 
 const PrivacyPolicyScreen = () => {
   const { width } = useWindowDimensions();
   const isTablet = width >= 768;
-  const contentWidth = Math.min(width - (isTablet ? spacing(8) : spacing(4)), 700);
+  const contentMaxWidth = 700;
 
   const handleEmailPress = async (email: string) => {
     const url = `mailto:${email}`;
-    const supported = await Linking.canOpenURL(url);
-    if (supported) await Linking.openURL(url);
-    else Alert.alert('Error', 'Could not open email client.');
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) await Linking.openURL(url);
+      else Alert.alert('Error', 'Could not open email client.');
+    } catch (err) {
+      console.warn(err);
+    }
   };
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-      <SafeAreaView style={styles.safeArea}>
-        <View style={{ width: contentWidth, alignSelf: 'center' }}>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background || '#F8FAFC'} />
+      
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+        {/* Header constrained to content width */}
+        <View style={{ width: '100%', maxWidth: contentMaxWidth, alignSelf: 'center', paddingHorizontal: isTablet ? 0 : 16 }}>
           <ScreenHeader
             title="Privacy Policy"
             subtitle="Data Protection & Rights"
@@ -102,54 +110,62 @@ const PrivacyPolicyScreen = () => {
 
         <ScrollView
           style={styles.scroll}
-          contentContainerStyle={[styles.contentContainer, { paddingBottom: 60 }]}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingHorizontal: isTablet ? 0 : 16, width: '100%', maxWidth: contentMaxWidth, alignSelf: 'center' }
+          ]}
           showsVerticalScrollIndicator={false}
         >
-          <View style={{ width: contentWidth, alignSelf: 'center' }}>
-            {/* Introduction */}
-            <Text style={styles.leadText}>
-              {COMPANY_NAME} built <Text style={styles.bold}>DhanDiary</Text> to help individuals
-              track their cash flow safely. This policy explains what data we collect, why we
-              process it, and your choices.
+          {/* Introduction */}
+          <Text style={styles.leadText}>
+            {COMPANY_NAME} built <Text style={styles.bold}>DhanDiary</Text> to help individuals
+            track their cash flow safely. This policy explains what data we collect, why we
+            process it, and your choices.
+          </Text>
+
+          {/* Policy Sections */}
+          {SECTIONS.map((section) => (
+            <PolicyCard key={section.id} item={section} />
+          ))}
+
+          {/* Contact Section */}
+          <View style={[styles.card, styles.contactCard]}>
+            <View style={styles.cardHeader}>
+              <View style={[styles.iconContainer, styles.contactIconBg]}>
+                <MaterialCommunityIcons name="email-outline" size={20} color="#0284c7" />
+              </View>
+              <Text style={styles.cardTitle}>Contact Us</Text>
+            </View>
+            
+            <Text style={styles.cardBody}>
+              Questions or privacy requests? We aim to respond within 3 business days.
             </Text>
 
-            {/* Policy Sections */}
-            {sections.map((section) => (
-              <PolicySection key={section.id} item={section} />
-            ))}
-
-            {/* Contact Section */}
-            <View style={[styles.sectionContainer, styles.contactSection]}>
-              <View style={styles.sectionHeader}>
-                <View style={[styles.iconContainer, { backgroundColor: '#e0f2fe' }]}>
-                  <MaterialCommunityIcons name="email-outline" size={20} color="#0284c7" />
-                </View>
-                <Text style={styles.sectionTitle}>Contact Us</Text>
-              </View>
-              <Text style={styles.sectionBody}>
-                Questions or privacy requests? We aim to respond within 3 business days.
-              </Text>
-
+            <View style={styles.contactLinks}>
               <TouchableOpacity
                 onPress={() => handleEmailPress(SUPPORT_EMAIL_PRIMARY)}
                 activeOpacity={0.7}
+                style={styles.emailButton}
               >
+                <MaterialCommunityIcons name="email-fast-outline" size={18} color={colors.primary || '#2563EB'} />
                 <Text style={styles.emailLink}>{SUPPORT_EMAIL_PRIMARY}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 onPress={() => handleEmailPress(SUPPORT_EMAIL_SECONDARY)}
                 activeOpacity={0.7}
+                style={styles.emailButton}
               >
+                <MaterialCommunityIcons name="shield-account-outline" size={18} color={colors.muted || '#64748B'} />
                 <Text style={styles.secondaryEmail}>Alt: {SUPPORT_EMAIL_SECONDARY}</Text>
               </TouchableOpacity>
             </View>
+          </View>
 
-            {/* Footer */}
-            <View style={styles.footer}>
-              <Text style={styles.footerText}>Last updated: {LAST_UPDATED}</Text>
-              <Text style={styles.footerSubText}>Updates will be posted here.</Text>
-            </View>
+          {/* Footer */}
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>Last updated: {LAST_UPDATED}</Text>
+            <Text style={styles.footerSubText}>Updates will be posted here.</Text>
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -162,7 +178,7 @@ export default PrivacyPolicyScreen;
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.background || '#F8FAFC',
   },
   safeArea: {
     flex: 1,
@@ -170,37 +186,38 @@ const styles = StyleSheet.create({
   scroll: {
     flex: 1,
   },
-  contentContainer: {
-    paddingTop: spacing(2),
-    gap: spacing(2),
+  scrollContent: {
+    paddingBottom: 60,
+    paddingTop: 10,
   },
   leadText: {
     fontSize: 15,
     lineHeight: 24,
-    color: colors.text,
-    marginBottom: spacing(2),
-    opacity: 0.8,
+    color: colors.text || '#1E293B',
+    marginBottom: spacing(3),
+    opacity: 0.9,
   },
   bold: {
     fontWeight: '700',
-    color: colors.primary,
+    color: colors.primary || '#2563EB',
   },
-  // Section Card Styling
-  sectionContainer: {
-    backgroundColor: '#fff',
+  
+  // Card Styles
+  card: {
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: spacing(2.5),
     marginBottom: spacing(2),
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.04)',
+    borderColor: 'rgba(0,0,0,0.05)',
     // Shadow
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
+    shadowOpacity: 0.04,
     shadowRadius: 8,
     elevation: 2,
   },
-  sectionHeader: {
+  cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: spacing(1.5),
@@ -210,38 +227,52 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: '#f0fdf4', // Light green default
+    backgroundColor: '#F0FDF4', // Light green default
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sectionTitle: {
+  cardTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: colors.text,
+    color: colors.text || '#1E293B',
+    flex: 1,
   },
-  sectionBody: {
+  cardBody: {
     fontSize: 14,
     lineHeight: 22,
-    color: colors.muted,
+    color: colors.muted || '#64748B',
   },
+
   // Contact Specifics
-  contactSection: {
-    backgroundColor: '#f8fafc',
-    borderColor: '#e2e8f0',
+  contactCard: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#E2E8F0',
+    marginTop: 8,
+  },
+  contactIconBg: {
+    backgroundColor: '#E0F2FE', // Light Sky Blue
+  },
+  contactLinks: {
+    marginTop: spacing(2),
+    gap: 12,
+  },
+  emailButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 4,
   },
   emailLink: {
     fontSize: 15,
     fontWeight: '600',
-    color: colors.primary,
-    marginTop: spacing(2),
-    textDecorationLine: 'underline',
+    color: colors.primary || '#2563EB',
   },
   secondaryEmail: {
-    fontSize: 13,
-    color: colors.muted,
-    marginTop: 6,
+    fontSize: 14,
+    color: colors.muted || '#64748B',
     textDecorationLine: 'underline',
   },
+
   // Footer
   footer: {
     marginTop: spacing(2),
@@ -251,13 +282,13 @@ const styles = StyleSheet.create({
   footerText: {
     fontSize: 13,
     fontWeight: '600',
-    color: colors.muted,
+    color: colors.muted || '#94A3B8',
     textAlign: 'center',
     opacity: 0.8,
   },
   footerSubText: {
     fontSize: 12,
-    color: colors.muted,
+    color: colors.muted || '#94A3B8',
     textAlign: 'center',
     marginTop: 4,
     opacity: 0.6,

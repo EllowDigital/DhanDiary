@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Alert,
   useWindowDimensions,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
@@ -15,11 +16,19 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import ScreenHeader from '../components/ScreenHeader';
 import { colors, spacing } from '../utils/design';
 
+// --- CONFIG ---
 const LAST_UPDATED = 'December 12, 2025';
 const CONTACT_EMAIL_PRIMARY = 'ellowdigitalindia@gmail.com';
 const CONTACT_EMAIL_SECONDARY = 'sarwanyadav6174@gmail.com';
 
-const sections = [
+type EulaSectionData = {
+  id: string;
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  title: string;
+  body: string;
+};
+
+const SECTIONS: EulaSectionData[] = [
   {
     id: 'license',
     icon: 'file-certificate-outline',
@@ -70,11 +79,13 @@ const sections = [
   },
 ];
 
-const EulaSection = ({ item }: { item: (typeof sections)[0] }) => (
+// --- COMPONENTS ---
+
+const EulaCard = ({ item }: { item: EulaSectionData }) => (
   <View style={styles.card}>
     <View style={styles.cardHeader}>
       <View style={styles.iconContainer}>
-        <MaterialCommunityIcons name={item.icon as any} size={20} color={colors.primary} />
+        <MaterialCommunityIcons name={item.icon} size={22} color={colors.primary || '#2563EB'} />
       </View>
       <Text style={styles.cardTitle}>{item.title}</Text>
     </View>
@@ -85,23 +96,35 @@ const EulaSection = ({ item }: { item: (typeof sections)[0] }) => (
 const EulaScreen = () => {
   const { width } = useWindowDimensions();
   const isTablet = width >= 768;
-  const contentWidth = Math.min(width - (isTablet ? spacing(8) : spacing(4)), 700);
+  const contentMaxWidth = 700;
+  
+  // Calculate responsive padding
+  const horizontalPadding = isTablet ? (width - contentMaxWidth) / 2 : spacing(4);
 
   const handleEmailPress = async (email: string) => {
     const url = `mailto:${email}`;
-    const supported = await Linking.canOpenURL(url);
-    if (supported) await Linking.openURL(url);
-    else Alert.alert('Error', 'Could not open email client');
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert('No Email App', 'Could not find an email application to open this link.');
+      }
+    } catch (err) {
+      console.warn(err);
+    }
   };
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-      <SafeAreaView style={styles.safeArea}>
-        <View style={{ width: contentWidth, alignSelf: 'center' }}>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background || '#F8FAFC'} />
+      
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+        {/* Header container constrained to max width */}
+        <View style={{ width: '100%', maxWidth: contentMaxWidth, alignSelf: 'center', paddingHorizontal: isTablet ? 0 : 16 }}>
           <ScreenHeader
             title="End User License"
-            subtitle="License Agreement"
+            subtitle="Terms of Service & EULA"
             showScrollHint={false}
             useSafeAreaPadding={false}
           />
@@ -109,42 +132,58 @@ const EulaScreen = () => {
 
         <ScrollView
           style={styles.scroll}
-          contentContainerStyle={[styles.contentContainer, { paddingBottom: 60 }]}
+          contentContainerStyle={[
+            styles.scrollContent, 
+            { paddingHorizontal: isTablet ? 0 : 16, width: '100%', maxWidth: contentMaxWidth, alignSelf: 'center' }
+          ]}
           showsVerticalScrollIndicator={false}
         >
-          <View style={{ width: contentWidth, alignSelf: 'center' }}>
-            <Text style={styles.leadText}>
-              By downloading or using <Text style={styles.bold}>DhanDiary</Text>, you agree to this
-              End User License Agreement. If you do not agree, you must uninstall the app.
+          <Text style={styles.leadText}>
+            By downloading or using <Text style={styles.bold}>DhanDiary</Text>, you agree to this
+            End User License Agreement. If you do not agree, you must uninstall the app immediately.
+          </Text>
+
+          {SECTIONS.map((section) => (
+            <EulaCard key={section.id} item={section} />
+          ))}
+
+          {/* Contact Section */}
+          <View style={[styles.card, styles.contactCard]}>
+            <View style={styles.cardHeader}>
+              <View style={[styles.iconContainer, styles.contactIconBg]}>
+                <MaterialCommunityIcons name="email-fast-outline" size={22} color="#0284C7" />
+              </View>
+              <Text style={styles.cardTitle}>Contact & Support</Text>
+            </View>
+            
+            <Text style={styles.cardBody}>
+              Questions about this license? Reach out and we will reply within a few business days.
             </Text>
 
-            {sections.map((section) => (
-              <EulaSection key={section.id} item={section} />
-            ))}
-
-            <View style={[styles.card, styles.contactCard]}>
-              <View style={styles.cardHeader}>
-                <View style={[styles.iconContainer, { backgroundColor: '#e0f2fe' }]}>
-                  <MaterialCommunityIcons name="email-fast-outline" size={20} color="#0284c7" />
-                </View>
-                <Text style={styles.cardTitle}>Contact</Text>
-              </View>
-              <Text style={styles.cardBody}>
-                Questions about this license? Reach out and we will reply within a few business
-                days.
-              </Text>
-
-              <TouchableOpacity onPress={() => handleEmailPress(CONTACT_EMAIL_PRIMARY)}>
+            <View style={styles.contactLinks}>
+              <TouchableOpacity 
+                onPress={() => handleEmailPress(CONTACT_EMAIL_PRIMARY)}
+                activeOpacity={0.7}
+                style={styles.emailButton}
+              >
+                <MaterialCommunityIcons name="email-outline" size={18} color={colors.primary || '#2563EB'} />
                 <Text style={styles.linkText}>{CONTACT_EMAIL_PRIMARY}</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => handleEmailPress(CONTACT_EMAIL_SECONDARY)}>
+
+              <TouchableOpacity 
+                onPress={() => handleEmailPress(CONTACT_EMAIL_SECONDARY)}
+                activeOpacity={0.7}
+                style={styles.emailButton}
+              >
+                <MaterialCommunityIcons name="account-outline" size={18} color={colors.muted || '#64748B'} />
                 <Text style={styles.secondaryEmail}>{CONTACT_EMAIL_SECONDARY}</Text>
               </TouchableOpacity>
             </View>
+          </View>
 
-            <View style={styles.footer}>
-              <Text style={styles.footerText}>Last updated: {LAST_UPDATED}</Text>
-            </View>
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>Last updated: {LAST_UPDATED}</Text>
+            <Text style={styles.footerSubText}>© {new Date().getFullYear()} EllowDigital. All rights reserved.</Text>
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -157,7 +196,7 @@ export default EulaScreen;
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.background || '#F8FAFC',
   },
   safeArea: {
     flex: 1,
@@ -165,31 +204,34 @@ const styles = StyleSheet.create({
   scroll: {
     flex: 1,
   },
-  contentContainer: {
-    paddingTop: spacing(2),
-    gap: spacing(2),
+  scrollContent: {
+    paddingBottom: 60,
+    paddingTop: 10,
   },
   leadText: {
     fontSize: 15,
     lineHeight: 24,
-    color: colors.text,
-    marginBottom: spacing(2),
-    opacity: 0.8,
+    color: colors.text || '#1E293B',
+    marginBottom: 24,
+    opacity: 0.9,
   },
   bold: {
     fontWeight: '700',
-    color: colors.primary,
+    color: colors.primary || '#2563EB',
   },
+  
+  // Card Styles
   card: {
-    backgroundColor: '#fff',
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 20,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.04)',
+    borderColor: 'rgba(0,0,0,0.05)',
+    // Shadow
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
+    shadowOpacity: 0.04,
     shadowRadius: 8,
     elevation: 2,
   },
@@ -200,48 +242,69 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   iconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: '#f0fdf4',
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: colors.primarySoft || '#EFF6FF',
     alignItems: 'center',
     justifyContent: 'center',
   },
   cardTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: colors.text,
+    color: colors.text || '#1E293B',
+    flex: 1,
   },
   cardBody: {
     fontSize: 14,
     lineHeight: 22,
-    color: colors.muted,
+    color: colors.muted || '#64748B',
   },
+
+  // Contact Specifics
   contactCard: {
-    backgroundColor: '#f8fafc',
-    borderColor: '#e2e8f0',
+    backgroundColor: '#F8FAFC', // Slightly darker bg for contact
+    borderColor: '#E2E8F0',
+    marginTop: 8,
+  },
+  contactIconBg: {
+    backgroundColor: '#E0F2FE', // Light Sky Blue
+  },
+  contactLinks: {
+    marginTop: 16,
+    gap: 12,
+  },
+  emailButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 4,
   },
   linkText: {
     fontSize: 15,
-    color: colors.primary,
+    color: colors.primary || '#2563EB',
     fontWeight: '600',
-    marginTop: 16,
   },
   secondaryEmail: {
-    fontSize: 13,
-    color: colors.muted,
-    marginTop: 6,
+    fontSize: 14,
+    color: colors.muted || '#64748B',
     textDecorationLine: 'underline',
   },
+
+  // Footer
   footer: {
-    marginTop: 20,
+    marginTop: 32,
     alignItems: 'center',
     marginBottom: 20,
+    gap: 4,
   },
   footerText: {
     fontSize: 12,
-    color: colors.muted,
-    textAlign: 'center',
-    opacity: 0.7,
+    fontWeight: '600',
+    color: colors.muted || '#94A3B8',
+  },
+  footerSubText: {
+    fontSize: 11,
+    color: '#CBD5E1',
   },
 });
