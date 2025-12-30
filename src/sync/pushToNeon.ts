@@ -44,34 +44,32 @@ export async function pushToNeon(): Promise<{ pushed: string[]; deleted: string[
     for (const row of toPush) {
       try {
         const sql = `INSERT INTO transactions
-          (id, user_id, amount, type, category, note, date, updated_at)
-          VALUES ($1::uuid,$2::uuid,$3::numeric,$4::text,$5::text,$6::text,CASE WHEN $7::bigint IS NULL OR $7::bigint = 0 THEN NULL ELSE to_timestamp($7::bigint / 1000) END,$8::bigint)
+          (id, user_id, amount, type, category, note, date)
+          VALUES ($1::uuid,$2::uuid,$3::numeric,$4::text,$5::text,$6::text,CASE WHEN $7::bigint IS NULL OR $7::bigint = 0 THEN NULL ELSE to_timestamp($7::bigint / 1000) END)
           ON CONFLICT (id) DO UPDATE SET
             user_id = EXCLUDED.user_id,
             amount = EXCLUDED.amount,
             type = EXCLUDED.type,
             category = EXCLUDED.category,
             note = EXCLUDED.note,
-            date = EXCLUDED.date,
-            updated_at = EXCLUDED.updated_at`;
+            date = EXCLUDED.date`;
 
         // Ensure we pass numeric epoch-ms values for date/updated_at so the
         // server-side SQL casting ($7::bigint / $8::bigint) doesn't attempt
         // to cast a timestamp value to bigint (which errors).
+        // Do NOT send `updated_at` from client — let Postgres triggers set it.
+        // Normalize date to epoch-ms or null (server SQL will convert epoch-ms to timestamptz)
         const normalizeToEpoch = (v: any) => {
           if (v === null || v === undefined) return null;
           if (typeof v === 'number') return v;
-          // If it's already a numeric string, coerce to number
           const asNum = Number(v);
           if (!Number.isNaN(asNum)) return asNum;
-          // Fallback: parse as Date
           const d = new Date(v);
           const t = d.getTime();
           return Number.isNaN(t) ? null : t;
         };
 
         const dateParam = normalizeToEpoch(row.date ?? null);
-        const updatedAtParam = normalizeToEpoch(row.updated_at ?? null);
 
         await neonQuery(sql, [
           row.id,
@@ -81,7 +79,6 @@ export async function pushToNeon(): Promise<{ pushed: string[]; deleted: string[
           row.category ?? null,
           row.note ?? null,
           dateParam,
-          updatedAtParam,
         ]);
 
         // Mark local row as synced
@@ -96,7 +93,8 @@ export async function pushToNeon(): Promise<{ pushed: string[]; deleted: string[
     for (const row of toDelete) {
       try {
         await neonQuery('DELETE FROM transactions WHERE id = $1', [row.id]);
-        await executeSqlAsync('UPDATE transactions SET sync_status = 1 WHERE id = ?;', [row.id]);
+        // Remove local tombstone after successful remote delete so it does not reappear
+        await executeSqlAsync('DELETE FROM transactions WHERE id = ?;', [row.id]);
         deletedIds.push(row.id);
       } catch (err) {
         if (__DEV__) console.warn('[sync] pushToNeon: failed to delete row', row.id, err);

@@ -73,17 +73,9 @@ export const addLocalEntry = async (entry: any) => {
   // Ensure client_id exists
   const clientId = entry.client_id && uuidValidate(entry.client_id) ? entry.client_id : uuidv4();
 
-  // Normalize timestamp fields: prefer ISO strings for timestamptz columns
-  const createdAtIso = entry.created_at
-    ? typeof entry.created_at === 'string'
-      ? entry.created_at
-      : new Date(entry.created_at).toISOString()
-    : new Date().toISOString();
-  const updatedAtIso = entry.updated_at
-    ? typeof entry.updated_at === 'string'
-      ? entry.updated_at
-      : new Date(entry.updated_at).toISOString()
-    : new Date().toISOString();
+  // Normalize date only. Do NOT send `updated_at` or `created_at` from client;
+  // let the DB trigger set those columns (server-side). This avoids timestamptz/bigint
+  // mismatches when syncing.
   const dateIso = entry.date
     ? typeof entry.date === 'string'
       ? entry.date
@@ -91,7 +83,7 @@ export const addLocalEntry = async (entry: any) => {
     : new Date().toISOString();
 
   const res = await query(
-    `INSERT INTO transactions (user_id, client_id, type, amount, category, note, currency, created_at, updated_at, date) VALUES ($1,$2,$3,$4::numeric,$5,$6,$7,$8::timestamptz,$9::timestamptz,$10::timestamptz) RETURNING id, user_id, type, amount, category, note, currency, created_at, updated_at, date, client_id`,
+    `INSERT INTO transactions (user_id, client_id, type, amount, category, note, currency, date) VALUES ($1,$2,$3,$4::numeric,$5,$6,$7,$8::timestamptz) RETURNING id, user_id, type, amount, category, note, currency, created_at, updated_at, date, client_id`,
     [
       userId,
       clientId,
@@ -100,8 +92,6 @@ export const addLocalEntry = async (entry: any) => {
       entry.category,
       entry.note || null,
       entry.currency || 'INR',
-      createdAtIso,
-      updatedAtIso,
       dateIso,
     ]
   );

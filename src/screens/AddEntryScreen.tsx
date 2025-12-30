@@ -146,7 +146,7 @@ const AddEntryScreen: React.FC = () => {
         setCategory(ensureCategory(found.category));
         // Handle various date formats safely
         const d = found.date || found.created_at;
-        setDate(d ? new Date(d) : new Date());
+        setDate(parseToDate(d));
         setEditingLocalId(found.local_id);
       }
     }
@@ -173,7 +173,7 @@ const AddEntryScreen: React.FC = () => {
           if ((navigation as any).setParams) {
             (navigation as any).setParams({ local_id: undefined });
           }
-        } catch (e) {}
+        } catch (e) { }
         setEditingLocalId(null);
         setSaving(false);
       };
@@ -181,6 +181,33 @@ const AddEntryScreen: React.FC = () => {
   );
 
   // --- HANDLERS ---
+  // Parse various date formats (seconds vs ms vs ISO) into a Date
+  const parseToDate = (v: any) => {
+    if (!v && v !== 0) return new Date();
+    // Numbers (could be seconds)
+    if (typeof v === 'number') {
+      const n = Number(v);
+      if (n < 1e12) return new Date(n * 1000);
+      return new Date(n);
+    }
+    // Strings: try ISO parse first
+    if (typeof v === 'string') {
+      const p = Date.parse(v);
+      if (!Number.isNaN(p)) return new Date(p);
+      const asNum = Number(v);
+      if (!Number.isNaN(asNum)) {
+        if (asNum < 1e12) return new Date(asNum * 1000);
+        return new Date(asNum);
+      }
+      return new Date();
+    }
+    // Fallback
+    try {
+      return new Date(v);
+    } catch (e) {
+      return new Date();
+    }
+  };
   const handleSave = () => {
     if (saving) return;
     if (!user?.id) {

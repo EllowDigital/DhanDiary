@@ -101,7 +101,7 @@ export async function getUnsyncedTransactions() {
 
 // Small helper for tests or debug to upsert from remote source during pull
 export async function upsertTransactionFromRemote(txn: TransactionRow) {
-  const sql = `INSERT OR REPLACE INTO transactions(id, user_id, amount, type, category, note, date, updated_at, sync_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`;
+  const sql = `INSERT OR REPLACE INTO transactions(id, user_id, amount, type, category, note, date, updated_at, sync_status, server_version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`;
   await executeSqlAsync(sql, [
     txn.id,
     txn.user_id,
@@ -112,6 +112,7 @@ export async function upsertTransactionFromRemote(txn: TransactionRow) {
     txn.date ?? null,
     txn.updated_at ?? Date.now(),
     typeof txn.sync_status === 'number' ? txn.sync_status : 1,
+    typeof (txn as any).server_version === 'number' ? (txn as any).server_version : 0,
   ]);
   if (__DEV__) console.log('[transactions] upsert remote', txn.id);
 }

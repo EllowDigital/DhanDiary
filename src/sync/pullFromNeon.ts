@@ -111,18 +111,20 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
     try {
       const remoteUpdatedAt = Number(remote.updated_at || 0);
 
-      // Get local version to compare timestamps
+      // Get local version to compare timestamps and sync status
       const localRow = await executeSqlAsync(
-        'SELECT updated_at FROM transactions WHERE id = ? LIMIT 1;',
+        'SELECT updated_at, sync_status FROM transactions WHERE id = ? LIMIT 1;',
         [remote.id]
       );
 
       let localUpdatedAt = 0;
+      let localSyncStatus = null as number | null;
       if (localRow && localRow[1]) {
         const r = localRow[1];
         if (r.rows && r.rows.length && r.rows.length > 0) {
           const it = r.rows.item(0);
           localUpdatedAt = it ? Number(it.updated_at || 0) : 0;
+          localSyncStatus = it && typeof it.sync_status === 'number' ? it.sync_status : null;
         }
       }
 
@@ -151,8 +153,12 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
       }
 
       // CASE B: Handle Remote Update/Insert
-      // Only apply if remote is strictly newer than local
-      if (remoteUpdatedAt > localUpdatedAt) {
+      // Respect local pending changes/deletes: if local has a pending delete (2) or
+      // pending update (0) that is newer than or equal to remote, skip applying remote.
+      const localHasPending = localSyncStatus === 0 || localSyncStatus === 2;
+      if (localHasPending && localUpdatedAt >= remoteUpdatedAt) {
+        // prefer local pending change; skip
+      } else if (remoteUpdatedAt > localUpdatedAt) {
         await upsertTransactionFromRemote({
           id: remote.id,
           user_id: remote.user_id,

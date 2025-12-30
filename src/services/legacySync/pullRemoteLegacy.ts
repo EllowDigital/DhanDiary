@@ -84,8 +84,8 @@ export const pullRemoteLegacy = async () => {
           if (localForDeleted && (localForDeleted as any).need_sync) {
             const revivedUpdatedAt = String(Date.now());
             await Q(
-              `UPDATE transactions SET deleted_at = NULL, need_sync = false, updated_at = $1::bigint WHERE id = $2`,
-              [revivedUpdatedAt, r.id]
+              `UPDATE transactions SET deleted_at = NULL, need_sync = false, updated_at = now() WHERE id = $1`,
+              [r.id]
             );
             try {
               await markEntrySynced(

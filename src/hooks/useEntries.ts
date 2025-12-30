@@ -99,6 +99,20 @@ export const useEntries = (userId?: string | null) => {
       try {
         const local = await getTransactionsByUser(userId);
         // Map sqlite rows to LocalEntry shape
+        const normalizeRowDate = (d: any) => {
+          if (d === null || d === undefined) return null;
+          if (typeof d === 'number') return new Date(Number(d)).toISOString();
+          const parsed = new Date(d);
+          if (!Number.isFinite(parsed.getTime())) return null;
+          return parsed.toISOString();
+        };
+        const normalizeUpdatedAt = (u: any) => {
+          if (u === null || u === undefined) return 0;
+          if (typeof u === 'number') return Number(u);
+          const parsed = new Date(u);
+          return Number.isFinite(parsed.getTime()) ? parsed.getTime() : 0;
+        };
+
         const mapped = (local || []).map((r: any) => ({
           local_id: r.id,
           remote_id: null,
@@ -107,8 +121,10 @@ export const useEntries = (userId?: string | null) => {
           amount: r.amount,
           category: r.category,
           note: r.note,
-          date: r.date,
-          updated_at: r.updated_at,
+          date:
+            normalizeRowDate(r.date) ||
+            (r.created_at ? new Date(r.created_at).toISOString() : null),
+          updated_at: normalizeUpdatedAt(r.updated_at),
           currency: 'INR',
         }));
 

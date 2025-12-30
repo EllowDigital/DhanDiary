@@ -42,7 +42,17 @@ if (Platform.OS === 'android') {
   }
 }
 
-const resolveEntryMoment = (entry: any) => dayjs(entry?.date || entry?.created_at);
+const resolveEntryMoment = (entry: any) => {
+  const v = entry?.date || entry?.created_at;
+  // normalize seconds vs ms vs ISO
+  if (v == null) return dayjs();
+  const num = Number(v);
+  if (!Number.isNaN(num)) {
+    const ms = num < 1e12 ? num * 1000 : num;
+    return dayjs(ms);
+  }
+  return dayjs(v);
+};
 
 // --- 1. MEMOIZED LIST ITEM (Performance) ---
 const SwipeableHistoryItem = React.memo(({ item, onEdit, onDelete }: any) => {
@@ -157,7 +167,17 @@ const EditTransactionModal = React.memo(({ visible, entry, onClose, onSave }: an
       setCategory(ensureCategory(entry.category));
       setNote(entry.note || '');
       setTypeIndex(isIncome(entry.type) ? 1 : 0);
-      setDate(new Date(entry.date || entry.created_at));
+      // normalize date value
+      const v = entry.date || entry.created_at;
+      if (v == null) setDate(new Date());
+      else {
+        const n = Number(v);
+        if (!Number.isNaN(n)) setDate(new Date(n < 1e12 ? n * 1000 : n));
+        else {
+          const parsed = Date.parse(v);
+          setDate(!Number.isNaN(parsed) ? new Date(parsed) : new Date());
+        }
+      }
     }
   }, [entry]);
 
@@ -183,7 +203,7 @@ const EditTransactionModal = React.memo(({ visible, entry, onClose, onSave }: an
       // component may unmount after onClose; attempt to reset saving
       try {
         setSaving(false);
-      } catch (e) {}
+      } catch (e) { }
     }
   };
 

@@ -39,6 +39,28 @@ export async function initDB(): Promise<void> {
   }
 }
 
+// Ensure optional migration columns exist (idempotent)
+export async function ensureLocalSchemaUpgrades(): Promise<void> {
+  try {
+    // Check for server_version column
+    const [_, infoRes] = await executeSqlAsync("PRAGMA table_info('transactions');");
+    const cols = (infoRes && infoRes.rows && infoRes.rows._array) || [];
+    const names = cols.map((c: any) => c.name);
+    if (!names.includes('server_version')) {
+      try {
+        await executeSqlAsync(
+          'ALTER TABLE transactions ADD COLUMN server_version INTEGER DEFAULT 0;'
+        );
+        if (__DEV__) console.log('[sqlite] added server_version column');
+      } catch (e) {
+        if (__DEV__) console.warn('[sqlite] failed to add server_version column', e);
+      }
+    }
+  } catch (e) {
+    if (__DEV__) console.warn('[sqlite] ensureLocalSchemaUpgrades error', e);
+  }
+}
+
 /**
  * Compatibility wrapper: emulate the old `executeSqlAsync` return shape
  * used across the codebase: Promise<[tx, result]> where `result.rows`
