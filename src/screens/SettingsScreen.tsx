@@ -19,8 +19,8 @@ import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 
 // Optional Haptics: prefer runtime require so builds without expo-haptics still work.
 let Haptics: any = {
-  impactAsync: async () => {},
-  notificationAsync: async () => {},
+  impactAsync: async () => { },
+  notificationAsync: async () => { },
   ImpactFeedbackStyle: { Medium: 'medium' },
   NotificationFeedbackType: { Warning: 'warning' },
 };
@@ -33,7 +33,8 @@ try {
 
 // Logic
 import { logout } from '../services/auth';
-import { syncBothWays } from '../services/syncManager';
+import { syncBothWays, getLastSuccessfulSyncAt } from '../services/syncManager';
+import NetInfo from '@react-native-community/netinfo';
 import { useAuth } from '../hooks/useAuth';
 import { useNavigation } from '@react-navigation/native';
 import { useQueryClient } from '@tanstack/react-query';
@@ -103,7 +104,8 @@ const SettingsScreen = () => {
 
   // Sync state
   const [isSyncing, setIsSyncing] = useState(false);
-  const [lastSyncTime, setLastSyncTime] = useState('Just now');
+  const [lastSyncTime, setLastSyncTime] = useState('—');
+  const [isOnline, setIsOnline] = useState<boolean>(true);
 
   useEffect(() => {
     const animations = animValues.map((anim) =>
@@ -116,6 +118,34 @@ const SettingsScreen = () => {
     );
     Animated.stagger(60, animations).start();
   }, [animValues]);
+
+  // Monitor network connectivity and last successful sync time
+  useEffect(() => {
+    let mounted = true;
+    // initial network state
+    NetInfo.fetch().then((s) => {
+      if (!mounted) return;
+      setIsOnline(!!s.isConnected);
+    });
+
+    const unsub = NetInfo.addEventListener((s) => setIsOnline(!!s.isConnected));
+
+    // Load last successful sync from memory if available
+    try {
+      const last = getLastSuccessfulSyncAt();
+      if (last) {
+        const d = new Date(last);
+        setLastSyncTime(`${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`);
+      }
+    } catch (e) { }
+
+    return () => {
+      mounted = false;
+      try {
+        unsub();
+      } catch (e) { }
+    };
+  }, []);
 
   const getAnimStyle = (index: number) => ({
     opacity: animValues[index],
@@ -132,6 +162,10 @@ const SettingsScreen = () => {
   // Handlers
   const handleManualSync = async () => {
     if (isSyncing) return;
+    if (!isOnline) {
+      showToast('No network connection. Connect to the internet and try again.', 'error');
+      return;
+    }
 
     // Haptic feedback
     if (Platform.OS !== 'web') {
@@ -140,10 +174,20 @@ const SettingsScreen = () => {
 
     setIsSyncing(true);
     try {
-      await syncBothWays();
-      const now = new Date();
-      setLastSyncTime(`${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`);
-      showToast('Sync completed successfully');
+      const res: any = await syncBothWays();
+      if (res && res.ok) {
+        const now = new Date();
+        setLastSyncTime(`${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`);
+        showToast('Sync completed successfully');
+      } else {
+        // Could be offline or an internal failure
+        const state = await NetInfo.fetch();
+        if (!state.isConnected) {
+          showToast('No network connection. Connect to the internet and try again.', 'error');
+        } else {
+          showToast('Sync did not complete. Please try again.', 'error');
+        }
+      }
     } catch (e) {
       showToast('Sync failed. Please try again.', 'error');
     } finally {
@@ -243,7 +287,9 @@ const SettingsScreen = () => {
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.cardTitle}>Sync Status</Text>
-                    <Text style={styles.cardSub}>Data is backed up automatically.</Text>
+                    <Text style={styles.cardSub}>
+                      {isOnline ? 'Data is backed up automatically.' : 'Offline — changes are saved locally.'}
+                    </Text>
                   </View>
                 </View>
 
@@ -252,9 +298,14 @@ const SettingsScreen = () => {
                     <Text style={styles.statLabel}>STATUS</Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                       <View
-                        style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#22C55E' }}
+                        style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: 4,
+                          backgroundColor: isOnline ? (isSyncing ? '#F59E0B' : '#22C55E') : (colors.accentRed || '#EF4444'),
+                        }}
                       />
-                      <Text style={styles.statValue}>Online</Text>
+                      <Text style={styles.statValue}>{isOnline ? (isSyncing ? 'Syncing…' : 'Online') : 'Offline'}</Text>
                     </View>
                   </View>
                   <View style={[styles.statItem, styles.statBorderLeft]}>
@@ -264,9 +315,9 @@ const SettingsScreen = () => {
                 </View>
 
                 <TouchableOpacity
-                  style={styles.syncBtn}
+                  style={[styles.syncBtn, (!isOnline || isSyncing) && { opacity: 0.6 }]}
                   onPress={handleManualSync}
-                  disabled={isSyncing}
+                  disabled={isSyncing || !isOnline}
                   activeOpacity={0.8}
                 >
                   {isSyncing ? (

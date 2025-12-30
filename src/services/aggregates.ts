@@ -1,62 +1,67 @@
 import dayjs from 'dayjs';
 import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
+import { getSummaries } from '../db/localDb';
+import asyncAggregator, { StatResult } from '../utils/asyncAggregator';
+import { fetchEntriesGenerator } from '../db/entries';
+import { getNeonHealth, checkNeonConnection } from '../api/neonClient'; // Consolidated import
+import { executeSqlAsync } from '../db/sqlite';
 
 dayjs.extend(isSameOrBefore);
-import { getSummaries } from '../db/localDb';
-import asyncAggregator from '../utils/asyncAggregator';
-// Use the online entries generator which reads directly from Neon
-import { fetchEntriesGenerator } from '../db/entries';
-import { StatResult } from '../utils/asyncAggregator';
-import { getTransactionsByUser } from '../db/transactions';
-import { getNeonHealth } from '../api/neonClient';
 
-// Simple in-memory cache to avoid repeated heavy queries when UI opens/closes quickly.
+// Simple in-memory cache
 type CacheEntry = { ts: number; value: StatResult };
 const AGG_CACHE = new Map<string, CacheEntry>();
-const CACHE_TTL_MS = 30 * 1000; // 30s
+const CACHE_TTL_MS = 30 * 1000; // 30s Cache
 
 const cacheKey = (userId: string, start: dayjs.Dayjs, end: dayjs.Dayjs) =>
   `${userId}:${start.startOf('day').valueOf()}:${end.startOf('day').valueOf()}`;
 
-// Local aggregation fallback that reads from SQLite transactions table
+/**
+ * ------------------------------------------------------------------
+ * 1. LOCAL SQLITE AGGREGATION (Offline / Fallback)
+ * ------------------------------------------------------------------
+ */
 const aggregateLocally = async (userId: string, start: dayjs.Dayjs, end: dayjs.Dayjs) => {
-  const rows = await getTransactionsByUser(userId);
-  const startMs = start.startOf('day').valueOf();
-  const endMs = end.endOf('day').valueOf();
+  const startIso = start.startOf('day').toISOString();
+  const endIso = end.endOf('day').toISOString();
 
-  let totalIn = 0;
-  let totalOut = 0;
-  const dayMap: Map<string, { in: number; out: number; count: number }> = new Map();
-  const catMap: Map<string, { value: number; count: number }> = new Map();
-  let maxIncome = 0;
-  let maxExpense = 0;
+  // A. Totals & Extremes
+  const totalSql = `
+    SELECT
+      COALESCE(SUM(CASE WHEN type='income' THEN amount ELSE 0 END),0) AS total_in,
+      COALESCE(SUM(CASE WHEN type='expense' THEN amount ELSE 0 END),0) AS total_out,
+      COALESCE(MAX(CASE WHEN type='income' THEN amount END),0) AS max_in,
+      COALESCE(MAX(CASE WHEN type='expense' THEN amount END),0) AS max_out,
+      COUNT(*) AS cnt
+    FROM transactions
+    WHERE user_id = ? AND date >= ? AND date <= ? AND deleted_at IS NULL;
+  `;
 
-  for (const r of rows || []) {
-    const t = r.date ? new Date(r.date).getTime() : r.updated_at || 0;
-    if (t < startMs || t > endMs) continue;
-    const isInc =
-      String(r.type).toLowerCase() === 'income' || String(r.type).toLowerCase() === 'in';
-    const amt = Number(r.amount) || 0;
-    if (isInc) {
-      totalIn += amt;
-      maxIncome = Math.max(maxIncome, amt);
-    } else {
-      totalOut += amt;
-      maxExpense = Math.max(maxExpense, amt);
-      const cat = r.category || 'Uncategorized';
-      const prev = catMap.get(cat) || { value: 0, count: 0 };
-      prev.value += amt;
-      prev.count += 1;
-      catMap.set(cat, prev);
-    }
-    const dayKey = dayjs(t).format('YYYY-MM-DD');
-    const dprev = dayMap.get(dayKey) || { in: 0, out: 0, count: 0 };
-    if (isInc) dprev.in += amt;
-    else dprev.out += amt;
-    dprev.count += 1;
-    dayMap.set(dayKey, dprev);
+  const [, totalRes] = await executeSqlAsync(totalSql, [userId, startIso, endIso]);
+  const totalRow = totalRes.rows.length ? totalRes.rows.item(0) : null;
+
+  const totalIn = Number(totalRow?.total_in || 0);
+  const totalOut = Number(totalRow?.total_out || 0);
+  const maxIncome = Number(totalRow?.max_in || 0);
+  const maxExpense = Number(totalRow?.max_out || 0);
+  const count = Number(totalRow?.cnt || 0);
+
+  // B. Daily Trend (Expenses)
+  const dailySql = `
+    SELECT date(date) as d, COALESCE(SUM(CASE WHEN type='expense' THEN amount ELSE 0 END),0) AS total_out
+    FROM transactions
+    WHERE user_id = ? AND date >= ? AND date <= ? AND deleted_at IS NULL
+    GROUP BY date(date)
+    ORDER BY date(date);
+  `;
+  const [, dailyRes] = await executeSqlAsync(dailySql, [userId, startIso, endIso]);
+  const dailyMap = new Map<string, number>();
+  for (let i = 0; i < dailyRes.rows.length; i++) {
+    const r = dailyRes.rows.item(i);
+    dailyMap.set(r.d, Number(r.total_out || 0));
   }
 
+  // Fill Date Gaps
   const days: string[] = [];
   let cur = start.startOf('day');
   const last = end.startOf('day');
@@ -67,23 +72,38 @@ const aggregateLocally = async (userId: string, start: dayjs.Dayjs, end: dayjs.D
 
   const dailyTrend = days.map((d) => ({
     label: dayjs(d).format('DD MMM'),
-    value: dayMap.get(d)?.out || 0,
+    value: dailyMap.get(d) || 0,
     date: d,
   }));
-  const pie = Array.from(catMap.entries())
-    .sort((a, b) => b[1].value - a[1].value)
-    .slice(0, 8)
-    .map(([name, v]) => ({ name, value: v.value, count: v.count }));
+
+  // C. Category Distribution
+  const catSql = `
+    SELECT 
+      COALESCE(category,'Uncategorized') AS category, 
+      COALESCE(SUM(CASE WHEN type='expense' THEN amount ELSE 0 END),0) AS value, 
+      COUNT(*) AS cnt
+    FROM transactions
+    WHERE user_id = ? AND date >= ? AND date <= ? AND deleted_at IS NULL
+    GROUP BY COALESCE(category,'Uncategorized')
+    ORDER BY value DESC
+    LIMIT 8;
+  `;
+  const [, catRes] = await executeSqlAsync(catSql, [userId, startIso, endIso]);
+  const pie = [] as { name: string; value: number; count: number }[];
+  for (let i = 0; i < catRes.rows.length; i++) {
+    const r = catRes.rows.item(i);
+    pie.push({ name: r.category, value: Number(r.value || 0), count: Number(r.cnt || 0) });
+  }
 
   const daysCount = Math.max(1, days.length);
-  const avgPerDay = totalOut / daysCount;
+  const avgPerDay = daysCount > 0 ? Number(totalOut) / daysCount : 0;
   const savingsRate = totalIn > 0 ? ((totalIn - totalOut) / totalIn) * 100 : 0;
 
   return {
     totalIn,
     totalOut,
     net: totalIn - totalOut,
-    count: rows.length,
+    count,
     skipped: 0,
     mean: 0,
     median: 0,
@@ -100,13 +120,10 @@ const aggregateLocally = async (userId: string, start: dayjs.Dayjs, end: dayjs.D
 };
 
 /**
- * Aggregates service
- * - Prefer precomputed summaries stored under `users/{uid}/summaries/{period}`
- * - If summaries not available for range, fallback to streaming aggregation
- * - This file intentionally keeps logic lightweight so it can be replaced
- *   with a native-worker bridging implementation later.
+ * ------------------------------------------------------------------
+ * 2. PRECOMPUTED SUMMARIES READER
+ * ------------------------------------------------------------------
  */
-
 export const readPrecomputedDaily = async (
   userId: string,
   start: dayjs.Dayjs,
@@ -114,26 +131,24 @@ export const readPrecomputedDaily = async (
 ) => {
   if (!userId) return null;
   try {
-    // Fetch daily summaries in a single range query to avoid N round-trips
     const srows: any = await getSummaries(
       'daily',
       start.format('YYYY-MM-DD'),
       end.format('YYYY-MM-DD')
     );
 
-    // Normalize returned rows into a map for quick lookup
     const summaryMap = new Map<string, any>();
     (srows || []).forEach((r: any) => {
       const d = dayjs(r.date).format('YYYY-MM-DD');
+      // Handle potential casing diffs (DB is snake_case)
       summaryMap.set(d, {
         date: d,
-        total_in: Number(r.total_in || r.totalIn || 0),
-        total_out: Number(r.total_out || r.totalOut || 0),
-        count: Number(r.count || 0),
+        total_in: Number(r.total_in ?? r.totalIn ?? 0),
+        total_out: Number(r.total_out ?? r.totalOut ?? 0),
+        count: Number(r.count ?? 0),
       });
     });
 
-    // Determine full date range and detect any missing days
     const days: string[] = [];
     let cur = start.startOf('day');
     const last = end.startOf('day');
@@ -143,35 +158,39 @@ export const readPrecomputedDaily = async (
     }
 
     const missing = days.filter((d) => !summaryMap.has(d));
-
-    // If there are missing days, query entries once for the full range and merge
     let filledMap = new Map(summaryMap);
+
+    // Backfill missing days from Remote DB if needed
     if (missing.length > 0) {
       try {
-        const { query } = require('../api/neonClient');
-        // Query the entire date range once and group by date to avoid N round trips
-        const rows = await query(
-          `SELECT date::date AS date, COALESCE(SUM(CASE WHEN type='income' THEN amount ELSE 0 END),0) AS total_in, COALESCE(SUM(CASE WHEN type='expense' THEN amount ELSE 0 END),0) AS total_out, COUNT(*)::int AS count
-           FROM transactions
-           WHERE user_id = $1 AND date::date >= $2::date AND date::date <= $3::date AND deleted_at IS NULL
-           GROUP BY date::date`,
-          [userId, start.format('YYYY-MM-DD'), end.format('YYYY-MM-DD')]
-        );
-        (rows || []).forEach((r: any) => {
-          const d = dayjs(r.date).format('YYYY-MM-DD');
-          filledMap.set(d, {
-            date: d,
-            total_in: Number(r.total_in || 0),
-            total_out: Number(r.total_out || 0),
-            count: Number(r.count || 0),
+        const reachable = await checkNeonConnection(1000);
+        if (reachable) {
+          const { query } = require('../api/neonClient');
+          const rows = await query(
+            `SELECT date::date AS date, 
+                    COALESCE(SUM(CASE WHEN type='income' THEN amount ELSE 0 END),0) AS total_in, 
+                    COALESCE(SUM(CASE WHEN type='expense' THEN amount ELSE 0 END),0) AS total_out, 
+                    COUNT(*)::int AS count
+             FROM transactions
+             WHERE user_id = $1 AND date::date >= $2::date AND date::date <= $3::date AND deleted_at IS NULL
+             GROUP BY date::date`,
+            [userId, start.format('YYYY-MM-DD'), end.format('YYYY-MM-DD')]
+          );
+          (rows || []).forEach((r: any) => {
+            const d = dayjs(r.date).format('YYYY-MM-DD');
+            filledMap.set(d, {
+              date: d,
+              total_in: Number(r.total_in || 0),
+              total_out: Number(r.total_out || 0),
+              count: Number(r.count || 0),
+            });
           });
-        });
+        }
       } catch (e) {
         console.warn('Failed to backfill missing daily summaries from entries', e);
       }
     }
 
-    // Build ordered results for the UI
     const results = days
       .map((d) => {
         const r = filledMap.get(d);
@@ -195,143 +214,176 @@ export const readPrecomputedDaily = async (
   }
 };
 
+/**
+ * ------------------------------------------------------------------
+ * 3. MAIN AGGREGATOR
+ * ------------------------------------------------------------------
+ */
 export const aggregateWithPreferSummary = async (
   userId: string | undefined,
   start: dayjs.Dayjs,
   end: dayjs.Dayjs,
   opts?: { signal?: AbortSignal }
 ): Promise<StatResult> => {
-  // Try precomputed daily first
-  if (userId) {
-    const key = cacheKey(userId, start, end);
-    const cached = AGG_CACHE.get(key);
-    if (cached && Date.now() - cached.ts < CACHE_TTL_MS) return cached.value;
+  if (!userId) {
+    return {
+      totalIn: 0, totalOut: 0, net: 0, count: 0, skipped: 0,
+      mean: 0, median: 0, stddev: 0, maxIncome: 0, maxExpense: 0,
+      currency: 'INR', detectedCurrencies: [], dailyTrend: [], pieData: [],
+    } as StatResult;
+  }
 
-    const pre = await readPrecomputedDaily(userId, start, end);
-    if (pre && pre.length > 0) {
-      // Convert precomputed to StatResult-like minimal shape
-      // Note: this is a best-effort mapping; full fidelity requires server-side schema.
-      const totalOut = pre.reduce((s: number, p: any) => s + (Number(p.out || 0) || 0), 0);
-      const totalIn = pre.reduce((s: number, p: any) => s + (Number(p.in || 0) || 0), 0);
-      // Build daily trend (expenses) and category distribution by querying Neon once
-      const dailyTrend: { label: string; value: number; date: string }[] = pre
-        .slice()
-        .sort((a: any, b: any) => (a.date > b.date ? 1 : -1))
-        .map((p: any) => ({
-          label: dayjs(p.date).format('DD MMM'),
-          value: Number(p.out || 0),
-          date: String(p.date),
-        }));
-      // Attempt to fetch top categories (expenses) and extrema for the same range so UI can show Distribution/Top Expenses and metrics
-      let pie: { name: string; value: number; count: number }[] = [];
-      let maxIncome = 0;
-      let maxExpense = 0;
-      let avgPerDay = 0;
-      let savingsRate = 0;
+  // 1. Check Cache
+  const key = cacheKey(userId, start, end);
+  const cached = AGG_CACHE.get(key);
+  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) return cached.value;
+
+  // 2. Try Precomputed Summaries (Daily)
+  const pre = await readPrecomputedDaily(userId, start, end);
+  if (pre && pre.length > 0) {
+    const totalOut = pre.reduce((s: number, p: any) => s + (Number(p.out || 0) || 0), 0);
+    const totalIn = pre.reduce((s: number, p: any) => s + (Number(p.in || 0) || 0), 0);
+    
+    const dailyTrend = pre
+      .slice()
+      .sort((a: any, b: any) => (a.date > b.date ? 1 : -1))
+      .map((p: any) => ({
+        label: dayjs(p.date).format('DD MMM'),
+        value: Number(p.out || 0),
+        date: String(p.date),
+      }));
+
+    // 3. Fetch "Extras" (Categories & Max/Min) 
+    // summaries don't have these, so we need a separate query
+    let pie: { name: string; value: number; count: number }[] = [];
+    let maxIncome = 0;
+    let maxExpense = 0;
+
+    let neonReachable = false;
+    try { neonReachable = await checkNeonConnection(1500); } catch (e) {}
+
+    if (neonReachable) {
+      // REMOTE QUERY
       try {
         const { query } = require('../api/neonClient');
-        // Run category distribution and summary stats in parallel to reduce latency
-        const catPromise = query(
-          `SELECT COALESCE(category,'Uncategorized') AS category, COALESCE(SUM(CASE WHEN type='expense' THEN amount ELSE 0 END),0) AS value, COUNT(*)::int AS cnt
-           FROM transactions
-           WHERE user_id = $1 AND date::date >= $2::date AND date::date <= $3::date AND deleted_at IS NULL
-           GROUP BY COALESCE(category,'Uncategorized') ORDER BY value DESC LIMIT 8`,
-          [userId, start.format('YYYY-MM-DD'), end.format('YYYY-MM-DD')]
-        );
-
-        const statsPromise = query(
-          `SELECT COALESCE(SUM(CASE WHEN type='income' THEN amount ELSE 0 END),0) AS total_in, COALESCE(SUM(CASE WHEN type='expense' THEN amount ELSE 0 END),0) AS total_out, COALESCE(MAX(CASE WHEN type='income' THEN amount END),0) AS max_in, COALESCE(MAX(CASE WHEN type='expense' THEN amount END),0) AS max_out
-           FROM transactions
-           WHERE user_id = $1 AND date::date >= $2::date AND date::date <= $3::date AND deleted_at IS NULL`,
-          [userId, start.format('YYYY-MM-DD'), end.format('YYYY-MM-DD')]
-        );
-
-        const [catRows, statsRows] = await Promise.all([catPromise, statsPromise]);
+        const [catRows, statsRows] = await Promise.all([
+          query(
+            `SELECT COALESCE(category,'Uncategorized') AS category, 
+                    COALESCE(SUM(CASE WHEN type='expense' THEN amount ELSE 0 END),0) AS value, 
+                    COUNT(*)::int AS cnt
+             FROM transactions
+             WHERE user_id = $1 AND date::date >= $2::date AND date::date <= $3::date AND deleted_at IS NULL
+             GROUP BY COALESCE(category,'Uncategorized') ORDER BY value DESC LIMIT 8`,
+            [userId, start.format('YYYY-MM-DD'), end.format('YYYY-MM-DD')]
+          ),
+          query(
+            `SELECT COALESCE(MAX(CASE WHEN type='income' THEN amount END),0) AS max_in, 
+                    COALESCE(MAX(CASE WHEN type='expense' THEN amount END),0) AS max_out
+             FROM transactions
+             WHERE user_id = $1 AND date::date >= $2::date AND date::date <= $3::date AND deleted_at IS NULL`,
+            [userId, start.format('YYYY-MM-DD'), end.format('YYYY-MM-DD')]
+          )
+        ]);
 
         pie = (catRows || []).map((r: any) => ({
           name: r.category,
           value: Number(r.value || 0),
           count: Number(r.cnt || 0),
         }));
+        maxIncome = Number(statsRows?.[0]?.max_in || 0);
+        maxExpense = Number(statsRows?.[0]?.max_out || 0);
 
-        maxIncome = Number((statsRows && statsRows[0] && statsRows[0].max_in) || 0);
-        maxExpense = Number((statsRows && statsRows[0] && statsRows[0].max_out) || 0);
-
-        try {
-          const days = Math.max(1, end.diff(start, 'day') + 1);
-          avgPerDay = days > 0 ? Number(totalOut) / days : 0;
-          savingsRate =
-            Number(totalIn) > 0
-              ? ((Number(totalIn) - Number(totalOut)) / Number(totalIn)) * 100
-              : 0;
-        } catch (e) {
-          avgPerDay = 0;
-          savingsRate = 0;
-        }
       } catch (e) {
-        // If category aggregation fails, fall back to empty pieData (UI shows empty state)
-        console.warn('Failed to fetch category distribution for summaries', e);
-        pie = [];
+        console.warn('Remote details fetch failed, falling back to local', e);
+        // Force fallback logic below to run if this part failed
+        neonReachable = false; 
       }
-
-      const result = {
-        totalIn,
-        totalOut,
-        net: totalIn - totalOut,
-        count: pre.reduce((s: number, p: any) => s + (Number(p.count || 0) || 0), 0),
-        skipped: 0,
-        mean: 0,
-        median: 0,
-        stddev: 0,
-        maxIncome,
-        maxExpense,
-        currency: 'INR',
-        detectedCurrencies: [],
-        dailyTrend,
-        pieData: pie,
-        avgPerDay,
-        savingsRate: Math.max(0, savingsRate),
-      } as StatResult;
-      // Cache short-term
-      try {
-        AGG_CACHE.set(key, { ts: Date.now(), value: result });
-      } catch (e) {}
-      return result;
     }
+
+    if (!neonReachable) {
+      // LOCAL FALLBACK for Extras
+      try {
+        const startIso = start.startOf('day').toISOString();
+        const endIso = end.endOf('day').toISOString();
+        
+        const catSql = `
+          SELECT COALESCE(category,'Uncategorized') AS category, 
+                 COALESCE(SUM(CASE WHEN type='expense' THEN amount ELSE 0 END),0) AS value, 
+                 COUNT(*) AS cnt
+          FROM transactions
+          WHERE user_id = ? AND date >= ? AND date <= ? AND deleted_at IS NULL
+          GROUP BY COALESCE(category,'Uncategorized') ORDER BY value DESC LIMIT 8;`;
+        const [, catLocal] = await executeSqlAsync(catSql, [userId, startIso, endIso]);
+        
+        pie = [];
+        for (let i = 0; i < catLocal.rows.length; i++) {
+          const r = catLocal.rows.item(i);
+          pie.push({ name: r.category, value: Number(r.value || 0), count: Number(r.cnt || 0) });
+        }
+
+        const statsSql = `
+          SELECT COALESCE(MAX(CASE WHEN type='income' THEN amount END),0) AS max_in,
+                 COALESCE(MAX(CASE WHEN type='expense' THEN amount END),0) AS max_out
+          FROM transactions
+          WHERE user_id = ? AND date >= ? AND date <= ? AND deleted_at IS NULL;`;
+        const [, statsLocal] = await executeSqlAsync(statsSql, [userId, startIso, endIso]);
+        const srow = statsLocal.rows.length ? statsLocal.rows.item(0) : null;
+        maxIncome = Number(srow?.max_in || 0);
+        maxExpense = Number(srow?.max_out || 0);
+      } catch (e) {
+        console.warn('Local category/stats fallback failed', e);
+      }
+    }
+
+    // Derived Stats
+    const daysCount = Math.max(1, end.diff(start, 'day') + 1);
+    const avgPerDay = daysCount > 0 ? Number(totalOut) / daysCount : 0;
+    const savingsRate = totalIn > 0 ? ((totalIn - totalOut) / totalIn) * 100 : 0;
+
+    const result = {
+      totalIn,
+      totalOut,
+      net: totalIn - totalOut,
+      count: pre.reduce((s: number, p: any) => s + (Number(p.count || 0) || 0), 0),
+      skipped: 0,
+      mean: 0, median: 0, stddev: 0,
+      maxIncome, maxExpense,
+      currency: 'INR', detectedCurrencies: [],
+      dailyTrend, pieData: pie,
+      avgPerDay,
+      savingsRate: Math.max(0, savingsRate),
+    } as StatResult;
+
+    AGG_CACHE.set(key, { ts: Date.now(), value: result });
+    return result;
   }
 
-  // If Neon is not configured or unreachable, aggregate from local SQLite
+  // 4. Fallback: Full Aggregation
   try {
     const health = getNeonHealth();
+    // If not configured, immediately use local
     if (!health.isConfigured) {
-      if (userId) return await aggregateLocally(userId, start, end);
+      return await aggregateLocally(userId, start, end);
     }
-  } catch (e) {}
-
-  // Fallback: stream pages from remote generator and aggregate in JS (non-blocking)
-  const pages = userId ? fetchEntriesGenerator(userId, 500) : undefined;
-  if (pages && opts?.signal) {
-    return asyncAggregator.aggregateFromPages(pages, start, end, { signal: opts.signal });
+    // If configured but unreachable, use local
+    const reachable = await checkNeonConnection(2000);
+    if (!reachable) {
+      return await aggregateLocally(userId, start, end);
+    }
+  } catch (e) {
+    return await aggregateLocally(userId, start, end);
   }
+
+  // If we reach here, Neon is reachable but we don't have precomputed summaries.
+  // Use streaming generator for potentially large datasets.
+  const pages = fetchEntriesGenerator(userId, 500);
   if (pages) {
+    if (opts?.signal) {
+      return asyncAggregator.aggregateFromPages(pages, start, end, { signal: opts.signal });
+    }
     return asyncAggregator.aggregateFromPages(pages, start, end);
   }
 
-  // If no userId, just return empty aggregator
-  return {
-    totalIn: 0,
-    totalOut: 0,
-    net: 0,
-    count: 0,
-    skipped: 0,
-    mean: 0,
-    median: 0,
-    stddev: 0,
-    maxIncome: 0,
-    maxExpense: 0,
-    currency: 'INR',
-    detectedCurrencies: [],
-    dailyTrend: [],
-    pieData: [],
-  } as StatResult;
+  // Final fallback
+  return await aggregateLocally(userId, start, end);
 };
