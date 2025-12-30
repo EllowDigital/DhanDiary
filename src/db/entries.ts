@@ -114,7 +114,7 @@ export const updateLocalEntry = async (localId: string, updates: any) => {
   const params: any[] = [];
   let idx = 1;
   if (updates.type !== undefined) {
-    fields.push(`type = $${idx++}`);
+    fields.push(`type = $${idx++}::text`);
     params.push(updates.type);
   }
   if (updates.amount !== undefined) {
@@ -122,11 +122,11 @@ export const updateLocalEntry = async (localId: string, updates: any) => {
     params.push(Number(updates.amount));
   }
   if (updates.category !== undefined) {
-    fields.push(`category = $${idx++}`);
+    fields.push(`category = $${idx++}::text`);
     params.push(updates.category);
   }
   if (updates.note !== undefined) {
-    fields.push(`note = $${idx++}`);
+    fields.push(`note = $${idx++}::text`);
     params.push(updates.note);
   }
   if (updates.date !== undefined) {
@@ -143,7 +143,7 @@ export const updateLocalEntry = async (localId: string, updates: any) => {
   }
   if (fields.length === 0) return null;
   params.push(localId);
-  const sql = `UPDATE transactions SET ${fields.join(',')}, updated_at = now() WHERE id = $${idx} RETURNING id, user_id, type, amount, category, note, currency, created_at, updated_at, date`;
+  const sql = `UPDATE transactions SET ${fields.join(',')}, updated_at = now() WHERE id = $${idx}::uuid RETURNING id, user_id, type, amount, category, note, currency, created_at, updated_at, date`;
   const res = await query(sql, params);
   const row = res && res[0];
   return row ? mapRowToLocal(row) : null;

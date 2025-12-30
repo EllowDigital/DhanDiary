@@ -25,6 +25,8 @@ import { LineChart, PieChart } from 'react-native-chart-kit';
 import dayjs from 'dayjs';
 import { subscribeSyncStatus } from '../services/syncManager';
 import { isExpense as isExpenseType, isIncome as isIncomeType } from '../utils/transactionType';
+import { getIconForCategory } from '../constants/categories';
+import { colors as themeColors } from '../utils/design';
 
 // --- CRASH PROOF ANIMATION SETUP ---
 const setupLayoutAnimation = () => {
@@ -181,24 +183,23 @@ const RankList = React.memo(({ data, total }: { data: any[]; total: number }) =>
 const TransactionItem = React.memo(({ item, onPress }: { item: any; onPress: () => void }) => {
   const isExpense = isExpenseType(item.type);
   const category = item.category || 'Other';
-  const color = CATEGORY_COLORS[category] || colors.subText;
-
-  const iconMap: Record<string, any> = {
-    Food: 'restaurant',
-    Shopping: 'shopping-bag',
-    Transport: 'directions-car',
-    Bills: 'receipt',
-    Salary: 'attach-money',
-    Health: 'local-hospital',
-  };
+  const isInc = isIncomeType(item.type);
+  const color = isInc ? themeColors.accentGreen : themeColors.accentRed;
+  const catIcon = getIconForCategory(item.category);
+  const iconName = catIcon || (isInc ? 'arrow-downward' : 'arrow-upward');
 
   return (
     <TouchableOpacity style={styles.txnCard} onPress={onPress} activeOpacity={0.7}>
-      <View style={[styles.txnIconBox, { backgroundColor: isExpense ? '#FEF2F2' : '#ECFDF5' }]}>
+      <View
+        style={[
+          styles.txnIconBox,
+          { backgroundColor: isInc ? themeColors.accentGreenSoft : themeColors.accentRedSoft },
+        ]}
+      >
         <MaterialIcon
-          name={iconMap[category] || 'category'}
+          name={iconName as any}
           size={22}
-          color={isExpense ? color : colors.success}
+          color={isInc ? themeColors.accentGreen : themeColors.accentRed}
         />
       </View>
       <View style={styles.txnContent}>
@@ -210,8 +211,13 @@ const TransactionItem = React.memo(({ item, onPress }: { item: any; onPress: () 
         </Text>
       </View>
       <View style={styles.txnRight}>
-        <Text style={[styles.txnAmount, { color: isExpense ? colors.danger : colors.success }]}>
-          {isExpense ? '-' : '+'}₹{Math.abs(Number(item.amount)).toLocaleString()}
+        <Text
+          style={[
+            styles.txnAmount,
+            { color: isInc ? themeColors.accentGreen : themeColors.accentRed },
+          ]}
+        >
+          {isInc ? '+' : '-'}₹{Number(item.amount).toLocaleString()}
         </Text>
         <Text style={styles.txnDate}>{dayjs(item.date).format('MMM D, h:mm A')}</Text>
       </View>
