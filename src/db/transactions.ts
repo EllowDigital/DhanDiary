@@ -257,6 +257,38 @@ export async function upsertTransactionFromRemote(txn: TransactionRow) {
       }
     }
 
+    // Normalize date/created_at/updated_at types for local SQLite storage:
+    // - store `date` and `created_at` as ISO strings (timestamptz)
+    // - store `updated_at` as epoch milliseconds (number)
+    const toIso = (v: any, fallbackMs?: number) => {
+      try {
+        if (v == null)
+          return fallbackMs ? new Date(fallbackMs).toISOString() : new Date().toISOString();
+        if (v instanceof Date) return v.toISOString();
+        const n = Number(v);
+        if (!Number.isNaN(n)) {
+          const ms = n < 1e12 ? n * 1000 : n;
+          return new Date(ms).toISOString();
+        }
+        const parsed = Date.parse(String(v));
+        if (!Number.isNaN(parsed)) return new Date(parsed).toISOString();
+        return fallbackMs ? new Date(fallbackMs).toISOString() : new Date().toISOString();
+      } catch (e) {
+        return fallbackMs ? new Date(fallbackMs).toISOString() : new Date().toISOString();
+      }
+    };
+
+    const normalizedDate = toIso(txn.date, Number(txn.updated_at) || Date.now());
+    const normalizedCreatedAt = toIso(txn.created_at, Number(txn.updated_at) || Date.now());
+    const normalizedUpdatedAt = (() => {
+      const u = txn.updated_at;
+      if (u == null) return Date.now();
+      const n = Number(u);
+      if (!Number.isNaN(n)) return n < 1e12 ? n * 1000 : n;
+      const parsed = Date.parse(String(u));
+      return Number.isNaN(parsed) ? Date.now() : parsed;
+    })();
+
     const sql = `
       INSERT OR REPLACE INTO transactions(
         id, user_id, amount, type, category, note, currency, date,
@@ -273,9 +305,9 @@ export async function upsertTransactionFromRemote(txn: TransactionRow) {
       txn.category ?? null,
       txn.note ?? null,
       txn.currency ?? 'INR',
-      txn.date, // ISO String
-      txn.created_at, // ISO String
-      txn.updated_at, // epoch ms or ISO depending on caller
+      normalizedDate,
+      normalizedCreatedAt,
+      normalizedUpdatedAt,
       txn.deleted_at ?? null,
       txn.server_version ?? 0,
       1, // sync_status = 1 (Synced because it came from server)

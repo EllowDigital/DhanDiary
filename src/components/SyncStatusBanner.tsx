@@ -45,6 +45,7 @@ interface BannerConfig {
 
 const DEBOUNCE_MS = 400; // Delay before showing state change to prevent flickering
 const SHOW_SYNCED_MS = 2000; // Duration to show "Synced" success message
+const SHOW_OFFLINE_MS = 5000; // Show offline banner briefly then hide so it doesn't block header
 const ANIMATION_DURATION = 300;
 
 /* -------------------------------------------------------------------------- */
@@ -146,13 +147,20 @@ const SyncStatusBanner = () => {
       if (nextState === 'synced') {
         setBannerState('synced');
 
-        // Schedule auto-hide
+        // Schedule auto-hide for synced
         if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
         hideTimerRef.current = setTimeout(() => {
           setBannerState('hidden');
         }, SHOW_SYNCED_MS);
+      } else if (nextState === 'offline') {
+        // Show offline briefly then auto-hide so header isn't blocked long-term
+        setBannerState('offline');
+        if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+        hideTimerRef.current = setTimeout(() => {
+          setBannerState('hidden');
+        }, SHOW_OFFLINE_MS);
       } else {
-        // For all other states, cancel the auto-hide timer
+        // For other states (error, syncing, hidden), cancel any auto-hide timer
         if (hideTimerRef.current) {
           clearTimeout(hideTimerRef.current);
           hideTimerRef.current = null;
@@ -304,8 +312,8 @@ const SyncStatusBanner = () => {
   });
 
   /* ------------------------- Render ------------------------ */
-  // We strictly don't render null, but rely on opacity/translate to hide it
-  // This ensures the exit animation plays correctly.
+  // If hidden, don't render at all so it doesn't overlay or reserve space
+  if (bannerState === 'hidden') return null;
 
   return (
     <Animated.View
@@ -356,11 +364,8 @@ const SyncStatusBanner = () => {
 
 const styles = StyleSheet.create({
   container: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 9999, // Ensure it sits on top of everything
+    // Render in normal flow so banner pushes content down instead of overlapping header
+    position: 'relative',
     paddingHorizontal: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
