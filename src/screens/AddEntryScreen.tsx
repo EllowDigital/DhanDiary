@@ -162,7 +162,7 @@ const AddEntryScreen: React.FC = () => {
     }
     // If it's already a Date object (or Date-like)
     if (v instanceof Date) return v;
-    
+
     return new Date();
   };
 
@@ -175,7 +175,7 @@ const AddEntryScreen: React.FC = () => {
         setNote(found.note ?? '');
         setTypeIndex(isIncome(found.type) ? 1 : 0);
         setCategory(ensureCategory(found.category));
-        
+
         const d = found.date || found.created_at;
         setDate(parseToDate(d));
         setEditingLocalId(found.local_id);
@@ -205,7 +205,7 @@ const AddEntryScreen: React.FC = () => {
           // Reset params on blur so next open is clean
           navigation.setParams({ local_id: undefined } as any);
         } catch (e) {
-            // ignore navigation errors
+          // ignore navigation errors
         }
         setEditingLocalId(null);
         setSaving(false);
@@ -265,7 +265,7 @@ const AddEntryScreen: React.FC = () => {
 
   const handleDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
     if (Platform.OS === 'android') {
-        setShowDatePicker(false);
+      setShowDatePicker(false);
     }
     if (event.type === 'dismissed') return;
     if (selectedDate) setDate(selectedDate);
@@ -330,10 +330,7 @@ const AddEntryScreen: React.FC = () => {
 
               {/* 2. AMOUNT CARD */}
               <Animated.View
-                style={[
-                  styles.amountCard,
-                  { backgroundColor: themeBg, borderColor: themeBorder },
-                ]}
+                style={[styles.amountCard, { backgroundColor: themeBg, borderColor: themeBorder }]}
               >
                 <Text style={[styles.inputLabel, { color: activeType.color }]}>AMOUNT</Text>
                 <View style={styles.amountInputRow}>
@@ -354,10 +351,7 @@ const AddEntryScreen: React.FC = () => {
 
               {/* 3. DETAILS GRID */}
               <View style={styles.gridContainer}>
-                <Pressable
-                  style={styles.gridCard}
-                  onPress={() => setCategoryModalVisible(true)}
-                >
+                <Pressable style={styles.gridCard} onPress={() => setCategoryModalVisible(true)}>
                   <View style={styles.gridIconBg}>
                     <MaterialIcon name="category" size={22} color={colors.primary || '#2563EB'} />
                   </View>

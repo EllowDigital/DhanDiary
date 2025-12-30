@@ -6,7 +6,7 @@ export type TransactionRow = {
   id: string; // uuid
   user_id: string; // uuid
   client_id?: string | null; // uuid (optional, for tracking device origin)
-  
+
   // Core Data
   amount: number; // numeric(18,2)
   type: 'income' | 'expense';
@@ -26,12 +26,14 @@ export type TransactionRow = {
   deleted_at?: string | null; // timestamptz
 };
 
-/** * Insert a new transaction. 
- * Matches Postgres defaults: currency='INR', server_version=0 
+/** * Insert a new transaction.
+ * Matches Postgres defaults: currency='INR', server_version=0
  */
-export async function addTransaction(txn: Partial<TransactionRow> & { id: string; user_id: string }) {
+export async function addTransaction(
+  txn: Partial<TransactionRow> & { id: string; user_id: string }
+) {
   const now = new Date().toISOString();
-  
+
   // Default values based on schema.sql
   const row: TransactionRow = {
     id: txn.id,
@@ -76,7 +78,7 @@ export async function addTransaction(txn: Partial<TransactionRow> & { id: string
   try {
     notifyEntriesChanged();
   } catch (e) {}
-  
+
   return row;
 }
 
@@ -88,7 +90,7 @@ export async function updateTransaction(
   txn: Partial<TransactionRow> & { id: string; user_id: string }
 ) {
   const now = new Date().toISOString();
-  
+
   // SQL to update specific fields and reset sync status
   const sql = `
     UPDATE transactions 
@@ -98,13 +100,13 @@ export async function updateTransaction(
   `;
 
   // We use coalescing to ensure we don't accidentally wipe data if partial txn is passed
-  // Note: For a true partial update in SQLite without selecting first, you usually 
+  // Note: For a true partial update in SQLite without selecting first, you usually
   // need the full object or dynamic SQL. Assuming 'txn' contains the edit form values.
-  
-  // WARNING: If txn.amount is undefined, this puts NULL or 0? 
+
+  // WARNING: If txn.amount is undefined, this puts NULL or 0?
   // Ideally, updateTransaction should receive the full updated object or we fetch-then-update.
   // Below assumes the UI passes the complete specific fields being edited.
-  
+
   const [, res] = await executeSqlAsync(sql, [
     txn.amount ?? 0,
     txn.type ?? 'expense',
@@ -120,7 +122,8 @@ export async function updateTransaction(
   // Fallback: If row doesn't exist locally (offline edit of remote item not yet pulled?), insert it.
   const affected = Number(res?.rowsAffected || 0);
   if (affected === 0) {
-    if (__DEV__) console.warn('[transactions] update affected 0 rows, falling back to insert', txn.id);
+    if (__DEV__)
+      console.warn('[transactions] update affected 0 rows, falling back to insert', txn.id);
     return await addTransaction({ ...txn, created_at: now } as TransactionRow);
   } else {
     if (__DEV__) console.log('[transactions] update', txn.id);
@@ -137,21 +140,21 @@ export async function updateTransaction(
   } as TransactionRow;
 }
 
-/** * Soft-delete: Set deleted_at timestamp and mark for sync 
+/** * Soft-delete: Set deleted_at timestamp and mark for sync
  * Schema uses 'deleted_at IS NOT NULL' to identify deleted rows.
  */
 export async function deleteTransaction(id: string, userId: string) {
   const now = new Date().toISOString();
-  
+
   // We keep sync_status = 0 (pending) so the deletion gets pushed to server
   const sql = `
     UPDATE transactions 
     SET deleted_at = ?, updated_at = ?, sync_status = 0 
     WHERE id = ? AND user_id = ?;
   `;
-  
+
   await executeSqlAsync(sql, [now, now, id, userId]);
-  
+
   if (__DEV__) console.log('[transactions] soft delete', id);
   try {
     notifyEntriesChanged();
@@ -159,7 +162,7 @@ export async function deleteTransaction(id: string, userId: string) {
   return true;
 }
 
-/** * Get active transactions (Not deleted) 
+/** * Get active transactions (Not deleted)
  */
 export async function getTransactionsByUser(userId: string) {
   // Filter: deleted_at IS NULL
@@ -169,7 +172,7 @@ export async function getTransactionsByUser(userId: string) {
       AND deleted_at IS NULL 
     ORDER BY date DESC, updated_at DESC;
   `;
-  
+
   const [, res] = await executeSqlAsync(sql, [userId]);
   const rows: TransactionRow[] = [];
   for (let i = 0; i < res.rows.length; i++) {
@@ -199,23 +202,24 @@ export async function getUnsyncedTransactions() {
 export async function upsertTransactionFromRemote(txn: TransactionRow) {
   try {
     // 1. Check if we have a newer local version or a deletion tombstone that hasn't synced yet?
-    // Actually, usually "Server Wins" or "Last Write Wins". 
+    // Actually, usually "Server Wins" or "Last Write Wins".
     // If local has deleted_at set and sync_status=0, we might want to keep our local delete.
-    
+
     const checkSql = `SELECT sync_status, deleted_at, server_version FROM transactions WHERE id = ? LIMIT 1;`;
     const [, res] = await executeSqlAsync(checkSql, [txn.id]);
-    
+
     if (res && res.rows && res.rows.length > 0) {
       const existing = res.rows.item(0);
-      
+
       // If local is pending push (dirty), strictly speaking we have a conflict.
       // Simple strategy: Server Wins (overwrite local), unless you want sophisticated conflict resolution.
-      
+
       // OPTIONAL: If local has higher server_version (impossible if pulled from server)
       // or if we want to preserve local deletion:
       if (existing.deleted_at && existing.sync_status === 0) {
-         if (__DEV__) console.log('[transactions] skipping remote upsert, local pending delete exists', txn.id);
-         return; 
+        if (__DEV__)
+          console.log('[transactions] skipping remote upsert, local pending delete exists', txn.id);
+        return;
       }
     }
 
