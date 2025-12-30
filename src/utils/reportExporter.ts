@@ -336,7 +336,7 @@ const generateExcel = async (data: TransactionItem[], options: ExportOptions): P
   const wbout = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
 
   const fileName = `${sanitizeFilename(options.title)}.xlsx`;
-  
+
   // Important: Pass 'base64' encoding to write function
   return await writeFile(fileName, wbout, { encoding: 'base64' });
 };
