@@ -232,7 +232,7 @@ export async function upsertTransactionFromRemote(txn: TransactionRow) {
       const isLocalTombstoneFlag = existing && Number(existing.sync_status) === 2;
       if (isLocalPendingDelete || isLocalTombstoneFlag) {
         if (__DEV__)
-          console.log(
+          console.debug(
             '[transactions] skipping remote upsert, local pending delete/tombstone exists',
             txn.id
           );
@@ -240,18 +240,20 @@ export async function upsertTransactionFromRemote(txn: TransactionRow) {
       }
 
       // Also skip if local already has equal-or-newer data by server_version/updated_at.
-      try {
-        const localServerVersion = Number(existing.server_version || 0);
-        const localUpdatedAt = Number(existing.updated_at || 0);
-        const remoteServerVersion = Number(txn.server_version || 0);
-        const remoteUpdatedAt = Number(txn.updated_at || 0);
-        if (localServerVersion >= remoteServerVersion && localUpdatedAt >= remoteUpdatedAt) {
-          if (__DEV__)
-            console.log('[transactions] skipping remote upsert, local is up-to-date', txn.id);
-          return;
+      if (existing) {
+        try {
+          const localServerVersion = Number(existing.server_version || 0);
+          const localUpdatedAt = Number(existing.updated_at || 0);
+          const remoteServerVersion = Number(txn.server_version || 0);
+          const remoteUpdatedAt = Number(txn.updated_at || 0);
+          if (localServerVersion >= remoteServerVersion && localUpdatedAt >= remoteUpdatedAt) {
+            if (__DEV__)
+              console.debug('[transactions] skipping remote upsert, local is up-to-date', txn.id);
+            return;
+          }
+        } catch (e) {
+          // ignore parse errors and proceed to upsert
         }
-      } catch (e) {
-        // ignore parse errors and proceed to upsert
       }
     }
 

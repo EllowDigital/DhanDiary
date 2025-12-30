@@ -348,7 +348,7 @@ export const useEntries = (userId?: string | null) => {
         date: created,
         sync_status: 0, // Pending sync
         updated_at: Date.now(),
-        created_at: Date.now(),
+        created_at: created, // store ISO string for created_at
       };
 
       await addTransaction(toInsert as any);
