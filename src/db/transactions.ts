@@ -1,4 +1,5 @@
 import { executeSqlAsync } from './sqlite';
+import { notifyEntriesChanged } from '../utils/dbEvents';
 
 export type TransactionRow = {
   id: string;
@@ -35,6 +36,9 @@ export async function addTransaction(txn: Partial<TransactionRow> & { id: string
   ]);
 
   if (__DEV__) console.log('[transactions] add', txn.id);
+  try {
+    notifyEntriesChanged();
+  } catch (e) {}
   return {
     ...txn,
     updated_at: now,
@@ -81,8 +85,14 @@ export async function updateTransaction(
         0,
       ]);
       if (__DEV__) console.log('[transactions] update -> inserted fallback', txn.id);
+      try {
+        notifyEntriesChanged();
+      } catch (e) {}
     } else {
       if (__DEV__) console.log('[transactions] update', txn.id);
+      try {
+        notifyEntriesChanged();
+      } catch (e) {}
     }
   } catch (e) {
     if (__DEV__) console.warn('[transactions] update fallback insert failed', e, txn.id);
@@ -101,6 +111,9 @@ export async function deleteTransaction(id: string, userId: string) {
   const sql = `UPDATE transactions SET sync_status = 2, updated_at = ? WHERE id = ? AND user_id = ?;`;
   await executeSqlAsync(sql, [now, id, userId]);
   if (__DEV__) console.log('[transactions] soft delete', id);
+  try {
+    notifyEntriesChanged();
+  } catch (e) {}
   return true;
 }
 
@@ -155,6 +168,9 @@ export async function upsertTransactionFromRemote(txn: TransactionRow) {
       typeof (txn as any).server_version === 'number' ? (txn as any).server_version : 0,
     ]);
     if (__DEV__) console.log('[transactions] upsert remote', txn.id);
+    try {
+      notifyEntriesChanged();
+    } catch (e) {}
   } catch (e) {
     if (__DEV__) console.warn('[transactions] upsertTransactionFromRemote failed', e, txn.id);
   }
