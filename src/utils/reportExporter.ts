@@ -2,7 +2,6 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
 import XLSX from 'xlsx';
-import { Platform, PermissionsAndroid } from 'react-native';
 import { formatDate } from './date';
 import { isIncome } from './transactionType';
 
@@ -81,22 +80,22 @@ export const shareFile = async (filePath: string) => {
  * it uses expo-print to "discover" a valid cache path.
  */
 const getWritablePath = async (filename: string): Promise<string> => {
-  // 1. Try standard constants first
-  // Cast to any to avoid TypeScript complaints if types are strict
+  // 1. Try standard constants first (cast to any to avoid TS errors)
   const fs = FileSystem as any;
-  if (fs.documentDirectory) return `${fs.documentDirectory}${filename}`;
   if (fs.cacheDirectory) return `${fs.cacheDirectory}${filename}`;
+  if (fs.documentDirectory) return `${fs.documentDirectory}${filename}`;
 
   // 2. Fallback: Use Expo Print to discover a valid path
-  // We create a tiny dummy PDF, get its URI, and use that directory.
   console.log('FileSystem constants missing. Attempting path discovery via Print...');
   try {
     const { uri } = await Print.printToFileAsync({ html: '<p>temp</p>' });
+    // uri is typically file:///data/.../cache/Print/uuid.pdf
+    // We strip the filename to get the directory
     const dir = uri.substring(0, uri.lastIndexOf('/') + 1);
     return `${dir}${filename}`;
   } catch (e) {
     console.error('Path discovery failed:', e);
-    throw new Error('No writable directory available. Please ensure app permissions are granted.');
+    throw new Error('Could not determine a writable directory path on this device.');
   }
 };
 
@@ -108,40 +107,11 @@ const writeFile = async (
   contents: string,
   encoding: 'utf8' | 'base64' = 'utf8'
 ): Promise<string> => {
+  // Get a guaranteed path
   const fileUri = await getWritablePath(fileName);
-
-  // Try to use react-native-fs for efficient native writes when available
+  
   try {
-    const RNFS = require('react-native-fs');
-    if (RNFS) {
-      // RNFS uses native paths without file://
-      let nativePath = fileUri;
-      if (nativePath.startsWith('file://')) nativePath = nativePath.replace('file://', '');
-
-      // write or overwrite
-      if (encoding === 'base64') {
-        await RNFS.writeFile(nativePath, contents, 'base64');
-      } else {
-        // For large files prefer streaming append to avoid huge memory spikes
-        await RNFS.writeFile(nativePath, '', 'utf8');
-        // Append content in chunks if large
-        if (contents.length > 1024 * 1024) {
-          const CHUNK = 64 * 1024; // 64KB
-          for (let i = 0; i < contents.length; i += CHUNK) {
-            const chunk = contents.substring(i, i + CHUNK);
-            await RNFS.appendFile(nativePath, chunk, 'utf8');
-          }
-        } else {
-          await RNFS.writeFile(nativePath, contents, 'utf8');
-        }
-      }
-      return fileUri;
-    }
-  } catch (err) {
-    // RNFS not available or failed — fall back to Expo FileSystem
-  }
-
-  try {
+    // Cast FileSystem to any to ensure writeAsStringAsync is accessible
     await (FileSystem as any).writeAsStringAsync(fileUri, contents, { encoding });
     return fileUri;
   } catch (e) {
@@ -307,13 +277,11 @@ const generateCsv = async (data: TransactionItem[], options: ExportOptions): Pro
   const csvContent = [headers.join(','), ...rows].join('\n');
   const fileName = `${sanitizeFilename(options.title)}.csv`;
 
-  // Write with utf8 encoding
   return await writeFile(fileName, csvContent, 'utf8');
 };
 
 // 3. EXCEL GENERATOR
 const generateExcel = async (data: TransactionItem[], options: ExportOptions): Promise<string> => {
-  // 1. Prepare Data
   const sheetData = data.map((item) => ({
     Date: formatDate(item.date, 'YYYY-MM-DD'),
     Type: item.type,
@@ -324,16 +292,14 @@ const generateExcel = async (data: TransactionItem[], options: ExportOptions): P
     CreatedAt: item.created_at || '',
   }));
 
-  // 2. Create Workbook
   const ws = XLSX.utils.json_to_sheet(sheetData);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Transactions');
 
-  // 3. Generate Base64
+  // Use base64 encoding for binary file
   const wbout = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
-
-  // 4. Write to file using explicit 'base64' encoding
   const fileName = `${sanitizeFilename(options.title)}.xlsx`;
+  
   return await writeFile(fileName, wbout, 'base64');
 };
 

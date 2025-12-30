@@ -134,7 +134,7 @@ const ExportScreen = () => {
           pivotDate.format()
         );
         console.log('[ExportScreen] sample entries=', entries.slice(0, 3));
-      } catch (e) {}
+      } catch (e) { }
     }
 
     let startUnix = -Infinity;
@@ -243,6 +243,15 @@ const ExportScreen = () => {
 
   const executeExport = async () => {
     setExporting(true);
+
+    // Ask for permissions proactively so we can show a clearer error if denied
+    // try {
+    //   await ensureExportPermissions();
+    // } catch (permErr: any) {
+    //   setExporting(false);
+    //   Alert.alert('Permission required', permErr.message || 'Storage permission is required to export files.');
+    //   return;
+    // }
 
     // Use interaction manager to allow UI render to complete (spinner to show)
     await new Promise<void>((resolve) => InteractionManager.runAfterInteractions(() => resolve()));
