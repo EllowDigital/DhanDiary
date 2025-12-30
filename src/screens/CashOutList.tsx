@@ -16,10 +16,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, Button } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
-import { getIconForCategory } from '../constants/categories';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Swipeable } from 'react-native-gesture-handler';
-import dayjs from 'dayjs';
 
 // Custom Hooks & Components
 import { useEntries } from '../hooks/useEntries';
@@ -36,6 +34,8 @@ import {
   summarizeEntries,
 } from '../utils/entryFilters';
 import { colors } from '../utils/design';
+import { getIconForCategory } from '../constants/categories';
+import { formatDate } from '../utils/date';
 
 // Enable LayoutAnimation for Android
 if (Platform.OS === 'android') {
@@ -110,10 +110,10 @@ const ExpenseSummaryCard = React.memo(({ summary, fadeAnim, slideAnim }: any) =>
 // --- SWIPEABLE COMPACT ROW ---
 const SwipeableExpenseItem = React.memo(({ item, onEdit, onDelete }: any) => {
   const swipeableRef = useRef<Swipeable>(null);
-  const dateStr = dayjs(item.date || item.created_at).format('MMM D, h:mm A');
+  const dateStr = formatDate(item.date || item.created_at);
 
   // Render Right Actions (Swipe Left -> Edit)
-  const renderRightActions = (progress: any, dragX: any) => {
+  const renderRightActions = (_progress: any, dragX: any) => {
     const scale = dragX.interpolate({
       inputRange: [-80, 0],
       outputRange: [1, 0],
@@ -128,7 +128,7 @@ const SwipeableExpenseItem = React.memo(({ item, onEdit, onDelete }: any) => {
           onEdit();
         }}
       >
-        <Animated.View style={{ transform: [{ scale }] }}>
+        <Animated.View style={{ transform: [{ scale }], alignItems: 'center' }}>
           <MaterialIcon name="edit" size={24} color="white" />
           <Text style={styles.actionText}>Edit</Text>
         </Animated.View>
@@ -137,7 +137,7 @@ const SwipeableExpenseItem = React.memo(({ item, onEdit, onDelete }: any) => {
   };
 
   // Render Left Actions (Swipe Right -> Delete)
-  const renderLeftActions = (progress: any, dragX: any) => {
+  const renderLeftActions = (_progress: any, dragX: any) => {
     const scale = dragX.interpolate({
       inputRange: [0, 80],
       outputRange: [0, 1],
@@ -152,7 +152,7 @@ const SwipeableExpenseItem = React.memo(({ item, onEdit, onDelete }: any) => {
           onDelete();
         }}
       >
-        <Animated.View style={{ transform: [{ scale }] }}>
+        <Animated.View style={{ transform: [{ scale }], alignItems: 'center' }}>
           <MaterialIcon name="delete" size={24} color="white" />
           <Text style={styles.actionText}>Delete</Text>
         </Animated.View>
@@ -166,10 +166,13 @@ const SwipeableExpenseItem = React.memo(({ item, onEdit, onDelete }: any) => {
       renderRightActions={renderRightActions}
       renderLeftActions={renderLeftActions}
       containerStyle={styles.swipeContainer}
+      friction={2}
+      overshootRight={false}
+      overshootLeft={false}
     >
       <View style={styles.compactRow}>
         <View style={[styles.compactIcon, { backgroundColor: '#fef2f2' }]}>
-          <MaterialIcon name={getIconForCategory(item.category) as any} size={18} color="#b91c1c" />
+          <MaterialIcon name={getIconForCategory(item.category) as any} size={20} color="#b91c1c" />
         </View>
         <View style={styles.compactContent}>
           <View style={styles.compactHeader}>
@@ -220,14 +223,14 @@ const CashOutList = () => {
         useNativeDriver: true,
         easing: Easing.out(Easing.cubic),
       }),
-      Animated.timing(slideAnim, {
+      Animated.spring(slideAnim, {
         toValue: 0,
-        duration: 700,
         useNativeDriver: true,
-        easing: Easing.out(Easing.cubic),
+        damping: 20,
+        stiffness: 90,
       }),
     ]).start();
-  }, []);
+  }, [fadeAnim, slideAnim]);
 
   useFocusEffect(
     useCallback(() => {
@@ -252,74 +255,91 @@ const CashOutList = () => {
   );
 
   // --- HANDLERS ---
-  const handleEdit = (item: any) => {
-    navigation.navigate('AddEntry', {
-      local_id: item.local_id,
-      type: 'out', // Explicitly tell editor this is an expense
-    });
-  };
+  const handleEdit = useCallback(
+    (item: any) => {
+      navigation.navigate('AddEntry', {
+        local_id: item.local_id,
+        type: 'out', // Explicitly tell editor this is an expense
+      });
+    },
+    [navigation]
+  );
 
-  const handleDelete = (id: string) => {
-    Alert.alert('Delete Expense', 'Are you sure you want to remove this record?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await deleteEntry(id);
-          } catch (err) {
-            console.warn(err);
-          }
+  const handleDelete = useCallback(
+    (id: string) => {
+      Alert.alert('Delete Expense', 'Are you sure you want to remove this record?', [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteEntry(id);
+            } catch (err) {
+              console.warn(err);
+            }
+          },
         },
-      },
-    ]);
-  };
+      ]);
+    },
+    [deleteEntry]
+  );
 
-  const handleFilterChange = (type: 'time' | 'sort', value: any) => {
+  const handleFilterChange = useCallback((type: 'time' | 'sort', value: any) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     if (type === 'time') setTimeFilter(value);
     else setSortMode(value);
-  };
+  }, []);
 
   // --- RENDER HELPERS ---
-  const renderHeader = () => (
-    <View>
-      <ExpenseSummaryCard summary={summary} fadeAnim={fadeAnim} slideAnim={slideAnim} />
+  const renderHeader = useMemo(
+    () => (
+      <View>
+        <ExpenseSummaryCard summary={summary} fadeAnim={fadeAnim} slideAnim={slideAnim} />
 
-      <View style={styles.filterSection}>
-        <FlatList
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          data={[...TIME_FILTERS, ...SORT_OPTIONS]}
-          keyExtractor={(item) => item.label}
-          renderItem={({ item }) => {
-            const isActive = item.value === timeFilter || item.value === sortMode;
-            const isSort = ['recent', 'amount'].includes(item.value);
-            return (
-              <FilterPill
-                label={item.label}
-                active={isActive}
-                onPress={() => handleFilterChange(isSort ? 'sort' : 'time', item.value)}
-              />
-            );
-          }}
-          contentContainerStyle={{ gap: 8, paddingHorizontal: 4 }}
-        />
-      </View>
-
-      <View style={styles.listHeaderRow}>
-        <Text style={styles.listSectionTitle}>Recent Transactions</Text>
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>{entryView.filteredEntries.length}</Text>
+        <View style={styles.filterSection}>
+          <FlatList
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            data={[...TIME_FILTERS, ...SORT_OPTIONS]}
+            keyExtractor={(item) => item.label}
+            renderItem={({ item }) => {
+              const isActive = item.value === timeFilter || item.value === sortMode;
+              const isSort = ['recent', 'amount'].includes(item.value);
+              return (
+                <FilterPill
+                  label={item.label}
+                  active={isActive}
+                  onPress={() => handleFilterChange(isSort ? 'sort' : 'time', item.value)}
+                />
+              );
+            }}
+            contentContainerStyle={{ gap: 8, paddingHorizontal: 4 }}
+          />
         </View>
-      </View>
 
-      {/* Swipe Hint */}
-      {entryView.filteredEntries.length > 0 && (
-        <Text style={styles.swipeHint}>Swipe left to edit, right to delete</Text>
-      )}
-    </View>
+        <View style={styles.listHeaderRow}>
+          <Text style={styles.listSectionTitle}>Recent Transactions</Text>
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>{entryView.filteredEntries.length}</Text>
+          </View>
+        </View>
+
+        {/* Swipe Hint */}
+        {entryView.filteredEntries.length > 0 && (
+          <Text style={styles.swipeHint}>Swipe left to edit, right to delete</Text>
+        )}
+      </View>
+    ),
+    [
+      summary,
+      fadeAnim,
+      slideAnim,
+      timeFilter,
+      sortMode,
+      entryView.filteredEntries.length,
+      handleFilterChange,
+    ]
   );
 
   const renderEmpty = () =>
@@ -367,7 +387,7 @@ const CashOutList = () => {
         )}
         contentContainerStyle={{
           paddingHorizontal: isTablet ? 0 : 20,
-          paddingTop: 20,
+          paddingTop: 10,
           paddingBottom: insets.bottom + 80,
           width: '100%',
           maxWidth: MAX_WIDTH,
@@ -378,6 +398,7 @@ const CashOutList = () => {
         ListEmptyComponent={renderEmpty}
         initialNumToRender={10}
         windowSize={10}
+        removeClippedSubviews={Platform.OS === 'android'}
       />
 
       <FullScreenSpinner visible={showLoading} />
@@ -390,7 +411,7 @@ export default CashOutList;
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.background || '#F8FAFC',
   },
   /* COMPACT ROW STYLES */
   swipeContainer: {
@@ -401,12 +422,12 @@ const styles = StyleSheet.create({
   compactRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.card,
+    backgroundColor: colors.card || '#FFFFFF',
     padding: 12,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.04)',
-    height: 70,
+    height: 72,
   },
   compactIcon: {
     width: 38,
@@ -428,7 +449,7 @@ const styles = StyleSheet.create({
   compactCategory: {
     fontSize: 15,
     fontWeight: '600',
-    color: colors.text,
+    color: colors.text || '#1E293B',
     flex: 1,
     marginRight: 8,
   },
@@ -443,13 +464,13 @@ const styles = StyleSheet.create({
   },
   compactNote: {
     fontSize: 12,
-    color: colors.muted,
+    color: colors.muted || '#94A3B8',
     flex: 1,
     marginRight: 8,
   },
   compactDate: {
     fontSize: 11,
-    color: '#94a3b8',
+    color: '#94A3B8',
   },
   /* SWIPE ACTIONS */
   leftAction: {
@@ -459,7 +480,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: '100%',
     borderRadius: 14,
-    marginRight: 10,
+    marginRight: 8,
   },
   rightAction: {
     backgroundColor: '#3b82f6', // Blue
@@ -468,7 +489,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: '100%',
     borderRadius: 14,
-    marginLeft: 10,
+    marginLeft: 8,
   },
   actionText: {
     color: 'white',
@@ -479,17 +500,17 @@ const styles = StyleSheet.create({
 
   /* HERO CARD (RED THEME) */
   heroCard: {
-    backgroundColor: '#fef2f2', // Light Red BG
+    backgroundColor: '#FEF2F2', // Light Red BG
     borderRadius: 24,
     padding: 24,
     marginBottom: 24,
-    shadowColor: '#b91c1c',
+    shadowColor: '#B91C1C',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.1,
     shadowRadius: 16,
     elevation: 3,
     borderWidth: 1,
-    borderColor: '#fecaca',
+    borderColor: '#FECACA',
     position: 'relative',
     overflow: 'hidden',
   },
@@ -500,7 +521,7 @@ const styles = StyleSheet.create({
     width: 150,
     height: 150,
     borderRadius: 75,
-    backgroundColor: '#fee2e2',
+    backgroundColor: '#FEE2E2',
     opacity: 0.5,
   },
   heroTopRow: {
@@ -510,31 +531,31 @@ const styles = StyleSheet.create({
   },
   heroLabel: {
     fontSize: 13,
-    color: '#991b1b', // Dark Red
+    color: '#991B1B', // Dark Red
     fontWeight: '700',
     marginBottom: 6,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
   },
   heroValue: {
-    fontSize: 36,
+    fontSize: 32,
     fontWeight: '800',
-    color: '#7f1d1d', // Darker Red
+    color: '#7F1D1D', // Darker Red
     letterSpacing: -1,
   },
   heroIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 18,
-    backgroundColor: '#ffffff',
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#fecaca',
+    borderColor: '#FECACA',
   },
   divider: {
     height: 1,
-    backgroundColor: '#fecaca',
+    backgroundColor: '#FECACA',
     marginVertical: 20,
   },
   statsRow: {
@@ -548,21 +569,20 @@ const styles = StyleSheet.create({
   verticalDivider: {
     width: 1,
     height: 24,
-    backgroundColor: '#fecaca',
+    backgroundColor: '#FECACA',
     marginHorizontal: 12,
   },
   statLabel: {
     fontSize: 11,
-    color: '#991b1b',
+    color: '#991B1B',
     marginBottom: 4,
     fontWeight: '600',
   },
   statNum: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#7f1d1d',
+    color: '#7F1D1D',
   },
-
   /* FILTERS */
   filterSection: {
     marginBottom: 24,
@@ -571,24 +591,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 12,
-    backgroundColor: colors.card,
+    backgroundColor: colors.card || '#FFFFFF',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.border || '#E2E8F0',
     marginRight: 8,
   },
   pillActive: {
-    backgroundColor: '#b91c1c', // Primary Red
-    borderColor: '#b91c1c',
+    backgroundColor: '#B91C1C', // Primary Red
+    borderColor: '#B91C1C',
   },
   pillText: {
     fontSize: 13,
     fontWeight: '600',
-    color: colors.muted,
+    color: colors.muted || '#94A3B8',
   },
   pillTextActive: {
     color: '#fff',
   },
-
   /* LIST HEADERS */
   listHeaderRow: {
     flexDirection: 'row',
@@ -599,11 +618,11 @@ const styles = StyleSheet.create({
   listSectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: colors.text,
+    color: colors.text || '#1E293B',
     marginLeft: 4,
   },
   badge: {
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: colors.surfaceMuted || '#F1F5F9',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
@@ -611,16 +630,15 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 12,
     fontWeight: '700',
-    color: colors.text,
+    color: colors.text || '#1E293B',
   },
   swipeHint: {
     fontSize: 12,
-    color: colors.muted,
+    color: colors.muted || '#94A3B8',
     marginLeft: 4,
     marginBottom: 16,
     fontStyle: 'italic',
   },
-
   /* EMPTY STATE */
   emptyContainer: {
     alignItems: 'center',
@@ -632,30 +650,30 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#fef2f2',
+    backgroundColor: '#FEF2F2',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#fecaca',
+    borderColor: '#FECACA',
   },
   emptyTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: colors.text,
+    color: colors.text || '#1E293B',
     marginBottom: 8,
   },
   emptyText: {
     fontSize: 14,
-    color: colors.muted,
+    color: colors.muted || '#94A3B8',
     textAlign: 'center',
     lineHeight: 20,
   },
   addBtn: {
-    backgroundColor: '#b91c1c',
+    backgroundColor: '#B91C1C',
     borderRadius: 14,
     paddingVertical: 14,
-    shadowColor: '#b91c1c',
+    shadowColor: '#B91C1C',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,

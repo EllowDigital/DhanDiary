@@ -267,7 +267,7 @@ export const deleteAccount = async () => {
     try {
       // Delete dependent entries first
       const entriesRes = await withTimeout(
-        query('DELETE FROM cash_entries WHERE user_id = $1 RETURNING id', [session.id]),
+        query('DELETE FROM transactions WHERE user_id = $1 RETURNING id', [session.id]),
         10_000
       );
       if (entriesRes && Array.isArray(entriesRes)) remoteDeleted = entriesRes.length;

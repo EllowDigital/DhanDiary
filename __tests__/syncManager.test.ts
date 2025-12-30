@@ -1,4 +1,4 @@
-import { syncPending } from '../src/services/syncManager';
+import { syncBothWays } from '../src/services/syncManager';
 import NetInfo from '@react-native-community/netinfo';
 import { getUnsyncedEntries } from '../src/db/localDb';
 
@@ -9,7 +9,7 @@ jest.mock('../src/api/neonClient');
 describe('syncManager', () => {
   it('does nothing if offline', async () => {
     (NetInfo.fetch as jest.Mock).mockResolvedValue({ isConnected: false });
-    await syncPending();
+    await syncBothWays();
     expect(getUnsyncedEntries).not.toHaveBeenCalled();
   });
 });

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useWindowDimensions, Platform } from 'react-native';
-import { createDrawerNavigator } from '@react-navigation/drawer';
+import { createDrawerNavigator, DrawerNavigationOptions } from '@react-navigation/drawer';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 // --- SCREENS ---
@@ -22,71 +22,93 @@ import EulaScreen from '../screens/EulaScreen';
 import CustomDrawerContent from './CustomDrawerContent';
 import { colors } from '../utils/design';
 
-const Drawer = createDrawerNavigator();
+// --- TYPES ---
+export type DrawerParamList = {
+  Dashboard: undefined;
+  AddEntry: { local_id?: string } | undefined;
+  History: undefined;
+  Income: undefined;
+  Expenses: undefined;
+  Analytics: undefined;
+  Account: undefined;
+  Settings: undefined;
+  About: undefined;
+  Export: undefined;
+  PrivacyPolicy: undefined;
+  Terms: undefined;
+  Eula: undefined;
+};
+
+const Drawer = createDrawerNavigator<DrawerParamList>();
 
 const DrawerNavigator = () => {
   const { width } = useWindowDimensions();
 
   // --- RESPONSIVE CONFIG ---
-  const isLargeScreen = width >= 768; // Tablet breakpoint
+  // Tablet breakpoint usually around 768px
+  const isLargeScreen = width >= 768;
 
   // On large screens, show drawer permanently on the left.
   // On phones, it slides over as a modal.
   const drawerType = isLargeScreen ? 'permanent' : 'front';
 
   // Cap width so it doesn't look ridiculous on landscape tablets
-  const drawerWidth = Math.min(300, width * 0.8);
+  const drawerWidth = Math.min(280, width * 0.75);
+
+  const screenOptions: DrawerNavigationOptions = {
+    headerShown: false, // We usually handle headers inside the screens/stacks
+
+    // Layout
+    drawerType,
+    drawerStyle: {
+      backgroundColor: colors.background || '#F8FAFC',
+      width: drawerWidth,
+      borderRightWidth: isLargeScreen ? 1 : 0,
+      borderRightColor: 'rgba(0,0,0,0.06)',
+    },
+
+    // Item Styling
+    drawerActiveTintColor: colors.primary || '#2563EB',
+    drawerInactiveTintColor: colors.text || '#1E293B',
+    drawerActiveBackgroundColor: colors.primarySoft || 'rgba(37, 99, 235, 0.1)',
+
+    drawerLabelStyle: {
+      fontSize: 14,
+      fontWeight: '600',
+      marginLeft: -10,
+    },
+
+    drawerItemStyle: {
+      borderRadius: 12,
+      paddingHorizontal: 8,
+      marginVertical: 4,
+    },
+
+    // Overlay (Mobile 'front' mode only)
+    overlayColor: 'rgba(0,0,0,0.5)',
+    swipeEdgeWidth: width * 0.25, // Wider grab area for better UX
+    swipeEnabled: !isLargeScreen, // Disable swipe on desktop/tablet permanent mode
+  };
 
   return (
     <Drawer.Navigator
       drawerContent={(props) => <CustomDrawerContent {...props} />}
-      screenOptions={{
-        headerShown: false,
-
-        // Drawer Layout
-        drawerType,
-        drawerStyle: {
-          backgroundColor: colors.background || '#F8FAFC',
-          width: drawerWidth,
-          borderRightWidth: isLargeScreen ? 1 : 0,
-          borderRightColor: 'rgba(0,0,0,0.06)',
-        },
-
-        // Item Styling (Default styles, though CustomDrawerContent overrides most)
-        drawerActiveTintColor: colors.primary,
-        drawerInactiveTintColor: colors.text,
-        drawerActiveBackgroundColor: colors.primarySoft || '#EEF2FF',
-
-        drawerLabelStyle: {
-          fontSize: 15,
-          fontWeight: '600',
-          marginLeft: -8,
-        },
-
-        drawerItemStyle: {
-          borderRadius: 12,
-          paddingHorizontal: 8,
-          marginVertical: 4,
-        },
-
-        // Overlay (only for mobile 'front' mode)
-        overlayColor: 'rgba(0,0,0,0.6)',
-        swipeEdgeWidth: width * 0.2, // Easier to grab
-      }}
+      screenOptions={screenOptions}
+      initialRouteName="Dashboard"
     >
-      {/* --- DASHBOARD (Tabs) --- */}
+      {/* --- 1. MAIN DASHBOARD --- */}
       <Drawer.Screen
         name="Dashboard"
         component={BottomTabNavigator}
         options={{
-          title: 'Dashboard',
+          title: 'Home',
           drawerIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="view-dashboard-outline" color={color} size={22} />
+            <MaterialCommunityIcons name="home-variant-outline" color={color} size={22} />
           ),
         }}
       />
 
-      {/* --- CORE ACTIONS --- */}
+      {/* --- 2. CORE ACTIONS --- */}
       <Drawer.Screen
         name="AddEntry"
         component={AddEntryScreen}
@@ -109,7 +131,7 @@ const DrawerNavigator = () => {
         }}
       />
 
-      {/* --- LISTS --- */}
+      {/* --- 3. CATEGORIES & LISTS --- */}
       <Drawer.Screen
         name="Income"
         component={CashInList}
@@ -123,7 +145,7 @@ const DrawerNavigator = () => {
 
       <Drawer.Screen
         name="Expenses"
-        component={CashOutList} // Renamed route to match plural "Expenses"
+        component={CashOutList}
         options={{
           title: 'Expenses',
           drawerIcon: ({ color, size }) => (
@@ -132,19 +154,30 @@ const DrawerNavigator = () => {
         }}
       />
 
-      {/* --- ANALYTICS --- */}
+      {/* --- 4. DATA & ANALYTICS --- */}
       <Drawer.Screen
         name="Analytics"
-        component={StatsScreen} // Renamed route to match sidebar text
+        component={StatsScreen}
         options={{
-          title: 'Analytics',
+          title: 'Analytics & Charts',
           drawerIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="chart-box-outline" color={color} size={22} />
+            <MaterialCommunityIcons name="chart-bar" color={color} size={22} />
           ),
         }}
       />
 
-      {/* --- SETTINGS GROUP --- */}
+      <Drawer.Screen
+        name="Export"
+        component={ExportScreen}
+        options={{
+          title: 'Export Data',
+          drawerIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="file-export-outline" color={color} size={22} />
+          ),
+        }}
+      />
+
+      {/* --- 5. USER & SETTINGS --- */}
       <Drawer.Screen
         name="Account"
         component={AccountManagementScreen}
@@ -171,43 +204,29 @@ const DrawerNavigator = () => {
         name="About"
         component={AboutScreen}
         options={{
-          title: 'About',
+          title: 'About App',
           drawerIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="information-outline" color={color} size={22} />
           ),
         }}
       />
 
-      <Drawer.Screen
-        name="Export"
-        component={ExportScreen}
-        options={{
-          title: 'Export Data',
-          drawerIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="file-export-outline" color={color} size={22} />
-          ),
-        }}
-      />
-
-      {/* --- HIDDEN SCREENS (Navigable but not in menu) --- */}
-      {/* Use drawerItemStyle: { display: 'none' } to hide from auto-generated lists */}
+      {/* --- HIDDEN SCREENS (Accessible via navigation, hidden from menu) --- */}
       <Drawer.Screen
         name="PrivacyPolicy"
         component={PrivacyPolicyScreen}
         options={{
-          title: 'Privacy Policy',
           drawerItemStyle: { display: 'none' },
+          title: 'Privacy Policy',
         }}
       />
-
-      {/* Notifications screen unregistered — feature hidden */}
 
       <Drawer.Screen
         name="Terms"
         component={TermsScreen}
         options={{
-          title: 'Terms of Use',
           drawerItemStyle: { display: 'none' },
+          title: 'Terms of Use',
         }}
       />
 
@@ -215,8 +234,8 @@ const DrawerNavigator = () => {
         name="Eula"
         component={EulaScreen}
         options={{
-          title: 'End User License',
           drawerItemStyle: { display: 'none' },
+          title: 'EULA',
         }}
       />
     </Drawer.Navigator>

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -11,67 +11,71 @@ import {
   Platform,
   ActivityIndicator,
   NativeModules,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useNavigation } from '@react-navigation/native';
+import Svg, { Defs, LinearGradient, Stop, Rect, Circle } from 'react-native-svg';
+import { LineChart, PieChart } from 'react-native-chart-kit';
+import dayjs from 'dayjs';
+
+// --- CUSTOM HOOKS & UTILS IMPORTS ---
+// Assuming these paths exist based on your snippets.
 import { useAuth } from '../hooks/useAuth';
 import { useEntries } from '../hooks/useEntries';
 import useDelayedLoading from '../hooks/useDelayedLoading';
 import UserAvatar from '../components/UserAvatar';
-import Svg, { Defs, LinearGradient, Stop, Rect, Circle } from 'react-native-svg';
-import { LineChart, PieChart } from 'react-native-chart-kit';
-import dayjs from 'dayjs';
+import { dayjsFrom, formatDate } from '../utils/date';
 import { subscribeSyncStatus } from '../services/syncManager';
+import { isExpense as isExpenseType, isIncome as isIncomeType } from '../utils/transactionType';
+import { getIconForCategory } from '../constants/categories';
+import { colors as themeColors } from '../utils/design';
 
-// --- CRASH PROOF ANIMATION SETUP ---
-const setupLayoutAnimation = () => {
-  if (Platform.OS === 'android') {
-    try {
-      const UIManager = NativeModules.UIManager;
-      if (UIManager && UIManager.setLayoutAnimationEnabledExperimental) {
-        UIManager.setLayoutAnimationEnabledExperimental(true);
-      }
-    } catch (e) {
-      console.warn('LayoutAnimation setup skipped');
-    }
+// --- ANIMATION SETUP ---
+if (Platform.OS === 'android') {
+  if (NativeModules.UIManager?.setLayoutAnimationEnabledExperimental) {
+    NativeModules.UIManager.setLayoutAnimationEnabledExperimental(true);
   }
+}
+
+// --- CONSTANTS & THEME ---
+const COLORS = {
+  primary: '#2563EB', // Royal Blue
+  primaryDark: '#1E40AF',
+  background: '#F8FAFC', // Slate 50
+  card: '#FFFFFF',
+  textMain: '#0F172A', // Slate 900
+  textSub: '#64748B', // Slate 500
+  success: '#10B981', // Emerald 500
+  successBg: 'rgba(16, 185, 129, 0.15)',
+  danger: '#EF4444', // Red 500
+  dangerBg: 'rgba(239, 68, 68, 0.15)',
+  border: '#E2E8F0',
 };
 
-// Initialize
-setupLayoutAnimation();
+const CHART_PALETTE = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
 
-// --- THEME ---
-const colors = {
-  primary: '#2563EB',
-  background: '#F8FAFC',
-  text: '#1E293B',
-  subText: '#64748B',
-  success: '#10B981',
-  danger: '#EF4444',
-  white: '#FFFFFF',
-};
-
-const CATEGORY_COLORS: Record<string, string> = {
-  Food: '#F59E0B',
-  Shopping: '#3B82F6',
-  Transport: '#EF4444',
-  Bills: '#8B5CF6',
-  Salary: '#10B981',
-  Other: '#64748B',
-};
-
-const CHART_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
+// --- TYPES ---
+interface Transaction {
+  local_id: string;
+  amount: number | string;
+  type: 'in' | 'out';
+  category?: string;
+  note?: string;
+  date: string | Date;
+}
 
 // --- SUB-COMPONENTS ---
 
-// 1. CLEAN WAVE CHART
+// 1. WAVE CHART (Optimized)
 const CleanWaveChart = React.memo(({ data, width }: { data: number[]; width: number }) => {
+  // Ensure we always have data to prevent rendering errors
   const chartData = data.length > 1 ? data : [0, 0, 0, 0, 0, 0];
 
   return (
-    <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+    <View style={styles.chartContainer}>
       <LineChart
         data={{
           labels: [],
@@ -87,17 +91,17 @@ const CleanWaveChart = React.memo(({ data, width }: { data: number[]; width: num
         withVerticalLabels={false}
         withHorizontalLabels={false}
         chartConfig={{
-          backgroundColor: '#ffffff',
-          backgroundGradientFrom: '#ffffff',
-          backgroundGradientTo: '#ffffff',
+          backgroundColor: COLORS.card,
+          backgroundGradientFrom: COLORS.card,
+          backgroundGradientTo: COLORS.card,
           decimalPlaces: 0,
           color: (opacity = 1) => `rgba(37, 99, 235, ${opacity})`,
           labelColor: () => 'transparent',
           propsForBackgroundLines: { strokeWidth: 0 },
-          fillShadowGradientFrom: '#3B82F6',
-          fillShadowGradientTo: '#3B82F6',
-          fillShadowGradientFromOpacity: 0.3,
-          fillShadowGradientToOpacity: 0.05,
+          fillShadowGradientFrom: COLORS.primary,
+          fillShadowGradientTo: COLORS.primary,
+          fillShadowGradientFromOpacity: 0.25,
+          fillShadowGradientToOpacity: 0.0,
         }}
         bezier
         style={{ paddingRight: 0, paddingLeft: 0 }}
@@ -106,12 +110,13 @@ const CleanWaveChart = React.memo(({ data, width }: { data: number[]; width: num
   );
 });
 
-// 2. PIE CHART (CENTERED FIX)
+// 2. PIE CHART (With Custom Legend)
 const CleanPieChart = React.memo(({ data, width }: { data: any[]; width: number }) => {
-  if (!data || data.length === 0) {
+  if (!data || data.length === 0 || data.every((d) => d.population === 0)) {
     return (
       <View style={styles.emptyChartBox}>
-        <Text style={styles.emptyText}>No expenses yet</Text>
+        <MaterialIcon name="donut-large" size={48} color={COLORS.border} />
+        <Text style={styles.emptyText}>No expenses in this period</Text>
       </View>
     );
   }
@@ -128,8 +133,7 @@ const CleanPieChart = React.memo(({ data, width }: { data: any[]; width: number 
         accessor="population"
         backgroundColor="transparent"
         paddingLeft="0"
-        // This offset shifts the pie from the left (default) to the exact center
-        center={[width / 4, 0]}
+        center={[width / 4, 0]} // Centers the circle relative to the container
         absolute={false}
         hasLegend={false}
       />
@@ -137,7 +141,9 @@ const CleanPieChart = React.memo(({ data, width }: { data: any[]; width: number 
         {data.slice(0, 5).map((item, i) => (
           <View key={i} style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: item.color }]} />
-            <Text style={styles.legendText}>{item.name}</Text>
+            <Text style={styles.legendText} numberOfLines={1}>
+              {item.name}
+            </Text>
           </View>
         ))}
       </View>
@@ -148,229 +154,275 @@ const CleanPieChart = React.memo(({ data, width }: { data: any[]; width: number 
 // 3. RANK LIST
 const RankList = React.memo(({ data, total }: { data: any[]; total: number }) => (
   <View style={styles.rankContainer}>
-    {data.slice(0, 5).map((item, index) => {
-      const percent = total > 0 ? (item.population / total) * 100 : 0;
-      return (
-        <View key={index} style={styles.rankRow}>
-          <View style={styles.rankHeader}>
-            <View style={styles.rankLabelRow}>
-              <View style={[styles.rankDot, { backgroundColor: item.color }]} />
-              <Text style={styles.rankName}>{item.name}</Text>
+    {data.length === 0 ? (
+      <Text style={[styles.emptyText, { textAlign: 'center', marginVertical: 20 }]}>
+        No data available
+      </Text>
+    ) : (
+      data.slice(0, 5).map((item, index) => {
+        const percent = total > 0 ? (item.population / total) * 100 : 0;
+        return (
+          <View key={index} style={styles.rankRow}>
+            <View style={styles.rankHeader}>
+              <View style={styles.rankLabelRow}>
+                <View style={[styles.rankDot, { backgroundColor: item.color }]} />
+                <Text style={styles.rankName}>{item.name}</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                <Text style={styles.rankPercent}>{Math.round(percent)}%</Text>
+                <Text style={styles.rankAmt}>
+                  {' '}
+                  (₹{Math.round(item.population).toLocaleString()})
+                </Text>
+              </View>
             </View>
-            <View style={{ flexDirection: 'row' }}>
-              <Text style={styles.rankPercent}>{Math.round(percent)}% </Text>
-              <Text style={styles.rankAmt}>(₹{Math.round(item.population).toLocaleString()})</Text>
+            <View style={styles.progressBarBg}>
+              <View
+                style={[
+                  styles.progressBarFill,
+                  { width: `${percent}%`, backgroundColor: item.color || COLORS.primary },
+                ]}
+              />
             </View>
           </View>
-          <View style={styles.progressBarBg}>
-            <View
-              style={[
-                styles.progressBarFill,
-                { width: `${percent}%`, backgroundColor: colors.primary },
-              ]}
-            />
-          </View>
-        </View>
-      );
-    })}
+        );
+      })
+    )}
   </View>
 ));
 
 // 4. TRANSACTION ITEM
-const TransactionItem = React.memo(({ item, onPress }: { item: any; onPress: () => void }) => {
-  const isExpense = item.type === 'out';
-  const category = item.category || 'Other';
-  const color = CATEGORY_COLORS[category] || colors.subText;
+const TransactionItem = React.memo(
+  ({ item, onPress }: { item: Transaction; onPress: () => void }) => {
+    const isInc = isIncomeType(item.type);
+    const category = item.category || 'Uncategorized';
+    const amount = Number(item.amount) || 0;
 
-  const iconMap: Record<string, any> = {
-    Food: 'restaurant',
-    Shopping: 'shopping-bag',
-    Transport: 'directions-car',
-    Bills: 'receipt',
-    Salary: 'attach-money',
-    Health: 'local-hospital',
-  };
+    // Dynamic Icon Logic
+    let iconName = getIconForCategory(category);
+    if (!iconName) iconName = isInc ? 'arrow-downward' : 'arrow-upward';
 
-  return (
-    <TouchableOpacity style={styles.txnCard} onPress={onPress} activeOpacity={0.7}>
-      <View style={[styles.txnIconBox, { backgroundColor: isExpense ? '#FEF2F2' : '#ECFDF5' }]}>
-        <MaterialIcon
-          name={iconMap[category] || 'category'}
-          size={22}
-          color={isExpense ? color : colors.success}
-        />
-      </View>
-      <View style={styles.txnContent}>
-        <Text style={styles.txnTitle} numberOfLines={1}>
-          {category}
-        </Text>
-        <Text style={styles.txnSubtitle} numberOfLines={1}>
-          {item.note || 'No description'}
-        </Text>
-      </View>
-      <View style={styles.txnRight}>
-        <Text style={[styles.txnAmount, { color: isExpense ? colors.danger : colors.success }]}>
-          {isExpense ? '-' : '+'}₹{Math.abs(Number(item.amount)).toLocaleString()}
-        </Text>
-        <Text style={styles.txnDate}>{dayjs(item.date).format('MMM D, h:mm A')}</Text>
-      </View>
-    </TouchableOpacity>
-  );
-});
+    return (
+      <TouchableOpacity style={styles.txnCard} onPress={onPress} activeOpacity={0.7}>
+        <View
+          style={[
+            styles.txnIconBox,
+            { backgroundColor: isInc ? COLORS.successBg : COLORS.dangerBg },
+          ]}
+        >
+          <MaterialIcon
+            name={iconName as any}
+            size={22}
+            color={isInc ? COLORS.success : COLORS.danger}
+          />
+        </View>
+        <View style={styles.txnContent}>
+          <Text style={styles.txnTitle} numberOfLines={1}>
+            {category}
+          </Text>
+          <Text style={styles.txnSubtitle} numberOfLines={1}>
+            {item.note || formatDate(item.date)}
+          </Text>
+        </View>
+        <View style={styles.txnRight}>
+          <Text
+            style={[
+              styles.txnAmount,
+              { color: isInc ? COLORS.success : COLORS.textMain }, // Expenses just dark, Income Green
+            ]}
+          >
+            {isInc ? '+' : '-'}₹{amount.toLocaleString()}
+          </Text>
+          <Text style={styles.txnDate}>{dayjsFrom(item.date).format('h:mm A')}</Text>
+        </View>
+      </TouchableOpacity>
+    );
+  }
+);
 
 // --- MAIN SCREEN ---
 const HomeScreen = () => {
   const navigation = useNavigation<any>();
   const { user } = useAuth();
-  const { entries = [], isLoading } = useEntries(user?.id);
-  const showLoading = useDelayedLoading(Boolean(isLoading), 200);
+  const { entries, isLoading, refetch } = useEntries(user?.id);
 
+  // Use slightly longer delay for loading spinner to avoid flicker
+  const showLoading = useDelayedLoading(Boolean(isLoading), 300);
   const { width: screenWidth } = useWindowDimensions();
-  // CALCULATION: Screen - (20px * 2 outer pad) - (16px * 2 card pad) = Width - 72
-  const CHART_WIDTH = screenWidth - 72;
 
+  // Constants for Chart
+  const CHART_PADDING = 40; // Inner card padding
+  const SCREEN_PADDING = 32; // Outer screen padding
+  const CHART_WIDTH = screenWidth - SCREEN_PADDING - CHART_PADDING;
+
+  // Local State
   const [showBalance, setShowBalance] = useState(true);
   const [period, setPeriod] = useState<'week' | 'month'>('month');
   const [chartType, setChartType] = useState<'wave' | 'pie' | 'list'>('wave');
   const [isSyncing, setIsSyncing] = useState(false);
+
+  // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
-  }, []);
-
-  useEffect(() => {
-    const unsub = subscribeSyncStatus(setIsSyncing);
+    Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }).start();
+    const unsub = subscribeSyncStatus((s) => setIsSyncing(s === 'syncing'));
     return () => {
       try {
-        unsub();
+        if (unsub) unsub();
       } catch (e) {}
     };
+  }, [fadeAnim]);
+
+  // Dev logging removed — production-ready
+
+  const animateLayout = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+  };
+
+  const handleToggleChart = useCallback((type: 'wave' | 'pie' | 'list') => {
+    animateLayout();
+    setChartType(type);
   }, []);
 
-  const safeLayoutAnim = () => {
-    try {
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    } catch (e) {}
-  };
-
-  const handleToggleChart = (type: any) => {
-    safeLayoutAnim();
-    setChartType(type);
-  };
-  const handleTogglePeriod = (p: any) => {
-    safeLayoutAnim();
+  const handleTogglePeriod = useCallback((p: 'week' | 'month') => {
+    animateLayout();
     setPeriod(p);
-  };
+  }, []);
 
+  // --- DATA PROCESSING (Memoized) ---
   const { stats, chartData, recentEntries } = useMemo(() => {
-    if (!entries)
-      return {
-        stats: { in: 0, out: 0, bal: 0 },
-        chartData: { wave: [], pie: [] },
-        recentEntries: [],
-      };
+    const rawEntries = entries || [];
 
-    const inVal = entries
-      .filter((e) => e.type === 'in')
+    // 1. Stats Calculation
+    const inVal = rawEntries
+      .filter((e) => isIncomeType(e.type))
       .reduce((acc, c) => acc + Number(c.amount), 0);
-    const outVal = entries
-      .filter((e) => e.type === 'out')
+
+    const outVal = rawEntries
+      .filter((e) => isExpenseType(e.type))
       .reduce((acc, c) => acc + Number(c.amount), 0);
+
+    // 2. Filter for Chart
     const cutOff = period === 'week' ? dayjs().subtract(6, 'day') : dayjs().startOf('month');
-    const filtered = entries.filter((e) => dayjs(e.date).isAfter(cutOff));
+    const chartEntries = rawEntries.filter((e) => dayjsFrom(e.date).isAfter(cutOff));
 
-    // Wave
+    // Wave Data
     const wavePoints =
       period === 'week' ? new Array(7).fill(0) : new Array(dayjs().daysInMonth()).fill(0);
-    filtered
-      .filter((e) => e.type === 'out')
+
+    chartEntries
+      .filter((e) => isExpenseType(e.type))
       .forEach((e) => {
+        const d = dayjsFrom(e.date);
         const idx =
-          period === 'week' ? 6 - dayjs().diff(dayjs(e.date), 'day') : dayjs(e.date).date() - 1;
-        if (idx >= 0 && idx < wavePoints.length) wavePoints[idx] += Number(e.amount);
+          period === 'week'
+            ? 6 - dayjs().diff(d, 'day') // 0 = today, 6 = 7 days ago reversed? No, standard array: 0..6
+            : d.date() - 1;
+
+        // Reverse index for week to make left=oldest, right=newest
+        const weekIdx = 6 - dayjs().diff(d, 'day');
+        // Logic: if diff is 0 (today), index 6. If diff is 6, index 0.
+        const targetIdx = period === 'week' ? weekIdx : d.date() - 1;
+
+        if (targetIdx >= 0 && targetIdx < wavePoints.length) {
+          wavePoints[targetIdx] += Number(e.amount);
+        }
       });
 
-    // Pie
+    // Pie Data
     const catMap: Record<string, number> = {};
-    filtered
-      .filter((e) => e.type === 'out')
+    chartEntries
+      .filter((e) => isExpenseType(e.type))
       .forEach((e) => {
         const c = e.category || 'Other';
         catMap[c] = (catMap[c] || 0) + Number(e.amount);
       });
 
     const piePoints = Object.keys(catMap)
-      .sort((a, b) => catMap[b] - catMap[a])
       .map((name, i) => ({
         name,
         population: catMap[name],
-        color: i === 0 ? colors.primary : CHART_COLORS[i % CHART_COLORS.length],
+        color: CHART_PALETTE[i % CHART_PALETTE.length],
         legendFontColor: '#333',
         legendFontSize: 12,
-      }));
+      }))
+      .sort((a, b) => b.population - a.population);
+
+    // 3. Recent Transactions (SORTING FIX)
+    const sortedRecent = [...rawEntries]
+      .sort((a, b) => dayjsFrom(b.date).valueOf() - dayjsFrom(a.date).valueOf()) // Newest first
+      .slice(0, 7); // Show a few more
 
     return {
       stats: { in: inVal, out: outVal, bal: inVal - outVal },
       chartData: { wave: wavePoints, pie: piePoints },
-      recentEntries: entries
-        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-        .slice(0, 5),
+      recentEntries: sortedRecent,
     };
   }, [entries, period]);
 
+  // --- RENDER HEADER ---
   const renderHeader = () => (
     <View style={styles.headerContainer}>
-      {/* Top Bar */}
+      {/* 1. Top Bar */}
       <View style={styles.topBar}>
-        <TouchableOpacity onPress={() => navigation.openDrawer()} style={styles.menuBtn}>
-          <MaterialIcon name="menu" size={24} color={colors.text} />
-        </TouchableOpacity>
-        <View style={styles.userInfo}>
-          <Text style={styles.greetingText}>GOOD AFTERNOON</Text>
-          <Text style={styles.userName}>{user?.name || 'User'}</Text>
+        <View style={styles.userInfoRow}>
+          <UserAvatar
+            size={42}
+            name={user?.name}
+            imageUrl={user?.imageUrl || user?.image}
+            onPress={() => navigation.navigate('Account')}
+          />
+          <View style={{ marginLeft: 12 }}>
+            <Text style={styles.greetingText}>Welcome Back,</Text>
+            <Text style={styles.userName}>{user?.name || 'User'}</Text>
+          </View>
         </View>
-        <UserAvatar
-          size={40}
-          name={user?.name}
-          imageUrl={user?.image}
-          onPress={() => navigation.navigate('Account')}
-        />
+        <TouchableOpacity
+          onPress={() => navigation.openDrawer()}
+          style={styles.menuBtn}
+          accessibilityLabel="Open Menu"
+        >
+          <MaterialIcon name="menu" size={26} color={COLORS.textMain} />
+        </TouchableOpacity>
       </View>
 
-      {/* Hero Card */}
+      {/* 2. Hero Card */}
       <Animated.View style={[styles.heroCard, { opacity: fadeAnim }]}>
         <Svg style={StyleSheet.absoluteFill}>
           <Defs>
-            <LinearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
+            <LinearGradient id="heroGrad" x1="0" y1="0" x2="1" y2="1">
               <Stop offset="0" stopColor="#3B82F6" />
-              <Stop offset="1" stopColor="#2563EB" />
+              <Stop offset="1" stopColor="#1D4ED8" />
             </LinearGradient>
           </Defs>
-          <Rect width="100%" height="100%" fill="url(#grad)" />
-          <Circle cx="90%" cy="10%" r="90" fill="white" fillOpacity="0.1" />
-          <Circle cx="5%" cy="90%" r="60" fill="white" fillOpacity="0.05" />
+          <Rect width="100%" height="100%" fill="url(#heroGrad)" />
+          {/* Decorative Circles */}
+          <Circle cx="85%" cy="15%" r="80" fill="white" fillOpacity="0.1" />
+          <Circle cx="10%" cy="90%" r="50" fill="white" fillOpacity="0.08" />
         </Svg>
+
         <View style={styles.cardInner}>
           <View style={styles.cardHeader}>
-            <View style={styles.balanceBadge}>
-              <Text style={styles.balanceLabel}>Total Balance</Text>
-            </View>
-            <TouchableOpacity onPress={() => setShowBalance(!showBalance)}>
+            <Text style={styles.balanceLabel}>Total Balance</Text>
+            <TouchableOpacity onPress={() => setShowBalance(!showBalance)} style={styles.eyeBtn}>
               <MaterialIcon
                 name={showBalance ? 'visibility' : 'visibility-off'}
-                size={20}
-                color="rgba(255,255,255,0.8)"
+                size={18}
+                color="rgba(255,255,255,0.7)"
               />
             </TouchableOpacity>
           </View>
+
           <View style={styles.balanceRow}>
             <Text style={styles.currencySymbol}>₹</Text>
-            <Text style={styles.balanceAmount}>
+            <Text style={styles.balanceAmount} numberOfLines={1} adjustsFontSizeToFit>
               {showBalance ? stats.bal.toLocaleString('en-IN') : '••••••'}
             </Text>
           </View>
+
           <View style={styles.statsContainer}>
+            {/* Income */}
             <View style={styles.statItem}>
               <View style={[styles.statIcon, { backgroundColor: 'rgba(16, 185, 129, 0.2)' }]}>
                 <MaterialIcon name="arrow-downward" size={16} color="#4ADE80" />
@@ -378,11 +430,14 @@ const HomeScreen = () => {
               <View>
                 <Text style={styles.statLabel}>Income</Text>
                 <Text style={styles.statValue}>
-                  ₹{showBalance ? stats.in.toLocaleString() : '•••'}
+                  {showBalance ? `₹${stats.in.toLocaleString()}` : '••••'}
                 </Text>
               </View>
             </View>
+
             <View style={styles.statDivider} />
+
+            {/* Expense */}
             <View style={styles.statItem}>
               <View style={[styles.statIcon, { backgroundColor: 'rgba(239, 68, 68, 0.2)' }]}>
                 <MaterialIcon name="arrow-upward" size={16} color="#F87171" />
@@ -390,7 +445,7 @@ const HomeScreen = () => {
               <View>
                 <Text style={styles.statLabel}>Expense</Text>
                 <Text style={styles.statValue}>
-                  ₹{showBalance ? stats.out.toLocaleString() : '•••'}
+                  {showBalance ? `₹${stats.out.toLocaleString()}` : '••••'}
                 </Text>
               </View>
             </View>
@@ -398,35 +453,38 @@ const HomeScreen = () => {
         </View>
       </Animated.View>
 
-      {/* Actions */}
+      {/* 3. Quick Actions */}
       <View style={styles.actionGrid}>
         {[
-          { label: 'Add', icon: 'add', nav: 'AddEntry', primary: true },
-          { label: 'Stats', icon: 'bar-chart', nav: 'Analytics', primary: false },
-          { label: 'Export', icon: 'file-download', nav: 'Export', primary: false },
+          { label: 'Add New', icon: 'add', nav: 'AddEntry', primary: true },
+          { label: 'Analytics', icon: 'bar-chart', nav: 'Analytics', primary: false },
+          { label: 'History', icon: 'history', nav: 'History', primary: false },
         ].map((item, idx) => (
-          <View key={idx} style={styles.actionWrapper}>
-            <TouchableOpacity
-              style={[
-                styles.actionBtn,
-                item.primary ? { backgroundColor: colors.primary } : { backgroundColor: '#fff' },
-              ]}
-              onPress={() => navigation.navigate(item.nav)}
-            >
-              <MaterialIcon
-                name={item.icon as any}
-                size={28}
-                color={item.primary ? '#fff' : colors.primary}
-              />
-            </TouchableOpacity>
-            <Text style={styles.actionLabel}>{item.label}</Text>
-          </View>
+          <TouchableOpacity
+            key={idx}
+            style={[
+              styles.actionCard,
+              item.primary ? { backgroundColor: COLORS.primary } : { backgroundColor: COLORS.card },
+            ]}
+            onPress={() => navigation.navigate(item.nav)}
+            activeOpacity={0.8}
+          >
+            <MaterialIcon
+              name={item.icon as any}
+              size={24}
+              color={item.primary ? '#fff' : COLORS.primary}
+            />
+            <Text style={[styles.actionLabel, item.primary && { color: '#fff' }]}>
+              {item.label}
+            </Text>
+          </TouchableOpacity>
         ))}
       </View>
 
-      {/* Chart Widget */}
+      {/* 4. Analytics Widget */}
       <View style={styles.chartCard}>
         <View style={styles.chartHeader}>
+          {/* Chart Type Toggles */}
           <View style={styles.chartToggles}>
             {[
               { id: 'wave', icon: 'show-chart' },
@@ -436,25 +494,27 @@ const HomeScreen = () => {
               <TouchableOpacity
                 key={t.id}
                 style={[styles.chartToggleBtn, chartType === t.id && styles.chartToggleBtnActive]}
-                onPress={() => handleToggleChart(t.id)}
+                onPress={() => handleToggleChart(t.id as any)}
               >
                 <MaterialIcon
                   name={t.icon as any}
                   size={20}
-                  color={chartType === t.id ? colors.primary : '#94A3B8'}
+                  color={chartType === t.id ? COLORS.primary : COLORS.textSub}
                 />
               </TouchableOpacity>
             ))}
           </View>
+
+          {/* Time Period Switch */}
           <View style={styles.periodSwitch}>
             {['week', 'month'].map((p) => (
               <TouchableOpacity
                 key={p}
-                style={[styles.periodBtn, period === p ? styles.periodBtnActive : null]}
-                onPress={() => handleTogglePeriod(p)}
+                style={[styles.periodBtn, period === p && styles.periodBtnActive]}
+                onPress={() => handleTogglePeriod(p as any)}
               >
-                <Text style={[styles.periodText, period === p ? styles.periodTextActive : null]}>
-                  {p === 'week' ? '7D' : 'Month'}
+                <Text style={[styles.periodText, period === p && styles.periodTextActive]}>
+                  {p === 'week' ? '7 Days' : 'Month'}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -466,33 +526,13 @@ const HomeScreen = () => {
           {chartType === 'pie' && <CleanPieChart data={chartData.pie} width={CHART_WIDTH} />}
           {chartType === 'list' && <RankList data={chartData.pie} total={stats.out} />}
         </View>
-
-        {/* Context Caption */}
-        {chartType !== 'list' && (
-          <View style={styles.chartCaption}>
-            <Text style={styles.captionText}>
-              {chartType === 'wave'
-                ? 'This chart shows your spending trend. The blue area represents your daily expenses.'
-                : 'This chart shows your spending breakdown. Switch to the list view for more details.'}
-            </Text>
-            {chartType === 'wave' && (
-              <View style={styles.captionLegend}>
-                <View style={styles.legendDotSmall} />
-                <Text style={styles.legendTextSmall}>Daily expenses</Text>
-                <View
-                  style={[styles.legendDotSmall, { backgroundColor: '#10B981', marginLeft: 12 }]}
-                />
-                <Text style={styles.legendTextSmall}>Income (visible)</Text>
-              </View>
-            )}
-          </View>
-        )}
       </View>
 
+      {/* 5. Recent Section Header */}
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Recent Transactions</Text>
         <TouchableOpacity onPress={() => navigation.navigate('History')}>
-          <Text style={styles.seeAllBtn}>See All</Text>
+          <Text style={styles.seeAllBtn}>View All</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -500,17 +540,27 @@ const HomeScreen = () => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+        {/* Loading Overlay */}
         {showLoading && (
           <View style={styles.loadingOverlay}>
-            <ActivityIndicator size="large" color={colors.primary} />
+            <ActivityIndicator size="large" color={COLORS.primary} />
           </View>
         )}
+
+        {/* Using FlatList for the entire screen allows pull-to-refresh */}
         <FlatList
           data={recentEntries}
           keyExtractor={(item) => item.local_id || Math.random().toString()}
-          ListHeaderComponent={renderHeader()}
+          ListHeaderComponent={renderHeader}
+          refreshControl={
+            <RefreshControl
+              refreshing={isLoading && isSyncing}
+              onRefresh={refetch}
+              tintColor={COLORS.primary}
+            />
+          }
           renderItem={({ item }) => (
             <View style={styles.itemWrapper}>
               <TransactionItem
@@ -522,9 +572,17 @@ const HomeScreen = () => {
           contentContainerStyle={{ paddingBottom: 100 }}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
-            <View style={styles.emptyList}>
-              <Text style={styles.emptyText}>No recent transactions</Text>
-            </View>
+            !isLoading ? (
+              <View style={styles.emptyList}>
+                <Text style={styles.emptyText}>No recent transactions found.</Text>
+                <TouchableOpacity
+                  style={styles.emptyBtn}
+                  onPress={() => navigation.navigate('AddEntry')}
+                >
+                  <Text style={styles.emptyBtnText}>Add your first entry</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null
           }
         />
       </SafeAreaView>
@@ -532,200 +590,212 @@ const HomeScreen = () => {
   );
 };
 
+// --- STYLES ---
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
+  container: { flex: 1, backgroundColor: COLORS.background },
   safeArea: { flex: 1 },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 99,
     alignItems: 'center',
-    paddingTop: 100,
+    paddingTop: 150,
+    backgroundColor: 'rgba(248, 250, 252, 0.5)',
   },
-  headerContainer: { paddingHorizontal: 20, paddingTop: 10 },
-  itemWrapper: { paddingHorizontal: 20 },
 
+  // Header
+  headerContainer: { paddingHorizontal: 20, paddingTop: 12 },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 24,
     justifyContent: 'space-between',
+    marginBottom: 24,
   },
-  menuBtn: { padding: 8, borderRadius: 12, backgroundColor: '#fff', elevation: 1 },
-  userInfo: { flex: 1, alignItems: 'center' },
-  greetingText: { fontSize: 11, color: colors.subText, fontWeight: '600', letterSpacing: 0.5 },
-  userName: { fontSize: 16, fontWeight: '800', color: colors.text },
+  userInfoRow: { flexDirection: 'row', alignItems: 'center' },
+  greetingText: { fontSize: 12, color: COLORS.textSub, fontWeight: '500' },
+  userName: { fontSize: 18, fontWeight: '700', color: COLORS.textMain },
+  menuBtn: {
+    padding: 8,
+    borderRadius: 12,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
 
+  // Hero Card
   heroCard: {
     width: '100%',
+    height: 200,
     borderRadius: 24,
     marginBottom: 24,
     overflow: 'hidden',
-    elevation: 8,
-    height: 210,
+    // Shadow
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 15,
+    elevation: 10,
   },
   cardInner: { flex: 1, padding: 20, justifyContent: 'space-between' },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  balanceBadge: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  balanceLabel: { color: '#fff', fontSize: 12, fontWeight: '600' },
-  balanceRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-    marginTop: 8,
-  },
+  balanceLabel: { color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: '500' },
+  eyeBtn: { padding: 4 },
+  balanceRow: { flexDirection: 'row', alignItems: 'flex-start' },
   currencySymbol: {
     fontSize: 24,
     color: 'rgba(255,255,255,0.8)',
     fontWeight: '600',
-    marginTop: 8,
-    marginRight: 4,
+    marginTop: 6,
+    marginRight: 2,
   },
-  balanceAmount: { fontSize: 44, color: '#fff', fontWeight: '800' },
+  balanceAmount: { fontSize: 40, color: '#fff', fontWeight: '800' },
+
   statsContainer: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(0,0,0,0.15)',
-    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    borderRadius: 16,
     padding: 12,
   },
-  statItem: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-  },
+  statItem: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
   statIcon: {
     width: 32,
     height: 32,
-    borderRadius: 16,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
   statLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: '500' },
   statValue: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  statDivider: {
-    width: 1,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    height: '80%',
-    alignSelf: 'center',
-  },
+  statDivider: { width: 1, backgroundColor: 'rgba(255,255,255,0.2)', marginHorizontal: 12 },
 
+  // Action Grid
   actionGrid: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 10,
+    gap: 12,
     marginBottom: 24,
   },
-  actionWrapper: { alignItems: 'center', gap: 8 },
-  actionBtn: {
-    width: 60,
-    height: 60,
+  actionCard: {
+    flex: 1,
+    height: 80,
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 6,
+    // Soft Shadow
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
     elevation: 3,
   },
-  actionLabel: { fontSize: 12, color: colors.subText, fontWeight: '500' },
+  actionLabel: { fontSize: 12, fontWeight: '600', color: COLORS.textMain },
 
+  // Chart Card
   chartCard: {
-    backgroundColor: '#fff',
+    backgroundColor: COLORS.card,
     borderRadius: 24,
-    padding: 16,
+    padding: 20,
     marginBottom: 24,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    elevation: 1,
   },
-  chartHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
-  chartToggles: { flexDirection: 'row', gap: 6 },
-  chartToggleBtn: { padding: 8, borderRadius: 10, backgroundColor: colors.background },
+  chartHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
+  chartToggles: { flexDirection: 'row', gap: 8 },
+  chartToggleBtn: { padding: 6, borderRadius: 8, backgroundColor: COLORS.background },
   chartToggleBtnActive: { backgroundColor: '#DBEAFE' },
   periodSwitch: {
     flexDirection: 'row',
-    backgroundColor: colors.background,
-    borderRadius: 12,
-    padding: 4,
+    backgroundColor: COLORS.background,
+    borderRadius: 10,
+    padding: 3,
   },
   periodBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
-  periodBtnActive: { backgroundColor: colors.primary, elevation: 2 },
-  periodText: { fontSize: 12, fontWeight: '600', color: colors.subText },
-  periodTextActive: { color: '#fff' },
-  chartBody: { minHeight: 180, alignItems: 'center', justifyContent: 'center' },
-  chartCaption: { marginTop: 12, paddingHorizontal: 8 },
-  captionText: { fontSize: 12, color: colors.subText, lineHeight: 18 },
-  captionLegend: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
-  legendDotSmall: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.primary,
-    marginRight: 6,
-  },
-  legendTextSmall: { fontSize: 12, color: colors.subText },
+  periodBtnActive: { backgroundColor: COLORS.card, elevation: 1 },
+  periodText: { fontSize: 11, fontWeight: '600', color: COLORS.textSub },
+  periodTextActive: { color: COLORS.primary },
 
-  rankContainer: { width: '100%', paddingVertical: 10 },
-  rankRow: { marginBottom: 16 },
-  rankHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  rankLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  rankDot: { width: 8, height: 8, borderRadius: 4 },
-  rankName: { fontSize: 13, fontWeight: '600', color: colors.text },
-  rankPercent: { fontSize: 12, fontWeight: '700', color: colors.text },
-  rankAmt: { fontSize: 12, color: colors.subText },
-  progressBarBg: { height: 6, width: '100%', backgroundColor: colors.background, borderRadius: 3 },
-  progressBarFill: { height: '100%', borderRadius: 3 },
+  chartBody: { alignItems: 'center', justifyContent: 'center', minHeight: 180 },
+  chartContainer: { alignItems: 'center', justifyContent: 'center' },
 
-  pieContainer: { alignItems: 'center' },
-  emptyChartBox: { height: 180, justifyContent: 'center', alignItems: 'center' },
+  // Pie
+  pieContainer: { alignItems: 'center', width: '100%' },
   legendContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    gap: 16,
-    marginTop: 10,
+    gap: 12,
+    marginTop: 12,
   },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  legendDot: { width: 10, height: 10, borderRadius: 5 },
-  legendText: { fontSize: 12, fontWeight: '600', color: colors.text },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendText: { fontSize: 11, fontWeight: '500', color: COLORS.textSub },
 
+  // Rank List
+  rankContainer: { width: '100%' },
+  rankRow: { marginBottom: 16 },
+  rankHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
+  rankLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  rankDot: { width: 8, height: 8, borderRadius: 4 },
+  rankName: { fontSize: 13, fontWeight: '600', color: COLORS.textMain },
+  rankPercent: { fontSize: 12, fontWeight: '700', color: COLORS.textMain },
+  rankAmt: { fontSize: 12, color: COLORS.textSub },
+  progressBarBg: { height: 6, width: '100%', backgroundColor: COLORS.background, borderRadius: 3 },
+  progressBarFill: { height: '100%', borderRadius: 3 },
+
+  emptyChartBox: { alignItems: 'center', justifyContent: 'center', height: 180, gap: 10 },
+
+  // Section
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
-    paddingHorizontal: 20,
+    marginBottom: 16,
+    paddingHorizontal: 4,
   },
-  sectionTitle: { fontSize: 18, fontWeight: '800', color: colors.text },
-  seeAllBtn: { fontSize: 14, fontWeight: '700', color: colors.primary },
+  sectionTitle: { fontSize: 17, fontWeight: '700', color: COLORS.textMain },
+  seeAllBtn: { fontSize: 13, fontWeight: '600', color: COLORS.primary },
 
+  // Transactions
+  itemWrapper: { paddingHorizontal: 20 },
   txnCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    paddingVertical: 12,
+    backgroundColor: COLORS.card,
+    paddingVertical: 14,
     paddingHorizontal: 16,
-    borderRadius: 20,
-    marginBottom: 10,
-    elevation: 1,
+    borderRadius: 18,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    elevation: 0,
   },
   txnIconBox: {
-    width: 44,
-    height: 44,
+    width: 42,
+    height: 42,
     borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 14,
   },
   txnContent: { flex: 1 },
-  txnTitle: { fontSize: 15, fontWeight: '700', color: colors.text, marginBottom: 3 },
-  txnSubtitle: { fontSize: 12, color: colors.subText, fontWeight: '500' },
+  txnTitle: { fontSize: 15, fontWeight: '600', color: COLORS.textMain, marginBottom: 2 },
+  txnSubtitle: { fontSize: 12, color: COLORS.textSub },
   txnRight: { alignItems: 'flex-end' },
-  txnAmount: { fontSize: 15, fontWeight: '800', marginBottom: 3 },
-  txnDate: { fontSize: 11, color: colors.subText },
-  emptyList: { alignItems: 'center', padding: 20 },
-  emptyText: { color: colors.subText, fontStyle: 'italic' },
+  txnAmount: { fontSize: 15, fontWeight: '700', marginBottom: 2 },
+  txnDate: { fontSize: 11, color: COLORS.textSub },
+
+  // Empty States
+  emptyList: { alignItems: 'center', padding: 40, gap: 10 },
+  emptyText: { color: COLORS.textSub, fontSize: 14 },
+  emptyBtn: {
+    marginTop: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    backgroundColor: COLORS.primary,
+    borderRadius: 20,
+  },
+  emptyBtnText: { color: '#fff', fontWeight: '600' },
 });
 
 export default HomeScreen;

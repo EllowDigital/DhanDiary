@@ -6,21 +6,19 @@ import {
   ScrollView,
   Platform,
   KeyboardAvoidingView,
-  Dimensions,
   Alert,
   Animated,
   Easing,
   StatusBar,
   TextInput,
   LayoutAnimation,
-  Keyboard,
   UIManager,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Text } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
-import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import { useNavigation, useRoute, useFocusEffect, RouteProp } from '@react-navigation/native';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { v4 as uuidv4 } from 'uuid';
 import dayjs from 'dayjs';
 
@@ -33,6 +31,7 @@ import CategoryPickerModal from '../components/CategoryPickerModal';
 import { colors } from '../utils/design';
 import { ALLOWED_CATEGORIES, DEFAULT_CATEGORY, ensureCategory } from '../constants/categories';
 import ScreenHeader from '../components/ScreenHeader';
+import { isIncome, toCanonical } from '../utils/transactionType';
 
 // Enable LayoutAnimation for Android
 if (Platform.OS === 'android') {
@@ -41,7 +40,12 @@ if (Platform.OS === 'android') {
   }
 }
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+// --- TYPES ---
+type RootStackParamList = {
+  AddEntry: { local_id?: string; type?: 'in' | 'out' };
+};
+
+type AddEntryRouteProp = RouteProp<RootStackParamList, 'AddEntry'>;
 
 const typeConfigs = [
   {
@@ -64,7 +68,7 @@ const typeConfigs = [
 
 const AddEntryScreen: React.FC = () => {
   const navigation = useNavigation();
-  const route = useRoute<any>();
+  const route = useRoute<AddEntryRouteProp>();
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
 
@@ -73,8 +77,9 @@ const AddEntryScreen: React.FC = () => {
   const { showToast } = useToast();
 
   // Params
-  const editingParamId = route?.params?.local_id;
-  const initialType = route?.params?.type === 'in' ? 1 : 0;
+  const editingParamId = route.params?.local_id;
+  // Initialize type based on params, default to Expense (0)
+  const initialType = isIncome(route.params?.type) ? 1 : 0;
 
   // --- STATE ---
   const [editingLocalId, setEditingLocalId] = useState<string | null>(null);
@@ -123,7 +128,7 @@ const AddEntryScreen: React.FC = () => {
       }),
       Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true }),
     ]).start();
-  }, []);
+  }, [fadeAnim, slideAnim]);
 
   // Trigger Color Animation on Type Change
   useEffect(() => {
@@ -132,7 +137,34 @@ const AddEntryScreen: React.FC = () => {
       duration: 300,
       useNativeDriver: false, // Required for color interpolation
     }).start();
-  }, [typeIndex]);
+  }, [typeIndex, colorAnim]);
+
+  // Helper to parse dates safely
+  const parseToDate = (v: any): Date => {
+    if (!v && v !== 0) return new Date();
+    // Numbers (could be seconds or ms)
+    if (typeof v === 'number') {
+      const n = Number(v);
+      if (n < 1e12) return new Date(n * 1000); // likely seconds
+      return new Date(n); // likely ms
+    }
+    // Strings
+    if (typeof v === 'string') {
+      const p = Date.parse(v);
+      if (!Number.isNaN(p)) return new Date(p);
+      // Try parsing numeric string
+      const asNum = Number(v);
+      if (!Number.isNaN(asNum)) {
+        if (asNum < 1e12) return new Date(asNum * 1000);
+        return new Date(asNum);
+      }
+      return new Date();
+    }
+    // If it's already a Date object (or Date-like)
+    if (v instanceof Date) return v;
+
+    return new Date();
+  };
 
   // Load Data for Editing
   useEffect(() => {
@@ -141,11 +173,11 @@ const AddEntryScreen: React.FC = () => {
       if (found) {
         setAmount(String(found.amount));
         setNote(found.note ?? '');
-        setTypeIndex(found.type === 'in' ? 1 : 0);
+        setTypeIndex(isIncome(found.type) ? 1 : 0);
         setCategory(ensureCategory(found.category));
-        // Handle various date formats safely
+
         const d = found.date || found.created_at;
-        setDate(d ? new Date(d) : new Date());
+        setDate(parseToDate(d));
         setEditingLocalId(found.local_id);
       }
     }
@@ -157,22 +189,24 @@ const AddEntryScreen: React.FC = () => {
       setEditingLocalId(null);
       setAmount('');
       setNote('');
-      setTypeIndex(route?.params?.type === 'in' ? 1 : 0);
+      // If user navigated via "Add Income" button, respect that type
+      setTypeIndex(isIncome(route.params?.type) ? 1 : 0);
       setCategory(DEFAULT_CATEGORY);
       setDate(new Date());
       setSaving(false);
     }
-  }, [editingParamId]);
+  }, [editingParamId, route.params?.type]);
 
   // Clear params / editing state when the screen loses focus to avoid stale edit mode
   useFocusEffect(
     useCallback(() => {
       return () => {
         try {
-          if ((navigation as any).setParams) {
-            (navigation as any).setParams({ local_id: undefined });
-          }
-        } catch (e) {}
+          // Reset params on blur so next open is clean
+          navigation.setParams({ local_id: undefined } as any);
+        } catch (e) {
+          // ignore navigation errors
+        }
         setEditingLocalId(null);
         setSaving(false);
       };
@@ -180,10 +214,11 @@ const AddEntryScreen: React.FC = () => {
   );
 
   // --- HANDLERS ---
+
   const handleSave = () => {
     if (saving) return;
     if (!user?.id) {
-      showToast('Please sign in to save transactions.');
+      showToast('Please sign in to save transactions.', 'error');
       return;
     }
 
@@ -198,7 +233,7 @@ const AddEntryScreen: React.FC = () => {
 
     const payload = {
       amount: parsedAmount,
-      type: activeType.value as 'in' | 'out',
+      type: toCanonical(activeType.value),
       category: ensureCategory(category),
       note: note.trim(),
       currency: 'INR',
@@ -207,8 +242,8 @@ const AddEntryScreen: React.FC = () => {
 
     showToast(editingLocalId ? 'Updating transaction...' : 'Saving transaction...');
     setSaving(true);
-    navigation.goBack();
 
+    // Perform the write in background; navigate back only after the local write completes
     runInBackground(async () => {
       try {
         if (editingLocalId) {
@@ -218,22 +253,27 @@ const AddEntryScreen: React.FC = () => {
           await addEntry({ local_id: uuidv4(), ...payload });
           showToast('Transaction saved');
         }
+        // Navigate back on success
+        navigation.goBack();
       } catch (err) {
         console.error(err);
-        showToast('Failed to save. Please try again.');
+        showToast('Failed to save. Please try again.', 'error');
+        setSaving(false); // Re-enable button on error
       }
     });
   };
 
-  const handleDateChange = (event: any, selectedDate?: Date) => {
-    setShowDatePicker(false);
+  const handleDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+    if (Platform.OS === 'android') {
+      setShowDatePicker(false);
+    }
     if (event.type === 'dismissed') return;
     if (selectedDate) setDate(selectedDate);
   };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background || '#F8FAFC'} />
 
       <ScreenHeader
         title={editingLocalId ? 'Edit Transaction' : 'New Transaction'}
@@ -304,7 +344,7 @@ const AddEntryScreen: React.FC = () => {
                     placeholderTextColor="rgba(0,0,0,0.2)"
                     keyboardType="numeric"
                     style={[styles.amountInput, { color: activeType.color }]}
-                    autoFocus={!editingLocalId}
+                    autoFocus={!editingLocalId} // Only auto-focus on fresh entry
                   />
                 </View>
               </Animated.View>
@@ -313,7 +353,7 @@ const AddEntryScreen: React.FC = () => {
               <View style={styles.gridContainer}>
                 <Pressable style={styles.gridCard} onPress={() => setCategoryModalVisible(true)}>
                   <View style={styles.gridIconBg}>
-                    <MaterialIcon name="category" size={22} color={colors.primary} />
+                    <MaterialIcon name="category" size={22} color={colors.primary || '#2563EB'} />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.gridLabel}>Category</Text>
@@ -426,6 +466,7 @@ const AddEntryScreen: React.FC = () => {
           mode="date"
           display={Platform.OS === 'ios' ? 'spinner' : 'default'}
           onChange={handleDateChange}
+          minimumDate={new Date('2000-01-01')}
           maximumDate={new Date()} // Prevent future dates
         />
       )}

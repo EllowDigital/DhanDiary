@@ -31,6 +31,7 @@ import { syncClerkUserToNeon } from './src/services/clerkUserSync';
 import { saveSession as saveLocalSession } from './src/db/session';
 import { BiometricAuth } from './src/components/BiometricAuth';
 import tokenCache from './src/utils/tokenCache';
+import SyncStatusBanner from './src/components/SyncStatusBanner';
 
 import {
   startForegroundSyncScheduler,
@@ -38,6 +39,8 @@ import {
   startBackgroundFetch,
   stopBackgroundFetch,
 } from './src/services/syncManager';
+import { AppState } from 'react-native';
+import runFullSync, { isSyncRunning } from './src/sync/runFullSync';
 
 // --- Configuration ---
 LogBox.ignoreLogs([
@@ -156,6 +159,7 @@ const AppContent = () => {
   return (
     <>
       <BiometricAuth />
+      <SyncStatusBanner />
       <NavigationContainer>
         <RootStack.Navigator screenOptions={{ headerShown: false }}>
           <RootStack.Screen name="Splash" component={SplashScreen} />
@@ -180,10 +184,18 @@ function AppWithDb() {
     if (holder && typeof holder.setQueryClient === 'function') holder.setQueryClient(queryClient);
   } catch (e) {}
 
-  // App is online-only. Mark DB ready immediately.
+  // Initialize SQLite DB on startup and expose readiness to the app shell.
   const initializeDatabase = useCallback(async () => {
-    setDbReady(true);
-    setDbInitError(null);
+    try {
+      const { initDB } = await import('./src/db/sqlite');
+      await initDB();
+      setDbReady(true);
+      setDbInitError(null);
+    } catch (e: any) {
+      console.warn('[App] DB init failed', e);
+      setDbInitError(String(e?.message || e));
+      setDbReady(false);
+    }
   }, []);
 
   // 1. Initial Config Logging
@@ -222,6 +234,16 @@ function AppWithDb() {
   // Start schedulers when DB is ready
   useEffect(() => {
     if (!dbReady) return;
+    // Run a foreground sync once when the DB is ready and app is active.
+    try {
+      const current = AppState.currentState;
+      if (current === 'active') {
+        // call but don't await — safe non-blocking
+        runFullSync().catch((e) => {
+          if (__DEV__) console.warn('[App] initial runFullSync failed', e);
+        });
+      }
+    } catch (e) {}
 
     try {
       startForegroundSyncScheduler(15000);
@@ -241,6 +263,35 @@ function AppWithDb() {
       try {
         stopForegroundSyncScheduler();
         stopBackgroundFetch();
+      } catch (e) {}
+    };
+  }, [dbReady]);
+
+  // Listen for app coming to foreground and trigger a safe sync.
+  useEffect(() => {
+    if (!dbReady) return;
+
+    const handler = (nextState: string) => {
+      if (nextState === 'active') {
+        // Avoid overlapping runs — runFullSync has its own lock but check early too.
+        if (isSyncRunning) return;
+        // Debounce quick state changes
+        setTimeout(() => {
+          runFullSync().catch((e) => {
+            if (__DEV__) console.warn('[App] foreground runFullSync failed', e);
+          });
+        }, 250);
+      }
+    };
+
+    // Use the modern subscription API and always call `remove()` on cleanup.
+    const sub: any = AppState.addEventListener
+      ? AppState.addEventListener('change', handler)
+      : { remove: () => {} };
+
+    return () => {
+      try {
+        if (sub && typeof sub.remove === 'function') sub.remove();
       } catch (e) {}
     };
   }, [dbReady]);

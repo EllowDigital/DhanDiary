@@ -18,7 +18,8 @@
     "neon:migrate": "node ./scripts/run-neon-migrations.js",
     "format": "prettier --write .",
     "lint": "eslint ./ --ext .js,.jsx,.ts,.tsx",
-    "lint:fix": "eslint ./ --ext .js,.jsx,.ts,.tsx --fix"
+    "lint:fix": "eslint ./ --ext .js,.jsx,.ts,.tsx --fix",
+    "check": "npm run format && npm run lint --silent && npx tsc --noEmit"
   },
   "dependencies": {
     "@clerk/clerk-expo": "^2.19.14",
@@ -50,6 +51,7 @@
     "expo-print": "~15.0.8",
     "expo-secure-store": "^15.0.8",
     "expo-sharing": "~14.0.8",
+    "expo-sqlite": "~16.0.10",
     "expo-system-ui": "~6.0.9",
     "expo-updates": "^29.0.13",
     "expo-web-browser": "~15.0.10",

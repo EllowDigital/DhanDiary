@@ -7,18 +7,27 @@ import {
   Animated,
   Easing,
   Platform,
+  ViewStyle,
 } from 'react-native';
 import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-navigation/drawer';
 import { Text } from '@rneui/themed';
 import { useAuth, useUser } from '@clerk/clerk-expo';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
+import Constants from 'expo-constants'; // Standard way to access version
 
 // --- CUSTOM IMPORTS ---
-import { colors, spacing } from '../utils/design';
+// Ensure these paths are correct in your project
+import { colors } from '../utils/design';
 import UserAvatar from '../components/UserAvatar';
 import { logout } from '../services/auth';
-import appConfig from '../../app.json';
+
+// --- CONSTANTS ---
+const ACTIVE_COLOR = (colors as any).primary || '#2563EB';
+const INACTIVE_COLOR = '#64748B';
+const BACKGROUND_COLOR = (colors as any).background || '#F8FAFC';
+const DANGER_COLOR = (colors as any).danger || '#EF4444';
+const TEXT_SUB_COLOR = INACTIVE_COLOR;
 
 // --- DRAWER COMPONENT ---
 const CustomDrawerContent = (props: DrawerContentComponentProps) => {
@@ -28,20 +37,22 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
 
   // Animation Refs
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(20)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
 
+  // Entrance Animation
   useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 500,
+        duration: 600,
         useNativeDriver: true,
-        easing: Easing.out(Easing.quad),
+        easing: Easing.out(Easing.cubic),
       }),
       Animated.spring(slideAnim, {
         toValue: 0,
         useNativeDriver: true,
-        damping: 20,
+        damping: 15,
+        stiffness: 90,
       }),
     ]).start();
   }, []);
@@ -59,99 +70,119 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
         onPress: async () => {
           try {
             await signOut(); // Clerk
-            await logout(); // Local Data
+            await logout(); // Local storage clean up
+
+            // Reset nav stack to prevent going back
             props.navigation.reset({
               index: 0,
-              routes: [{ name: 'Auth' }],
+              routes: [{ name: 'Auth' }], // Ensure 'Auth' matches your root stack name
             });
           } catch (e) {
-            console.error('Logout failed', e);
+            console.error('[Drawer] Logout failed', e);
+            Alert.alert('Error', 'Failed to sign out. Please try again.');
           }
         },
       },
     ]);
   };
 
-  const getIconName = (routeName: string): keyof typeof MaterialIcon.glyphMap => {
-    switch (routeName) {
-      case 'Dashboard':
-        return 'dashboard';
-      case 'History':
-        return 'history';
-      case 'Income':
-        return 'arrow-downward';
-      case 'Expenses':
-        return 'arrow-upward';
-      case 'Analytics':
-        return 'bar-chart';
-      case 'My Profile':
-      case 'Account':
-        return 'person';
-      case 'App Settings':
-      case 'Settings':
-        return 'settings';
-      case 'About':
-        return 'info';
-      case 'Export Data':
-      case 'Export':
-        return 'file-download';
-      default:
-        return 'circle';
-    }
+  // Icon Helper
+  const getIconName = (routeName: string, label?: string): string => {
+    const key = (routeName || '').toString();
+    const lookup: Record<string, string> = {
+      Dashboard: 'dashboard',
+      DashboardStack: 'dashboard',
+      Home: 'home',
+      HomeStack: 'home',
+      History: 'history',
+      Income: 'arrow-downward',
+      Expenses: 'arrow-upward',
+      Analytics: 'bar-chart',
+      Account: 'person',
+      Profile: 'person',
+      Settings: 'settings',
+      About: 'info',
+      Export: 'file-download',
+      ExportData: 'file-download',
+      PrivacyPolicy: 'shield',
+      AddEntry: 'add',
+    };
+
+    if (lookup[key]) return lookup[key];
+
+    const labelKey = (label || '').toLowerCase();
+    if (labelKey.includes('export') || labelKey.includes('backup')) return 'file-download';
+    if (labelKey.includes('history')) return 'history';
+    if (labelKey.includes('income')) return 'arrow-downward';
+    if (labelKey.includes('expense') || labelKey.includes('expenses')) return 'arrow-upward';
+    if (labelKey.includes('analytics') || labelKey.includes('stats')) return 'bar-chart';
+    if (labelKey.includes('account') || labelKey.includes('profile')) return 'person';
+    if (labelKey.includes('settings')) return 'settings';
+    if (labelKey.includes('about')) return 'info';
+
+    return 'circle';
   };
 
   // Safe Version Access
-  const versionLabel = `v${appConfig?.expo?.version || '1.0.0'} (${appConfig?.expo?.android?.versionCode || '1'})`;
+  const appVersion = Constants.expoConfig?.version || '1.0.0';
+  const buildVersion =
+    Constants.expoConfig?.android?.versionCode || Constants.expoConfig?.ios?.buildNumber || '1';
+  const versionLabel = `v${appVersion} (${buildVersion})`;
 
   return (
     <View style={styles.container}>
-      {/* Scrollable Area */}
+      {/* 1. SCROLLABLE CONTENT */}
       <DrawerContentScrollView
         {...props}
         contentContainerStyle={{
-          paddingTop: Platform.OS === 'ios' ? 0 : insets.top, // Handle Android status bar
-          paddingBottom: 20,
+          paddingTop: 0, // We handle padding manually for full control
         }}
         showsVerticalScrollIndicator={false}
       >
-        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-          {/* 1. USER PROFILE HEADER */}
+        <Animated.View
+          style={{
+            opacity: fadeAnim,
+            transform: [{ translateX: slideAnim }],
+            paddingTop: Platform.OS === 'ios' ? 0 : insets.top, // Handle Android StatusBar
+          }}
+        >
+          {/* USER PROFILE SECTION */}
           <TouchableOpacity
             style={styles.profileHeader}
-            activeOpacity={0.7}
+            activeOpacity={0.8}
             onPress={() => props.navigation.navigate('Account')}
           >
             <UserAvatar
-              size={52}
+              size={56}
               name={user?.fullName || user?.firstName}
               imageUrl={user?.imageUrl}
             />
             <View style={styles.profileInfo}>
               <Text style={styles.profileName} numberOfLines={1}>
-                {user?.fullName || 'Guest User'}
+                {user?.fullName || user?.firstName || 'Guest User'}
               </Text>
               <Text style={styles.profileEmail} numberOfLines={1}>
-                {user?.primaryEmailAddress?.emailAddress || 'Not signed in'}
+                {user?.primaryEmailAddress?.emailAddress || 'Sign in to sync'}
               </Text>
             </View>
-            <MaterialIcon name="chevron-right" size={24} color={colors.muted || '#94A3B8'} />
+            <MaterialIcon name="chevron-right" size={24} color={colors.border || '#CBD5E1'} />
           </TouchableOpacity>
 
           <View style={styles.divider} />
 
-          {/* 2. NAVIGATION MENU */}
+          {/* NAVIGATION MENU */}
           <View style={styles.menuSection}>
-            <Text style={styles.sectionTitle}>NAVIGATION</Text>
+            <Text style={styles.sectionTitle}>MENU</Text>
             {props.state.routes.map((route, index) => {
               const focused = props.state.index === index;
               const { options } = props.descriptors[route.key];
 
-              // Skip hidden items if needed
-              if (options.drawerItemStyle && (options.drawerItemStyle as any).display === 'none')
-                return null;
+              // Filter hidden routes
+              const isHidden = (options.drawerItemStyle as ViewStyle)?.display === 'none';
+              if (isHidden) return null;
 
               const label = options.title !== undefined ? options.title : route.name;
-              const icon = getIconName(label);
+              const iconName = getIconName(route.name, String(label));
 
               return (
                 <TouchableOpacity
@@ -159,15 +190,28 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
                   onPress={() => handleNavigate(route.name)}
                   style={[styles.menuItem, focused && styles.menuItemActive]}
                   activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: focused }}
                 >
-                  <View style={[styles.iconContainer, focused && styles.iconContainerActive]}>
-                    <MaterialIcon
-                      name={icon}
-                      size={22}
-                      color={focused ? colors.primary || '#2563EB' : colors.muted || '#64748B'}
-                    />
+                  <View style={styles.iconWrapper}>
+                    <View
+                      style={[
+                        styles.iconCircle,
+                        focused
+                          ? { backgroundColor: ACTIVE_COLOR }
+                          : { backgroundColor: '#E6EEF8' },
+                      ]}
+                    >
+                      <MaterialIcon
+                        name={iconName as any}
+                        size={18}
+                        color={focused ? '#fff' : INACTIVE_COLOR}
+                      />
+                    </View>
                   </View>
                   <Text style={[styles.menuText, focused && styles.menuTextActive]}>{label}</Text>
+
+                  {/* Active Pill Indicator */}
                   {focused && <View style={styles.activeIndicator} />}
                 </TouchableOpacity>
               );
@@ -176,21 +220,26 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
         </Animated.View>
       </DrawerContentScrollView>
 
-      {/* 3. FOOTER ACTIONS */}
-      <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}>
+      {/* 2. STICKY FOOTER */}
+      <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
         <View style={styles.divider} />
 
         <TouchableOpacity
           style={styles.footerItem}
-          onPress={() => props.navigation.navigate('Export')}
+          onPress={() => handleNavigate('Export')}
+          activeOpacity={0.7}
         >
-          <MaterialIcon name="file-upload" size={20} color={colors.text || '#1E293B'} />
-          <Text style={styles.footerText}>Export Data</Text>
+          <View style={styles.iconWrapper}>
+            <MaterialIcon name="cloud-download" size={22} color={colors.text || '#334155'} />
+          </View>
+          <Text style={styles.footerText}>Backup & Export</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.footerItem} onPress={handleLogout}>
-          <MaterialIcon name="logout" size={20} color="#EF4444" />
-          <Text style={[styles.footerText, { color: '#EF4444' }]}>Sign Out</Text>
+        <TouchableOpacity style={styles.footerItem} onPress={handleLogout} activeOpacity={0.7}>
+          <View style={styles.iconWrapper}>
+            <MaterialIcon name="logout" size={22} color={DANGER_COLOR} />
+          </View>
+          <Text style={[styles.footerText, { color: DANGER_COLOR }]}>Sign Out</Text>
         </TouchableOpacity>
 
         <Text style={styles.versionText}>{versionLabel}</Text>
@@ -203,7 +252,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background || '#F8FAFC',
+    backgroundColor: BACKGROUND_COLOR,
   },
 
   /* HEADER */
@@ -212,43 +261,48 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 24,
-    backgroundColor: colors.background || '#F8FAFC',
+    marginTop: 8,
   },
   profileInfo: {
     flex: 1,
-    marginLeft: 16,
+    marginLeft: 14,
     justifyContent: 'center',
   },
   profileName: {
     fontSize: 16,
     fontWeight: '700',
     color: colors.text || '#0F172A',
-    marginBottom: 4,
+    marginBottom: 2,
+    letterSpacing: 0.3,
   },
   profileEmail: {
     fontSize: 12,
-    color: colors.muted || '#64748B',
+    color: TEXT_SUB_COLOR,
+    fontWeight: '500',
   },
 
   divider: {
     height: 1,
-    backgroundColor: '#E2E8F0',
-    width: '100%',
-    marginVertical: 8,
+    backgroundColor: colors.border || '#E2E8F0',
+    width: '90%',
+    alignSelf: 'center',
+    marginVertical: 10,
+    opacity: 0.6,
   },
 
-  /* MENU SECTION */
+  /* MENU */
   menuSection: {
     paddingHorizontal: 12,
-    marginTop: 16,
+    marginTop: 10,
   },
   sectionTitle: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#94A3B8',
-    marginBottom: 12,
+    marginBottom: 8,
     marginLeft: 16,
-    letterSpacing: 1,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
   },
   menuItem: {
     flexDirection: 'row',
@@ -259,54 +313,61 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   menuItemActive: {
-    backgroundColor: '#EFF6FF', // Light Blue Tint
+    backgroundColor: colors.primarySoft || 'rgba(37, 99, 235, 0.08)',
   },
-  iconContainer: {
-    width: 24,
+  iconWrapper: { width: 44, alignItems: 'center', marginRight: 12 },
+  iconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     alignItems: 'center',
-    marginRight: 12,
-  },
-  iconContainerActive: {
-    // Optional: scale up slightly
+    justifyContent: 'center',
   },
   menuText: {
     fontSize: 15,
-    fontWeight: '500',
-    color: '#334155',
+    fontWeight: '600',
+    color: INACTIVE_COLOR,
     flex: 1,
   },
   menuTextActive: {
-    color: colors.primary || '#2563EB',
+    color: ACTIVE_COLOR,
     fontWeight: '700',
   },
   activeIndicator: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.primary || '#2563EB',
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: ACTIVE_COLOR,
+    marginLeft: 8,
   },
 
   /* FOOTER */
   footer: {
-    paddingHorizontal: 24,
-    paddingTop: 10,
+    paddingHorizontal: 12,
+    backgroundColor: BACKGROUND_COLOR,
+    // Ensure footer sits above content if minimal scrolling
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.03)',
   },
   footerItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
   },
   footerText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
-    color: colors.text || '#1E293B',
+    color: colors.text || '#334155',
   },
   versionText: {
-    marginTop: 20,
-    fontSize: 11,
+    marginTop: 8,
+    fontSize: 10,
     color: '#CBD5E1',
     textAlign: 'center',
+    fontWeight: '500',
+    letterSpacing: 0.5,
   },
 });
 

@@ -165,7 +165,8 @@ class AnalyticsCore {
       // but keeping dayjs for consistency with 'YYYY-MM' logic.
       const bucketKey = dayjs.unix(unix).format(this.bucketFormat);
 
-      if (e.type === 'in') {
+      const { isIncome } = require('./transactionType');
+      if (isIncome(e.type)) {
         this.totalIn += cents;
         if (cents > this.maxIn) this.maxIn = cents;
       } else {

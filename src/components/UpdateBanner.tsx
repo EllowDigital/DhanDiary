@@ -1,30 +1,40 @@
 import React, { useEffect } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Pressable } from 'react-native';
-import Animated, { FadeInUp, FadeOutUp } from 'react-native-reanimated';
+import { StyleSheet, Text, View, Pressable, Platform } from 'react-native';
+import Animated, { FadeInUp, FadeOutUp, Layout } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
-// --- Mock Colors (Replace with your '../utils/design') ---
-const colors = {
-  backgroundDark: '#1F2937', // Dark Grey/Black for contrast
-  textLight: '#F9FAFB',
-  textMuted: '#9CA3AF',
-  primary: '#10B981', // Green for update action
-  white: '#FFFFFF',
+// --- Theme Configuration (Replace with your actual design system import) ---
+const theme = {
+  colors: {
+    bg: '#1F2937', // Dark Grey/Slate
+    surface: '#374151', // Lighter Grey for icon bg
+    textPrimary: '#F9FAFB',
+    textSecondary: '#D1D5DB',
+    accent: '#10B981', // Emerald Green
+    white: '#FFFFFF',
+    shadow: '#000000',
+  },
+  spacing: {
+    s: 8,
+    m: 12,
+    l: 16,
+  },
+  borderRadius: 16,
 };
 
 type Props = {
   visible: boolean;
   message?: string;
-  duration?: number; // ms
+  duration?: number;
   onPress?: () => void;
   onClose?: () => void;
 };
 
 const UpdateBanner: React.FC<Props> = ({
   visible,
-  message,
-  duration = 6000, // Increased default slightly for readability
+  message = 'Tap to install the latest version',
+  duration = 6000,
   onPress,
   onClose,
 }) => {
@@ -32,16 +42,16 @@ const UpdateBanner: React.FC<Props> = ({
 
   // Auto-dismiss logic
   useEffect(() => {
-    let timeoutRef: ReturnType<typeof setTimeout> | undefined;
+    let timeoutRef: ReturnType<typeof setTimeout> | null = null;
+
     if (visible && duration > 0) {
       timeoutRef = setTimeout(() => {
-        onClose?.();
+        if (onClose) onClose();
       }, duration);
     }
+
     return () => {
-      if (timeoutRef) {
-        clearTimeout(timeoutRef);
-      }
+      if (timeoutRef !== null) clearTimeout(timeoutRef as any);
     };
   }, [visible, duration, onClose]);
 
@@ -49,101 +59,136 @@ const UpdateBanner: React.FC<Props> = ({
 
   return (
     <Animated.View
-      entering={FadeInUp.springify().damping(15)}
-      exiting={FadeOutUp}
+      entering={FadeInUp.springify().damping(16).stiffness(150)}
+      exiting={FadeOutUp.duration(200)}
+      layout={Layout.springify()}
       style={[
-        styles.container,
-        { top: insets.top + 8 }, // Respect Safe Area + padding
+        styles.absoluteContainer,
+        { top: insets.top + 8 }, // Dynamic safe area spacing
       ]}
     >
-      <TouchableOpacity style={styles.banner} activeOpacity={0.9} onPress={onPress}>
-        {/* Left Icon */}
-        <View style={styles.iconContainer}>
-          <MaterialCommunityIcons name="cloud-download-outline" size={24} color={colors.primary} />
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => [
+          styles.banner,
+          pressed && styles.bannerPressed, // Visual feedback on press
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel="Update available. Tap to update."
+      >
+        {/* Icon */}
+        <View style={styles.iconWrapper}>
+          <MaterialCommunityIcons
+            name="arrow-up-bold-circle-outline"
+            size={24}
+            color={theme.colors.accent}
+          />
         </View>
 
         {/* Text Content */}
-        <View style={styles.content}>
+        <View style={styles.textContainer}>
           <Text style={styles.title}>Update Available</Text>
-          <Text style={styles.subtitle} numberOfLines={1}>
-            {message || 'Tap to install the latest version'}
+          <Text style={styles.message} numberOfLines={1} ellipsizeMode="tail">
+            {message}
           </Text>
         </View>
 
-        {/* Action Button */}
-        <View style={styles.actionButton}>
-          <Text style={styles.actionText}>Update</Text>
+        {/* CTA "Button" (Visual only, part of the main pressable) */}
+        <View style={styles.ctaBadge}>
+          <Text style={styles.ctaText}>UPDATE</Text>
         </View>
 
-        {/* Close Button (Optional) */}
+        {/* Close Button (Separate Hit Zone) */}
         {onClose && (
-          <Pressable onPress={onClose} hitSlop={12} style={styles.closeBtn}>
-            <MaterialCommunityIcons name="close" size={18} color={colors.textMuted} />
+          <Pressable
+            onPress={(e) => {
+              // Stop event from bubbling to the main "Update" action
+              e.stopPropagation();
+              onClose();
+            }}
+            hitSlop={12}
+            style={({ pressed }) => [styles.closeButton, pressed && { opacity: 0.5 }]}
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss update notification"
+          >
+            <MaterialCommunityIcons name="close" size={20} color={theme.colors.textSecondary} />
           </Pressable>
         )}
-      </TouchableOpacity>
+      </Pressable>
     </Animated.View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  absoluteContainer: {
     position: 'absolute',
-    left: 16,
-    right: 16,
-    zIndex: 9999,
+    left: theme.spacing.l,
+    right: theme.spacing.l,
+    zIndex: 9999, // Ensure it floats above everything
   },
   banner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.backgroundDark,
-    borderRadius: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    backgroundColor: theme.colors.bg,
+    borderRadius: theme.borderRadius,
+    padding: theme.spacing.m,
 
-    // High-end Shadow
-    shadowColor: '#000',
+    // Modern Shadow
+    shadowColor: theme.colors.shadow,
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.2,
     shadowRadius: 12,
     elevation: 8,
+
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)', // Subtle border for definition
   },
-  iconContainer: {
-    marginRight: 12,
-    backgroundColor: 'rgba(16, 185, 129, 0.1)', // Very subtle green bg
-    padding: 8,
-    borderRadius: 12,
+  bannerPressed: {
+    transform: [{ scale: 0.98 }], // Micro-interaction squeeze
+    opacity: 0.95,
   },
-  content: {
-    flex: 1,
-    marginRight: 8,
+  iconWrapper: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(16, 185, 129, 0.15)', // Transparent Accent
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: theme.spacing.m,
+  },
+  textContainer: {
+    flex: 1, // Takes up remaining space
+    justifyContent: 'center',
+    marginRight: theme.spacing.s,
   },
   title: {
-    color: colors.textLight,
+    color: theme.colors.textPrimary,
     fontWeight: '700',
     fontSize: 14,
     marginBottom: 2,
+    letterSpacing: 0.3,
   },
-  subtitle: {
-    color: colors.textMuted,
+  message: {
+    color: theme.colors.textSecondary,
     fontSize: 12,
     fontWeight: '500',
   },
-  actionButton: {
-    backgroundColor: colors.primary,
+  ctaBadge: {
+    backgroundColor: theme.colors.accent,
     paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-    marginRight: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    marginRight: theme.spacing.s,
   },
-  actionText: {
-    color: colors.white,
-    fontSize: 12,
-    fontWeight: '700',
+  ctaText: {
+    color: theme.colors.white,
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
   },
-  closeBtn: {
-    marginLeft: 4,
-    opacity: 0.8,
+  closeButton: {
+    padding: 4,
+    marginLeft: 2,
   },
 });
 

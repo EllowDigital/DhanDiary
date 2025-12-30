@@ -160,8 +160,45 @@ const run = async () => {
     console.log('Parsed', statements.length, 'statements');
     try {
       for (let idx = 0; idx < statements.length; idx++) {
-        const stmt = statements[idx];
+        let stmt = statements[idx];
+        // Remove block comments and line comments for detection
+        // Remove block comments and line comments (handle CRLF and LF)
+        const cleaned = stmt
+          .replace(/\/\*[\s\S]*?\*\//g, '')
+          .replace(/(^|\r?\n)\s*--.*(?=\r?\n|$)/g, '\n')
+          .trim();
+        if (!cleaned) {
+          // Nothing but comments/whitespace — skip executing this statement.
+          if (process.env.DEBUG) console.log(`Skipping comment-only statement ${idx + 1}`);
+          continue;
+        }
         const preview = stmt.replace(/\n+/g, ' ').slice(0, 120);
+        // Only execute statements that begin with known SQL verbs to avoid
+        // sending stray text or documentation comments to the Neon HTTP API.
+        const firstToken = (cleaned.split(/\s+/)[0] || '').toUpperCase();
+        const allowed = new Set([
+          'CREATE',
+          'ALTER',
+          'DROP',
+          'INSERT',
+          'UPDATE',
+          'DELETE',
+          'BEGIN',
+          'COMMIT',
+          'GRANT',
+          'REVOKE',
+          'COMMENT',
+          'SET',
+          'DO',
+          'SELECT',
+          'WITH',
+          'REPLACE',
+          'TRUNCATE',
+        ]);
+        if (!allowed.has(firstToken)) {
+          console.log(`Skipping non-SQL statement ${idx + 1}/${statements.length}:`, preview);
+          continue;
+        }
         console.log(`Executing statement ${idx + 1}/${statements.length}:`, preview);
         await sql.query(stmt);
       }
@@ -170,6 +207,71 @@ const run = async () => {
       console.error('Schema execution error on statement:', e.message || e);
       // try to provide index/context if possible
       process.exit(5);
+    }
+
+    // Post-schema migration steps: if a legacy `cash_entries` table exists,
+    // perform an idempotent copy of rows into `transactions` (mapping types
+    // and timestamps). Dropping the legacy table is optional and only
+    // performed when DROP_LEGACY_TABLE=1 is set in the environment.
+    console.log('Running post-schema migration checks...');
+    try {
+      const legacy = await sql.query("SELECT to_regclass('public.cash_entries') as exists;");
+      const hasLegacy = !!(legacy && legacy[0] && legacy[0].exists);
+      console.log('legacy cash_entries present:', hasLegacy);
+      if (hasLegacy) {
+        console.log('Copying missing rows from cash_entries -> transactions (idempotent)...');
+        // Introspect which legacy columns exist, then build a safe copy query.
+        const cols = await sql.query(
+          "SELECT column_name FROM information_schema.columns WHERE table_name='cash_entries';"
+        );
+        const exists = (name) => cols.some((c) => c && c.column_name === name);
+
+        const createdExpr = exists('created_at')
+          ? '(EXTRACT(EPOCH FROM ce.created_at) * 1000)::bigint'
+          : 'NULL';
+        const updatedExpr = exists('updated_at')
+          ? '(EXTRACT(EPOCH FROM ce.updated_at) * 1000)::bigint'
+          : 'NULL';
+        // deleted can be boolean (legacy) or deleted_at timestamp
+        let deletedExpr = 'NULL';
+        if (exists('deleted_at')) {
+          deletedExpr = '(EXTRACT(EPOCH FROM ce.deleted_at) * 1000)::bigint';
+        } else if (exists('deleted')) {
+          // If only boolean flag exists, set deleted_at to epoch of now for deleted rows, else NULL
+          deletedExpr =
+            'CASE WHEN ce.deleted THEN (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint ELSE NULL END';
+        }
+
+        const copySql = `INSERT INTO transactions (id, user_id, client_id, type, amount, category, note, currency, created_at, updated_at, date, deleted_at)
+          SELECT ce.id, ce.user_id, ce.client_id,
+            CASE WHEN ce.type = 'in' THEN 'income' WHEN ce.type = 'out' THEN 'expense' ELSE ce.type END,
+            ce.amount, ce.category, ce.note, COALESCE(ce.currency, 'INR'),
+            ${createdExpr}, ${updatedExpr}, ce.date, ${deletedExpr}
+          FROM cash_entries ce
+          WHERE NOT EXISTS (SELECT 1 FROM transactions t WHERE t.id::text = ce.id::text);`;
+
+        await sql.query(copySql);
+        console.log('Copy complete.');
+
+        if (process.env.DROP_LEGACY_TABLE === '1') {
+          console.log(
+            'DROP_LEGACY_TABLE=1 provided — dropping legacy triggers and table `cash_entries`'
+          );
+          try {
+            await sql.query('DROP TRIGGER IF EXISTS tr_summary_on_cash_entries ON cash_entries;');
+            await sql.query('DROP TABLE IF EXISTS cash_entries;');
+            console.log('Dropped legacy table cash_entries.');
+          } catch (dErr) {
+            console.warn('Failed to drop legacy table or triggers:', dErr.message || dErr);
+          }
+        } else {
+          console.log(
+            'To drop legacy table after verification set DROP_LEGACY_TABLE=1 and re-run this script.'
+          );
+        }
+      }
+    } catch (mErr) {
+      console.warn('Post-migration copy failed (non-fatal):', mErr.message || mErr);
     }
 
     // Verification checks

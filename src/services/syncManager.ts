@@ -4,14 +4,9 @@ import Constants from 'expo-constants';
 import AsyncStorage from '../utils/AsyncStorageWrapper';
 import { getPendingProfileUpdates, markPendingProfileProcessed } from '../db/localDb';
 import { getSession, saveSession } from '../db/session';
-import {
-  getLocalByRemoteId,
-  getLocalByClientId,
-  upsertLocalFromRemote,
-  markLocalDeletedByRemoteId,
-  markEntrySynced,
-  deleteLocalEntry,
-} from '../db/entries';
+// Legacy entry-related DB helpers moved to `src/services/legacySync` to keep
+// `syncManager` free of direct Neon/SQLite logic. Import from legacy module
+// only when needed.
 import { query } from '../api/neonClient';
 
 // --- Types & Constants ---
@@ -60,15 +55,34 @@ let _syncInProgress: boolean = false;
 let _lastSuccessfulSyncAt: number | null = null;
 let _lastSyncAttemptAt: number | null = null;
 let _syncFailureCount = 0;
-// Sync status listeners (UI can subscribe to show progress)
-const _syncStatusListeners = new Set<(running: boolean) => void>();
+// Sync status listeners (UI can subscribe to show progress or errors)
+export type SyncStatus = 'idle' | 'syncing' | 'error';
+let _syncStatus: SyncStatus = 'idle';
+const _syncStatusListeners = new Set<(status: SyncStatus) => void>();
 
-export const subscribeSyncStatus = (listener: (running: boolean) => void) => {
+export const subscribeSyncStatus = (listener: (status: SyncStatus) => void) => {
   _syncStatusListeners.add(listener);
   return () => _syncStatusListeners.delete(listener);
 };
 
-export const isSyncInProgress = () => !!_syncInProgress;
+export const isSyncInProgress = () => _syncStatus === 'syncing';
+
+const setSyncStatus = (s: SyncStatus) => {
+  _syncStatus = s;
+  try {
+    _syncStatusListeners.forEach((l) => {
+      try {
+        l(s);
+      } catch (e) {}
+    });
+  } catch (e) {}
+  // Dev-only diagnostic to help QA catch persistent failures
+  try {
+    if (__DEV__ && s === 'error') {
+      console.warn('[sync] Entered error state');
+    }
+  } catch (e) {}
+};
 
 // --- Helper Functions ---
 
@@ -125,183 +139,16 @@ export const syncPending = async () => {
   return { pushed: 0, updated: 0, deleted: 0 };
 };
 
+/**
+ * DEPRECATED: Legacy pullRemote implementation moved to `src/services/legacySync/pullRemoteLegacy.ts`.
+ *
+ * Keep this exported wrapper for backward compatibility. Prefer `runFullSync()` as the
+ * single source of truth for syncing.
+ */
 export const pullRemote = async () => {
-  const state = await NetInfo.fetch();
-  if (!state.isConnected) return { pulled: 0, merged: 0 };
-
-  const session = await getSession();
-  console.log('[pullRemote] using session id=', session?.id);
-  if (!session || !session.id) return { pulled: 0, merged: 0 };
-  if (!isUuid(session.id)) {
-    console.log('[pullRemote] session id is not a valid Neon UUID, skipping pull');
-    return { pulled: 0, merged: 0 };
-  }
-
-  try {
-    // Queueing disabled in online-only mode; nothing to flush.
-
-    // --- DELTA SYNC IMPLEMENTATION ---
-    const lastSyncAt = await AsyncStorage.getItem('last_sync_at');
-    // If no last sync, use epoch to fetch all.
-    const timeParam = lastSyncAt || '1970-01-01T00:00:00.000Z';
-
-    // Only fetch rows modified strictly AFTER the last sync
-    const rows = await Q(
-      `SELECT id, user_id, type, amount, category, note, currency, created_at, updated_at, deleted, client_id, server_version, date 
-       FROM cash_entries 
-       WHERE user_id = $1 AND updated_at > $2::timestamptz`,
-      [session.id, timeParam]
-    );
-
-    if (!rows || rows.length === 0) return { pulled: 0, merged: 0 };
-
-    console.log(`[pullRemote] Fetched ${rows.length} changed rows from remote`);
-
-    let pulled = 0;
-    let merged = 0;
-
-    for (const r of rows) {
-      try {
-        // 1. Handle Remote Deletion
-        if (r.deleted) {
-          // Attempt to find local mapping if local DB is available
-          let localForDeleted: any = null;
-          try {
-            localForDeleted = await getLocalByRemoteId(String(r.id));
-          } catch (e: any) {
-            if (isLocalDbDisabledError(e)) {
-              localForDeleted = null;
-            } else throw e;
-          }
-          if (!localForDeleted && r.client_id) {
-            try {
-              localForDeleted = await getLocalByClientId(String(r.client_id));
-            } catch (e: any) {
-              if (isLocalDbDisabledError(e)) localForDeleted = null;
-              else throw e;
-            }
-          }
-
-          if (localForDeleted && (localForDeleted as any).need_sync) {
-            // Local was modified while remote was deleted. Revive remote.
-            const revivedUpdatedAt = new Date().toISOString();
-            await Q(
-              `UPDATE cash_entries SET deleted = false, need_sync = false, updated_at = $1::timestamptz WHERE id = $2`,
-              [revivedUpdatedAt, r.id]
-            );
-            // Attempt to mark local entry as synced; ignore if local DB disabled
-            try {
-              await markEntrySynced(
-                (localForDeleted as any).local_id,
-                String(r.id),
-                undefined,
-                revivedUpdatedAt
-              );
-            } catch (e: any) {
-              if (isLocalDbDisabledError(e)) {
-                console.log('[pullRemote] local DB disabled; skipping markEntrySynced');
-              } else throw e;
-            }
-          } else {
-            // Accept deletion: try to remove local mapping if possible
-            try {
-              await markLocalDeletedByRemoteId(String(r.id));
-            } catch (e: any) {
-              if (isLocalDbDisabledError(e)) {
-                // local DB disabled — nothing to do
-              } else throw e;
-            }
-          }
-          continue;
-        }
-
-        // 2. Handle Merges / Upserts
-        let local: any = null;
-        try {
-          local = await getLocalByRemoteId(String(r.id));
-        } catch (e: any) {
-          if (isLocalDbDisabledError(e)) {
-            local = null;
-          } else throw e;
-        }
-        if (!local && r.client_id) {
-          try {
-            local = await getLocalByClientId(String(r.client_id));
-          } catch (e: any) {
-            if (isLocalDbDisabledError(e)) local = null;
-            else throw e;
-          }
-        }
-
-        if (local && local.local_id) {
-          const localEntry = local as unknown as CashEntry;
-
-          // Conflict: Local has unsynced changes
-          if (localEntry.need_sync) {
-            const localTime = new Date(localEntry.updated_at || 0).getTime();
-            const remoteTime = new Date(r.updated_at || 0).getTime();
-
-            // If timestamps match, it's the same update
-            if (localTime === remoteTime) {
-              try {
-                await markEntrySynced(
-                  localEntry.local_id,
-                  String(r.id),
-                  Number(r.server_version),
-                  r.updated_at
-                );
-              } catch (e: any) {
-                if (isLocalDbDisabledError(e)) {
-                  console.log('[pullRemote] local DB disabled; skipping markEntrySynced');
-                } else throw e;
-              }
-              merged++;
-              continue;
-            }
-
-            // Actual Conflict: Client Wins logic (Push local change as update to remote)
-            emitSyncConflict({
-              localId: localEntry.local_id,
-              remoteId: String(r.id),
-              message: 'Conflict detected. Preserving local changes.',
-            });
-
-            // We skip merging the remote row into local.
-            // We ensure the local row triggers a push next time by leaving need_sync=true
-            continue;
-          }
-        }
-
-        // 3. Upsert Local
-        await upsertLocalFromRemote({
-          id: String(r.id),
-          user_id: r.user_id,
-          type: r.type,
-          amount: Number(r.amount),
-          category: r.category,
-          note: r.note,
-          currency: r.currency,
-          created_at: r.created_at,
-          updated_at: r.updated_at,
-          deleted: !!r.deleted,
-          client_id: r.client_id || null,
-          server_version: typeof r.server_version === 'number' ? r.server_version : undefined,
-          date: r.date,
-        });
-        pulled++;
-      } catch (err) {
-        console.error('Failed to merge remote row', r.id, err);
-        // Queueing disabled in online-only mode; skipping queue.
-      }
-    }
-    return { pulled, merged };
-  } catch (err) {
-    // Log and return safe empty result instead of throwing to avoid crashing
-    try {
-      console.error('Failed to pull remote entries', err);
-    } catch (e) {}
-    return { pulled: 0, merged: 0 };
-  }
+  if (__DEV__) console.warn('[syncManager] pullRemote() is DEPRECATED. Use runFullSync() instead.');
+  const mod = await import('./legacySync/pullRemoteLegacy');
+  return mod.pullRemoteLegacy();
 };
 
 const flushPendingProfileUpdates = async () => {
@@ -357,103 +204,63 @@ const flushPendingProfileUpdates = async () => {
 
 // --- Main Sync Entry Point ---
 
+import runFullSync from '../sync/runFullSync';
+
 export const syncBothWays = async () => {
   if (_syncInProgress) {
     _pendingSyncRequested = true;
-    console.log('Sync already running, scheduling follow-up');
-    return { pushed: 0, updated: 0, deleted: 0, pulled: 0, merged: 0, total: 0 };
+    if (__DEV__) console.log('Sync already running, scheduling follow-up');
+    return { ok: false } as any;
   }
 
   _lastSyncAttemptAt = Date.now();
 
   const state = await NetInfo.fetch();
-  if (!state.isConnected) return;
+  if (!state.isConnected) return { ok: false } as any;
 
   _syncInProgress = true;
   // notify listeners that sync started
   try {
-    _syncStatusListeners.forEach((l) => {
-      try {
-        l(true);
-      } catch (e) {}
-    });
+    setSyncStatus('syncing');
   } catch (e) {}
 
   try {
-    // local DB init skipped in online-only mode
-    const session = await getSession();
-    if (!session || !session.id)
-      return { pushed: 0, updated: 0, deleted: 0, pulled: 0, merged: 0, total: 0 };
-    if (!isUuid(session.id)) {
-      console.log('[syncBothWays] session id is not a valid Neon UUID, skipping full sync');
-      return { pushed: 0, updated: 0, deleted: 0, pulled: 0, merged: 0, total: 0 };
-    }
-
-    // --- Optimization: Quick Probe ---
-    // If we haven't synced before, check if remote has ANY data before doing heavy lifting
-    const lastSyncCount = await AsyncStorage.getItem('last_sync_count');
-    if (!lastSyncCount || lastSyncCount === '0') {
-      try {
-        const probe = await query(
-          'SELECT 1 FROM cash_entries WHERE user_id = $1 LIMIT 1',
-          [session.id],
-          { timeoutMs: 2000 }
-        );
-        if (!probe || probe.length === 0) {
-          // Remote is empty, just push.
-          console.log('Remote empty, skipping pull');
-        }
-      } catch (e) {}
-    }
-
-    // 1. Flush Profiles
-    await flushPendingProfileUpdates();
-
-    // 2. Push Local Changes
-    const pushStats = await syncPending();
-
-    // 3. Pull Remote Changes (Delta)
-    const pullStats = await pullRemote();
-
-    const total =
-      (pushStats.pushed || 0) +
-      (pushStats.updated || 0) +
-      (pushStats.deleted || 0) +
-      (pullStats.pulled || 0) +
-      (pullStats.merged || 0);
-
-    // 4. Update Sync Metadata
-    const now = new Date().toISOString();
-    await AsyncStorage.setItem('last_sync_at', now);
-    await AsyncStorage.setItem('last_sync_count', String(total));
+    // Delegate actual sync work to runFullSync (single source of truth)
+    await runFullSync();
 
     _lastSuccessfulSyncAt = Date.now();
+    try {
+      // Persist last successful sync time so UI can show it after restarts
+      await AsyncStorage.setItem('last_sync_at', String(_lastSuccessfulSyncAt));
+    } catch (e) {}
     _syncFailureCount = 0;
 
-    // 5. Notify UI
     try {
       const { notifyEntriesChanged } = require('../utils/dbEvents');
       notifyEntriesChanged();
     } catch (e) {}
 
-    return { ...pushStats, ...pullStats, total };
+    // success -> clear any previous error state
+    try {
+      setSyncStatus('idle');
+    } catch (e) {}
+
+    return { ok: true } as any;
   } catch (err) {
-    // Log error but do not re-throw to keep auto-sync safe
     try {
       console.error('Sync failed', err);
     } catch (e) {}
-    // Continue to finally block to ensure _syncInProgress is reset
     _syncFailureCount = Math.min(5, _syncFailureCount + 1);
-    return { pushed: 0, updated: 0, deleted: 0, pulled: 0, merged: 0, total: 0 };
+    // Enter error state — callers should only set this if runFullSync truly failed
+    try {
+      setSyncStatus('error');
+    } catch (e) {}
+    return { ok: false } as any;
   } finally {
     _syncInProgress = false;
-    // notify listeners that sync finished
+    // notify listeners that sync finished (if not errored, set to idle above)
     try {
-      _syncStatusListeners.forEach((l) => {
-        try {
-          l(false);
-        } catch (e) {}
-      });
+      if (_syncStatus !== 'error') setSyncStatus('idle');
     } catch (e) {}
     if (_pendingSyncRequested) {
       _pendingSyncRequested = false;
@@ -467,6 +274,9 @@ export const syncBothWays = async () => {
 // --- Listeners & Background Tasks ---
 
 export const getLastSyncTime = async () => AsyncStorage.getItem('last_sync_at');
+
+// Synchronous getter for in-memory last-successful-sync timestamp (ms since epoch)
+export const getLastSuccessfulSyncAt = (): number | null => _lastSuccessfulSyncAt;
 
 export const getLastSyncCount = async () => {
   try {

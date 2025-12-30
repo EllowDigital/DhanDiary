@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState, useCallback, memo } from 'react';
+import React, { useEffect, useMemo, useRef, useState, memo } from 'react';
 import {
   View,
   StyleSheet,
@@ -29,6 +29,7 @@ import DailyTrendChart from '../components/charts/DailyTrendChart';
 import { LocalEntry } from '../db/entries';
 import asyncAggregator from '../utils/asyncAggregator';
 import { aggregateWithPreferSummary } from '../services/aggregates';
+import { dayjsFrom } from '../utils/date';
 
 // --- ANIMATION SETUP ---
 if (Platform.OS === 'android') {
@@ -144,7 +145,7 @@ const StatsScreen = () => {
     const yearSet = new Set<number>();
 
     entries.forEach((e) => {
-      const d = dayjs(e.date || e.created_at);
+      const d = dayjsFrom(e.date || e.created_at);
       if (!d.isValid()) return;
 
       const mKey = d.format('YYYY-MM');
@@ -331,6 +332,7 @@ const StatsScreen = () => {
         <ScreenHeader
           title="Analytics"
           subtitle="Financial health overview"
+          showScrollHint={false}
           useSafeAreaPadding={false}
         />
       </View>

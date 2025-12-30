@@ -13,7 +13,9 @@ import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { RectButton } from 'react-native-gesture-handler';
 import dayjs from 'dayjs';
+import { formatDate } from '../utils/date';
 import AppCard from './AppCard';
+import { isIncome } from '../utils/transactionType';
 import { ensureCategory } from '../constants/categories';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -81,13 +83,13 @@ const TransactionCardInner: React.FC<Props> = ({
           <View
             style={[
               styles.iconContainer,
-              { backgroundColor: item.type === 'in' ? '#E8F5E9' : '#FDECEA' },
+              { backgroundColor: isIncome(item.type) ? '#E8F5E9' : '#FDECEA' },
             ]}
           >
             <MaterialIcon
-              name={item.type === 'in' ? 'arrow-downward' : 'arrow-upward'}
+              name={isIncome(item.type) ? 'arrow-downward' : 'arrow-upward'}
               size={26}
-              color={item.type === 'in' ? '#2E7D32' : '#C62828'}
+              color={isIncome(item.type) ? '#2E7D32' : '#C62828'}
             />
           </View>
 
@@ -100,22 +102,27 @@ const TransactionCardInner: React.FC<Props> = ({
           {/* RIGHT SIDE */}
           <View style={styles.rightSide}>
             <Text
-              style={[
-                styles.amountText,
-                {
-                  color: item.type === 'in' ? '#2E7D32' : '#C62828',
-                },
-              ]}
+              style={[styles.amountText, { color: isIncome(item.type) ? '#2E7D32' : '#C62828' }]}
             >
-              {item.type === 'in' ? '+' : '-'}₹{Number(item.amount).toFixed(2)}
+              {isIncome(item.type) ? '+' : '-'}₹{Number(item.amount).toFixed(2)}
             </Text>
 
             <RNText style={styles.dateText}>
-              {(() => {
-                const d = dayjs(item.date || item.created_at);
-                return d.isValid() ? d.format('DD MMM YYYY') : '—';
-              })()}
+              {formatDate(item.date || item.created_at, 'DD MMM YYYY')}
             </RNText>
+
+            {/* Sync badge */}
+            {item && item.sync_status !== undefined && (
+              <View style={{ marginTop: 6, alignItems: 'center' }}>
+                {item.sync_status === 1 ? (
+                  <MaterialIcon name="check-circle" size={14} color="#10B981" />
+                ) : item.sync_status === 0 ? (
+                  <MaterialIcon name="access-time" size={14} color="#F59E0B" />
+                ) : item.sync_status === 2 ? (
+                  <MaterialIcon name="delete" size={14} color="#EF4444" />
+                ) : null}
+              </View>
+            )}
 
             {/* ACTION ICONS: Only show if handlers are provided */}
             {(onEdit || onDelete) && (
@@ -205,7 +212,7 @@ const styles = StyleSheet.create({
   iconContainer: {
     width: 48,
     height: 48,
-    borderRadius: 14,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 14,

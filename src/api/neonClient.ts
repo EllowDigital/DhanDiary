@@ -195,7 +195,19 @@ export const query = async <T = any>(
       }
 
       if (!isTransient) {
-        console.error('Neon Query Error (permanent):', error);
+        // Suppress noisy ERROR-level logs for missing remote tables (common in early deploys).
+        // The caller (e.g. pullFromNeon) may handle this and set a session guard.
+        if (
+          msg.includes('relation') &&
+          msg.includes('transactions') &&
+          msg.includes('does not exist')
+        ) {
+          if (typeof __DEV__ !== 'undefined' && __DEV__) {
+            console.warn('Neon Query permanent error (remote table missing):', msg);
+          }
+        } else {
+          console.error('Neon Query Error (permanent):', error);
+        }
         throw error;
       }
 

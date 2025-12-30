@@ -30,11 +30,11 @@ import ScreenHeader from '../components/ScreenHeader';
 const getLatestShareLink = async () => 'https://www.ellowdigital.space';
 
 // Safe package import
-let pkg: any = {};
+let pkg: { version: string } = { version: '1.0.0' };
 try {
   pkg = require('../../package.json');
 } catch (e) {
-  pkg = { version: '1.0.0' };
+  console.warn('Failed to load package.json', e);
 }
 
 // --- THEME ---
@@ -74,9 +74,14 @@ const AboutScreen: React.FC = () => {
         useNativeDriver: true,
         easing: Easing.out(Easing.cubic),
       }),
-      Animated.spring(slideAnim, { toValue: 0, friction: 8, tension: 40, useNativeDriver: true }),
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      }),
     ]).start();
-  }, []);
+  }, [fadeAnim, slideAnim]);
 
   // --- STATE ---
   const [checking, setChecking] = useState(false);
@@ -93,7 +98,8 @@ const AboutScreen: React.FC = () => {
   // --- UPDATE LOGIC ---
   const checkForUpdates = useCallback(async () => {
     if (isExpoGo) {
-      return Alert.alert('Development Mode', 'Over-the-air updates are disabled in Expo Go.');
+      Alert.alert('Development Mode', 'Over-the-air updates are disabled in Expo Go.');
+      return;
     }
 
     setChecking(true);
@@ -137,6 +143,7 @@ const AboutScreen: React.FC = () => {
   };
 
   // --- ACTIONS ---
+  // In development/Expo Go, updateId might be null
   const updateId = Updates.updateId || 'Embedded';
   const shortId = updateId === 'Embedded' ? updateId : updateId.substring(0, 8);
 
@@ -159,20 +166,20 @@ const AboutScreen: React.FC = () => {
 
   const infoGrid = useMemo(
     () => [
-      { label: 'Version', value: `v${pkg.version}`, icon: 'tag' },
-      { label: 'Channel', value: BUILD_TYPE, icon: 'layers' },
+      { label: 'Version', value: `v${pkg.version}`, icon: 'tag' as const },
+      { label: 'Channel', value: BUILD_TYPE, icon: 'layers' as const },
       {
         label: 'Environment',
         value: __DEV__ ? 'Development' : 'Production',
-        icon: 'code',
+        icon: 'code' as const,
         isBadge: true,
       },
       {
         label: 'Build ID',
         value: shortId,
-        icon: 'fingerprint',
+        icon: 'fingerprint' as const,
         onPress: copyUpdateId,
-        actionIcon: 'content-copy',
+        actionIcon: 'content-copy' as const,
       },
     ],
     [shortId]
@@ -202,6 +209,7 @@ const AboutScreen: React.FC = () => {
           <View style={styles.heroCard}>
             <View style={styles.heroContent}>
               <View style={styles.heroIconContainer}>
+                {/* Ensure asset exists or use placeholder logic */}
                 <Image
                   source={require('../../assets/splash-icon.png')}
                   style={styles.heroIcon}
@@ -364,7 +372,16 @@ const AboutScreen: React.FC = () => {
 };
 
 // --- GRID ITEM COMPONENT ---
-const GridItem = ({ item, borderRight }: { item: any; borderRight?: boolean }) => (
+interface GridItemProps {
+  label: string;
+  value: string;
+  icon?: any;
+  isBadge?: boolean;
+  onPress?: () => void;
+  actionIcon?: any;
+}
+
+const GridItem = ({ item, borderRight }: { item: GridItemProps; borderRight?: boolean }) => (
   <TouchableOpacity
     style={[
       styles.gridItem,
