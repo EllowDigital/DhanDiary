@@ -49,7 +49,9 @@ describe('transactions DB behavior', () => {
 
     // Find the UPDATE call and assert date param used
     const calls = sqlite.executeSqlAsync.mock.calls;
-    const updateCall = calls.find((c: any) => typeof c[0] === 'string' && c[0].includes('UPDATE transactions'));
+    const updateCall = calls.find(
+      (c: any) => typeof c[0] === 'string' && c[0].includes('UPDATE transactions')
+    );
     expect(updateCall).toBeDefined();
     const params = updateCall[1];
     // params order: amount, type, category, note, date, updated_at, sync_status, id, user_id

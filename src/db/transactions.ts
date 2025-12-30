@@ -32,9 +32,11 @@ export type TransactionRow = {
 export async function addTransaction(
   txn: Partial<TransactionRow> & { id: string; user_id: string }
 ) {
-  const now = new Date().toISOString();
+  const now = Date.now();
 
   // Default values based on schema.sql
+  const nowIso = new Date().toISOString();
+  const nowMs = Date.now();
   const row: TransactionRow = {
     id: txn.id,
     user_id: txn.user_id,
@@ -43,9 +45,9 @@ export async function addTransaction(
     category: txn.category ?? null,
     note: txn.note ?? null,
     currency: txn.currency ?? 'INR',
-    date: txn.date ?? now, // Schema says NOT NULL
-    created_at: now,
-    updated_at: now,
+    date: txn.date ?? nowIso, // Schema says NOT NULL
+    created_at: nowIso,
+    updated_at: nowMs,
     deleted_at: null,
     server_version: 0,
     sync_status: typeof txn.sync_status === 'number' ? txn.sync_status : 0, // Default 0 (pending push)
@@ -89,7 +91,7 @@ export async function addTransaction(
 export async function updateTransaction(
   txn: Partial<TransactionRow> & { id: string; user_id: string }
 ) {
-  const now = new Date().toISOString();
+  const now = Date.now();
 
   // SQL to update specific fields and reset sync status
   const sql = `
@@ -112,9 +114,9 @@ export async function updateTransaction(
     txn.type ?? 'expense',
     txn.category ?? null,
     txn.note ?? null,
-    txn.date ?? now,
+    txn.date ?? new Date().toISOString(),
     txn.currency ?? 'INR',
-    now, // updated_at
+    now, // updated_at (ms)
     txn.id,
     txn.user_id,
   ]);
@@ -124,7 +126,7 @@ export async function updateTransaction(
   if (affected === 0) {
     if (__DEV__)
       console.warn('[transactions] update affected 0 rows, falling back to insert', txn.id);
-    return await addTransaction({ ...txn, created_at: now } as TransactionRow);
+    return await addTransaction({ ...txn, created_at: new Date().toISOString() } as TransactionRow);
   } else {
     if (__DEV__) console.log('[transactions] update', txn.id);
     try {
@@ -132,10 +134,20 @@ export async function updateTransaction(
     } catch (e) {}
   }
 
-  // Return a partial structure reflecting the update
+  // Return a structure reflecting the update (avoid spreading untyped fields)
   return {
-    ...txn,
+    id: txn.id,
+    user_id: txn.user_id,
+    amount: txn.amount ?? 0,
+    type: txn.type ?? 'expense',
+    category: txn.category ?? null,
+    note: txn.note ?? null,
+    currency: txn.currency ?? 'INR',
+    date: txn.date ?? new Date().toISOString(),
+    created_at: (txn as any).created_at ?? new Date().toISOString(),
     updated_at: now,
+    deleted_at: (txn as any).deleted_at ?? null,
+    server_version: (txn as any).server_version ?? 0,
     sync_status: 0,
   } as TransactionRow;
 }
@@ -205,7 +217,7 @@ export async function upsertTransactionFromRemote(txn: TransactionRow) {
     // Actually, usually "Server Wins" or "Last Write Wins".
     // If local has deleted_at set and sync_status=0, we might want to keep our local delete.
 
-    const checkSql = `SELECT sync_status, deleted_at, server_version FROM transactions WHERE id = ? LIMIT 1;`;
+    const checkSql = `SELECT sync_status, deleted_at, server_version, updated_at FROM transactions WHERE id = ? LIMIT 1;`;
     const [, res] = await executeSqlAsync(checkSql, [txn.id]);
 
     if (res && res.rows && res.rows.length > 0) {
@@ -215,10 +227,31 @@ export async function upsertTransactionFromRemote(txn: TransactionRow) {
       // Simple strategy: Server Wins (overwrite local), unless you want sophisticated conflict resolution.
 
       // OPTIONAL: If local has a pending deletion (deleted_at set and sync_status === 0), keep local tombstone.
-      if (existing && existing.deleted_at && existing.sync_status === 0) {
+      // Also treat sync_status === 2 as an explicit local tombstone marker (skip remote upsert).
+      const isLocalPendingDelete = existing && existing.deleted_at && existing.sync_status === 0;
+      const isLocalTombstoneFlag = existing && Number(existing.sync_status) === 2;
+      if (isLocalPendingDelete || isLocalTombstoneFlag) {
         if (__DEV__)
-          console.log('[transactions] skipping remote upsert, local pending delete exists', txn.id);
+          console.log(
+            '[transactions] skipping remote upsert, local pending delete/tombstone exists',
+            txn.id
+          );
         return;
+      }
+
+      // Also skip if local already has equal-or-newer data by server_version/updated_at.
+      try {
+        const localServerVersion = Number(existing.server_version || 0);
+        const localUpdatedAt = Number(existing.updated_at || 0);
+        const remoteServerVersion = Number(txn.server_version || 0);
+        const remoteUpdatedAt = Number(txn.updated_at || 0);
+        if (localServerVersion >= remoteServerVersion && localUpdatedAt >= remoteUpdatedAt) {
+          if (__DEV__)
+            console.log('[transactions] skipping remote upsert, local is up-to-date', txn.id);
+          return;
+        }
+      } catch (e) {
+        // ignore parse errors and proceed to upsert
       }
     }
 
@@ -230,7 +263,7 @@ export async function upsertTransactionFromRemote(txn: TransactionRow) {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
     `;
 
-    await executeSqlAsync(sql, [
+    const [, writeRes] = await executeSqlAsync(sql, [
       txn.id,
       txn.user_id,
       txn.amount,
@@ -240,7 +273,7 @@ export async function upsertTransactionFromRemote(txn: TransactionRow) {
       txn.currency ?? 'INR',
       txn.date, // ISO String
       txn.created_at, // ISO String
-      txn.updated_at, // ISO String
+      txn.updated_at, // epoch ms or ISO depending on caller
       txn.deleted_at ?? null,
       txn.server_version ?? 0,
       1, // sync_status = 1 (Synced because it came from server)
@@ -248,7 +281,8 @@ export async function upsertTransactionFromRemote(txn: TransactionRow) {
 
     if (__DEV__) console.log('[transactions] upsert remote', txn.id);
     try {
-      notifyEntriesChanged();
+      const rowsAffected = Number(writeRes?.rowsAffected || 0);
+      if (rowsAffected > 0) notifyEntriesChanged();
     } catch (e) {}
   } catch (e) {
     if (__DEV__) console.warn('[transactions] upsertTransactionFromRemote failed', e, txn.id);

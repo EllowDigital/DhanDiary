@@ -67,8 +67,11 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
         category, 
         note, 
         date, 
+        currency,
         sync_status,
         (EXTRACT(EPOCH FROM updated_at) * 1000)::bigint as updated_at,
+        (EXTRACT(EPOCH FROM created_at) * 1000)::bigint as created_at,
+        server_version,
         CASE 
           WHEN deleted_at IS NULL THEN NULL 
           ELSE (EXTRACT(EPOCH FROM deleted_at) * 1000)::bigint 
@@ -107,7 +110,14 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
   let pulled = 0;
 
   // 4. Process fetched rows
+  const processedIds = new Set<string>();
   for (const remote of remoteRows) {
+    if (!remote || !remote.id) continue;
+    if (processedIds.has(remote.id)) {
+      if (__DEV__) console.log('[sync] pullFromNeon: skipping duplicate remote row', remote.id);
+      continue;
+    }
+    processedIds.add(remote.id);
     try {
       const remoteUpdatedAt = Number(remote.updated_at || 0);
 
@@ -171,7 +181,12 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
             category: remote.category ?? null,
             note: remote.note ?? null,
             date: remote.date ?? null,
+            currency: remote.currency ?? 'INR',
+            created_at: remote.created_at
+              ? new Date(Number(remote.created_at)).toISOString()
+              : new Date(remoteUpdatedAt).toISOString(),
             updated_at: remoteUpdatedAt,
+            server_version: typeof remote.server_version === 'number' ? remote.server_version : 0,
             sync_status: 1, // 1 = Synced
           });
           pulled += 1;
