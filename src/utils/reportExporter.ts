@@ -9,29 +9,54 @@ const UTF8_ENCODING = (FileSystem as any)?.EncodingType?.UTF8 || 'utf8';
 // then fall back to the installed FileSystem implementation. This avoids runtime
 // errors on newer Expo SDKs where the old helpers are removed.
 async function writeFile(path: string, contents: string, options?: any) {
-  // Try dynamic import of the legacy API first
+  // Prefer the legacy API via synchronous require so Metro includes it in the bundle
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const FSlegacy = await import('expo-file-system/legacy');
+    const FSlegacy = require('expo-file-system/legacy');
     if (FSlegacy && typeof FSlegacy.writeAsStringAsync === 'function') {
       await FSlegacy.writeAsStringAsync(path, contents, options);
       return;
     }
   } catch (e) {
-    // ignore and fallback
+    // If require fails, continue to other fallbacks
   }
 
-  // Next try the currently installed FileSystem API (may still provide the method)
+  // Try the older style API on the primary package (may exist on older SDKs)
   try {
     if (typeof (FileSystem as any).writeAsStringAsync === 'function') {
       await (FileSystem as any).writeAsStringAsync(path, contents, options);
       return;
     }
   } catch (e) {
-    // ignore and fallthrough
+    // ignore and proceed to new API attempt
   }
 
-  // If neither is available, throw a helpful error so the caller can surface it.
+  // Try the new File API: create a File instance and write text
+  try {
+    const FileCtor = (FileSystem as any).File || (global as any).File;
+    if (typeof FileCtor === 'function') {
+      const f = new FileCtor(path);
+      // Try common method names used across runtimes
+      if (typeof f.write === 'function') {
+        // Some implementations accept either a string or an object
+        // Try simple string write first
+        await f.write(contents);
+        return;
+      }
+      if (typeof f.writeAsync === 'function') {
+        await f.writeAsync(contents);
+        return;
+      }
+      if (typeof f.text === 'function') {
+        // fallback: try writing via text() setter if available (rare)
+        await f.write(contents);
+        return;
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+
   throw new Error(
     'No available write API: upgrade `expo-file-system` or install `expo-file-system/legacy`.'
   );
