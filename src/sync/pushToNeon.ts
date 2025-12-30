@@ -52,7 +52,8 @@ export async function pushToNeon(): Promise<{ pushed: string[]; deleted: string[
             type = EXCLUDED.type,
             category = EXCLUDED.category,
             note = EXCLUDED.note,
-            date = EXCLUDED.date`;
+            date = EXCLUDED.date
+          RETURNING id, server_version, (EXTRACT(EPOCH FROM updated_at) * 1000)::bigint as updated_at`;
 
         // Ensure we pass numeric epoch-ms values for date/updated_at so the
         // server-side SQL casting ($7::bigint / $8::bigint) doesn't attempt
@@ -71,7 +72,7 @@ export async function pushToNeon(): Promise<{ pushed: string[]; deleted: string[
 
         const dateParam = normalizeToEpoch(row.date ?? null);
 
-        await neonQuery(sql, [
+        const res = await neonQuery(sql, [
           row.id,
           row.user_id,
           row.amount,
@@ -81,8 +82,29 @@ export async function pushToNeon(): Promise<{ pushed: string[]; deleted: string[
           dateParam,
         ]);
 
-        // Mark local row as synced
-        await executeSqlAsync('UPDATE transactions SET sync_status = 1 WHERE id = ?;', [row.id]);
+        // Neon returns the updated row metadata; update local row to mark synced
+        const returned = Array.isArray(res) && res.length ? res[0] : null;
+        const serverVer =
+          returned && typeof returned.server_version === 'number' ? returned.server_version : null;
+        const returnedUpdatedAt =
+          returned && returned.updated_at ? Number(returned.updated_at) : null;
+
+        if (returned) {
+          // update local row: set sync_status=1 and sync updated_at/server_version
+          try {
+            await executeSqlAsync(
+              'UPDATE transactions SET sync_status = 1, server_version = ?, updated_at = ? WHERE id = ?;',
+              [serverVer ?? 0, returnedUpdatedAt ?? Date.now(), row.id]
+            );
+          } catch (e) {
+            // best-effort: if update fails, still mark pushedIds so we don't block
+            if (__DEV__)
+              console.warn('[sync] pushToNeon: failed to update local metadata', e, row.id);
+          }
+        } else {
+          // No return - fall back to marking synced
+          await executeSqlAsync('UPDATE transactions SET sync_status = 1 WHERE id = ?;', [row.id]);
+        }
         pushedIds.push(row.id);
       } catch (err) {
         if (__DEV__) console.warn('[sync] pushToNeon: failed to push row', row.id, err);
