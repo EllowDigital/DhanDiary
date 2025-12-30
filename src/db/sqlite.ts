@@ -33,6 +33,12 @@ export async function initDB(): Promise<void> {
     );`);
 
     if (__DEV__) console.log('[sqlite] initialized');
+    // Ensure optional local schema upgrades run immediately after init
+    try {
+      await ensureLocalSchemaUpgrades();
+    } catch (e) {
+      if (__DEV__) console.warn('[sqlite] ensureLocalSchemaUpgrades error during init', e);
+    }
   } catch (e) {
     if (__DEV__) console.warn('[sqlite] init error', e);
     throw e;

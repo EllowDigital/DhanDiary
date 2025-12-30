@@ -394,6 +394,7 @@ const ExportScreen = () => {
           mode="date"
           display={Platform.OS === 'ios' ? 'spinner' : 'default'}
           onChange={handleDateChange}
+          minimumDate={new Date('2000-01-01')}
           maximumDate={new Date()}
         />
       )}

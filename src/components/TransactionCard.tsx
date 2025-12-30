@@ -113,6 +113,19 @@ const TransactionCardInner: React.FC<Props> = ({
               })()}
             </RNText>
 
+            {/* Sync badge */}
+            {item && item.sync_status !== undefined && (
+              <View style={{ marginTop: 6, alignItems: 'center' }}>
+                {item.sync_status === 1 ? (
+                  <MaterialIcon name="check-circle" size={14} color="#10B981" />
+                ) : item.sync_status === 0 ? (
+                  <MaterialIcon name="access-time" size={14} color="#F59E0B" />
+                ) : item.sync_status === 2 ? (
+                  <MaterialIcon name="delete" size={14} color="#EF4444" />
+                ) : null}
+              </View>
+            )}
+
             {/* ACTION ICONS: Only show if handlers are provided */}
             {(onEdit || onDelete) && (
               <View style={styles.actionsRow}>
@@ -161,7 +174,7 @@ const TransactionCard = React.memo(TransactionCardInner, (prev, next) => {
       if (prev.item.updated_at !== next.item.updated_at) return false;
       if (prev.item.type !== next.item.type) return false;
     }
-  } catch (e) {}
+  } catch (e) { }
   // assume handlers stable (caller should memoize) — otherwise re-render
   return (
     prev.onEdit === next.onEdit &&

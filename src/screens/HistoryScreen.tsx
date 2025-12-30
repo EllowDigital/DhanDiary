@@ -131,6 +131,18 @@ const SwipeableHistoryItem = React.memo(({ item, onEdit, onDelete }: any) => {
             <Text style={styles.compactCategory} numberOfLines={1}>
               {item.category}
             </Text>
+            {/* Sync badge: shows per-item sync state */}
+            {item && item.sync_status !== undefined && (
+              <View style={{ marginLeft: 8, justifyContent: 'center' }}>
+                {item.sync_status === 1 ? (
+                  <MaterialIcon name="check-circle" size={14} color="#10B981" />
+                ) : item.sync_status === 0 ? (
+                  <MaterialIcon name="access-time" size={14} color="#F59E0B" />
+                ) : item.sync_status === 2 ? (
+                  <MaterialIcon name="delete" size={14} color="#EF4444" />
+                ) : null}
+              </View>
+            )}
             <Text style={[styles.compactAmount, { color }]}>
               {isInc ? '+' : '-'}₹{Number(item.amount).toLocaleString()}
             </Text>
@@ -328,6 +340,8 @@ const EditTransactionModal = React.memo(({ visible, entry, onClose, onSave }: an
             setShowDatePicker(false);
             if (d) setDate(d);
           }}
+          minimumDate={new Date('2000-01-01')}
+          maximumDate={new Date()}
         />
       )}
     </Modal>
@@ -411,6 +425,29 @@ const HistoryScreen = () => {
     [deleteEntry]
   );
 
+  // Attempt to start edit flow with sync-state checks
+  const attemptEdit = useCallback(
+    (item: any) => {
+      if (!item) return;
+      // If tombstone / pending delete — disallow edit
+      if (item.sync_status === 2) {
+        showToast('This transaction is pending deletion and cannot be edited.', 'error');
+        return;
+      }
+      // If not yet synced, warn user before editing
+      if (item.sync_status !== 1) {
+        Alert.alert('Pending changes', 'This entry has local changes that are not yet synced. Edit anyway?', [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Edit', onPress: () => setEditingEntry(item) },
+        ]);
+        return;
+      }
+      // Normal: open editor
+      setEditingEntry(item);
+    },
+    [showToast]
+  );
+
   // --- HEADER ---
   const ListHeader = useMemo(
     () => (
@@ -476,7 +513,7 @@ const HistoryScreen = () => {
         renderItem={({ item }) => (
           <SwipeableHistoryItem
             item={item}
-            onEdit={() => setEditingEntry(item)}
+            onEdit={() => attemptEdit(item)}
             onDelete={() => handleDelete(item.local_id)}
           />
         )}
