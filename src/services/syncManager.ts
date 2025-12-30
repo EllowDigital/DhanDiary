@@ -229,6 +229,10 @@ export const syncBothWays = async () => {
     await runFullSync();
 
     _lastSuccessfulSyncAt = Date.now();
+    try {
+      // Persist last successful sync time so UI can show it after restarts
+      await AsyncStorage.setItem('last_sync_at', String(_lastSuccessfulSyncAt));
+    } catch (e) {}
     _syncFailureCount = 0;
 
     try {
@@ -270,6 +274,9 @@ export const syncBothWays = async () => {
 // --- Listeners & Background Tasks ---
 
 export const getLastSyncTime = async () => AsyncStorage.getItem('last_sync_at');
+
+// Synchronous getter for in-memory last-successful-sync timestamp (ms since epoch)
+export const getLastSuccessfulSyncAt = (): number | null => _lastSuccessfulSyncAt;
 
 export const getLastSyncCount = async () => {
   try {

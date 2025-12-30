@@ -16,7 +16,7 @@ import {
 import { subscribeEntries } from '../utils/dbEvents';
 import { getSession, saveSession } from '../db/session';
 import { ensureCategory, DEFAULT_CATEGORY } from '../constants/categories';
-import { toCanonical } from '../utils/transactionType';
+import { toCanonical, isIncome } from '../utils/transactionType';
 import { syncBothWays } from '../services/syncManager';
 
 /* ----------------------------------------------------------
@@ -64,7 +64,10 @@ const resolveUserId = async (passedId?: string | null): Promise<string> => {
 };
 
 // Normalize any date input
-const normalizeDate = (raw: string | number | Date | null | undefined, fallback: string): string => {
+const normalizeDate = (
+  raw: string | number | Date | null | undefined,
+  fallback: string
+): string => {
   if (raw === null || raw === undefined) return fallback;
   if (raw instanceof Date) return raw.toISOString();
   if (typeof raw === 'number') return new Date(raw).toISOString();
@@ -127,7 +130,7 @@ export const useEntries = (userId?: string | null) => {
   const requestSync = React.useCallback(() => {
     try {
       if (syncKickRef.current) clearTimeout(syncKickRef.current);
-      
+
       syncKickRef.current = setTimeout(() => {
         syncKickRef.current = null;
         (async () => {
@@ -209,7 +212,10 @@ export const useEntries = (userId?: string | null) => {
           amount: r.amount,
           category: r.category,
           note: r.note,
-          date: normalizeDate(r.date, r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString()),
+          date: normalizeDate(
+            r.date,
+            r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString()
+          ),
           updated_at: normalizeUpdatedAt(r.updated_at),
           currency: 'INR',
           is_synced: r.sync_status === 1,
@@ -230,7 +236,7 @@ export const useEntries = (userId?: string | null) => {
           try {
             const { getNeonHealth, query } = require('../api/neonClient');
             const health = getNeonHealth();
-            
+
             if (health.isConfigured) {
               const rows = await query(
                 `SELECT id, user_id, type, amount, category, note, created_at, updated_at, date 
@@ -256,7 +262,12 @@ export const useEntries = (userId?: string | null) => {
                   try {
                     await upsertTransactionFromRemote(upd as any);
                   } catch (e) {
-                    if (__DEV__) console.warn('[useEntries] upsertTransactionFromRemote failed for row', r.id, e);
+                    if (__DEV__)
+                      console.warn(
+                        '[useEntries] upsertTransactionFromRemote failed for row',
+                        r.id,
+                        e
+                      );
                   }
                 }
               }
@@ -277,7 +288,7 @@ export const useEntries = (userId?: string | null) => {
     staleTime: 30_000,
     refetchOnWindowFocus: false, // Prevent infinite loops if window focus triggers refetch -> write -> event -> refetch
     // Modern React Query replacement for keepPreviousData
-    placeholderData: (previousData: LocalEntry[] | undefined) => previousData, 
+    placeholderData: (previousData: LocalEntry[] | undefined) => previousData,
   });
 
   // Keep query data fresh when DB is mutated by background syncs or other processes.
@@ -297,7 +308,10 @@ export const useEntries = (userId?: string | null) => {
    ---------------------------------------------------------- */
   const addEntryMutation = useMutation({
     mutationFn: async (
-      entry: Omit<LocalEntry, 'is_synced' | 'user_id' | 'created_at' | 'updated_at' | 'local_id' | 'remote_id'> & { local_id?: string }
+      entry: Omit<
+        LocalEntry,
+        'is_synced' | 'user_id' | 'created_at' | 'updated_at' | 'local_id' | 'remote_id'
+      > & { local_id?: string }
     ) => {
       const sid = await resolveUserId(userId);
       const now = new Date().toISOString();
@@ -373,7 +387,8 @@ export const useEntries = (userId?: string | null) => {
         id: local_id,
         user_id: sid,
         amount: updates.amount !== undefined ? Number(updates.amount) : undefined,
-        type: updates.type !== undefined ? toCanonical(updates.type as any) : undefined,
+        type:
+          updates.type !== undefined ? (isIncome(updates.type as any) ? 'in' : 'out') : undefined,
         category: updates.category !== undefined ? ensureCategory(updates.category) : undefined,
         note: updates.note !== undefined ? updates.note : undefined,
         date: dateVal,
@@ -381,7 +396,9 @@ export const useEntries = (userId?: string | null) => {
       };
 
       // Remove undefined keys to prevent accidental nulling
-      Object.keys(payload).forEach(key => (payload as any)[key] === undefined && delete (payload as any)[key]);
+      Object.keys(payload).forEach(
+        (key) => (payload as any)[key] === undefined && delete (payload as any)[key]
+      );
 
       await updateTransaction(payload as any);
     },
