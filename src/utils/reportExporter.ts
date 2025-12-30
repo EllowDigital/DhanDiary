@@ -2,6 +2,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
 import XLSX from 'xlsx';
+import { Platform, PermissionsAndroid } from 'react-native';
 import { formatDate } from './date';
 import { isIncome } from './transactionType';
 
@@ -57,40 +58,91 @@ export const shareFile = async (filePath: string) => {
     throw new Error('Sharing is not available on this device');
   }
 
+  // Ensure file exists before sharing
+  const fileInfo = await FileSystem.getInfoAsync(filePath);
+  if (!fileInfo.exists) {
+    throw new Error('File generation failed. File not found at path.');
+  }
+
   await Sharing.shareAsync(filePath, {
     mimeType: filePath.endsWith('.xlsx')
       ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-      : undefined,
-    UTI: filePath.endsWith('.xlsx') ? 'com.microsoft.excel.xlsx' : undefined,
+      : 'application/pdf',
+    UTI: filePath.endsWith('.xlsx') ? 'com.microsoft.excel.xlsx' : 'com.adobe.pdf',
+    dialogTitle: 'Share Export',
   });
 };
 
 // --- Helpers ---
 
 /**
- * Robust file writer.
- * Improvements:
- * 1. Fallback to cacheDirectory if documentDirectory is null (common Android issue).
- * 2. Uses string literals for encoding to avoid "undefined property" crashes.
+ * Helper to find a valid writable path.
+ * If standard constants are null (common in some Android builds),
+ * it uses expo-print to "discover" a valid cache path.
+ */
+const getWritablePath = async (filename: string): Promise<string> => {
+  // 1. Try standard constants first
+  // Cast to any to avoid TypeScript complaints if types are strict
+  const fs = FileSystem as any;
+  if (fs.documentDirectory) return `${fs.documentDirectory}${filename}`;
+  if (fs.cacheDirectory) return `${fs.cacheDirectory}${filename}`;
+
+  // 2. Fallback: Use Expo Print to discover a valid path
+  // We create a tiny dummy PDF, get its URI, and use that directory.
+  console.log('FileSystem constants missing. Attempting path discovery via Print...');
+  try {
+    const { uri } = await Print.printToFileAsync({ html: '<p>temp</p>' });
+    const dir = uri.substring(0, uri.lastIndexOf('/') + 1);
+    return `${dir}${filename}`;
+  } catch (e) {
+    console.error('Path discovery failed:', e);
+    throw new Error('No writable directory available. Please ensure app permissions are granted.');
+  }
+};
+
+/**
+ * Robust file writer with Path Discovery fallback.
  */
 const writeFile = async (
   fileName: string,
   contents: string,
   encoding: 'utf8' | 'base64' = 'utf8'
 ): Promise<string> => {
-  // Try documentDirectory first, then cacheDirectory
-  const dir = FileSystem.documentDirectory || FileSystem.cacheDirectory;
+  const fileUri = await getWritablePath(fileName);
 
-  if (!dir) {
-    throw new Error(
-      'No writable directory available (documentDirectory and cacheDirectory are null). Try rebuilding the app: npx expo run:android'
-    );
+  // Try to use react-native-fs for efficient native writes when available
+  try {
+    const RNFS = require('react-native-fs');
+    if (RNFS) {
+      // RNFS uses native paths without file://
+      let nativePath = fileUri;
+      if (nativePath.startsWith('file://')) nativePath = nativePath.replace('file://', '');
+
+      // write or overwrite
+      if (encoding === 'base64') {
+        await RNFS.writeFile(nativePath, contents, 'base64');
+      } else {
+        // For large files prefer streaming append to avoid huge memory spikes
+        await RNFS.writeFile(nativePath, '', 'utf8');
+        // Append content in chunks if large
+        if (contents.length > 1024 * 1024) {
+          const CHUNK = 64 * 1024; // 64KB
+          for (let i = 0; i < contents.length; i += CHUNK) {
+            const chunk = contents.substring(i, i + CHUNK);
+            await RNFS.appendFile(nativePath, chunk, 'utf8');
+          }
+        } else {
+          await RNFS.writeFile(nativePath, contents, 'utf8');
+        }
+      }
+      return fileUri;
+    }
+  } catch (err) {
+    // RNFS not available or failed — fall back to Expo FileSystem
   }
 
-  const fileUri = `${dir}${fileName}`;
-
   try {
-    await FileSystem.writeAsStringAsync(fileUri, contents, { encoding });
+    await (FileSystem as any).writeAsStringAsync(fileUri, contents, { encoding });
     return fileUri;
   } catch (e) {
     console.error('FileSystem Write Error:', e);
@@ -255,7 +307,7 @@ const generateCsv = async (data: TransactionItem[], options: ExportOptions): Pro
   const csvContent = [headers.join(','), ...rows].join('\n');
   const fileName = `${sanitizeFilename(options.title)}.csv`;
 
-  // FIX: Explicit string 'utf8'
+  // Write with utf8 encoding
   return await writeFile(fileName, csvContent, 'utf8');
 };
 
@@ -280,7 +332,7 @@ const generateExcel = async (data: TransactionItem[], options: ExportOptions): P
   // 3. Generate Base64
   const wbout = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
 
-  // 4. Write to file using explicit 'base64' string
+  // 4. Write to file using explicit 'base64' encoding
   const fileName = `${sanitizeFilename(options.title)}.xlsx`;
   return await writeFile(fileName, wbout, 'base64');
 };
