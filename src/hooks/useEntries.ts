@@ -64,6 +64,23 @@ const makeOptimisticEntry = (entry: any, sid: string) => {
 ---------------------------------------------------------- */
 export const useEntries = (userId?: string | null) => {
   const queryClient = useQueryClient();
+  const [resolvedId, setResolvedId] = React.useState<string | null>(null);
+
+  // Resolve effective user id (may create guest) and keep stable for the hook
+  React.useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const sid = await resolveUserId(userId);
+        if (mounted) setResolvedId(sid);
+      } catch (e) {
+        if (mounted) setResolvedId(null);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [userId]);
 
   const syncKickRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -91,13 +108,13 @@ export const useEntries = (userId?: string | null) => {
     isLoading,
     refetch,
   } = useQuery<LocalEntry[], Error>({
-    queryKey: ['entries', userId],
+    queryKey: ['entries', resolvedId],
     queryFn: async () => {
-      if (!userId) return [] as LocalEntry[];
+      if (!resolvedId) return [] as LocalEntry[];
 
       // Always read from local SQLite first for responsive UI.
       try {
-        const local = await getTransactionsByUser(userId);
+        const local = await getTransactionsByUser(resolvedId);
         // Map sqlite rows to LocalEntry shape
         const normalizeRowDate = (d: any) => {
           if (d === null || d === undefined) return null;
@@ -144,7 +161,7 @@ export const useEntries = (userId?: string | null) => {
             if (health.isConfigured) {
               const rows = await query(
                 `SELECT id, user_id, type, amount, category, note, created_at, updated_at, date FROM transactions WHERE user_id = $1 AND (deleted_at IS NULL) ORDER BY updated_at DESC LIMIT 1000`,
-                [userId]
+                [resolvedId]
               );
               if (rows && rows.length) {
                 for (const r of rows) {
@@ -174,7 +191,7 @@ export const useEntries = (userId?: string | null) => {
         return [] as LocalEntry[];
       }
     },
-    enabled: !!userId,
+    enabled: !!resolvedId,
     staleTime: 30_000,
     refetchOnWindowFocus: false,
     // keepPreviousData isn't recognized by some installed @tanstack/react-query types

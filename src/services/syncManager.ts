@@ -55,15 +55,34 @@ let _syncInProgress: boolean = false;
 let _lastSuccessfulSyncAt: number | null = null;
 let _lastSyncAttemptAt: number | null = null;
 let _syncFailureCount = 0;
-// Sync status listeners (UI can subscribe to show progress)
-const _syncStatusListeners = new Set<(running: boolean) => void>();
+// Sync status listeners (UI can subscribe to show progress or errors)
+export type SyncStatus = 'idle' | 'syncing' | 'error';
+let _syncStatus: SyncStatus = 'idle';
+const _syncStatusListeners = new Set<(status: SyncStatus) => void>();
 
-export const subscribeSyncStatus = (listener: (running: boolean) => void) => {
+export const subscribeSyncStatus = (listener: (status: SyncStatus) => void) => {
   _syncStatusListeners.add(listener);
   return () => _syncStatusListeners.delete(listener);
 };
 
-export const isSyncInProgress = () => !!_syncInProgress;
+export const isSyncInProgress = () => _syncStatus === 'syncing';
+
+const setSyncStatus = (s: SyncStatus) => {
+  _syncStatus = s;
+  try {
+    _syncStatusListeners.forEach((l) => {
+      try {
+        l(s);
+      } catch (e) {}
+    });
+  } catch (e) {}
+  // Dev-only diagnostic to help QA catch persistent failures
+  try {
+    if (__DEV__ && s === 'error') {
+      console.warn('[sync] Entered error state');
+    }
+  } catch (e) {}
+};
 
 // --- Helper Functions ---
 
@@ -202,11 +221,7 @@ export const syncBothWays = async () => {
   _syncInProgress = true;
   // notify listeners that sync started
   try {
-    _syncStatusListeners.forEach((l) => {
-      try {
-        l(true);
-      } catch (e) {}
-    });
+    setSyncStatus('syncing');
   } catch (e) {}
 
   try {
@@ -221,22 +236,27 @@ export const syncBothWays = async () => {
       notifyEntriesChanged();
     } catch (e) {}
 
+    // success -> clear any previous error state
+    try {
+      setSyncStatus('idle');
+    } catch (e) {}
+
     return { ok: true } as any;
   } catch (err) {
     try {
       console.error('Sync failed', err);
     } catch (e) {}
     _syncFailureCount = Math.min(5, _syncFailureCount + 1);
+    // Enter error state — callers should only set this if runFullSync truly failed
+    try {
+      setSyncStatus('error');
+    } catch (e) {}
     return { ok: false } as any;
   } finally {
     _syncInProgress = false;
-    // notify listeners that sync finished
+    // notify listeners that sync finished (if not errored, set to idle above)
     try {
-      _syncStatusListeners.forEach((l) => {
-        try {
-          l(false);
-        } catch (e) {}
-      });
+      if (_syncStatus !== 'error') setSyncStatus('idle');
     } catch (e) {}
     if (_pendingSyncRequested) {
       _pendingSyncRequested = false;
