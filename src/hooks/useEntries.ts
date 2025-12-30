@@ -1,12 +1,13 @@
 import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { LocalEntry } from '../db/entries';
 import {
-  getEntries,
-  addLocalEntry,
-  LocalEntry,
-  updateLocalEntry,
-  markEntryDeleted,
-} from '../db/entries';
+  getTransactionsByUser,
+  addTransaction,
+  updateTransaction,
+  deleteTransaction as sqliteDeleteTransaction,
+  upsertTransactionFromRemote,
+} from '../db/transactions';
 import { subscribeEntries } from '../utils/dbEvents';
 import { getSession, saveSession } from '../db/session';
 import { ensureCategory, DEFAULT_CATEGORY } from '../constants/categories';
@@ -93,7 +94,61 @@ export const useEntries = (userId?: string | null) => {
     queryKey: ['entries', userId],
     queryFn: async () => {
       if (!userId) return [] as LocalEntry[];
-      return await getEntries(userId);
+
+      // Always read from local SQLite first for responsive UI.
+      try {
+        const local = await getTransactionsByUser(userId);
+        // Map sqlite rows to LocalEntry shape
+        const mapped = (local || []).map((r: any) => ({
+          local_id: r.id,
+          remote_id: null,
+          user_id: r.user_id,
+          type: r.type,
+          amount: r.amount,
+          category: r.category,
+          note: r.note,
+          date: r.date,
+          updated_at: r.updated_at,
+          currency: 'INR',
+        }));
+
+        // In background: if Neon is configured, try to pull remote rows and upsert into local DB
+        (async () => {
+          try {
+            const { getNeonHealth, query } = require('../api/neonClient');
+            const health = getNeonHealth();
+            if (health.isConfigured) {
+              const rows = await query(
+                `SELECT id, user_id, type, amount, category, note, created_at, updated_at, date FROM transactions WHERE user_id = $1 AND (deleted_at IS NULL) ORDER BY updated_at DESC LIMIT 1000`,
+                [userId]
+              );
+              if (rows && rows.length) {
+                for (const r of rows) {
+                  // Convert server timestamps to epoch-ms where needed
+                  const upd = {
+                    id: r.id,
+                    user_id: r.user_id,
+                    type: r.type,
+                    amount: Number(r.amount),
+                    category: r.category,
+                    note: r.note,
+                    date: r.date ?? null,
+                    updated_at: r.updated_at ?? Date.now(),
+                    sync_status: 1,
+                  };
+                  try {
+                    await upsertTransactionFromRemote(upd as any);
+                  } catch (e) {}
+                }
+              }
+            }
+          } catch (e) {}
+        })();
+
+        return mapped as LocalEntry[];
+      } catch (e) {
+        return [] as LocalEntry[];
+      }
     },
     enabled: !!userId,
     staleTime: 30_000,
@@ -124,17 +179,23 @@ export const useEntries = (userId?: string | null) => {
       const now = new Date().toISOString();
 
       const created = normalizeDate((entry as any).date || (entry as any).created_at, now);
-      const newEntry = {
-        ...entry,
-        category: ensureCategory(entry.category),
+      // Simple client-side id for offline mode
+      const localId =
+        (entry as any).local_id || `local_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+
+      const toInsert = {
+        id: localId,
         user_id: sid,
-        date: created,
-        created_at: created,
-        updated_at: now,
         type: toCanonical((entry as any).type),
+        amount: Number((entry as any).amount) || 0,
+        category: ensureCategory(entry.category),
+        note: entry.note || null,
+        date: created,
+        sync_status: 0,
       };
 
-      return await addLocalEntry(newEntry);
+      await addTransaction(toInsert as any);
+      return toInsert;
     },
 
     onMutate: async (entry) => {
@@ -181,12 +242,18 @@ export const useEntries = (userId?: string | null) => {
       const dateVal =
         updates.date !== undefined ? normalizeDate(updates.date, null as any) : undefined;
 
-      await updateLocalEntry(local_id, {
-        ...updates,
+      const sid = await resolveUserId(userId);
+      // Build update payload for sqlite
+      const payload: any = {
+        id: local_id,
+        user_id: sid,
+        amount: updates.amount !== undefined ? Number(updates.amount) : undefined,
         type: updates.type !== undefined ? toCanonical(updates.type as any) : undefined,
         category: updates.category !== undefined ? ensureCategory(updates.category) : undefined,
-        date: dateVal,
-      } as any);
+        note: updates.note !== undefined ? updates.note : undefined,
+        date: dateVal !== undefined ? dateVal : undefined,
+      };
+      await updateTransaction(payload as any);
     },
 
     onMutate: async ({ local_id, updates }) => {
@@ -234,7 +301,8 @@ export const useEntries = (userId?: string | null) => {
   const deleteEntryMutation = useMutation({
     mutationFn: async (local_id: string) => {
       if (!local_id) throw new Error('local_id required');
-      await markEntryDeleted(local_id);
+      const sid = await resolveUserId(userId);
+      await sqliteDeleteTransaction(local_id, sid);
     },
 
     onMutate: async (local_id: string) => {
