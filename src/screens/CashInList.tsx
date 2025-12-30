@@ -19,6 +19,7 @@ import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Swipeable } from 'react-native-gesture-handler';
 import dayjs from 'dayjs';
+import { formatDate, dayjsFrom } from '../utils/date';
 
 // Custom Hooks & Components
 import { useEntries } from '../hooks/useEntries';
@@ -110,7 +111,7 @@ const IncomeSummaryCard = React.memo(({ summary, fadeAnim, slideAnim }: any) => 
 // --- SWIPEABLE COMPACT ROW ---
 const SwipeableIncomeItem = React.memo(({ item, onEdit, onDelete }: any) => {
   const swipeableRef = useRef<Swipeable>(null);
-  const dateStr = dayjs(item.date || item.created_at).format('MMM D, h:mm A');
+  const dateStr = formatDate(item.date || item.created_at);
 
   // Render Right Actions (Swipe Left -> Edit)
   const renderRightActions = (progress: any, dragX: any) => {

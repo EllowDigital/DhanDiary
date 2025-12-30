@@ -158,6 +158,7 @@ const AppContent = () => {
   return (
     <>
       <BiometricAuth />
+      <SyncStatusBanner />
       <NavigationContainer>
         <RootStack.Navigator screenOptions={{ headerShown: false }}>
           <RootStack.Screen name="Splash" component={SplashScreen} />
@@ -180,7 +181,7 @@ function AppWithDb() {
   try {
     const holder = require('./src/utils/queryClientHolder');
     if (holder && typeof holder.setQueryClient === 'function') holder.setQueryClient(queryClient);
-  } catch (e) {}
+  } catch (e) { }
 
   // Initialize SQLite DB on startup and expose readiness to the app shell.
   const initializeDatabase = useCallback(async () => {
@@ -201,7 +202,7 @@ function AppWithDb() {
     // Enable legacy LayoutAnimation on Android when appropriate (centralized)
     try {
       enableLegacyLayoutAnimations();
-    } catch (e) {}
+    } catch (e) { }
     try {
       const extra = (Constants?.expoConfig?.extra as any) || {};
       const neonUrl = extra.NEON_URL || process.env.NEON_URL || null;
@@ -241,7 +242,7 @@ function AppWithDb() {
           if (__DEV__) console.warn('[App] initial runFullSync failed', e);
         });
       }
-    } catch (e) {}
+    } catch (e) { }
 
     try {
       startForegroundSyncScheduler(15000);
@@ -261,7 +262,7 @@ function AppWithDb() {
       try {
         stopForegroundSyncScheduler();
         stopBackgroundFetch();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, [dbReady]);
 
@@ -285,12 +286,12 @@ function AppWithDb() {
     // Use the modern subscription API and always call `remove()` on cleanup.
     const sub: any = AppState.addEventListener
       ? AppState.addEventListener('change', handler)
-      : { remove: () => {} };
+      : { remove: () => { } };
 
     return () => {
       try {
         if (sub && typeof sub.remove === 'function') sub.remove();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, [dbReady]);
 

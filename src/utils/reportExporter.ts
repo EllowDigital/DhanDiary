@@ -108,7 +108,7 @@ const generatePdf = async (data: any[], options: ExportOptions): Promise<string>
           .map(
             (item, idx) => `
             <tr style="border-bottom: 1px solid #e2e8f0; background-color: ${idx % 2 === 0 ? '#fff' : '#f8fafc'};">
-                <td style="padding: 6px;">${dayjs(item.date).format('DD MMM YYYY')}</td>
+                <td style="padding: 6px;">${formatDate(item.date, 'DD MMM YYYY')}</td>
                 <td style="padding: 6px;">${item.category}</td>
                 <td style="padding: 6px; color: #64748b;">${item.note || ''}</td>
                 <td style="padding: 6px; text-align: right; color: ${isIncome(item.type) ? '#166534' : '#991B1B'}; font-weight: 600;">
@@ -170,7 +170,7 @@ const generateCsv = async (data: any[], options: ExportOptions): Promise<string>
   const rows = data
     .map((i) => {
       const cleanNote = (i.note || '').replace(/,/g, ' '); // remove commas to prevent csv break
-      return `${dayjs(i.date).format('YYYY-MM-DD')},${i.type},${i.category},${i.amount},${i.currency || 'INR'},${cleanNote},${i.created_at}`;
+      return `${formatDate(i.date, 'YYYY-MM-DD')},${i.type},${i.category},${i.amount},${i.currency || 'INR'},${cleanNote},${i.created_at}`;
     })
     .join('\n');
 

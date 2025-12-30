@@ -128,6 +128,14 @@ export const useEntries = (userId?: string | null) => {
           currency: 'INR',
         }));
 
+        // DEV SAFETY: warn if tombstoned rows appear in the source (they should be filtered)
+        if (__DEV__) {
+          try {
+            const leaked = (local || []).some((rr: any) => rr && rr.sync_status === 2);
+            if (leaked) console.warn('[useEntries] Tombstone row leaked into local query result');
+          } catch (e) {}
+        }
+
         // In background: if Neon is configured, try to pull remote rows and upsert into local DB
         (async () => {
           try {

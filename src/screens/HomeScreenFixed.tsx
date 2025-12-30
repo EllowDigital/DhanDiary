@@ -23,6 +23,7 @@ import UserAvatar from '../components/UserAvatar';
 import Svg, { Defs, LinearGradient, Stop, Rect, Circle } from 'react-native-svg';
 import { LineChart, PieChart } from 'react-native-chart-kit';
 import dayjs from 'dayjs';
+import { dayjsFrom, formatDate, parseToDate } from '../utils/date';
 import { subscribeSyncStatus } from '../services/syncManager';
 import { isExpense as isExpenseType, isIncome as isIncomeType } from '../utils/transactionType';
 import { getIconForCategory } from '../constants/categories';
@@ -219,7 +220,7 @@ const TransactionItem = React.memo(({ item, onPress }: { item: any; onPress: () 
         >
           {isInc ? '+' : '-'}₹{Number(item.amount).toLocaleString()}
         </Text>
-        <Text style={styles.txnDate}>{dayjs(item.date).format('MMM D, h:mm A')}</Text>
+        <Text style={styles.txnDate}>{formatDate(item.date)}</Text>
       </View>
     </TouchableOpacity>
   );
@@ -251,14 +252,14 @@ const HomeScreen = () => {
     return () => {
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
   const safeLayoutAnim = () => {
     try {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    } catch (e) {}
+    } catch (e) { }
   };
 
   const handleToggleChart = (type: any) => {
@@ -285,7 +286,7 @@ const HomeScreen = () => {
       .filter((e) => isExpenseType(e.type))
       .reduce((acc, c) => acc + Number(c.amount), 0);
     const cutOff = period === 'week' ? dayjs().subtract(6, 'day') : dayjs().startOf('month');
-    const filtered = entries.filter((e) => dayjs(e.date).isAfter(cutOff));
+    const filtered = entries.filter((e) => dayjsFrom(e.date).isAfter(cutOff));
 
     // Wave
     const wavePoints =
@@ -294,7 +295,7 @@ const HomeScreen = () => {
       .filter((e) => isExpenseType(e.type))
       .forEach((e) => {
         const idx =
-          period === 'week' ? 6 - dayjs().diff(dayjs(e.date), 'day') : dayjs(e.date).date() - 1;
+          period === 'week' ? 6 - dayjs().diff(dayjsFrom(e.date), 'day') : dayjsFrom(e.date).date() - 1;
         if (idx >= 0 && idx < wavePoints.length) wavePoints[idx] += Number(e.amount);
       });
 
