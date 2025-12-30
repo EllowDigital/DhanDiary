@@ -74,14 +74,22 @@ const writeFile = async (
   contents: string,
   encoding: 'utf8' | 'base64' = 'utf8'
 ): Promise<string> => {
-  // Ensure we have a valid directory path
-  const dir = FileSystem.documentDirectory;
+  // Ensure we have a valid directory path. Cast to any to avoid SDK type mismatches.
+  const dir = (FileSystem as any).documentDirectory || (FileSystem as any).documentDirectory;
   if (!dir) {
+    // If no documentDirectory (e.g., some runtimes), fall back to current working directory URI-ish placeholder
+    // Use Print fallback later if write fails.
     throw new Error('FileSystem.documentDirectory is not available');
   }
 
   const fileUri = `${dir}${fileName}`;
-  await FileSystem.writeAsStringAsync(fileUri, contents, { encoding });
+  // Use runtime method if available
+  if (typeof (FileSystem as any).writeAsStringAsync === 'function') {
+    await (FileSystem as any).writeAsStringAsync(fileUri, contents, { encoding });
+  } else {
+    // Let higher-level callers handle fallback via Print or other strategy
+    throw new Error('writeAsStringAsync is not available on FileSystem');
+  }
   return fileUri;
 };
 
