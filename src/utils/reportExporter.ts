@@ -2,15 +2,45 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
 const { documentDirectory } = FileSystem as any;
-const writeAsStringAsync: typeof FileSystem.writeAsStringAsync = (FileSystem as any)
-  .writeAsStringAsync;
 // Some SDK versions may not expose EncodingType; fallback to 'utf8' string if missing
 const UTF8_ENCODING = (FileSystem as any)?.EncodingType?.UTF8 || 'utf8';
+
+// Robust write helper: prefer the legacy API when available (expo-file-system/legacy),
+// then fall back to the installed FileSystem implementation. This avoids runtime
+// errors on newer Expo SDKs where the old helpers are removed.
+async function writeFile(path: string, contents: string, options?: any) {
+  // Try dynamic import of the legacy API first
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const FSlegacy = await import('expo-file-system/legacy');
+    if (FSlegacy && typeof FSlegacy.writeAsStringAsync === 'function') {
+      await FSlegacy.writeAsStringAsync(path, contents, options);
+      return;
+    }
+  } catch (e) {
+    // ignore and fallback
+  }
+
+  // Next try the currently installed FileSystem API (may still provide the method)
+  try {
+    if (typeof (FileSystem as any).writeAsStringAsync === 'function') {
+      await (FileSystem as any).writeAsStringAsync(path, contents, options);
+      return;
+    }
+  } catch (e) {
+    // ignore and fallthrough
+  }
+
+  // If neither is available, throw a helpful error so the caller can surface it.
+  throw new Error(
+    'No available write API: upgrade `expo-file-system` or install `expo-file-system/legacy`.'
+  );
+}
 import { formatDate } from './date';
 import { isIncome } from './transactionType';
 
 // Types
-type Format = 'pdf' | 'excel' | 'json';
+type Format = 'pdf' | 'excel' | 'json' | 'csv';
 interface ExportOptions {
   title: string;
   periodLabel: string;
@@ -27,6 +57,9 @@ export const exportToFile = async (
   }
   if (format === 'excel') {
     return await generateExcel(data, options);
+  }
+  if (format === 'csv') {
+    return await generateCsv(data, options);
   }
   if (format === 'json') {
     return await generateJson(data, options);
@@ -169,6 +202,36 @@ const generatePdf = async (data: any[], options: ExportOptions): Promise<string>
 };
 
 // --- CSV GENERATOR ---
+const generateCsv = async (data: any[], options: ExportOptions): Promise<string> => {
+  // Build CSV header
+  const headers = ['Date', 'Type', 'Category', 'Amount', 'Currency', 'Note', 'CreatedAt'];
+  let csv = headers.join(',') + '\n';
+
+  for (let i = 0; i < data.length; i++) {
+    const item = data[i];
+    const date = formatDate(item.date, 'YYYY-MM-DD');
+    const type = (item.type || '').toString();
+    const category = (item.category || '').toString();
+    const amount = item.amount != null ? item.amount : '';
+    const currency = item.currency || '';
+    const note = (item.note || '').toString().replace(/"/g, '""');
+    const created = item.created_at || '';
+    // Wrap fields that may contain commas or quotes in double-quotes
+    const row = [date, type, category, amount, currency, `"${note}"`, created];
+    csv += row.join(',') + '\n';
+  }
+
+  const fileName = `${options.title.replace(/\s/g, '_')}.csv`;
+  const path = `${documentDirectory}${fileName}`;
+  try {
+    await writeFile(path, csv, { encoding: UTF8_ENCODING as any });
+    return path;
+  } catch (e) {
+    throw new Error(`Failed to write CSV file: ${e instanceof Error ? e.message : String(e)}`);
+  }
+};
+
+// --- CSV GENERATOR ---
 // --- EXCEL GENERATOR (HTML table saved with .xls extension)
 const generateExcel = async (data: any[], options: ExportOptions): Promise<string> => {
   // Build rows with a fast loop to avoid creating large intermediate arrays
@@ -214,7 +277,7 @@ const generateExcel = async (data: any[], options: ExportOptions): Promise<strin
   try {
     const fileName = `${options.title.replace(/\s/g, '_')}.xls`;
     const path = `${documentDirectory}${fileName}`;
-    await writeAsStringAsync(path, html, { encoding: UTF8_ENCODING as any });
+    await writeFile(path, html, { encoding: UTF8_ENCODING as any });
     return path;
   } catch (e) {
     // Re-throw with clearer message
@@ -239,7 +302,7 @@ const generateJson = async (data: any[], options: ExportOptions): Promise<string
   const fileName = `${options.title.replace(/\s/g, '_')}.json`;
   const path = `${documentDirectory}${fileName}`;
   try {
-    await writeAsStringAsync(path, jsonContent, { encoding: UTF8_ENCODING as any });
+    await writeFile(path, jsonContent, { encoding: UTF8_ENCODING as any });
     return path;
   } catch (e) {
     throw new Error(`Failed to write JSON file: ${e instanceof Error ? e.message : String(e)}`);

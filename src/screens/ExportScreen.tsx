@@ -37,7 +37,7 @@ if (Platform.OS === 'android') {
 const FILTERS = ['Today', 'Daily', 'Weekly', 'Monthly', 'Custom', 'All'] as const;
 type FilterLabel = (typeof FILTERS)[number];
 type InternalMode = 'Today' | 'Day' | 'Week' | 'Month' | 'Custom' | 'All';
-type ExportFormat = 'pdf' | 'excel';
+type ExportFormat = 'pdf' | 'excel' | 'csv';
 
 // --- UTILS ---
 const fontScale = (size: number) => size / PixelRatio.getFontScale();
@@ -84,7 +84,7 @@ const FormatOption = React.memo(
       accessibilityState={{ selected: active }}
     >
       <MaterialIcon
-        name={type === 'pdf' ? 'picture-as-pdf' : 'grid-view'}
+        name={type === 'pdf' ? 'picture-as-pdf' : type === 'excel' ? 'grid-view' : 'file-download'}
         size={28}
         color={active ? colors.primary : '#94A3B8'}
       />
@@ -134,7 +134,7 @@ const ExportScreen = () => {
           pivotDate.format()
         );
         console.log('[ExportScreen] sample entries=', entries.slice(0, 3));
-      } catch (e) {}
+      } catch (e) { }
     }
 
     let startUnix = -Infinity;
@@ -447,7 +447,7 @@ const ExportScreen = () => {
           </View>
 
           <View style={styles.formatRow}>
-            {(['pdf', 'excel'] as const).map((f) => (
+            {(['pdf', 'excel', 'csv'] as const).map((f) => (
               <FormatOption key={f} type={f} active={format === f} onPress={() => setFormat(f)} />
             ))}
           </View>
