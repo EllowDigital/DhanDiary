@@ -18,7 +18,8 @@
     "neon:migrate": "node ./scripts/run-neon-migrations.js",
     "format": "prettier --write .",
     "lint": "eslint ./ --ext .js,.jsx,.ts,.tsx",
-    "lint:fix": "eslint ./ --ext .js,.jsx,.ts,.tsx --fix"
+    "lint:fix": "eslint ./ --ext .js,.jsx,.ts,.tsx --fix",
+    "check": "npm run format && npm run lint --silent && npx tsc --noEmit"
   },
   "dependencies": {
     "@clerk/clerk-expo": "^2.19.14",

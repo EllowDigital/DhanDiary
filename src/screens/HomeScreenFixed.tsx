@@ -270,7 +270,7 @@ const HomeScreen = () => {
     return () => {
       try {
         if (unsub) unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, [fadeAnim]);
 
@@ -368,7 +368,7 @@ const HomeScreen = () => {
           <UserAvatar
             size={42}
             name={user?.name}
-            imageUrl={user?.image}
+            imageUrl={user?.imageUrl || user?.image}
             onPress={() => navigation.navigate('Account')}
           />
           <View style={{ marginLeft: 12 }}>
