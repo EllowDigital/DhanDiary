@@ -36,7 +36,7 @@ if (Platform.OS === 'android') {
 // --- CONFIG ---
 const FILTERS = ['Today', 'Daily', 'Weekly', 'Monthly', 'Custom', 'All'];
 type Mode = 'Today' | 'Day' | 'Week' | 'Month' | 'Custom' | 'All';
-type Format = 'pdf' | 'csv';
+type Format = 'pdf' | 'excel';
 
 // --- UTILS ---
 const fontScale = (size: number) => size / PixelRatio.getFontScale();
@@ -69,7 +69,7 @@ const FormatOption = React.memo(
       activeOpacity={0.8}
     >
       <MaterialIcon
-        name={type === 'pdf' ? 'picture-as-pdf' : 'table-view'}
+        name={type === 'pdf' ? 'picture-as-pdf' : 'grid-view'}
         size={24}
         color={active ? colors.primary : '#94A3B8'}
       />
@@ -330,7 +330,7 @@ const ExportScreen = () => {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>2. FORMAT</Text>
           <View style={styles.formatRow}>
-            {(['pdf', 'csv'] as Format[]).map((f) => (
+            {(['pdf', 'excel'] as Format[]).map((f) => (
               <FormatOption key={f} type={f} active={format === f} onPress={() => setFormat(f)} />
             ))}
           </View>

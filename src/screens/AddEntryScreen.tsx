@@ -173,7 +173,7 @@ const AddEntryScreen: React.FC = () => {
           if ((navigation as any).setParams) {
             (navigation as any).setParams({ local_id: undefined });
           }
-        } catch (e) { }
+        } catch (e) {}
         setEditingLocalId(null);
         setSaving(false);
       };
@@ -252,10 +252,10 @@ const AddEntryScreen: React.FC = () => {
       } finally {
         try {
           setSaving(false);
-        } catch (e) { }
+        } catch (e) {}
         try {
           navigation.goBack();
-        } catch (e) { }
+        } catch (e) {}
       }
     });
   };

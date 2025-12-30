@@ -252,14 +252,14 @@ const HomeScreen = () => {
     return () => {
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, []);
 
   const safeLayoutAnim = () => {
     try {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    } catch (e) { }
+    } catch (e) {}
   };
 
   const handleToggleChart = (type: any) => {

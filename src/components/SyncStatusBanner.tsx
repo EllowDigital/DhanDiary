@@ -59,7 +59,12 @@ const formatRelativeTime = (ts: number) => {
   if (diff < 60 * 60 * 1000) return `${Math.floor(diff / (60 * 1000))}m ago`;
   if (diff < 24 * 60 * 60 * 1000) return `${Math.floor(diff / (60 * 60 * 1000))}h ago`;
   const d = new Date(ts);
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 };
 
 /* -------------------------------------------------------------------------- */
@@ -69,7 +74,7 @@ const formatRelativeTime = (ts: number) => {
 const SyncStatusBanner = () => {
   const isOnline = useInternetStatus();
   const insets = useSafeAreaInsets();
-  
+
   // State
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
   const [bannerState, setBannerState] = useState<BannerState>('hidden');
@@ -125,22 +130,22 @@ const SyncStatusBanner = () => {
       } else {
         // If we were previously syncing or had an error, and now we are idle/success,
         // we show the "synced" success state briefly.
-        // We only transition to 'synced' if the PREVIOUS state wasn't hidden/offline 
+        // We only transition to 'synced' if the PREVIOUS state wasn't hidden/offline
         // to avoid showing "Synced" immediately on app launch.
         if (bannerState === 'syncing' || bannerState === 'error') {
-           nextState = 'synced';
+          nextState = 'synced';
         } else if (bannerState === 'synced') {
-           // Keep it synced until timer runs out
-           nextState = 'synced';
+          // Keep it synced until timer runs out
+          nextState = 'synced';
         } else {
-           nextState = 'hidden';
+          nextState = 'hidden';
         }
       }
 
       // Handle the transition logic
       if (nextState === 'synced') {
         setBannerState('synced');
-        
+
         // Schedule auto-hide
         if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
         hideTimerRef.current = setTimeout(() => {
@@ -154,7 +159,6 @@ const SyncStatusBanner = () => {
         }
         setBannerState(nextState);
       }
-
     }, DEBOUNCE_MS);
 
     return () => {
@@ -167,7 +171,7 @@ const SyncStatusBanner = () => {
     let mounted = true;
     const loadTime = async () => {
       if (bannerState !== 'synced') return;
-      
+
       // Try in-memory first
       const inMem = getLastSuccessfulSyncAt && getLastSuccessfulSyncAt();
       if (inMem) {
@@ -191,7 +195,9 @@ const SyncStatusBanner = () => {
       loadTime();
     }
 
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, [bannerState]);
 
   /* ------------------------- 4. Run Animations ------------------------ */
@@ -262,7 +268,13 @@ const SyncStatusBanner = () => {
         };
       default:
         // Hidden state fallback
-        return { bg: 'transparent', color: 'transparent', accent: 'transparent', icon: 'check', text: '' };
+        return {
+          bg: 'transparent',
+          color: 'transparent',
+          accent: 'transparent',
+          icon: 'check',
+          text: '',
+        };
     }
   };
 
@@ -294,7 +306,7 @@ const SyncStatusBanner = () => {
   /* ------------------------- Render ------------------------ */
   // We strictly don't render null, but rely on opacity/translate to hide it
   // This ensures the exit animation plays correctly.
-  
+
   return (
     <Animated.View
       style={[
@@ -318,9 +330,7 @@ const SyncStatusBanner = () => {
         </Animated.View>
 
         <View style={styles.textContainer}>
-          <Text style={[styles.title, { color: config.color }]}>
-            {config.text}
-          </Text>
+          <Text style={[styles.title, { color: config.color }]}>{config.text}</Text>
           {config.subtext ? (
             <Text style={[styles.subtitle, { color: config.color, opacity: 0.8 }]}>
               {config.subtext}
@@ -333,7 +343,7 @@ const SyncStatusBanner = () => {
           <View style={[styles.indicator, { backgroundColor: '#EF4444' }]} />
         )}
       </View>
-      
+
       {/* Subtle bottom border line */}
       <View style={[styles.bottomLine, { backgroundColor: config.color, opacity: 0.1 }]} />
     </Animated.View>
