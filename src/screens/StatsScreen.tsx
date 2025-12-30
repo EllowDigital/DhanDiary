@@ -54,20 +54,25 @@ const CHART_CONFIG = {
 const fontScale = (size: number) => size / PixelRatio.getFontScale();
 
 const formatCompact = (val: number, currency: string = 'INR') => {
-  const abs = Math.abs(val);
-  if (abs === 0) return '0';
-
+  const num = Number(val || 0);
+  const abs = Math.abs(num);
   const prefix = currency === 'USD' ? '$' : '₹';
 
+  // Explicitly handle zero
+  if (abs === 0) return '0';
+
+  // Small fractional values: show two decimals (useful for avg/day)
+  if (abs > 0 && abs < 1) return prefix + num.toFixed(2);
+
   if (currency === 'INR' || currency === '₹') {
-    if (abs >= 10000000) return prefix + (val / 10000000).toFixed(2) + 'Cr';
-    if (abs >= 100000) return prefix + (val / 100000).toFixed(2) + 'L';
-    return prefix + Math.round(val).toLocaleString('en-IN');
+    if (abs >= 10000000) return prefix + (num / 10000000).toFixed(2) + 'Cr';
+    if (abs >= 100000) return prefix + (num / 100000).toFixed(2) + 'L';
+    return prefix + Math.round(num).toLocaleString('en-IN');
   } else {
-    if (abs >= 1000000000) return prefix + (val / 1000000000).toFixed(2) + 'B';
-    if (abs >= 1000000) return prefix + (val / 1000000).toFixed(2) + 'M';
-    if (abs >= 1000) return prefix + (val / 1000).toFixed(1) + 'k';
-    return prefix + Math.round(val).toLocaleString();
+    if (abs >= 1000000000) return prefix + (num / 1000000000).toFixed(2) + 'B';
+    if (abs >= 1000000) return prefix + (num / 1000000).toFixed(2) + 'M';
+    if (abs >= 1000) return prefix + (num / 1000).toFixed(1) + 'k';
+    return prefix + Math.round(num).toLocaleString();
   }
 };
 
