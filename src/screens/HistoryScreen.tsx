@@ -32,6 +32,7 @@ import { colors, spacing } from '../utils/design';
 import { DEFAULT_CATEGORY, ensureCategory, getIconForCategory } from '../constants/categories';
 import ScreenHeader from '../components/ScreenHeader';
 import dayjs from 'dayjs';
+import { formatDate, dayjsFrom } from '../utils/date';
 import { Swipeable } from 'react-native-gesture-handler';
 import { isIncome } from '../utils/transactionType';
 
@@ -61,7 +62,7 @@ const SwipeableHistoryItem = React.memo(({ item, onEdit, onDelete }: any) => {
   // Use category-based icon when available, fall back to type arrows
   const catIcon = getIconForCategory(item.category);
   const iconName = catIcon || (isInc ? 'arrow-downward' : 'arrow-upward');
-  const dateStr = dayjs(item.date || item.created_at).format('MMM D, h:mm A');
+  const dateStr = formatDate(item.date || item.created_at);
   const swipeableRef = useRef<Swipeable>(null);
 
   const renderRightActions = (_: any, dragX: any) => {
@@ -292,7 +293,7 @@ const EditTransactionModal = React.memo(({ visible, entry, onClose, onSave }: an
                     onPress={() => setShowDatePicker(true)}
                   >
                     <Text style={styles.pickerLabel}>Date</Text>
-                    <Text style={styles.pickerValue}>{dayjs(date).format('DD MMM')}</Text>
+                    <Text style={styles.pickerValue}>{formatDate(date, 'DD MMM')}</Text>
                   </TouchableOpacity>
                 </View>
 

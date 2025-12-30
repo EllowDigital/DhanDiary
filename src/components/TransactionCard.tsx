@@ -13,6 +13,7 @@ import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { RectButton } from 'react-native-gesture-handler';
 import dayjs from 'dayjs';
+import { formatDate } from '../utils/date';
 import AppCard from './AppCard';
 import { isIncome } from '../utils/transactionType';
 import { ensureCategory } from '../constants/categories';
@@ -106,12 +107,7 @@ const TransactionCardInner: React.FC<Props> = ({
               {isIncome(item.type) ? '+' : '-'}₹{Number(item.amount).toFixed(2)}
             </Text>
 
-            <RNText style={styles.dateText}>
-              {(() => {
-                const d = dayjs(item.date || item.created_at);
-                return d.isValid() ? d.format('DD MMM YYYY') : '—';
-              })()}
-            </RNText>
+            <RNText style={styles.dateText}>{formatDate(item.date || item.created_at, 'DD MMM YYYY')}</RNText>
 
             {/* Sync badge */}
             {item && item.sync_status !== undefined && (

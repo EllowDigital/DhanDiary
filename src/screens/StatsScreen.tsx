@@ -19,6 +19,7 @@ import { Text } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { PieChart } from 'react-native-chart-kit';
 import dayjs from 'dayjs';
+import { dayjsFrom, formatDate } from '../utils/date';
 
 // --- CUSTOM IMPORTS (Assumed based on your context) ---
 import { useEntries } from '../hooks/useEntries';
@@ -144,7 +145,7 @@ const StatsScreen = () => {
     const yearSet = new Set<number>();
 
     entries.forEach((e) => {
-      const d = dayjs(e.date || e.created_at);
+      const d = dayjsFrom(e.date || e.created_at);
       if (!d.isValid()) return;
 
       const mKey = d.format('YYYY-MM');
