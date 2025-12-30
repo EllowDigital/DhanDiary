@@ -1,4 +1,12 @@
-import React, { createContext, useState, useContext, useCallback, useMemo, useRef, useEffect } from 'react';
+import React, {
+  createContext,
+  useState,
+  useContext,
+  useCallback,
+  useMemo,
+  useRef,
+  useEffect,
+} from 'react';
 import { StyleSheet, Text, View, Pressable, Platform } from 'react-native';
 import Animated, { FadeInUp, FadeOutUp, Layout } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -56,8 +64,8 @@ export const ToastProvider = ({ children }: { children: React.ReactNode }) => {
 
   const hideToast = useCallback(() => {
     if (timerRef.current) {
-        clearTimeout(timerRef.current);
-        timerRef.current = null;
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
     }
     setToast(null);
   }, []);
@@ -100,20 +108,14 @@ export const ToastProvider = ({ children }: { children: React.ReactNode }) => {
               style={styles.icon}
             />
 
-            <Text style={[styles.text, { color: config.text }]}>
-              {toast.message}
-            </Text>
+            <Text style={[styles.text, { color: config.text }]}>{toast.message}</Text>
 
-            <Pressable 
-                onPress={hideToast} 
-                hitSlop={12} 
-                style={({pressed}) => [{ opacity: pressed ? 0.5 : 0.8 }, styles.closeBtn]}
+            <Pressable
+              onPress={hideToast}
+              hitSlop={12}
+              style={({ pressed }) => [{ opacity: pressed ? 0.5 : 0.8 }, styles.closeBtn]}
             >
-              <MaterialCommunityIcons
-                name="close"
-                size={18}
-                color={config.text}
-              />
+              <MaterialCommunityIcons name="close" size={18} color={config.text} />
             </Pressable>
           </View>
         </Animated.View>
@@ -138,7 +140,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 30, // "Pill" shape
-    
+
     // Modern Shadow
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
@@ -150,7 +152,7 @@ const styles = StyleSheet.create({
     maxWidth: 600, // Tablet friendly
     width: 'auto',
     alignSelf: 'center',
-    
+
     // Glassmorphism-lite border
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
@@ -166,7 +168,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   closeBtn: {
-      padding: 2,
-      marginLeft: 4,
-  }
+    padding: 2,
+    marginLeft: 4,
+  },
 });

@@ -252,10 +252,7 @@ const SplashScreen = () => {
               bottom: -height * 0.1,
               left: -width * 0.2,
               backgroundColor: `${colors.secondary || '#8B5CF6'}15`,
-              transform: [
-                { scale: orbPulse },
-                { translateY: Animated.multiply(orbTranslate, -1) },
-              ],
+              transform: [{ scale: orbPulse }, { translateY: Animated.multiply(orbTranslate, -1) }],
             },
           ]}
         />
@@ -350,7 +347,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  
+
   /* DECORATION */
   orb: {
     position: 'absolute',

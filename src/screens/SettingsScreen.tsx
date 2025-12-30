@@ -19,8 +19,8 @@ import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 
 // Optional Haptics: prefer runtime require so builds without expo-haptics still work.
 let Haptics: any = {
-  impactAsync: async () => { },
-  notificationAsync: async () => { },
+  impactAsync: async () => {},
+  notificationAsync: async () => {},
   ImpactFeedbackStyle: { Medium: 'medium' },
   NotificationFeedbackType: { Warning: 'warning' },
 };
@@ -137,13 +137,13 @@ const SettingsScreen = () => {
         const d = new Date(last);
         setLastSyncTime(`${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`);
       }
-    } catch (e) { }
+    } catch (e) {}
 
     return () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, []);
 
@@ -288,7 +288,9 @@ const SettingsScreen = () => {
                   <View style={{ flex: 1 }}>
                     <Text style={styles.cardTitle}>Sync Status</Text>
                     <Text style={styles.cardSub}>
-                      {isOnline ? 'Data is backed up automatically.' : 'Offline — changes are saved locally.'}
+                      {isOnline
+                        ? 'Data is backed up automatically.'
+                        : 'Offline — changes are saved locally.'}
                     </Text>
                   </View>
                 </View>
@@ -302,10 +304,16 @@ const SettingsScreen = () => {
                           width: 8,
                           height: 8,
                           borderRadius: 4,
-                          backgroundColor: isOnline ? (isSyncing ? '#F59E0B' : '#22C55E') : (colors.accentRed || '#EF4444'),
+                          backgroundColor: isOnline
+                            ? isSyncing
+                              ? '#F59E0B'
+                              : '#22C55E'
+                            : colors.accentRed || '#EF4444',
                         }}
                       />
-                      <Text style={styles.statValue}>{isOnline ? (isSyncing ? 'Syncing…' : 'Online') : 'Offline'}</Text>
+                      <Text style={styles.statValue}>
+                        {isOnline ? (isSyncing ? 'Syncing…' : 'Online') : 'Offline'}
+                      </Text>
                     </View>
                   </View>
                   <View style={[styles.statItem, styles.statBorderLeft]}>

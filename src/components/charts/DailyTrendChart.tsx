@@ -124,8 +124,8 @@ const DailyTrendChart = ({ data, height = 220, width, currency = 'INR' }: Props)
         hidePointsAtIndex={
           data.length > 10
             ? Array.from({ length: data.length }, (_, i) => i).filter(
-              (i) => i % Math.ceil(data.length / 5) !== 0
-            )
+                (i) => i % Math.ceil(data.length / 5) !== 0
+              )
             : []
         }
         style={{

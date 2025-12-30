@@ -57,8 +57,8 @@ const aggregateLocally = async (userId: string, start: dayjs.Dayjs, end: dayjs.D
   const [, dailyRes] = await executeSqlAsync(dailySql, [userId, startIso, endIso]);
   const dailyMap = new Map<string, number>();
   for (let i = 0; i < dailyRes.rows.length; i++) {
-    const r = dailyRes.rows.item(i);
-    dailyMap.set(r.d, Number(r.total_out || 0));
+    const r: any = dailyRes.rows.item(i) || {};
+    dailyMap.set(String(r.d || ''), Number(r.total_out || 0));
   }
 
   // Fill Date Gaps
@@ -91,8 +91,12 @@ const aggregateLocally = async (userId: string, start: dayjs.Dayjs, end: dayjs.D
   const [, catRes] = await executeSqlAsync(catSql, [userId, startIso, endIso]);
   const pie = [] as { name: string; value: number; count: number }[];
   for (let i = 0; i < catRes.rows.length; i++) {
-    const r = catRes.rows.item(i);
-    pie.push({ name: r.category, value: Number(r.value || 0), count: Number(r.cnt || 0) });
+    const r: any = catRes.rows.item(i) || {};
+    pie.push({
+      name: r.category || 'Uncategorized',
+      value: Number(r.value || 0),
+      count: Number(r.cnt || 0),
+    });
   }
 
   const daysCount = Math.max(1, days.length);
@@ -227,9 +231,20 @@ export const aggregateWithPreferSummary = async (
 ): Promise<StatResult> => {
   if (!userId) {
     return {
-      totalIn: 0, totalOut: 0, net: 0, count: 0, skipped: 0,
-      mean: 0, median: 0, stddev: 0, maxIncome: 0, maxExpense: 0,
-      currency: 'INR', detectedCurrencies: [], dailyTrend: [], pieData: [],
+      totalIn: 0,
+      totalOut: 0,
+      net: 0,
+      count: 0,
+      skipped: 0,
+      mean: 0,
+      median: 0,
+      stddev: 0,
+      maxIncome: 0,
+      maxExpense: 0,
+      currency: 'INR',
+      detectedCurrencies: [],
+      dailyTrend: [],
+      pieData: [],
     } as StatResult;
   }
 
@@ -243,7 +258,7 @@ export const aggregateWithPreferSummary = async (
   if (pre && pre.length > 0) {
     const totalOut = pre.reduce((s: number, p: any) => s + (Number(p.out || 0) || 0), 0);
     const totalIn = pre.reduce((s: number, p: any) => s + (Number(p.in || 0) || 0), 0);
-    
+
     const dailyTrend = pre
       .slice()
       .sort((a: any, b: any) => (a.date > b.date ? 1 : -1))
@@ -253,14 +268,16 @@ export const aggregateWithPreferSummary = async (
         date: String(p.date),
       }));
 
-    // 3. Fetch "Extras" (Categories & Max/Min) 
+    // 3. Fetch "Extras" (Categories & Max/Min)
     // summaries don't have these, so we need a separate query
     let pie: { name: string; value: number; count: number }[] = [];
     let maxIncome = 0;
     let maxExpense = 0;
 
     let neonReachable = false;
-    try { neonReachable = await checkNeonConnection(1500); } catch (e) {}
+    try {
+      neonReachable = await checkNeonConnection(1500);
+    } catch (e) {}
 
     if (neonReachable) {
       // REMOTE QUERY
@@ -282,7 +299,7 @@ export const aggregateWithPreferSummary = async (
              FROM transactions
              WHERE user_id = $1 AND date::date >= $2::date AND date::date <= $3::date AND deleted_at IS NULL`,
             [userId, start.format('YYYY-MM-DD'), end.format('YYYY-MM-DD')]
-          )
+          ),
         ]);
 
         pie = (catRows || []).map((r: any) => ({
@@ -292,11 +309,10 @@ export const aggregateWithPreferSummary = async (
         }));
         maxIncome = Number(statsRows?.[0]?.max_in || 0);
         maxExpense = Number(statsRows?.[0]?.max_out || 0);
-
       } catch (e) {
         console.warn('Remote details fetch failed, falling back to local', e);
         // Force fallback logic below to run if this part failed
-        neonReachable = false; 
+        neonReachable = false;
       }
     }
 
@@ -305,7 +321,7 @@ export const aggregateWithPreferSummary = async (
       try {
         const startIso = start.startOf('day').toISOString();
         const endIso = end.endOf('day').toISOString();
-        
+
         const catSql = `
           SELECT COALESCE(category,'Uncategorized') AS category, 
                  COALESCE(SUM(CASE WHEN type='expense' THEN amount ELSE 0 END),0) AS value, 
@@ -314,11 +330,15 @@ export const aggregateWithPreferSummary = async (
           WHERE user_id = ? AND date >= ? AND date <= ? AND deleted_at IS NULL
           GROUP BY COALESCE(category,'Uncategorized') ORDER BY value DESC LIMIT 8;`;
         const [, catLocal] = await executeSqlAsync(catSql, [userId, startIso, endIso]);
-        
+
         pie = [];
         for (let i = 0; i < catLocal.rows.length; i++) {
-          const r = catLocal.rows.item(i);
-          pie.push({ name: r.category, value: Number(r.value || 0), count: Number(r.cnt || 0) });
+          const r: any = catLocal.rows.item(i) || {};
+          pie.push({
+            name: r.category || 'Uncategorized',
+            value: Number(r.value || 0),
+            count: Number(r.cnt || 0),
+          });
         }
 
         const statsSql = `
@@ -346,10 +366,15 @@ export const aggregateWithPreferSummary = async (
       net: totalIn - totalOut,
       count: pre.reduce((s: number, p: any) => s + (Number(p.count || 0) || 0), 0),
       skipped: 0,
-      mean: 0, median: 0, stddev: 0,
-      maxIncome, maxExpense,
-      currency: 'INR', detectedCurrencies: [],
-      dailyTrend, pieData: pie,
+      mean: 0,
+      median: 0,
+      stddev: 0,
+      maxIncome,
+      maxExpense,
+      currency: 'INR',
+      detectedCurrencies: [],
+      dailyTrend,
+      pieData: pie,
       avgPerDay,
       savingsRate: Math.max(0, savingsRate),
     } as StatResult;
