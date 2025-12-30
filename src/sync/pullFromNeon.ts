@@ -114,7 +114,8 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
   for (const remote of remoteRows) {
     if (!remote || !remote.id) continue;
     if (processedIds.has(remote.id)) {
-      if (__DEV__) console.log('[sync] pullFromNeon: skipping duplicate remote row', remote.id);
+      if ((globalThis as any).__SYNC_VERBOSE__)
+        console.log('[sync] pullFromNeon: skipping duplicate remote row', remote.id);
       continue;
     }
     processedIds.add(remote.id);

@@ -231,7 +231,7 @@ export async function upsertTransactionFromRemote(txn: TransactionRow) {
       const isLocalPendingDelete = existing && existing.deleted_at && existing.sync_status === 0;
       const isLocalTombstoneFlag = existing && Number(existing.sync_status) === 2;
       if (isLocalPendingDelete || isLocalTombstoneFlag) {
-        if (__DEV__)
+        if ((globalThis as any).__SYNC_VERBOSE__)
           console.debug(
             '[transactions] skipping remote upsert, local pending delete/tombstone exists',
             txn.id
@@ -247,7 +247,7 @@ export async function upsertTransactionFromRemote(txn: TransactionRow) {
           const remoteServerVersion = Number(txn.server_version || 0);
           const remoteUpdatedAt = Number(txn.updated_at || 0);
           if (localServerVersion >= remoteServerVersion && localUpdatedAt >= remoteUpdatedAt) {
-            if (__DEV__)
+            if ((globalThis as any).__SYNC_VERBOSE__)
               console.debug('[transactions] skipping remote upsert, local is up-to-date', txn.id);
             return;
           }
