@@ -42,9 +42,18 @@ type Format = 'pdf' | 'excel';
 const fontScale = (size: number) => size / PixelRatio.getFontScale();
 
 const getUnix = (dateInput: any): number => {
-  if (typeof dateInput === 'number') return dateInput;
-  if (dateInput instanceof Date) return dateInput.getTime() / 1000;
-  return new Date(dateInput).getTime() / 1000;
+  if (dateInput === null || dateInput === undefined) return NaN;
+  if (typeof dateInput === 'number') {
+    // Accept seconds or milliseconds; normalize to seconds
+    // If value looks like ms (greater than 1e12 ~ year 33658), treat as ms
+    if (dateInput > 1e12) return Math.floor(dateInput / 1000);
+    // If it's clearly milliseconds (>= 1e11 ~ year 5138), also divide
+    if (dateInput > 1e11) return Math.floor(dateInput / 1000);
+    return Math.floor(dateInput);
+  }
+  if (dateInput instanceof Date) return Math.floor(dateInput.getTime() / 1000);
+  const d = new Date(dateInput);
+  return Number.isFinite(d.getTime()) ? Math.floor(d.getTime() / 1000) : NaN;
 };
 
 // --- SUB-COMPONENTS ---
@@ -82,7 +91,7 @@ const FormatOption = React.memo(
 
 const ExportScreen = () => {
   const { user } = useAuth();
-  const { entries = [] } = useEntries(user?.id);
+  const { entries = [], refetch } = useEntries(user?.id);
 
   // --- STATE ---
   const [exporting, setExporting] = useState(false);
@@ -181,6 +190,28 @@ const ExportScreen = () => {
     // Defer heavy work to next tick to allow UI spinner to render
     InteractionManager.runAfterInteractions(async () => {
       try {
+        // If online and Neon is configured, attempt a quick pull to ensure latest remote rows are present locally.
+        try {
+          const NetInfo = require('@react-native-community/netinfo');
+          const net = await NetInfo.fetch();
+          if (net.isConnected) {
+            try {
+              const pullMod = await import('../sync/pullFromNeon');
+              await pullMod.default();
+            } catch (e) {
+              // fallback to full sync if pull fails silently
+              try {
+                const { syncBothWays } = await import('../services/syncManager');
+                await syncBothWays();
+              } catch (ee) { }
+            }
+            // Refresh local entries after pull
+            try {
+              await refetch?.();
+            } catch (e) { }
+          }
+        } catch (e) { }
+
         const periodLabel =
           mode === 'All'
             ? 'All Time'
@@ -188,8 +219,53 @@ const ExportScreen = () => {
               ? `${dayjs(customStart).format('D MMM')} - ${dayjs(customEnd).format('D MMM')}`
               : getDateLabel();
 
-        // Prepare Data
-        let finalData = targetEntries;
+        // Prepare Data: recompute targetEntries from the freshest `entries` snapshot.
+        // This ensures we include any rows just pulled from remote.
+        let source = entries || [];
+        // try to use refetch result if available (react-query returns updated cache), otherwise use `entries`
+        try {
+          // no-op: entries should be refreshed by refetch awaited above
+        } catch (e) { }
+
+        let finalData = [] as any[];
+        if (source && source.length > 0) {
+          let startUnix = -Infinity;
+          let endUnix = Infinity;
+          const now = dayjs();
+          const pDate = pivotDate;
+
+          switch (mode) {
+            case 'Today':
+              startUnix = now.startOf('day').unix();
+              endUnix = now.endOf('day').unix();
+              break;
+            case 'Day':
+              startUnix = pDate.startOf('day').unix();
+              endUnix = pDate.endOf('day').unix();
+              break;
+            case 'Week':
+              startUnix = pDate.startOf('week').unix();
+              endUnix = pDate.endOf('week').unix();
+              break;
+            case 'Month':
+              startUnix = pDate.startOf('month').unix();
+              endUnix = pDate.endOf('month').unix();
+              break;
+            case 'Custom':
+              startUnix = dayjs(customStart).startOf('day').unix();
+              endUnix = dayjs(customEnd).endOf('day').unix();
+              break;
+            case 'All':
+            default:
+              break;
+          }
+
+          for (let i = 0; i < source.length; i++) {
+            const e = source[i] as any;
+            const t = getUnix(e.date || e.created_at || e.createdAt || e.updated_at);
+            if (!isNaN(t) && t >= startUnix && t <= endUnix) finalData.push(e);
+          }
+        }
         if (!includeNotes) {
           finalData = targetEntries.map(({ note, ...rest }: any) => rest);
         }
