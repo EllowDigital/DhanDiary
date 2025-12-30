@@ -22,7 +22,11 @@ const SyncStatusBanner = () => {
         const unsub = subscribeSyncStatus((running) => {
             setRemoteRunning(Boolean(running));
         });
-        return unsub;
+        return () => {
+            try {
+                unsub();
+            } catch (e) { }
+        };
     }, []);
 
     // Derive banner state with debounce to prevent flicker
