@@ -114,15 +114,28 @@ export const useAuth = () => {
                   name: bridge?.name || name || '',
                   email: bridge?.email || email || '',
                   image: image || null,
+                  imageUrl: image || null,
                 });
                 try {
-                  void saveSession(uid, bridge?.name || name || '', bridge?.email || email || '');
+                  void saveSession(
+                    uid,
+                    bridge?.name || name || '',
+                    bridge?.email || email || '',
+                    image || null,
+                    image || null
+                  );
                 } catch (e) {}
               } catch (e) {
                 // Fallback: persist clerk id if bridge fails
-                setUser({ id, name: name || '', email: email || '', image: image || null });
+                setUser({
+                  id,
+                  name: name || '',
+                  email: email || '',
+                  image: image || null,
+                  imageUrl: image || null,
+                });
                 try {
-                  void saveSession(id, name || '', email || '');
+                  void saveSession(id, name || '', email || '', image || null, image || null);
                 } catch (ee) {}
               }
             })();
@@ -182,7 +195,13 @@ export const useAuth = () => {
         const uid = bridge?.uuid || id;
         // persist authoritative session info
         try {
-          await saveSession(uid, bridge?.name || name || '', bridge?.email || email || '');
+          await saveSession(
+            uid,
+            bridge?.name || name || '',
+            bridge?.email || email || '',
+            image || null,
+            image || null
+          );
         } catch (e) {}
         setUser({
           id: uid,
@@ -201,7 +220,7 @@ export const useAuth = () => {
           imageUrl: image || null,
         });
         try {
-          await saveSession(id, name || '', email || '');
+          await saveSession(id, name || '', email || '', image || null, image || null);
         } catch (ee) {}
       }
     })();

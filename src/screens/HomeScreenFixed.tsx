@@ -274,6 +274,8 @@ const HomeScreen = () => {
     };
   }, [fadeAnim]);
 
+  // Dev logging removed — production-ready
+
   const animateLayout = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
   };

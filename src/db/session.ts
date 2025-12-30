@@ -6,6 +6,8 @@ export type Session = {
   name: string;
   email: string;
   clerk_id?: string | null; // original Clerk id when available
+  image?: string | null;
+  imageUrl?: string | null;
 } | null;
 
 const KEY = 'FALLBACK_SESSION';
@@ -36,8 +38,22 @@ export const getSession = async (): Promise<Session> => {
  * token), we generate an internal UUID and store the original value under
  * `clerk_id` so Neon queries always receive a valid UUID.
  */
-export const saveSession = async (id: string, name: string, email: string) => {
+export const saveSession = async (
+  id: string,
+  name: string,
+  email: string,
+  image: string | null = null,
+  imageUrl: string | null = null
+) => {
   try {
+    // Read existing session if present so we can preserve image fields when callers
+    // don't supply them (many callers only pass id/name/email).
+    let existing: any = null;
+    try {
+      const raw = await AsyncStorage.getItem(KEY);
+      if (raw) existing = JSON.parse(raw);
+    } catch (e) {}
+
     let payload: any = { name: name || '', email: email || '' };
     if (uuidValidate(id)) {
       payload.id = id;
@@ -45,6 +61,16 @@ export const saveSession = async (id: string, name: string, email: string) => {
       payload.id = uuidv4();
       payload.clerk_id = id;
     }
+
+    // Determine resulting image fields:
+    // - If caller provided `image`/`imageUrl` (including explicit null), use it.
+    // - If caller omitted the parameter (undefined), preserve existing stored value when available.
+    const finalImage = typeof image === 'undefined' ? (existing?.image ?? null) : image;
+    const finalImageUrl = typeof imageUrl === 'undefined' ? (existing?.imageUrl ?? null) : imageUrl;
+
+    if (finalImage) payload.image = finalImage;
+    if (finalImageUrl) payload.imageUrl = finalImageUrl;
+
     await AsyncStorage.setItem(KEY, JSON.stringify(payload));
     try {
       notifySessionChanged();
