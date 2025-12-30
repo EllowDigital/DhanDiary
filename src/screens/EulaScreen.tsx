@@ -97,7 +97,7 @@ const EulaScreen = () => {
   const { width } = useWindowDimensions();
   const isTablet = width >= 768;
   const contentMaxWidth = 700;
-  
+
   // Calculate responsive padding
   const horizontalPadding = isTablet ? (width - contentMaxWidth) / 2 : spacing(4);
 
@@ -118,10 +118,17 @@ const EulaScreen = () => {
   return (
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background || '#F8FAFC'} />
-      
+
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
         {/* Header container constrained to max width */}
-        <View style={{ width: '100%', maxWidth: contentMaxWidth, alignSelf: 'center', paddingHorizontal: isTablet ? 0 : 16 }}>
+        <View
+          style={{
+            width: '100%',
+            maxWidth: contentMaxWidth,
+            alignSelf: 'center',
+            paddingHorizontal: isTablet ? 0 : 16,
+          }}
+        >
           <ScreenHeader
             title="End User License"
             subtitle="Terms of Service & EULA"
@@ -133,8 +140,13 @@ const EulaScreen = () => {
         <ScrollView
           style={styles.scroll}
           contentContainerStyle={[
-            styles.scrollContent, 
-            { paddingHorizontal: isTablet ? 0 : 16, width: '100%', maxWidth: contentMaxWidth, alignSelf: 'center' }
+            styles.scrollContent,
+            {
+              paddingHorizontal: isTablet ? 0 : 16,
+              width: '100%',
+              maxWidth: contentMaxWidth,
+              alignSelf: 'center',
+            },
           ]}
           showsVerticalScrollIndicator={false}
         >
@@ -155,27 +167,35 @@ const EulaScreen = () => {
               </View>
               <Text style={styles.cardTitle}>Contact & Support</Text>
             </View>
-            
+
             <Text style={styles.cardBody}>
               Questions about this license? Reach out and we will reply within a few business days.
             </Text>
 
             <View style={styles.contactLinks}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 onPress={() => handleEmailPress(CONTACT_EMAIL_PRIMARY)}
                 activeOpacity={0.7}
                 style={styles.emailButton}
               >
-                <MaterialCommunityIcons name="email-outline" size={18} color={colors.primary || '#2563EB'} />
+                <MaterialCommunityIcons
+                  name="email-outline"
+                  size={18}
+                  color={colors.primary || '#2563EB'}
+                />
                 <Text style={styles.linkText}>{CONTACT_EMAIL_PRIMARY}</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity 
+              <TouchableOpacity
                 onPress={() => handleEmailPress(CONTACT_EMAIL_SECONDARY)}
                 activeOpacity={0.7}
                 style={styles.emailButton}
               >
-                <MaterialCommunityIcons name="account-outline" size={18} color={colors.muted || '#64748B'} />
+                <MaterialCommunityIcons
+                  name="account-outline"
+                  size={18}
+                  color={colors.muted || '#64748B'}
+                />
                 <Text style={styles.secondaryEmail}>{CONTACT_EMAIL_SECONDARY}</Text>
               </TouchableOpacity>
             </View>
@@ -183,7 +203,9 @@ const EulaScreen = () => {
 
           <View style={styles.footer}>
             <Text style={styles.footerText}>Last updated: {LAST_UPDATED}</Text>
-            <Text style={styles.footerSubText}>© {new Date().getFullYear()} EllowDigital. All rights reserved.</Text>
+            <Text style={styles.footerSubText}>
+              © {new Date().getFullYear()} EllowDigital. All rights reserved.
+            </Text>
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -219,7 +241,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.primary || '#2563EB',
   },
-  
+
   // Card Styles
   card: {
     backgroundColor: '#FFFFFF',

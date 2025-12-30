@@ -214,7 +214,7 @@ const AccountManagementScreen = () => {
         showToast(`${biometricType} Disabled`);
       }
     } catch (e) {
-      showToast('Failed to update security settings');
+      showToast('Failed to update security settings', 'error');
     }
   };
 
@@ -372,7 +372,7 @@ const AccountManagementScreen = () => {
                     <MaterialIcon
                       name={hasPassword ? 'lock' : 'public'}
                       size={12}
-                      color={colors.primary}
+                      color={colors.primary || '#3B82F6'}
                       style={{ marginRight: 4 }}
                     />
                     <Text style={styles.authMethodText}>
@@ -408,7 +408,7 @@ const AccountManagementScreen = () => {
                       <MaterialIcon
                         name={showCur ? 'visibility' : 'visibility-off'}
                         size={20}
-                        color={colors.muted}
+                        color={colors.muted || '#94A3B8'}
                         onPress={() => setShowCur(!showCur)}
                       />
                     }
@@ -424,7 +424,7 @@ const AccountManagementScreen = () => {
                     <MaterialIcon
                       name={showNew ? 'visibility' : 'visibility-off'}
                       size={20}
-                      color={colors.muted}
+                      color={colors.muted || '#94A3B8'}
                       onPress={() => setShowNew(!showNew)}
                     />
                   }
@@ -439,7 +439,7 @@ const AccountManagementScreen = () => {
                     <MaterialIcon
                       name={showConfirm ? 'visibility' : 'visibility-off'}
                       size={20}
-                      color={colors.muted}
+                      color={colors.muted || '#94A3B8'}
                       onPress={() => setShowConfirm(!showConfirm)}
                     />
                   }
@@ -462,7 +462,7 @@ const AccountManagementScreen = () => {
                     description: `Secure using ${biometricType}`,
                     icon: 'fingerprint',
                     bgColor: '#EFF6FF', // Blue Tint
-                    iconColor: colors.primary,
+                    iconColor: colors.primary || '#3B82F6',
                   }}
                   isExpanded={activeCard === 'app_security'}
                   onToggle={() => toggleCard('app_security')}
@@ -477,7 +477,7 @@ const AccountManagementScreen = () => {
                     <Switch
                       value={biometricsEnabled}
                       onValueChange={toggleBiometrics}
-                      trackColor={{ false: '#E2E8F0', true: colors.primary }}
+                      trackColor={{ false: '#E2E8F0', true: colors.primary || '#3B82F6' }}
                       thumbColor={'#fff'}
                     />
                   </View>

@@ -96,10 +96,17 @@ const PrivacyPolicyScreen = () => {
   return (
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background || '#F8FAFC'} />
-      
+
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
         {/* Header constrained to content width */}
-        <View style={{ width: '100%', maxWidth: contentMaxWidth, alignSelf: 'center', paddingHorizontal: isTablet ? 0 : 16 }}>
+        <View
+          style={{
+            width: '100%',
+            maxWidth: contentMaxWidth,
+            alignSelf: 'center',
+            paddingHorizontal: isTablet ? 0 : 16,
+          }}
+        >
           <ScreenHeader
             title="Privacy Policy"
             subtitle="Data Protection & Rights"
@@ -112,15 +119,20 @@ const PrivacyPolicyScreen = () => {
           style={styles.scroll}
           contentContainerStyle={[
             styles.scrollContent,
-            { paddingHorizontal: isTablet ? 0 : 16, width: '100%', maxWidth: contentMaxWidth, alignSelf: 'center' }
+            {
+              paddingHorizontal: isTablet ? 0 : 16,
+              width: '100%',
+              maxWidth: contentMaxWidth,
+              alignSelf: 'center',
+            },
           ]}
           showsVerticalScrollIndicator={false}
         >
           {/* Introduction */}
           <Text style={styles.leadText}>
             {COMPANY_NAME} built <Text style={styles.bold}>DhanDiary</Text> to help individuals
-            track their cash flow safely. This policy explains what data we collect, why we
-            process it, and your choices.
+            track their cash flow safely. This policy explains what data we collect, why we process
+            it, and your choices.
           </Text>
 
           {/* Policy Sections */}
@@ -136,7 +148,7 @@ const PrivacyPolicyScreen = () => {
               </View>
               <Text style={styles.cardTitle}>Contact Us</Text>
             </View>
-            
+
             <Text style={styles.cardBody}>
               Questions or privacy requests? We aim to respond within 3 business days.
             </Text>
@@ -147,7 +159,11 @@ const PrivacyPolicyScreen = () => {
                 activeOpacity={0.7}
                 style={styles.emailButton}
               >
-                <MaterialCommunityIcons name="email-fast-outline" size={18} color={colors.primary || '#2563EB'} />
+                <MaterialCommunityIcons
+                  name="email-fast-outline"
+                  size={18}
+                  color={colors.primary || '#2563EB'}
+                />
                 <Text style={styles.emailLink}>{SUPPORT_EMAIL_PRIMARY}</Text>
               </TouchableOpacity>
 
@@ -156,7 +172,11 @@ const PrivacyPolicyScreen = () => {
                 activeOpacity={0.7}
                 style={styles.emailButton}
               >
-                <MaterialCommunityIcons name="shield-account-outline" size={18} color={colors.muted || '#64748B'} />
+                <MaterialCommunityIcons
+                  name="shield-account-outline"
+                  size={18}
+                  color={colors.muted || '#64748B'}
+                />
                 <Text style={styles.secondaryEmail}>Alt: {SUPPORT_EMAIL_SECONDARY}</Text>
               </TouchableOpacity>
             </View>
@@ -201,7 +221,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.primary || '#2563EB',
   },
-  
+
   // Card Styles
   card: {
     backgroundColor: '#FFFFFF',

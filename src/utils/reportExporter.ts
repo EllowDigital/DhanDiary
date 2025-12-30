@@ -1,7 +1,11 @@
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
-const { documentDirectory, writeAsStringAsync, EncodingType } = FileSystem as any;
+const { documentDirectory } = FileSystem as any;
+const writeAsStringAsync: typeof FileSystem.writeAsStringAsync = (FileSystem as any)
+  .writeAsStringAsync;
+// Some SDK versions may not expose EncodingType; fallback to 'utf8' string if missing
+const UTF8_ENCODING = (FileSystem as any)?.EncodingType?.UTF8 || 'utf8';
 import { formatDate } from './date';
 import { isIncome } from './transactionType';
 
@@ -167,25 +171,16 @@ const generatePdf = async (data: any[], options: ExportOptions): Promise<string>
 // --- CSV GENERATOR ---
 // --- EXCEL GENERATOR (HTML table saved with .xls extension)
 const generateExcel = async (data: any[], options: ExportOptions): Promise<string> => {
-  const rowsHtml = data
-    .map((item) => {
-      const note = (item.note || '').toString().replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      const date = formatDate(item.date, 'YYYY-MM-DD');
-      const amount = item.amount;
-      const currency = item.currency || 'INR';
-      return `
-        <tr>
-          <td>${date}</td>
-          <td>${item.type}</td>
-          <td>${item.category}</td>
-          <td style="text-align: right">${amount}</td>
-          <td>${currency}</td>
-          <td>${note}</td>
-          <td>${item.created_at || ''}</td>
-        </tr>
-      `;
-    })
-    .join('');
+  // Build rows with a fast loop to avoid creating large intermediate arrays
+  let rowsHtml = '';
+  for (let i = 0; i < data.length; i++) {
+    const item = data[i];
+    const note = (item.note || '').toString().replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const date = formatDate(item.date, 'YYYY-MM-DD');
+    const amount = item.amount;
+    const currency = item.currency || 'INR';
+    rowsHtml += `<tr><td>${date}</td><td>${item.type}</td><td>${item.category}</td><td style="text-align: right">${amount}</td><td>${currency}</td><td>${note}</td><td>${item.created_at || ''}</td></tr>`;
+  }
 
   const html = `
     <html>
@@ -216,10 +211,15 @@ const generateExcel = async (data: any[], options: ExportOptions): Promise<strin
     </html>
   `;
 
-  const fileName = `${options.title.replace(/\s/g, '_')}.xls`;
-  const path = `${documentDirectory}${fileName}`;
-  await writeAsStringAsync(path, html, { encoding: EncodingType.UTF8 });
-  return path;
+  try {
+    const fileName = `${options.title.replace(/\s/g, '_')}.xls`;
+    const path = `${documentDirectory}${fileName}`;
+    await writeAsStringAsync(path, html, { encoding: UTF8_ENCODING as any });
+    return path;
+  } catch (e) {
+    // Re-throw with clearer message
+    throw new Error(`Failed to write Excel file: ${e instanceof Error ? e.message : String(e)}`);
+  }
 };
 
 // --- JSON GENERATOR ---
@@ -238,8 +238,12 @@ const generateJson = async (data: any[], options: ExportOptions): Promise<string
   );
   const fileName = `${options.title.replace(/\s/g, '_')}.json`;
   const path = `${documentDirectory}${fileName}`;
-  await writeAsStringAsync(path, jsonContent, { encoding: EncodingType.UTF8 });
-  return path;
+  try {
+    await writeAsStringAsync(path, jsonContent, { encoding: UTF8_ENCODING as any });
+    return path;
+  } catch (e) {
+    throw new Error(`Failed to write JSON file: ${e instanceof Error ? e.message : String(e)}`);
+  }
 };
 
 const formatMoney = (amount: number, currency = 'INR') => {

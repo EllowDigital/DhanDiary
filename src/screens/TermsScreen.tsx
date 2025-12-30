@@ -101,10 +101,17 @@ const TermsScreen = () => {
   return (
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background || '#F8FAFC'} />
-      
+
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
         {/* Header constrained to max width */}
-        <View style={{ width: '100%', maxWidth: contentMaxWidth, alignSelf: 'center', paddingHorizontal: isTablet ? 0 : 16 }}>
+        <View
+          style={{
+            width: '100%',
+            maxWidth: contentMaxWidth,
+            alignSelf: 'center',
+            paddingHorizontal: isTablet ? 0 : 16,
+          }}
+        >
           <ScreenHeader
             title="Terms of Use"
             subtitle="Rights & Responsibilities"
@@ -117,14 +124,20 @@ const TermsScreen = () => {
           style={styles.scroll}
           contentContainerStyle={[
             styles.scrollContent,
-            { paddingHorizontal: isTablet ? 0 : 16, width: '100%', maxWidth: contentMaxWidth, alignSelf: 'center' }
+            {
+              paddingHorizontal: isTablet ? 0 : 16,
+              width: '100%',
+              maxWidth: contentMaxWidth,
+              alignSelf: 'center',
+            },
           ]}
           showsVerticalScrollIndicator={false}
         >
           {/* Intro Text */}
           <Text style={styles.leadText}>
-            Please read these Terms carefully before using <Text style={styles.bold}>DhanDiary</Text>. 
-            By creating an account or continuing to use the app, you agree to the rules below.
+            Please read these Terms carefully before using{' '}
+            <Text style={styles.bold}>DhanDiary</Text>. By creating an account or continuing to use
+            the app, you agree to the rules below.
           </Text>
 
           {/* Sections */}
@@ -140,27 +153,36 @@ const TermsScreen = () => {
               </View>
               <Text style={styles.cardTitle}>Contact Us</Text>
             </View>
-            
+
             <Text style={styles.cardBody}>
-              Have questions regarding these terms? We'll get back to you within a few business days.
+              Have questions regarding these terms? We'll get back to you within a few business
+              days.
             </Text>
 
             <View style={styles.contactLinks}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 onPress={() => handleEmailPress(CONTACT_EMAIL_PRIMARY)}
                 activeOpacity={0.7}
                 style={styles.emailButton}
               >
-                <MaterialCommunityIcons name="email-outline" size={18} color={colors.primary || '#2563EB'} />
+                <MaterialCommunityIcons
+                  name="email-outline"
+                  size={18}
+                  color={colors.primary || '#2563EB'}
+                />
                 <Text style={styles.linkText}>{CONTACT_EMAIL_PRIMARY}</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity 
+              <TouchableOpacity
                 onPress={() => handleEmailPress(CONTACT_EMAIL_SECONDARY)}
                 activeOpacity={0.7}
                 style={styles.emailButton}
               >
-                <MaterialCommunityIcons name="shield-account-outline" size={18} color={colors.muted || '#64748B'} />
+                <MaterialCommunityIcons
+                  name="shield-account-outline"
+                  size={18}
+                  color={colors.muted || '#64748B'}
+                />
                 <Text style={styles.secondaryEmail}>Alt: {CONTACT_EMAIL_SECONDARY}</Text>
               </TouchableOpacity>
             </View>
@@ -205,7 +227,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.primary || '#2563EB',
   },
-  
+
   // Card Styles
   card: {
     backgroundColor: '#FFFFFF',

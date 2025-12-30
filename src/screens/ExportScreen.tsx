@@ -125,9 +125,16 @@ const ExportScreen = () => {
 
     if (__DEV__) {
       try {
-        console.log('[ExportScreen] entries.len=', entries.length, 'mode=', mode, 'pivot=', pivotDate.format());
+        console.log(
+          '[ExportScreen] entries.len=',
+          entries.length,
+          'mode=',
+          mode,
+          'pivot=',
+          pivotDate.format()
+        );
         console.log('[ExportScreen] sample entries=', entries.slice(0, 3));
-      } catch (e) { }
+      } catch (e) {}
     }
 
     let startUnix = -Infinity;
@@ -171,7 +178,12 @@ const ExportScreen = () => {
       // Check date field first, fallbacks if missing
       const t = getUnix((e as any).date || (e as any).created_at || (e as any).updated_at);
       if (!Number.isFinite(t)) {
-        if (__DEV__) console.warn('[ExportScreen] invalid date for entry', e && ((e as any).local_id || (e as any).id), (e as any).date);
+        if (__DEV__)
+          console.warn(
+            '[ExportScreen] invalid date for entry',
+            e && ((e as any).local_id || (e as any).id),
+            (e as any).date
+          );
         // If user selected ALL, include rows with unparseable dates so they can be exported.
         if (mode === 'All') {
           filtered.push(e);

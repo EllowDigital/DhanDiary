@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState, useCallback, memo } from 'react';
+import React, { useEffect, useMemo, useRef, useState, memo } from 'react';
 import {
   View,
   StyleSheet,
@@ -19,7 +19,6 @@ import { Text } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { PieChart } from 'react-native-chart-kit';
 import dayjs from 'dayjs';
-import { dayjsFrom, formatDate } from '../utils/date';
 
 // --- CUSTOM IMPORTS (Assumed based on your context) ---
 import { useEntries } from '../hooks/useEntries';
@@ -30,6 +29,7 @@ import DailyTrendChart from '../components/charts/DailyTrendChart';
 import { LocalEntry } from '../db/entries';
 import asyncAggregator from '../utils/asyncAggregator';
 import { aggregateWithPreferSummary } from '../services/aggregates';
+import { dayjsFrom } from '../utils/date';
 
 // --- ANIMATION SETUP ---
 if (Platform.OS === 'android') {
@@ -332,6 +332,7 @@ const StatsScreen = () => {
         <ScreenHeader
           title="Analytics"
           subtitle="Financial health overview"
+          showScrollHint={false}
           useSafeAreaPadding={false}
         />
       </View>

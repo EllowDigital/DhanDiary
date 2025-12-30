@@ -26,12 +26,14 @@ import appConfig from '../../app.json';
 let pkg: { version?: string } = {};
 try {
   // Safe require for Metro bundler
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
   pkg = require('../../package.json');
 } catch (e) {
   pkg = { version: '1.0.0' };
 }
 
-type RouteName = 'Settings' | 'About' | 'Account' | 'Analytics' | string;
+// --- TYPES ---
+type RouteName = 'Settings' | 'About' | 'Account' | 'Analytics';
 
 interface MenuItem {
   icon: keyof typeof MaterialIcon.glyphMap;
@@ -41,8 +43,37 @@ interface MenuItem {
   color: string;
 }
 
+// --- SUB-COMPONENT: MENU ROW ---
+const MenuRow = ({
+  icon,
+  label,
+  description,
+  action,
+  color,
+  isLast,
+}: MenuItem & { isLast: boolean }) => (
+  <TouchableOpacity
+    onPress={action}
+    activeOpacity={0.7}
+    style={[styles.row, isLast && styles.rowLast]}
+  >
+    <View style={[styles.iconBox, { backgroundColor: `${color}15` }]}>
+      <MaterialIcon name={icon} size={22} color={color} />
+    </View>
+    <View style={styles.rowTextContainer}>
+      <Text style={styles.rowTitle} numberOfLines={1}>
+        {label}
+      </Text>
+      <Text style={styles.rowDesc} numberOfLines={1}>
+        {description}
+      </Text>
+    </View>
+    <MaterialIcon name="chevron-right" size={20} color={colors.border || '#E2E8F0'} />
+  </TouchableOpacity>
+);
+
 const MoreScreen: React.FC = () => {
-  const navigation = useNavigation<NavigationProp<Record<string, object>>>();
+  const navigation = useNavigation<NavigationProp<any>>();
   const [scrollOffset, setScrollOffset] = useState(0);
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -66,11 +97,11 @@ const MoreScreen: React.FC = () => {
       }),
       Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, damping: 16 }),
     ]).start();
-  }, []);
+  }, [fadeAnim, slideAnim]);
 
   // --- ACTIONS ---
   const navigateParent = useCallback(
-    (route: RouteName) => navigation.navigate(route as any),
+    (route: RouteName) => navigation.navigate(route),
     [navigation]
   );
 
@@ -94,21 +125,21 @@ const MoreScreen: React.FC = () => {
         label: 'Analytics',
         description: 'Spending trends & reports',
         action: () => navigateParent('Analytics'),
-        color: colors.accentOrange,
+        color: colors.accentOrange || '#F97316',
       },
       {
         icon: 'person',
         label: 'Account',
         description: 'Profile & personal details',
         action: () => navigateParent('Account'),
-        color: colors.primary,
+        color: colors.primary || '#2563EB',
       },
       {
         icon: 'tune',
         label: 'Settings',
         description: 'Preferences & backups',
         action: () => navigateParent('Settings'),
-        color: colors.secondary,
+        color: colors.secondary || '#4F46E5',
       },
     ],
     [navigateParent]
@@ -121,21 +152,21 @@ const MoreScreen: React.FC = () => {
         label: 'Roadmap',
         description: 'Upcoming features',
         action: handleRoadmap,
-        color: colors.accentGreen,
+        color: colors.accentGreen || '#10B981',
       },
       {
         icon: 'info-outline',
         label: 'About',
         description: 'Version & legal',
         action: () => navigateParent('About'),
-        color: colors.accentBlue,
+        color: colors.accentBlue || '#0EA5E9',
       },
       {
         icon: 'support-agent',
         label: 'Support',
         description: 'Contact us',
         action: handleEmail,
-        color: colors.accentRed,
+        color: colors.accentRed || '#EF4444',
       },
     ],
     [handleRoadmap, handleEmail, navigateParent]
@@ -143,7 +174,7 @@ const MoreScreen: React.FC = () => {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background || '#F8FAFC'} />
       <SafeAreaView style={styles.safeArea}>
         {/* HEADER */}
         <View style={styles.headerWrapper}>
@@ -174,8 +205,8 @@ const MoreScreen: React.FC = () => {
                 <Svg style={StyleSheet.absoluteFill}>
                   <Defs>
                     <LinearGradient id="heroGrad" x1="0" y1="0" x2="1" y2="1">
-                      <Stop offset="0" stopColor={colors.primary} />
-                      <Stop offset="1" stopColor={colors.secondary} />
+                      <Stop offset="0" stopColor={colors.primary || '#2563EB'} />
+                      <Stop offset="1" stopColor={colors.secondary || '#1D4ED8'} />
                     </LinearGradient>
                   </Defs>
                   <Rect width="100%" height="100%" rx={24} fill="url(#heroGrad)" />
@@ -232,38 +263,9 @@ const MoreScreen: React.FC = () => {
   );
 };
 
-// --- SUB-COMPONENT: MENU ROW ---
-const MenuRow = ({
-  icon,
-  label,
-  description,
-  action,
-  color,
-  isLast,
-}: MenuItem & { isLast: boolean }) => (
-  <TouchableOpacity
-    onPress={action}
-    activeOpacity={0.7}
-    style={[styles.row, isLast && styles.rowLast]}
-  >
-    <View style={[styles.iconBox, { backgroundColor: `${color}15` }]}>
-      <MaterialIcon name={icon} size={22} color={color} />
-    </View>
-    <View style={styles.rowTextContainer}>
-      <Text style={styles.rowTitle} numberOfLines={1}>
-        {label}
-      </Text>
-      <Text style={styles.rowDesc} numberOfLines={1}>
-        {description}
-      </Text>
-    </View>
-    <MaterialIcon name="chevron-right" size={20} color={colors.border} />
-  </TouchableOpacity>
-);
-
 // --- STYLES ---
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.background },
+  root: { flex: 1, backgroundColor: colors.background || '#F8FAFC' },
   safeArea: { flex: 1 },
   headerWrapper: { alignItems: 'center', width: '100%' },
 
@@ -278,7 +280,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
     elevation: 8,
-    shadowColor: colors.primary,
+    shadowColor: colors.primary || '#2563EB',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.25,
     shadowRadius: 16,
@@ -317,17 +319,17 @@ const styles = StyleSheet.create({
   sectionLabel: {
     fontSize: 13,
     fontWeight: '700',
-    color: colors.muted,
+    color: colors.muted || '#94A3B8',
     textTransform: 'uppercase',
     letterSpacing: 0.8,
     marginBottom: 10,
     marginLeft: 8,
   },
   menuGroup: {
-    backgroundColor: colors.card,
+    backgroundColor: colors.card || '#FFFFFF',
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.border || '#E2E8F0',
     marginBottom: 24,
     overflow: 'hidden',
     elevation: 2,
@@ -344,7 +346,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: colors.surfaceMuted || '#F3F4F6',
-    backgroundColor: colors.card,
+    backgroundColor: colors.card || '#FFFFFF',
   },
   rowLast: { borderBottomWidth: 0 },
   iconBox: {
@@ -356,13 +358,13 @@ const styles = StyleSheet.create({
     marginRight: 14,
   },
   rowTextContainer: { flex: 1, justifyContent: 'center', marginRight: 8 },
-  rowTitle: { fontSize: 16, fontWeight: '600', color: colors.text, marginBottom: 2 },
-  rowDesc: { fontSize: 13, color: colors.muted },
+  rowTitle: { fontSize: 16, fontWeight: '600', color: colors.text || '#1E293B', marginBottom: 2 },
+  rowDesc: { fontSize: 13, color: colors.muted || '#64748B' },
 
   // Footer
   footer: { alignItems: 'center', marginTop: 8 },
-  footerText: { color: colors.muted, fontSize: 12, fontWeight: '600' },
-  footerSubText: { color: colors.muted, fontSize: 11, marginTop: 4, opacity: 0.6 },
+  footerText: { color: colors.muted || '#94A3B8', fontSize: 12, fontWeight: '600' },
+  footerSubText: { color: colors.muted || '#94A3B8', fontSize: 11, marginTop: 4, opacity: 0.6 },
 });
 
 export default MoreScreen;

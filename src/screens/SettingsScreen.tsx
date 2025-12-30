@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -17,6 +17,20 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 
+// Optional Haptics: prefer runtime require so builds without expo-haptics still work.
+let Haptics: any = {
+  impactAsync: async () => {},
+  notificationAsync: async () => {},
+  ImpactFeedbackStyle: { Medium: 'medium' },
+  NotificationFeedbackType: { Warning: 'warning' },
+};
+try {
+  const _h = require('expo-haptics');
+  if (_h) Haptics = _h;
+} catch (e) {
+  // expo-haptics not installed — keep no-op fallback
+}
+
 // Logic
 import { logout } from '../services/auth';
 import { syncBothWays } from '../services/syncManager';
@@ -28,20 +42,12 @@ import { colors, spacing } from '../utils/design';
 import ScreenHeader from '../components/ScreenHeader';
 import appConfig from '../../app.json';
 
-// Safe Package Import
+// Safe Package Import for Version
 let pkg: { version?: string } = {};
 try {
   pkg = require('../../package.json');
 } catch (e) {
   pkg = { version: '1.0.0' };
-}
-
-// Optional: try to require expo-haptics if available (avoid hard dependency)
-let Haptics: any = null;
-try {
-  Haptics = require('expo-haptics');
-} catch (e) {
-  Haptics = null;
 }
 
 // --- SUB-COMPONENT: SETTINGS ROW ---
@@ -75,9 +81,9 @@ const SettingsScreen = () => {
   const navigation = useNavigation<any>();
   const query = useQueryClient();
   const { showToast } = useToast();
-  const { user } = useAuth();
+  const { user } = useAuth(); // Clerk or Custom Auth hook
 
-  // Clerk Auth (Safe Import)
+  // Clerk Auth (Safe Import for optional usage)
   let clerkSignOut: any = null;
   try {
     const clerk = require('@clerk/clerk-expo');
@@ -109,7 +115,7 @@ const SettingsScreen = () => {
       })
     );
     Animated.stagger(60, animations).start();
-  }, []);
+  }, [animValues]);
 
   const getAnimStyle = (index: number) => ({
     opacity: animValues[index],
@@ -127,11 +133,9 @@ const SettingsScreen = () => {
   const handleManualSync = async () => {
     if (isSyncing) return;
 
-    // Haptic feedback (if available)
-    if (Platform.OS !== 'web' && Haptics && typeof Haptics.impactAsync === 'function') {
-      try {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle?.Medium || 1);
-      } catch (e) {}
+    // Haptic feedback
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
 
     setIsSyncing(true);
@@ -141,7 +145,7 @@ const SettingsScreen = () => {
       setLastSyncTime(`${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`);
       showToast('Sync completed successfully');
     } catch (e) {
-      showToast('Sync failed. Please try again.');
+      showToast('Sync failed. Please try again.', 'error');
     } finally {
       setIsSyncing(false);
     }
@@ -167,7 +171,9 @@ const SettingsScreen = () => {
             const ok = await logout();
             try {
               query.clear();
-            } catch (e) {}
+            } catch (e) {
+              // ignore
+            }
 
             if (ok) showToast('Signed out successfully');
 
@@ -175,7 +181,7 @@ const SettingsScreen = () => {
             navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
           } catch (e) {
             console.warn('[Settings] logout failed', e);
-            showToast('Sign out failed. Please try again.');
+            showToast('Sign out failed. Please try again.', 'error');
           }
         },
       },
@@ -183,6 +189,9 @@ const SettingsScreen = () => {
   };
 
   const handleResetApp = () => {
+    if (Platform.OS !== 'web') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    }
     Alert.alert(
       'Reset Application?',
       'This will clear all local data, sign you out, and restart the app. Your cloud data will remain safe.',
@@ -192,15 +201,6 @@ const SettingsScreen = () => {
           text: 'Reset Everything',
           style: 'destructive',
           onPress: async () => {
-            if (
-              Platform.OS !== 'web' &&
-              Haptics &&
-              typeof Haptics.notificationAsync === 'function'
-            ) {
-              try {
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType?.Warning || 2);
-              } catch (e) {}
-            }
             await logout();
             query.clear();
             showToast('App has been reset');
@@ -217,7 +217,7 @@ const SettingsScreen = () => {
 
   return (
     <View style={styles.mainContainer}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background || '#F8FAFC'} />
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
         <View style={{ width: contentWidth, alignSelf: 'center' }}>
           <ScreenHeader
@@ -290,7 +290,6 @@ const SettingsScreen = () => {
                   label="Account Details"
                   onPress={() => navigation.navigate('Account')}
                 />
-                {/* Notifications feature hidden */}
                 <SettingsRow
                   icon="lock-outline"
                   label="Privacy Policy"
