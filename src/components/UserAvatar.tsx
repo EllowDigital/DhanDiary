@@ -49,7 +49,7 @@ export default function UserAvatar({ size = 36, name, imageUrl, onPress, style }
       activeOpacity={0.7}
       style={[styles.touchWrap, { minWidth: MIN_TOUCH, minHeight: MIN_TOUCH }, style]}
     >
-      {((resolvedUrl || lastGoodUrl) && !imgError) ? (
+      {(resolvedUrl || lastGoodUrl) && !imgError ? (
         <Image
           source={{ uri: (resolvedUrl || lastGoodUrl) as string }}
           style={{ width: size, height: size, borderRadius: radius }}

@@ -134,7 +134,7 @@ const ExportScreen = () => {
           pivotDate.format()
         );
         console.log('[ExportScreen] sample entries=', entries.slice(0, 3));
-      } catch (e) { }
+      } catch (e) {}
     }
 
     let startUnix = -Infinity;
