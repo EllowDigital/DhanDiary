@@ -68,17 +68,35 @@ const normalizeDate = (
   raw: string | number | Date | null | undefined,
   fallback: string
 ): string => {
-  if (raw === null || raw === undefined) return fallback;
-  if (raw instanceof Date) return raw.toISOString();
-  if (typeof raw === 'number') return new Date(raw).toISOString();
-  return String(raw);
+  try {
+    if (raw === null || raw === undefined) return fallback;
+    if (raw instanceof Date) {
+      const t = raw.getTime();
+      return Number.isFinite(t) ? raw.toISOString() : fallback;
+    }
+    if (typeof raw === 'number') {
+      const d = new Date(raw);
+      return Number.isFinite(d.getTime()) ? d.toISOString() : fallback;
+    }
+    // string
+    const s = String(raw);
+    const d = new Date(s);
+    return Number.isFinite(d.getTime()) ? d.toISOString() : fallback;
+  } catch (e) {
+    return fallback;
+  }
 };
 
 const normalizeUpdatedAt = (u: string | number | Date | null | undefined): number => {
-  if (u === null || u === undefined) return 0;
-  if (typeof u === 'number') return u;
-  const parsed = new Date(u);
-  return Number.isFinite(parsed.getTime()) ? parsed.getTime() : 0;
+  try {
+    if (u === null || u === undefined) return 0;
+    if (typeof u === 'number') return Number.isFinite(u) ? u : 0;
+    if (u instanceof Date) return Number.isFinite(u.getTime()) ? u.getTime() : 0;
+    const parsed = new Date(String(u));
+    return Number.isFinite(parsed.getTime()) ? parsed.getTime() : 0;
+  } catch (e) {
+    return 0;
+  }
 };
 
 // Build optimistic entry
@@ -361,6 +379,10 @@ export const useEntries = (userId?: string | null) => {
     onSettled: async () => {
       const sid = await resolveUserId(userId);
       await queryClient.invalidateQueries({ queryKey: ['entries', sid] });
+      try {
+        // Force immediate refetch so UI reflects DB write right away
+        await refetch();
+      } catch (e) {}
       requestSync();
     },
   });
@@ -438,6 +460,9 @@ export const useEntries = (userId?: string | null) => {
     onSettled: async () => {
       const sid = await resolveUserId(userId);
       await queryClient.invalidateQueries({ queryKey: ['entries', sid] });
+      try {
+        await refetch();
+      } catch (e) {}
       requestSync();
     },
   });
@@ -475,6 +500,9 @@ export const useEntries = (userId?: string | null) => {
     onSettled: async () => {
       const sid = await resolveUserId(userId);
       await queryClient.invalidateQueries({ queryKey: ['entries', sid] });
+      try {
+        await refetch();
+      } catch (e) {}
       requestSync();
     },
   });
