@@ -216,7 +216,7 @@ const EditTransactionModal = React.memo(({ visible, entry, onClose, onSave }: an
       // component may unmount after onClose; attempt to reset saving
       try {
         setSaving(false);
-      } catch (e) { }
+      } catch (e) {}
     }
   };
 
@@ -437,10 +437,14 @@ const HistoryScreen = () => {
       }
       // If not yet synced, warn user before editing
       if (item.sync_status !== 1) {
-        Alert.alert('Pending changes', 'This entry has local changes that are not yet synced. Edit anyway?', [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Edit', onPress: () => setEditingEntry(item) },
-        ]);
+        Alert.alert(
+          'Pending changes',
+          'This entry has local changes that are not yet synced. Edit anyway?',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Edit', onPress: () => setEditingEntry(item) },
+          ]
+        );
         return;
       }
       // Normal: open editor

@@ -252,14 +252,14 @@ const HomeScreen = () => {
     return () => {
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, []);
 
   const safeLayoutAnim = () => {
     try {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    } catch (e) { }
+    } catch (e) {}
   };
 
   const handleToggleChart = (type: any) => {
@@ -295,7 +295,9 @@ const HomeScreen = () => {
       .filter((e) => isExpenseType(e.type))
       .forEach((e) => {
         const idx =
-          period === 'week' ? 6 - dayjs().diff(dayjsFrom(e.date), 'day') : dayjsFrom(e.date).date() - 1;
+          period === 'week'
+            ? 6 - dayjs().diff(dayjsFrom(e.date), 'day')
+            : dayjsFrom(e.date).date() - 1;
         if (idx >= 0 && idx < wavePoints.length) wavePoints[idx] += Number(e.amount);
       });
 

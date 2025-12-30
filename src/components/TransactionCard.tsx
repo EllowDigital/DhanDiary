@@ -107,7 +107,9 @@ const TransactionCardInner: React.FC<Props> = ({
               {isIncome(item.type) ? '+' : '-'}₹{Number(item.amount).toFixed(2)}
             </Text>
 
-            <RNText style={styles.dateText}>{formatDate(item.date || item.created_at, 'DD MMM YYYY')}</RNText>
+            <RNText style={styles.dateText}>
+              {formatDate(item.date || item.created_at, 'DD MMM YYYY')}
+            </RNText>
 
             {/* Sync badge */}
             {item && item.sync_status !== undefined && (
@@ -170,7 +172,7 @@ const TransactionCard = React.memo(TransactionCardInner, (prev, next) => {
       if (prev.item.updated_at !== next.item.updated_at) return false;
       if (prev.item.type !== next.item.type) return false;
     }
-  } catch (e) { }
+  } catch (e) {}
   // assume handlers stable (caller should memoize) — otherwise re-render
   return (
     prev.onEdit === next.onEdit &&
