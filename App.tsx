@@ -99,6 +99,7 @@ const AppContent = () => {
   const { user } = useAuth();
   const { user: clerkUser, isLoaded: clerkLoaded } = useUser();
   const [localSessionId, setLocalSessionId] = React.useState<string | null>(null);
+  const [accountDeletedAt, setAccountDeletedAt] = React.useState<string | null>(null);
 
   // Load persisted fallback session early so offline sync features work even when Clerk user
   // isn't immediately available (e.g., cold start without internet).
@@ -108,7 +109,13 @@ const AppContent = () => {
       try {
         const s = await import('./src/db/session');
         const sess = await s.getSession();
-        if (mounted) setLocalSessionId(sess?.id ?? null);
+        if (mounted) {
+          setLocalSessionId(sess?.id ?? null);
+          try {
+            const del = await s.getAccountDeletedAt();
+            setAccountDeletedAt(del);
+          } catch (e) { }
+        }
       } catch (e) {
         if (__DEV__) console.warn('[AppContent] failed to load local session', e);
       }
@@ -121,6 +128,12 @@ const AppContent = () => {
       unsub = se.subscribeSession((s: any) => {
         try {
           setLocalSessionId(s?.id ?? null);
+          try {
+            const mod = require('./src/db/session');
+            if (mod && typeof mod.getAccountDeletedAt === 'function') {
+              mod.getAccountDeletedAt().then((v: any) => setAccountDeletedAt(v));
+            }
+          } catch (e) { }
         } catch (e) { }
       });
     } catch (e) { }
@@ -188,19 +201,23 @@ const AppContent = () => {
       {/* Biometric overlay (keeps being an overlay) */}
       <BiometricAuth />
 
-      {/* Signed-out modal: shown when there is no persisted session and no Clerk user */}
-      {(!user && !localSessionId) && (
+      {/* Signed-out modal: shown only when an account-delete marker exists */}
+      {(accountDeletedAt != null) && (
         <Modal transparent visible animationType="fade">
           <View style={styles.modalBackdrop}>
             <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>Signed Out</Text>
+              <Text style={styles.modalTitle}>Account Deleted</Text>
               <Text style={styles.modalBody}>
-                You have been signed out. Please sign in to continue using DhanDiary.
+                Your account was deleted. All local data has been cleared. Sign in to create a new account.
               </Text>
               <TouchableOpacity
                 style={styles.modalButton}
                 onPress={() => {
                   try {
+                    const mod = require('./src/db/session');
+                    if (mod && typeof mod.setAccountDeletedAt === 'function') {
+                      void mod.setAccountDeletedAt(null);
+                    }
                     resetRoot({ index: 0, routes: [{ name: 'Auth', state: { routes: [{ name: 'Login' }] } }] });
                   } catch (e) { }
                 }}
