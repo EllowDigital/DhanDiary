@@ -24,9 +24,13 @@ import dayjs from 'dayjs';
 // --- CUSTOM HOOKS & UTILS IMPORTS ---
 // Assuming these paths exist based on your snippets.
 import { useAuth } from '../hooks/useAuth';
+import { getSession } from '../db/session';
+import { subscribeSession } from '../utils/sessionEvents';
 import { useEntries } from '../hooks/useEntries';
 import useDelayedLoading from '../hooks/useDelayedLoading';
 import UserAvatar from '../components/UserAvatar';
+import { subscribeBanner } from '../utils/bannerState';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { dayjsFrom, formatDate } from '../utils/date';
 import { subscribeSyncStatus } from '../services/syncManager';
 import { isExpense as isExpenseType, isIncome as isIncomeType } from '../utils/transactionType';
@@ -244,11 +248,14 @@ const TransactionItem = React.memo(
 const HomeScreen = () => {
   const navigation = useNavigation<any>();
   const { user } = useAuth();
+  const [fallbackSession, setFallbackSession] = useState<any>(null);
   const { entries, isLoading, refetch } = useEntries(user?.id);
 
   // Use slightly longer delay for loading spinner to avoid flicker
   const showLoading = useDelayedLoading(Boolean(isLoading), 300);
   const { width: screenWidth } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const [bannerVisible, setBannerVisible] = useState(false);
 
   // Constants for Chart
   const CHART_PADDING = 40; // Inner card padding
@@ -273,6 +280,36 @@ const HomeScreen = () => {
       } catch (e) {}
     };
   }, [fadeAnim]);
+
+  useEffect(() => {
+    const unsub = subscribeBanner((v) => setBannerVisible(v));
+    return () => {
+      try {
+        unsub();
+      } catch (e) {}
+    };
+  }, []);
+
+  // Load local fallback session and subscribe to changes so avatar/name are available
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const s = await getSession();
+        if (mounted) setFallbackSession(s);
+      } catch (e) {}
+    };
+    load();
+    const unsub = subscribeSession((s) => {
+      if (mounted) setFallbackSession(s);
+    });
+    return () => {
+      mounted = false;
+      try {
+        unsub();
+      } catch (e) {}
+    };
+  }, []);
 
   // Dev logging removed — production-ready
 
@@ -367,16 +404,36 @@ const HomeScreen = () => {
       {/* 1. Top Bar */}
       <View style={styles.topBar}>
         <View style={styles.userInfoRow}>
-          <UserAvatar
-            size={42}
-            name={user?.name}
-            imageUrl={user?.imageUrl || user?.image}
-            onPress={() => navigation.navigate('Account')}
-          />
-          <View style={{ marginLeft: 12 }}>
-            <Text style={styles.greetingText}>Welcome Back,</Text>
-            <Text style={styles.userName}>{user?.name || 'User'}</Text>
-          </View>
+          {(() => {
+            const effectiveName =
+              (user && (user.name || (user as any).fullName || (user as any).firstName)) ||
+              fallbackSession?.name ||
+              null;
+            const effectiveImage =
+              user?.imageUrl || user?.image || fallbackSession?.imageUrl || fallbackSession?.image;
+
+            return (
+              <>
+                <View style={styles.avatarWrap}>
+                  <UserAvatar
+                    size={42}
+                    name={effectiveName || undefined}
+                    imageUrl={effectiveImage}
+                    onPress={() => navigation.navigate('Account')}
+                  />
+                  {fallbackSession && !user ? (
+                    <View style={styles.localBadge}>
+                      <MaterialIcon name="cloud-off" size={12} color="#B91C1C" />
+                    </View>
+                  ) : null}
+                </View>
+                <View style={{ marginLeft: 12 }}>
+                  <Text style={styles.greetingText}>Welcome Back,</Text>
+                  <Text style={styles.userName}>{effectiveName || 'User'}</Text>
+                </View>
+              </>
+            );
+          })()}
         </View>
         <TouchableOpacity
           onPress={() => navigation.openDrawer()}
@@ -541,7 +598,10 @@ const HomeScreen = () => {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
-      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+      <SafeAreaView
+        style={styles.safeArea}
+        edges={bannerVisible ? ['left', 'right'] : ['top', 'left', 'right']}
+      >
         {/* Loading Overlay */}
         {showLoading && (
           <View style={styles.loadingOverlay}>
@@ -611,6 +671,24 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   userInfoRow: { flexDirection: 'row', alignItems: 'center' },
+  avatarWrap: {
+    width: 42,
+    height: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+
+  localBadge: {
+    position: 'absolute',
+    right: -6,
+    bottom: -6,
+    backgroundColor: '#FEF2F2',
+    borderRadius: 10,
+    padding: 3,
+    borderWidth: 1,
+    borderColor: 'rgba(185,28,28,0.12)',
+  },
   greetingText: { fontSize: 12, color: COLORS.textSub, fontWeight: '500' },
   userName: { fontSize: 18, fontWeight: '700', color: COLORS.textMain },
   menuBtn: {

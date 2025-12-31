@@ -157,7 +157,9 @@ export const useAuth = () => {
     const unsub = subscribeSession((s) => {
       setUser(s || null);
     });
-    return () => unsub();
+    return () => {
+      if (unsub) unsub();
+    };
   }, []);
 
   // React to Clerk user changes and keep local session in sync.

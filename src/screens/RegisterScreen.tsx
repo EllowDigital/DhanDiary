@@ -16,10 +16,13 @@ import {
   Easing,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { subscribeBanner, isBannerVisible } from '../utils/bannerState';
 import { LinearGradient } from 'expo-linear-gradient';
+import NetInfo from '@react-native-community/netinfo';
 import { Ionicons } from '@expo/vector-icons';
 import { useSignUp } from '@clerk/clerk-expo';
 import { useNavigation } from '@react-navigation/native';
+import OfflineNotice from '../components/OfflineNotice';
 
 // --- CUSTOM IMPORTS ---
 import { colors } from '../utils/design';
@@ -37,6 +40,9 @@ const RegisterScreen = () => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [offlineVisible, setOfflineVisible] = useState(false);
+  const [offlineRetrying, setOfflineRetrying] = useState(false);
+  const [offlineAttemptsLeft, setOfflineAttemptsLeft] = useState<number | undefined>(undefined);
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -59,6 +65,15 @@ const RegisterScreen = () => {
     ]).start();
   }, []);
 
+  const [bannerVisible, setBannerVisible] = React.useState<boolean>(false);
+  React.useEffect(() => {
+    setBannerVisible(isBannerVisible());
+    const unsub = subscribeBanner((v: boolean) => setBannerVisible(v));
+    return () => {
+      if (unsub) unsub();
+    };
+  }, []);
+
   const onSignUpPress = async () => {
     if (!isLoaded) return;
 
@@ -68,45 +83,127 @@ const RegisterScreen = () => {
     }
 
     setLoading(true);
-    try {
-      // 1. Create the user in Clerk
-      await signUp.create({
-        firstName,
-        lastName,
-        emailAddress: email,
-        password,
-      });
 
-      // 2. Prepare the email verification (Send Code)
-      await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
+    const MAX_ATTEMPTS = 3;
 
-      // 3. Navigate to Verification Screen
-      // We pass the user details so the Verify screen can sync to DB after success
-      navigation.navigate('VerifyEmail', {
-        email,
-        mode: 'signup',
-        firstName,
-        lastName,
-      });
-    } catch (err: any) {
-      console.error('Registration error:', err);
+    const doSignUp = async () => {
+      try {
+        if (!signUp) return false;
+        // 1. Create the user in Clerk
+        await signUp.create({
+          firstName,
+          lastName,
+          emailAddress: email,
+          password,
+        });
 
-      const errors = err?.errors || [];
-      const errorMsg = errors.length > 0 ? errors[0].message : err.message;
+        // 2. Prepare the email verification (Send Code)
+        await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
 
-      // User-friendly error mapping
-      if (errorMsg.includes('already exists')) {
-        Alert.alert('Account Exists', 'That email is already in use. Please log in instead.');
-      } else if (errorMsg.includes('password')) {
-        Alert.alert(
-          'Weak Password',
-          'Please choose a stronger password (min 8 chars, mixed case/numbers).'
-        );
-      } else {
-        Alert.alert('Registration Failed', errorMsg);
+        // 3. Navigate to Verification Screen
+        navigation.navigate('VerifyEmail', {
+          email,
+          mode: 'signup',
+          firstName,
+          lastName,
+        });
+        return true;
+      } catch (err: any) {
+        console.error('Registration error:', err);
+
+        const errors = err?.errors || [];
+        const errorMsg = errors.length > 0 ? errors[0].message : err.message;
+
+        // User-friendly error mapping
+        if (errorMsg.includes('already exists')) {
+          Alert.alert('Account Exists', 'That email is already in use. Please log in instead.');
+        } else if (errorMsg.includes('password')) {
+          Alert.alert(
+            'Weak Password',
+            'Please choose a stronger password (min 8 chars, mixed case/numbers).'
+          );
+        } else {
+          try {
+            const net = await NetInfo.fetch();
+            if (!net.isConnected) {
+              setOfflineAttemptsLeft(3);
+              setOfflineVisible(true);
+              return false;
+            }
+          } catch (e) {}
+          Alert.alert('Registration Failed', errorMsg);
+        }
+        return false;
       }
-    } finally {
-      setLoading(false);
+    };
+
+    try {
+      const net = await NetInfo.fetch();
+      if (net.isConnected) {
+        await doSignUp();
+        return;
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    // Offline: show modal and attempt exponential backoff retries
+    setOfflineVisible(true);
+    setOfflineRetrying(true);
+    setOfflineAttemptsLeft(MAX_ATTEMPTS);
+
+    let attemptsLeft = MAX_ATTEMPTS;
+    while (attemptsLeft > 0) {
+      const waitMs = Math.pow(2, MAX_ATTEMPTS - attemptsLeft) * 1000; // 1s,2s,4s
+      await new Promise((r) => setTimeout(r, waitMs));
+      try {
+        const net = await NetInfo.fetch();
+        if (net.isConnected) {
+          setOfflineVisible(false);
+          setOfflineRetrying(false);
+          await doSignUp();
+          return;
+        }
+      } catch (e) {
+        // continue
+      }
+      attemptsLeft -= 1;
+      setOfflineAttemptsLeft(attemptsLeft);
+    }
+
+    setOfflineRetrying(false);
+    setLoading(false);
+  };
+
+  const offlineManualRetry = async () => {
+    setOfflineRetrying(true);
+    setOfflineAttemptsLeft((v) => (typeof v === 'number' ? Math.max(0, v - 1) : undefined));
+    try {
+      const net = await NetInfo.fetch();
+      if (net.isConnected) {
+        setOfflineVisible(false);
+        setOfflineRetrying(false);
+        setLoading(true);
+        try {
+          // attempt signup once
+          if (!signUp) throw new Error('Signup not available');
+          await signUp.create({
+            firstName,
+            lastName,
+            emailAddress: email,
+            password,
+          });
+          await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
+          navigation.navigate('VerifyEmail', { email, mode: 'signup', firstName, lastName });
+        } catch (err: any) {
+          const errors = err?.errors || [];
+          const errorMsg = errors.length > 0 ? errors[0].message : err.message;
+          Alert.alert('Registration Failed', errorMsg);
+          setLoading(false);
+        }
+      }
+    } catch (e) {
+      setOfflineRetrying(false);
     }
   };
 
@@ -122,7 +219,10 @@ const RegisterScreen = () => {
         end={{ x: 1, y: 1 }}
       />
 
-      <SafeAreaView style={{ flex: 1 }}>
+      <SafeAreaView
+        style={{ flex: 1 }}
+        edges={bannerVisible ? (['left', 'right'] as any) : (['top', 'left', 'right'] as any)}
+      >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
@@ -264,6 +364,18 @@ const RegisterScreen = () => {
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
+
+      <OfflineNotice
+        visible={offlineVisible}
+        retrying={offlineRetrying}
+        attemptsLeft={offlineAttemptsLeft}
+        onRetry={offlineManualRetry}
+        onClose={() => {
+          setOfflineVisible(false);
+          setOfflineRetrying(false);
+          setLoading(false);
+        }}
+      />
     </View>
   );
 };

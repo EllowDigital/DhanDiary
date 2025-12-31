@@ -91,7 +91,12 @@ const safeQ = async (sql: string, params: any[] = []) => {
     return await Q(sql, params);
   } catch (err) {
     try {
-      console.error('Neon query failed', { sql: sql.substring(0, 50) + '...', err });
+      if (__DEV__) {
+        console.error('Neon query failed', { sql: sql.substring(0, 50) + '...', err });
+      } else {
+        // In production avoid noisy, raw internal errors; keep a compact warning for diagnostics
+        console.warn('Neon query failed (suppressed details in production)');
+      }
     } catch (e) {}
     throw err;
   }
@@ -226,7 +231,20 @@ export const syncBothWays = async () => {
 
   try {
     // Delegate actual sync work to runFullSync (single source of truth)
-    await runFullSync();
+    const runResult = await runFullSync();
+
+    // If runFullSync returned null, it was throttled or skipped — treat as no-op
+    if (!runResult) {
+      if (__DEV__)
+        console.log('[sync] syncBothWays: runFullSync returned null (throttled/skipped)');
+      // clear in-progress and mark idle, return not-ok so callers can decide whether to show UI
+      _lastSyncAttemptAt = Date.now();
+      _syncInProgress = false;
+      try {
+        setSyncStatus('idle');
+      } catch (e) {}
+      return { ok: false, reason: 'throttled' } as any;
+    }
 
     _lastSuccessfulSyncAt = Date.now();
     try {
@@ -234,6 +252,27 @@ export const syncBothWays = async () => {
       await AsyncStorage.setItem('last_sync_at', String(_lastSuccessfulSyncAt));
     } catch (e) {}
     _syncFailureCount = 0;
+
+    // Compute push/pull counts for callers and for last-sync metrics
+    let pushedCount = 0;
+    let pulledCount = 0;
+    try {
+      if (runResult) {
+        // push result may be an object { pushed: string[] } or an array
+        const pr: any = runResult.pushed;
+        if (pr) {
+          if (Array.isArray(pr)) pushedCount = pr.length;
+          else if (Array.isArray(pr.pushed)) pushedCount = pr.pushed.length;
+          else if (typeof pr === 'number') pushedCount = pr;
+        }
+
+        const pl: any = runResult.pulled;
+        if (pl) {
+          if (typeof pl.pulled === 'number') pulledCount = pl.pulled;
+          else if (typeof pl === 'number') pulledCount = pl;
+        }
+      }
+    } catch (e) {}
 
     try {
       const { notifyEntriesChanged } = require('../utils/dbEvents');
@@ -245,10 +284,17 @@ export const syncBothWays = async () => {
       setSyncStatus('idle');
     } catch (e) {}
 
-    return { ok: true } as any;
+    try {
+      // persist last sync counts for diagnostics
+      try {
+        await AsyncStorage.setItem('last_sync_count', String(pulledCount));
+      } catch (e) {}
+    } catch (e) {}
+    return { ok: true, counts: { pushed: pushedCount, pulled: pulledCount } } as any;
   } catch (err) {
     try {
-      console.error('Sync failed', err);
+      if (__DEV__) console.error('Sync failed', err);
+      else console.warn('Sync failed (suppressed details in production)');
     } catch (e) {}
     _syncFailureCount = Math.min(5, _syncFailureCount + 1);
     // Enter error state — callers should only set this if runFullSync truly failed
@@ -367,9 +413,34 @@ export const startBackgroundFetch = async () => {
           try {
             if (!_syncInProgress) await syncBothWays();
           } catch (err) {
-            console.error('Background fetch sync failed', err);
+            if (__DEV__) console.warn('[BackgroundFetch] sync failed', err);
           } finally {
-            BackgroundFetch.finish(taskId);
+            try {
+              // Invalidate React Query caches related to entries so UI refreshes immediately.
+              try {
+                const holder = require('../utils/queryClientHolder');
+                const qc = holder && holder.getQueryClient ? holder.getQueryClient() : null;
+                if (qc) {
+                  // Invalidate any queries whose key starts with ['entries'] so guest -> real user
+                  // switches cause immediate refetch.
+                  try {
+                    await qc.invalidateQueries({ queryKey: ['entries'] });
+                  } catch (e) {}
+                  // Also invalidate generic balances/summary keys if present.
+                  try {
+                    await qc.invalidateQueries({ queryKey: ['balances'] });
+                  } catch (e) {}
+                }
+              } catch (e) {}
+
+              const { notifyEntriesChanged } = require('../utils/dbEvents');
+              notifyEntriesChanged();
+            } catch (e) {}
+
+            // Signal task complete to BackgroundFetch
+            try {
+              if (typeof BackgroundFetch.finish === 'function') BackgroundFetch.finish(taskId);
+            } catch (e) {}
           }
         },
         (error: any) => console.warn('BackgroundFetch configure failed', error)

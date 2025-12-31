@@ -22,6 +22,22 @@ export async function pushToNeon(): Promise<{ pushed: string[]; deleted: string[
     return { pushed: [], deleted: [] };
   }
 
+  // DEV DEBUG: report basic diagnostics about unsynced rows
+  try {
+    if (__DEV__) {
+      const userSet = new Set<string>();
+      for (const r of rows) if (r && r.user_id) userSet.add(String(r.user_id));
+      console.log(
+        '[sync] pushToNeon: unsynced rows',
+        rows.length,
+        'uniqueUsers',
+        Array.from(userSet)
+      );
+    }
+  } catch (e) {
+    if (__DEV__) console.warn('[sync] pushToNeon: debug log failed', e);
+  }
+
   const toPush = rows.filter((r) => r.sync_status === 0);
   const toDelete = rows.filter((r) => r.sync_status === 2);
 

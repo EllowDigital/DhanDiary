@@ -2,7 +2,7 @@ import NetInfo from '@react-native-community/netinfo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import bcrypt from 'bcryptjs';
-import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuidv4, validate as uuidValidate } from 'uuid';
 // NOTE: Ensure 'react-native-get-random-values' is imported in your App.tsx or index.js for uuid to work.
 
 import { query } from '../api/neonClient';
@@ -141,6 +141,18 @@ export const registerOnline = async (
 
     const user = result[0];
     await saveSession(user.id, user.name || '', user.email);
+    // Ensure guest-mode is cleared on successful registration so app can create
+    // normal sessions going forward.
+    try {
+      const sessMod = require('../db/session');
+      if (sessMod && typeof sessMod.setNoGuestMode === 'function') {
+        await sessMod.setNoGuestMode(false);
+        // Clear any account-deleted marker when user registers
+        if (typeof sessMod.setAccountDeletedAt === 'function') {
+          await sessMod.setAccountDeletedAt(null);
+        }
+      }
+    } catch (e) {}
     await prepareOfflineWorkspace(user.id);
 
     return { id: user.id, name: user.name || '', email: user.email };
@@ -176,6 +188,18 @@ export const loginOnline = async (email: string, password: string): Promise<Auth
   }
 
   await saveSession(user.id, user.name || '', user.email);
+  // Clear no-guest flag when a user successfully logs in so guest creation is allowed
+  // again in case the user logs out later.
+  try {
+    const sessMod = require('../db/session');
+    if (sessMod && typeof sessMod.setNoGuestMode === 'function') {
+      await sessMod.setNoGuestMode(false);
+      // Clear any account-deleted marker when user logs in
+      if (typeof sessMod.setAccountDeletedAt === 'function') {
+        await sessMod.setAccountDeletedAt(null);
+      }
+    }
+  } catch (e) {}
   await prepareOfflineWorkspace(user.id);
 
   return { id: user.id, name: user.name || '', email: user.email };
@@ -253,7 +277,7 @@ export const logout = async (): Promise<boolean> => {
   return true;
 };
 
-export const deleteAccount = async () => {
+export const deleteAccount = async (opts?: { clerkUserId?: string }) => {
   const NEON_URL = resolveNeonUrl();
   const session = await getSession();
 
@@ -261,23 +285,36 @@ export const deleteAccount = async () => {
 
   let remoteDeleted = 0;
   let userDeleted = 0;
+  let clerkDeleted = false;
 
   // 1. Remote Deletion (if online and configured)
   if (NEON_URL) {
     try {
-      // Delete dependent entries first
-      const entriesRes = await withTimeout(
-        query('DELETE FROM transactions WHERE user_id = $1 RETURNING id', [session.id]),
-        10_000
-      );
-      if (entriesRes && Array.isArray(entriesRes)) remoteDeleted = entriesRes.length;
+      // If the session id is not a UUID (e.g. guest_xxx created for offline-only users),
+      // skip remote deletion — Postgres uuid columns will reject non-UUID input.
+      const isUuid = typeof session.id === 'string' && uuidValidate(session.id);
+      if (!isUuid) {
+        console.info('[Auth] Skipping remote Neon deletion for non-UUID session id', session.id);
+      } else {
+        try {
+          // Delete dependent entries first
+          const entriesRes = await withTimeout(
+            query('DELETE FROM transactions WHERE user_id = $1 RETURNING id', [session.id]),
+            10_000
+          );
+          if (entriesRes && Array.isArray(entriesRes)) remoteDeleted = entriesRes.length;
 
-      // Delete user record
-      const userRes = await withTimeout(
-        query('DELETE FROM users WHERE id = $1 RETURNING id', [session.id]),
-        10_000
-      );
-      if (userRes && Array.isArray(userRes)) userDeleted = userRes.length;
+          // Delete user record
+          const userRes = await withTimeout(
+            query('DELETE FROM users WHERE id = $1 RETURNING id', [session.id]),
+            10_000
+          );
+          if (userRes && Array.isArray(userRes)) userDeleted = userRes.length;
+        } catch (err) {
+          console.warn('[Auth] Failed to connect or delete remote account:', err);
+          // Proceed to wipe local data anyway
+        }
+      }
     } catch (err) {
       console.warn('[Auth] Failed to connect or delete remote account:', err);
       // Proceed to wipe local data anyway
@@ -285,18 +322,84 @@ export const deleteAccount = async () => {
   }
 
   // 2. Wipe Local Data
+  // Mark account deleted flag (persisted) so UI can show a targeted message
+  try {
+    const sessMod = require('../db/session');
+    if (sessMod && typeof sessMod.setAccountDeletedAt === 'function') {
+      await sessMod.setAccountDeletedAt(new Date().toISOString());
+    }
+  } catch (e) {}
+
   await wipeLocalDatabase();
 
-  // 3. Clerk Deletion (Best Effort)
+  // Re-initialize DB schema so app restarts in clean state
   try {
+    const { initDB } = await import('../db/sqlite');
+    if (typeof initDB === 'function') await initDB();
+  } catch (e) {
+    console.warn('[Auth] initDB after wipe failed', e);
+  }
+
+  // 3. Clerk Deletion
+  try {
+    // Prefer calling a backend delete endpoint (recommended). If your app
+    // configures `CLERK_DELETE_URL` (in expo extra or env), we'll POST to it
+    // with the clerk user id. The backend should authenticate the request and
+    // call Clerk Admin API server-side.
+    const BACKEND_DELETE_URL =
+      (Constants.expoConfig && (Constants.expoConfig.extra as any)?.CLERK_DELETE_URL) ||
+      process.env.CLERK_DELETE_URL ||
+      null;
+
+    if (opts?.clerkUserId && BACKEND_DELETE_URL) {
+      try {
+        await withTimeout(
+          fetch(BACKEND_DELETE_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: opts.clerkUserId }),
+          }),
+          10000
+        );
+        clerkDeleted = true;
+      } catch (e) {
+        console.warn('[Auth] backend clerk delete failed', (e as any)?.message || e);
+      }
+    } else {
+      // No backend URL — fall back to best-effort client-side admin call only
+      // if a CLERK_SECRET is present (NOT recommended). Warn in dev.
+      const clerkSecret =
+        Constants.expoConfig?.extra?.CLERK_SECRET || process.env.CLERK_SECRET || null;
+
+      if (clerkSecret && opts?.clerkUserId) {
+        if (typeof __DEV__ !== 'undefined' && __DEV__) {
+          console.warn(
+            '[Auth] WARNING: CLERK_SECRET is present in client config. Storing or shipping admin secrets in a mobile client is insecure. Prefer a server endpoint.'
+          );
+        }
+        try {
+          const url = `https://api.clerk.com/v1/users/${opts.clerkUserId}`;
+          await withTimeout(
+            fetch(url, {
+              method: 'DELETE',
+              headers: { Authorization: `Bearer ${clerkSecret}` },
+            }),
+            10000
+          );
+          clerkDeleted = true;
+        } catch (e) {
+          console.warn('[Auth] Clerk admin delete failed', (e as any)?.message || e);
+        }
+      }
+    }
+
+    // Also attempt client-side best-effort signOut if available
     const clerk = require('@clerk/clerk-expo');
     if (clerk && typeof clerk.signOut === 'function') {
       await clerk.signOut();
     }
-    // Note: Actual user deletion usually requires a backend API call to Clerk
-    // rather than a client-side call, unless using useUser().delete().
   } catch (e) {
-    console.warn('[Auth] Clerk clean up failed', e);
+    console.warn('[Auth] Clerk clean up failed', (e as any)?.message || e);
   }
 
   // Ensure we run standard logout cleanup (stop sync, clear caches/storage)
@@ -306,6 +409,43 @@ export const deleteAccount = async () => {
     // best-effort: ignore errors here but log for diagnostics
     console.warn('[Auth] logout during deleteAccount failed', e);
   }
+
+  // Prevent the app from auto-creating a guest session after account deletion.
+  try {
+    const sessMod = require('../db/session');
+    if (sessMod && typeof sessMod.setNoGuestMode === 'function') {
+      // Persist 'no guest' so on next cold start the app won't create guest_... sessions.
+      await sessMod.setNoGuestMode(true);
+    }
+  } catch (e) {
+    if (typeof __DEV__ !== 'undefined' && __DEV__) console.warn('[Auth] setNoGuestMode failed', e);
+  }
+
+  const deletionInfo = {
+    timestamp: new Date().toISOString(),
+    remoteDeleted,
+    userDeleted,
+  };
+
+  // Emit analytics event if analytics helper available (best-effort)
+  try {
+    // Attempt to require a project analytics helper if present
+    const analytics = require('../utils/analytics');
+    if (analytics && typeof analytics.trackEvent === 'function') {
+      try {
+        analytics.trackEvent('account_deleted', deletionInfo);
+      } catch (aErr) {
+        console.warn('[Auth] analytics.trackEvent failed', aErr);
+      }
+    }
+  } catch (e) {
+    // No analytics util — fall back to console
+  }
+
+  // Always log deletion info for server-side ingestion or debugging
+  try {
+    console.info('[Auth] account deleted', deletionInfo);
+  } catch (e) {}
 
   return { remoteDeleted, userDeleted };
 };

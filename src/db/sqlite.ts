@@ -90,6 +90,61 @@ export async function ensureLocalSchemaUpgrades(): Promise<void> {
         if (__DEV__) console.warn('[sqlite] failed to add deleted_at column', e);
       }
     }
+
+    // Normalize existing date/created_at/updated_at formats for consistency.
+    // This will convert mixed numeric/string dates into ISO strings (for date/created_at)
+    // and epoch ms for updated_at. This preserves the original moment while making
+    // client-side grouping and sorting reliable across devices.
+    try {
+      const rows =
+        (await getAllAsync('SELECT id, date, created_at, updated_at FROM transactions;')) || [];
+      for (const r of rows) {
+        try {
+          const toIso = (v: any, fallbackMs?: number) => {
+            if (v == null) return fallbackMs ? new Date(fallbackMs).toISOString() : null;
+            if (v instanceof Date) return v.toISOString();
+            const n = Number(v);
+            if (!Number.isNaN(n)) {
+              const ms = n < 1e12 ? n * 1000 : n;
+              return new Date(ms).toISOString();
+            }
+            const parsed = Date.parse(String(v));
+            if (!Number.isNaN(parsed)) return new Date(parsed).toISOString();
+            return fallbackMs ? new Date(fallbackMs).toISOString() : null;
+          };
+
+          const normUpdated = (() => {
+            const u = r.updated_at;
+            if (u == null) return null;
+            const n = Number(u);
+            if (!Number.isNaN(n)) return n < 1e12 ? n * 1000 : n;
+            const parsed = Date.parse(String(u));
+            return Number.isNaN(parsed) ? null : parsed;
+          })();
+
+          const newDate = toIso(r.date, normUpdated ?? Date.now());
+          const newCreated = toIso(r.created_at, normUpdated ?? Date.now());
+          const newUpdated = normUpdated ?? null;
+
+          const needUpdate =
+            (newDate && String(newDate) !== String(r.date)) ||
+            (newCreated && String(newCreated) !== String(r.created_at)) ||
+            (newUpdated && Number(newUpdated) !== Number(r.updated_at));
+
+          if (needUpdate) {
+            await executeSqlAsync(
+              'UPDATE transactions SET date = ?, created_at = ?, updated_at = ? WHERE id = ?; ',
+              [newDate ?? r.date, newCreated ?? r.created_at, newUpdated ?? r.updated_at, r.id]
+            );
+            if (__DEV__) console.log('[sqlite] normalized transaction dates for', r.id);
+          }
+        } catch (e) {
+          if (__DEV__) console.warn('[sqlite] failed to normalize row', r && r.id, e);
+        }
+      }
+    } catch (e) {
+      if (__DEV__) console.warn('[sqlite] failed to run date normalization', e);
+    }
   } catch (e) {
     if (__DEV__) console.warn('[sqlite] ensureLocalSchemaUpgrades error', e);
   }

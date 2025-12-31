@@ -14,7 +14,9 @@ import {
   upsertTransactionFromRemote,
 } from '../db/transactions';
 import { subscribeEntries } from '../utils/dbEvents';
+import { subscribeSession } from '../utils/sessionEvents';
 import { getSession, saveSession } from '../db/session';
+import { resetRoot } from '../utils/rootNavigation';
 import { ensureCategory, DEFAULT_CATEGORY } from '../constants/categories';
 import { toCanonical, isIncome } from '../utils/transactionType';
 import { syncBothWays } from '../services/syncManager';
@@ -46,21 +48,66 @@ interface MutationContext {
    Helpers
 ---------------------------------------------------------- */
 
-// Resolve an effective user ID (explicit → session → guest)
+// Resolve an effective user ID (explicit → session → existing-local → guest)
 const resolveUserId = async (passedId?: string | null): Promise<string> => {
   if (passedId) return passedId;
 
-  const s = await getSession();
+  // 1) Read persisted fallback session (if any)
+  let s: any = null;
+  try {
+    s = await getSession();
+  } catch (e) {
+    if (__DEV__) console.warn('[resolveUserId] getSession failed', e);
+  }
+
+  // 2) Read any existing user_id already present in local transactions
+  let existingUser: string | null = null;
+  try {
+    const { getAnyUserWithTransactions } = require('../db/transactions');
+    try {
+      existingUser = await getAnyUserWithTransactions();
+    } catch (innerErr: any) {
+      // If the DB schema is not yet upgraded (missing column errors), try to run initDB
+      // and retry once. This helps races where other modules query the DB before
+      // migrations complete.
+      const msg = innerErr && innerErr.message ? String(innerErr.message) : String(innerErr);
+      if (msg.includes('no such column') || msg.includes('no such table')) {
+        try {
+          const { initDB } = await import('../db/sqlite');
+          if (typeof initDB === 'function') await initDB();
+          existingUser = await getAnyUserWithTransactions();
+        } catch (e) {
+          if (__DEV__) console.warn('[resolveUserId] retry initDB failed', e);
+        }
+      } else {
+        throw innerErr;
+      }
+    }
+  } catch (e) {
+    if (__DEV__) console.warn('[resolveUserId] getAnyUserWithTransactions failed', e);
+  }
+
+  // If the persisted session contains an original clerk_id that looks like
+  // a guest token (guest_...) prefer returning that so it matches rows written
+  // earlier (saveSession generates an internal UUID for non-UUID ids).
+  if (s?.clerk_id && typeof s.clerk_id === 'string' && s.clerk_id.startsWith('guest_')) {
+    return s.clerk_id;
+  }
+
+  // If we have local transactions for a user, prefer that id so offline data
+  // remains visible on cold start even if the stored session id is a generated UUID.
+  if (existingUser) return existingUser;
+
+  // If we have a persisted session id (likely a real user), use it.
   if (s?.id) return s.id;
 
-  // Create guest session
-  const guestId = `guest_${Date.now()}`;
-  try {
-    await saveSession(guestId, 'Guest', '');
-  } catch (e) {
-    if (__DEV__) console.warn('[resolveUserId] Failed to save guest session', e);
-  }
-  return guestId;
+  // We do not create guest sessions in this app. If no persisted session or
+  // local user exists, return null so UI can show the Auth flow.
+  if (__DEV__)
+    console.log(
+      '[resolveUserId] No persisted session or local user — returning null (no guest mode)'
+    );
+  return null as any;
 };
 
 // Normalize any date input
@@ -129,18 +176,51 @@ export const useEntries = (userId?: string | null) => {
   // Resolve effective user id (may create guest) and keep stable for the hook
   React.useEffect(() => {
     let mounted = true;
-    (async () => {
+    const runResolve = async () => {
       try {
         const sid = await resolveUserId(userId);
-        if (mounted) setResolvedId(sid);
+        if (mounted) {
+          setResolvedId(sid);
+          if (sid == null) {
+            // No session — ensure user lands on Auth/Login screen
+            try {
+              resetRoot({
+                index: 0,
+                routes: [{ name: 'Auth', state: { routes: [{ name: 'Login' }] } }],
+              });
+            } catch (e) {}
+          }
+        }
       } catch (e) {
         if (mounted) setResolvedId(null);
       }
-    })();
+    };
+    runResolve();
+
+    // Also re-resolve when session changes so UI picks up migrated remote user_id
+    const unsubSession = subscribeSession(() => {
+      // Re-run resolution; do not await (fire-and-forget)
+      void runResolve();
+    });
     return () => {
       mounted = false;
+      try {
+        unsubSession();
+      } catch (e) {}
     };
   }, [userId]);
+
+  // Debug: log when the resolved user id changes so we can trace handover
+  const _prevResolvedId = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    const prev = _prevResolvedId.current;
+    if (prev !== resolvedId) {
+      try {
+        console.log(`[useEntries] User ID changed: ${prev} -> ${resolvedId}`);
+      } catch (e) {}
+      _prevResolvedId.current = resolvedId;
+    }
+  }, [resolvedId]);
 
   const syncKickRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -318,7 +398,9 @@ export const useEntries = (userId?: string | null) => {
         if (__DEV__) console.warn('[useEntries] refetch failed inside subscription', e);
       }
     });
-    return () => unsub();
+    return () => {
+      if (unsub) unsub();
+    };
   }, [refetch]);
 
   /* ----------------------------------------------------------

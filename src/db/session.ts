@@ -11,6 +11,8 @@ export type Session = {
 } | null;
 
 const KEY = 'FALLBACK_SESSION';
+const NO_GUEST_KEY = 'NO_GUEST_MODE';
+const ACCOUNT_DELETED_KEY = 'ACCOUNT_DELETED_AT';
 
 const uuidValidate = (s: any) =>
   typeof s === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(s);
@@ -91,4 +93,54 @@ export const clearSession = async () => {
   }
 };
 
-export default { getSession, saveSession, clearSession };
+export const setNoGuestMode = async (noGuest: boolean) => {
+  try {
+    if (noGuest) {
+      await AsyncStorage.setItem(NO_GUEST_KEY, '1');
+    } else {
+      await AsyncStorage.removeItem(NO_GUEST_KEY);
+    }
+  } catch (e) {
+    console.warn('[Session] Failed to set no-guest mode', e);
+  }
+};
+
+export const getNoGuestMode = async (): Promise<boolean> => {
+  try {
+    const v = await AsyncStorage.getItem(NO_GUEST_KEY);
+    return v === '1';
+  } catch (e) {
+    return false;
+  }
+};
+
+export const setAccountDeletedAt = async (isoTs: string | null) => {
+  try {
+    if (isoTs) await AsyncStorage.setItem(ACCOUNT_DELETED_KEY, isoTs);
+    else await AsyncStorage.removeItem(ACCOUNT_DELETED_KEY);
+    try {
+      notifySessionChanged();
+    } catch (e) {}
+  } catch (e) {
+    console.warn('[Session] Failed to set account deleted flag', e);
+  }
+};
+
+export const getAccountDeletedAt = async (): Promise<string | null> => {
+  try {
+    const v = await AsyncStorage.getItem(ACCOUNT_DELETED_KEY);
+    return v || null;
+  } catch (e) {
+    return null;
+  }
+};
+
+export default {
+  getSession,
+  saveSession,
+  clearSession,
+  setNoGuestMode,
+  getNoGuestMode,
+  setAccountDeletedAt,
+  getAccountDeletedAt,
+};

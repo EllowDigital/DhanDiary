@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, TextInput, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { subscribeBanner, isBannerVisible } from '../utils/bannerState';
 import { Text, Button } from '@rneui/themed';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ScreenHeader from '../components/ScreenHeader';
@@ -21,6 +22,15 @@ const NotificationMessageScreen: React.FC = () => {
       } catch (e) {}
       setLoading(false);
     })();
+  }, []);
+
+  const [bannerVisible, setBannerVisible] = React.useState<boolean>(false);
+  React.useEffect(() => {
+    setBannerVisible(isBannerVisible());
+    const unsub = subscribeBanner((v: boolean) => setBannerVisible(v));
+    return () => {
+      if (unsub) unsub();
+    };
   }, []);
 
   const save = async () => {
@@ -52,7 +62,10 @@ const NotificationMessageScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView
+      style={styles.container}
+      edges={bannerVisible ? (['left', 'right'] as any) : (['top', 'left', 'right'] as any)}
+    >
       <ScreenHeader
         title="Notifications"
         subtitle="Developer messages"

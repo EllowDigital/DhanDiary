@@ -17,10 +17,13 @@ import {
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { subscribeBanner, isBannerVisible } from '../utils/bannerState';
 import { useSignIn } from '@clerk/clerk-expo';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import NetInfo from '@react-native-community/netinfo';
+import OfflineNotice from '../components/OfflineNotice';
 
 // --- CUSTOM IMPORTS ---
 import { colors } from '../utils/design';
@@ -43,6 +46,10 @@ const ForgotPasswordScreen = () => {
   const [loading, setLoading] = useState(false);
   const [resendDisabled, setResendDisabled] = useState(false);
   const [countdown, setCountdown] = useState(0);
+  const [offlineVisible, setOfflineVisible] = useState(false);
+  const [offlineRetrying, setOfflineRetrying] = useState(false);
+  const [offlineAttemptsLeft, setOfflineAttemptsLeft] = useState<number | undefined>(undefined);
+  const [lastOfflineAction, setLastOfflineAction] = useState<'request' | 'reset' | null>(null);
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -69,6 +76,15 @@ const ForgotPasswordScreen = () => {
 
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
+
+  const [bannerVisible, setBannerVisible] = React.useState<boolean>(false);
+  React.useEffect(() => {
+    setBannerVisible(isBannerVisible());
+    const unsub = subscribeBanner((v: boolean) => setBannerVisible(v));
+    return () => {
+      if (unsub) unsub();
     };
   }, []);
 
@@ -129,6 +145,15 @@ const ForgotPasswordScreen = () => {
     } catch (err: any) {
       console.error('Reset request error:', err);
       const msg = err.errors?.[0]?.message || err.message || 'Failed to send reset code.';
+      try {
+        const net = await NetInfo.fetch();
+        if (!net.isConnected) {
+          setLastOfflineAction('request');
+          setOfflineAttemptsLeft(3);
+          setOfflineVisible(true);
+          return;
+        }
+      } catch (e) {}
       Alert.alert('Error', msg);
     } finally {
       setLoading(false);
@@ -161,9 +186,37 @@ const ForgotPasswordScreen = () => {
     } catch (err: any) {
       console.error('Reset confirm error:', err);
       const msg = err.errors?.[0]?.message || 'Failed to reset password.';
+      try {
+        const net = await NetInfo.fetch();
+        if (!net.isConnected) {
+          setLastOfflineAction('reset');
+          setOfflineAttemptsLeft(3);
+          setOfflineVisible(true);
+          return;
+        }
+      } catch (e) {}
       Alert.alert('Error', msg);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const offlineManualRetry = async () => {
+    setOfflineRetrying(true);
+    setOfflineAttemptsLeft((v) => (typeof v === 'number' ? Math.max(0, v - 1) : undefined));
+    try {
+      const net = await NetInfo.fetch();
+      if (net.isConnected) {
+        setOfflineVisible(false);
+        setOfflineRetrying(false);
+        if (lastOfflineAction === 'request') {
+          await onRequestReset();
+        } else if (lastOfflineAction === 'reset') {
+          await onResetPassword();
+        }
+      }
+    } catch (e) {
+      setOfflineRetrying(false);
     }
   };
 
@@ -179,7 +232,10 @@ const ForgotPasswordScreen = () => {
         end={{ x: 1, y: 1 }}
       />
 
-      <SafeAreaView style={{ flex: 1 }}>
+      <SafeAreaView
+        style={{ flex: 1 }}
+        edges={bannerVisible ? (['left', 'right'] as any) : (['top', 'left', 'right'] as any)}
+      >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
@@ -350,6 +406,16 @@ const ForgotPasswordScreen = () => {
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
+      <OfflineNotice
+        visible={offlineVisible}
+        retrying={offlineRetrying}
+        attemptsLeft={offlineAttemptsLeft}
+        onRetry={offlineManualRetry}
+        onClose={() => {
+          setOfflineVisible(false);
+          setOfflineRetrying(false);
+        }}
+      />
     </View>
   );
 };

@@ -15,6 +15,7 @@ export type AuthStackParamList = {
   Terms: undefined;
   PrivacyPolicy: undefined;
   Eula: undefined;
+  AccountDeleted: undefined;
 };
 
 export type MainStackParamList = {

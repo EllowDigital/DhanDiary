@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -13,6 +13,7 @@ import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-nav
 import { Text } from '@rneui/themed';
 import { useAuth, useUser } from '@clerk/clerk-expo';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { subscribeBanner, isBannerVisible } from '../utils/bannerState';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import Constants from 'expo-constants'; // Standard way to access version
 
@@ -21,6 +22,9 @@ import Constants from 'expo-constants'; // Standard way to access version
 import { colors } from '../utils/design';
 import UserAvatar from '../components/UserAvatar';
 import { logout } from '../services/auth';
+import { resetRoot } from '../utils/rootNavigation';
+import { getSession } from '../db/session';
+import { subscribeSession } from '../utils/sessionEvents';
 
 // --- CONSTANTS ---
 const ACTIVE_COLOR = (colors as any).primary || '#2563EB';
@@ -34,6 +38,8 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   const insets = useSafeAreaInsets();
   const { signOut } = useAuth();
   const { user } = useUser();
+  const [fallbackSession, setFallbackSession] = useState<any>(null);
+  const [bannerVisible, setBannerVisible] = useState<boolean>(isBannerVisible());
 
   // Animation Refs
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -55,6 +61,37 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
         stiffness: 90,
       }),
     ]).start();
+    let mounted = true;
+    // Load persisted fallback session (used when Clerk user isn't available, e.g., offline)
+    const load = async () => {
+      try {
+        const s = await getSession();
+        if (mounted) setFallbackSession(s);
+      } catch (e) {
+        // ignore
+      }
+    };
+    load();
+
+    // Subscribe to session changes so UI updates when login/logout/saveSession runs
+    const unsub = subscribeSession((s) => {
+      if (mounted) setFallbackSession(s);
+    });
+
+    return () => {
+      mounted = false;
+      try {
+        unsub();
+      } catch (e) {}
+    };
+  }, []);
+
+  // subscribe to banner visibility so drawer top padding doesn't double-up
+  useEffect(() => {
+    const unsub = subscribeBanner((v) => setBannerVisible(!!v));
+    return () => {
+      if (unsub) unsub();
+    };
   }, []);
 
   const handleNavigate = (routeName: string) => {
@@ -73,10 +110,12 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
             await logout(); // Local storage clean up
 
             // Reset nav stack to prevent going back
-            props.navigation.reset({
-              index: 0,
-              routes: [{ name: 'Auth' }], // Ensure 'Auth' matches your root stack name
-            });
+            try {
+              resetRoot({ index: 0, routes: [{ name: 'Auth' }] });
+            } catch (e) {
+              // fallback
+              props.navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
+            }
           } catch (e) {
             console.error('[Drawer] Logout failed', e);
             Alert.alert('Error', 'Failed to sign out. Please try again.');
@@ -143,7 +182,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
           style={{
             opacity: fadeAnim,
             transform: [{ translateX: slideAnim }],
-            paddingTop: Platform.OS === 'ios' ? 0 : insets.top, // Handle Android StatusBar
+            paddingTop: bannerVisible ? 0 : Platform.OS === 'ios' ? 0 : insets.top, // Handle Android StatusBar and banner
           }}
         >
           {/* USER PROFILE SECTION */}
@@ -152,17 +191,35 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
             activeOpacity={0.8}
             onPress={() => props.navigation.navigate('Account')}
           >
-            <UserAvatar
-              size={56}
-              name={user?.fullName || user?.firstName}
-              imageUrl={user?.imageUrl}
-            />
+            {/* Prefer Clerk user when available, otherwise fall back to locally persisted session */}
+            <View style={styles.avatarWrap}>
+              <UserAvatar
+                size={56}
+                name={user?.fullName || user?.firstName || fallbackSession?.name}
+                imageUrl={user?.imageUrl || fallbackSession?.imageUrl || fallbackSession?.image}
+              />
+              {(() => {
+                // Show local badge only when there is no active Clerk `user` and
+                // we have a persisted fallback session. This avoids showing both
+                // the verified badge (which belongs to a live Clerk user) and
+                // the local badge at the same time.
+                const usingLocal = Boolean(fallbackSession && !user);
+                if (!usingLocal) return null;
+                return (
+                  <View style={styles.localBadge}>
+                    <MaterialIcon name="cloud-off" size={12} color="#B91C1C" />
+                  </View>
+                );
+              })()}
+            </View>
             <View style={styles.profileInfo}>
               <Text style={styles.profileName} numberOfLines={1}>
-                {user?.fullName || user?.firstName || 'Guest User'}
+                {user?.fullName || user?.firstName || fallbackSession?.name || 'Guest User'}
               </Text>
               <Text style={styles.profileEmail} numberOfLines={1}>
-                {user?.primaryEmailAddress?.emailAddress || 'Sign in to sync'}
+                {user?.primaryEmailAddress?.emailAddress ||
+                  fallbackSession?.email ||
+                  'Sign in to sync'}
               </Text>
             </View>
             <MaterialIcon name="chevron-right" size={24} color={colors.border || '#CBD5E1'} />
@@ -288,6 +345,25 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginVertical: 10,
     opacity: 0.6,
+  },
+
+  avatarWrap: {
+    width: 56,
+    height: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+
+  localBadge: {
+    position: 'absolute',
+    right: -6,
+    bottom: -6,
+    backgroundColor: '#FEF2F2',
+    borderRadius: 10,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(185,28,28,0.12)',
   },
 
   /* MENU */

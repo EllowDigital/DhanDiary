@@ -19,6 +19,9 @@ import { useSignIn, useSignUp } from '@clerk/clerk-expo';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { subscribeBanner, isBannerVisible } from '../utils/bannerState';
+import NetInfo from '@react-native-community/netinfo';
+import OfflineNotice from '../components/OfflineNotice';
 
 // --- CUSTOM IMPORTS ---
 // Ensure these point to your actual file paths
@@ -49,6 +52,10 @@ const VerifyEmailScreen = () => {
   const [loading, setLoading] = useState(false);
   const [resendDisabled, setResendDisabled] = useState(false);
   const [countdown, setCountdown] = useState(30);
+  const [offlineVisible, setOfflineVisible] = useState(false);
+  const [offlineRetrying, setOfflineRetrying] = useState(false);
+  const [offlineAttemptsLeft, setOfflineAttemptsLeft] = useState<number | undefined>(undefined);
+  const [lastOfflineAction, setLastOfflineAction] = useState<'resend' | 'verify' | null>(null);
 
   const resendTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -167,6 +174,15 @@ const VerifyEmailScreen = () => {
       startResendCooldown();
     } catch (err: any) {
       const msg = err?.errors?.[0]?.message || 'Failed to resend code.';
+      try {
+        const net = await NetInfo.fetch();
+        if (!net.isConnected) {
+          setLastOfflineAction('resend');
+          setOfflineAttemptsLeft(3);
+          setOfflineVisible(true);
+          return;
+        }
+      } catch (e) {}
       Alert.alert('Error', msg);
     } finally {
       setLoading(false);
@@ -236,6 +252,16 @@ const VerifyEmailScreen = () => {
     } catch (err: any) {
       console.error('Verify failed', err);
       const errCode = err?.errors?.[0]?.code;
+      try {
+        const net = await NetInfo.fetch();
+        if (!net.isConnected) {
+          setLastOfflineAction('verify');
+          setOfflineAttemptsLeft(3);
+          setOfflineVisible(true);
+          return;
+        }
+      } catch (e) {}
+
       if (errCode === 'verification_failed') {
         Alert.alert('Incorrect Code', 'The code you entered is invalid. Please try again.');
       } else {
@@ -246,7 +272,34 @@ const VerifyEmailScreen = () => {
     }
   };
 
+  const offlineManualRetry = async () => {
+    setOfflineRetrying(true);
+    setOfflineAttemptsLeft((v) => (typeof v === 'number' ? Math.max(0, v - 1) : undefined));
+    try {
+      const net = await NetInfo.fetch();
+      if (net.isConnected) {
+        setOfflineVisible(false);
+        setOfflineRetrying(false);
+        if (lastOfflineAction === 'resend') {
+          await onResend();
+        } else if (lastOfflineAction === 'verify') {
+          await onVerify();
+        }
+      }
+    } catch (e) {
+      setOfflineRetrying(false);
+    }
+  };
+
   // --- RENDER ---
+  const [bannerVisible, setBannerVisible] = React.useState<boolean>(false);
+  React.useEffect(() => {
+    setBannerVisible(isBannerVisible());
+    const unsub = subscribeBanner((v: boolean) => setBannerVisible(v));
+    return () => {
+      if (unsub) unsub();
+    };
+  }, []);
 
   return (
     <View style={styles.container}>
@@ -260,7 +313,10 @@ const VerifyEmailScreen = () => {
         end={{ x: 1, y: 1 }}
       />
 
-      <SafeAreaView style={{ flex: 1 }}>
+      <SafeAreaView
+        style={{ flex: 1 }}
+        edges={bannerVisible ? (['left', 'right'] as any) : (['top', 'left', 'right'] as any)}
+      >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
@@ -333,6 +389,16 @@ const VerifyEmailScreen = () => {
           </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
+      <OfflineNotice
+        visible={offlineVisible}
+        retrying={offlineRetrying}
+        attemptsLeft={offlineAttemptsLeft}
+        onRetry={offlineManualRetry}
+        onClose={() => {
+          setOfflineVisible(false);
+          setOfflineRetrying(false);
+        }}
+      />
     </View>
   );
 };

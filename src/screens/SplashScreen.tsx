@@ -12,17 +12,21 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
+import MaterialIcon from '@expo/vector-icons/MaterialIcons';
+
+// --- CUSTOM IMPORTS ---
+// Ensure these paths match your project structure
 import { RootStackParamList } from '../types/navigation';
 import { getSession } from '../db/session';
-import { colors } from '../utils/design';
-import MaterialIcon from '@expo/vector-icons/MaterialIcons';
-import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { hasCompletedOnboarding } from '../utils/onboarding';
+import { colors } from '../utils/design';
 
-type SplashNavProp = NativeStackNavigationProp<RootStackParamList, 'Splash'>;
+type SplashNavProp = NativeStackNavigationProp<RootStackParamList>;
 
-const MIN_SPLASH_TIME_MS = 2500; // Minimum time to show splash for branding
+// Configuration
+const MIN_SPLASH_TIME_MS = 2500; // Minimum time to show splash for branding/smoothness
 
 const SplashScreen = () => {
   const navigation = useNavigation<SplashNavProp>();
@@ -30,54 +34,65 @@ const SplashScreen = () => {
   const insets = useSafeAreaInsets();
 
   // --- ANIMATION VALUES ---
+  // Entrance animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.8)).current;
-  const slideAnim = useRef(new Animated.Value(50)).current;
+  const scaleAnim = useRef(new Animated.Value(0.9)).current;
+  const slideAnim = useRef(new Animated.Value(40)).current;
   const textSlideAnim = useRef(new Animated.Value(20)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
 
-  // Background "Breathing" Animation
+  // Background "Breathing" Orbs
   const orbPulse = useRef(new Animated.Value(1)).current;
   const orbTranslate = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // 1. Background Ambient Animation (Loops forever)
-    const orbAnimation = Animated.loop(
+    // 1. Background Ambient Animation (Infinite Loop)
+    const orbLoop = Animated.loop(
       Animated.parallel([
         Animated.sequence([
-          Animated.timing(orbPulse, { toValue: 1.2, duration: 4000, useNativeDriver: true }),
-          Animated.timing(orbPulse, { toValue: 1, duration: 4000, useNativeDriver: true }),
+          Animated.timing(orbPulse, {
+            toValue: 1.15,
+            duration: 4000,
+            useNativeDriver: true,
+            easing: Easing.inOut(Easing.sin),
+          }),
+          Animated.timing(orbPulse, {
+            toValue: 1,
+            duration: 4000,
+            useNativeDriver: true,
+            easing: Easing.inOut(Easing.sin),
+          }),
         ]),
         Animated.sequence([
           Animated.timing(orbTranslate, {
-            toValue: 15,
+            toValue: 20,
             duration: 5000,
-            easing: Easing.sin,
             useNativeDriver: true,
+            easing: Easing.inOut(Easing.sin),
           }),
           Animated.timing(orbTranslate, {
             toValue: 0,
             duration: 5000,
-            easing: Easing.sin,
             useNativeDriver: true,
+            easing: Easing.inOut(Easing.sin),
           }),
         ]),
       ])
     );
-    orbAnimation.start();
+    orbLoop.start();
 
-    // 2. Entrance Sequence
+    // 2. Main Entrance Sequence
     Animated.parallel([
       // Logo Entrance
       Animated.timing(fadeAnim, {
         toValue: 1,
         duration: 800,
         useNativeDriver: true,
-        easing: Easing.out(Easing.quad),
+        easing: Easing.out(Easing.cubic),
       }),
       Animated.spring(scaleAnim, {
         toValue: 1,
-        friction: 7,
+        friction: 8,
         tension: 40,
         useNativeDriver: true,
       }),
@@ -85,100 +100,120 @@ const SplashScreen = () => {
         toValue: 0,
         duration: 800,
         useNativeDriver: true,
-        easing: Easing.out(Easing.back(1.5)),
+        easing: Easing.out(Easing.cubic),
       }),
-      // Text Staggered Entrance
+      // Text Staggered Entrance (slightly delayed)
       Animated.sequence([
-        Animated.delay(300),
-        Animated.spring(textSlideAnim, {
-          toValue: 0,
-          friction: 8,
-          useNativeDriver: true,
-        }),
+        Animated.delay(200),
+        Animated.parallel([
+          Animated.timing(textSlideAnim, {
+            toValue: 0,
+            duration: 600,
+            useNativeDriver: true,
+            easing: Easing.out(Easing.cubic),
+          }),
+        ]),
       ]),
-      // Progress Bar
+      // Progress Bar Fill
       Animated.timing(progressAnim, {
         toValue: 1,
-        duration: MIN_SPLASH_TIME_MS - 200, // Sync with min splash time roughly
-        useNativeDriver: false, // Width animation requires false
+        duration: MIN_SPLASH_TIME_MS, // Sync with min splash time
+        easing: Easing.linear,
+        useNativeDriver: false, // Width requires false
       }),
     ]).start();
 
-    // Cleanup loop on unmount
-    return () => orbAnimation.stop();
+    return () => orbLoop.stop();
   }, []);
 
   useEffect(() => {
     let mounted = true;
 
-    const init = async () => {
-      // Run checks in parallel with minimum timer
+    const initApp = async () => {
       let user = null;
       let onboardingCompleted = false;
 
       try {
+        // Helper: Timeout to prevent indefinite hanging on DB calls
         const timeout = (ms: number) =>
-          new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms));
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), ms));
 
-        const safeGetSession = async () => {
+        // 1. Fetch Session (Safe Race)
+        const fetchSession = async () => {
           try {
             return await Promise.race([getSession(), timeout(3000)]);
           } catch (e) {
-            console.warn('[Splash] getSession timed out or failed', e);
+            console.warn('[Splash] Session check failed/timed out', e);
             return null;
           }
         };
 
-        const safeHasCompletedOnboarding = async () => {
+        // 2. Fetch Onboarding Status (Safe Race)
+        const fetchOnboarding = async () => {
           try {
             return await Promise.race([hasCompletedOnboarding(), timeout(2000)]);
           } catch (e) {
-            console.warn('[Splash] hasCompletedOnboarding timed out', e);
+            console.warn('[Splash] Onboarding check failed', e);
             return false;
           }
         };
 
-        const res: any = await Promise.all([
-          safeGetSession(),
-          safeHasCompletedOnboarding(),
-          new Promise((resolve) => setTimeout(resolve, MIN_SPLASH_TIME_MS)), // Ensure min display time
+        // 3. Minimum Timer (Branding)
+        const minTimer = new Promise((resolve) => setTimeout(resolve, MIN_SPLASH_TIME_MS));
+
+        // Wait for all
+        const [sessionResult, onboardingResult] = await Promise.all([
+          fetchSession(),
+          fetchOnboarding(),
+          minTimer,
         ]);
 
-        user = res[0];
-        onboardingCompleted = Boolean(res[1]);
+        user = sessionResult;
+        onboardingCompleted = Boolean(onboardingResult);
       } catch (e) {
-        console.warn('[Splash] init error', e);
+        console.error('[Splash] Critical init error', e);
       }
 
       if (!mounted) return;
 
-      // Exit Animation (non-blocking) and navigate immediately so UI is responsive.
-      let navigated = false;
-      const doNav = () => {
-        if (navigated) return;
-        navigated = true;
-
-        // Navigation Logic
-        if (user) {
-          navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
-        } else if (onboardingCompleted) {
-          navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
-        } else {
-          navigation.reset({ index: 0, routes: [{ name: 'Onboarding' }] });
-        }
-      };
-
-      // Fire the exit animation
+      // Exit Animation & Navigation
+      // We animate out slightly before navigating to make the transition seamless
       Animated.parallel([
-        Animated.timing(fadeAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
-        Animated.timing(scaleAnim, { toValue: 1.1, duration: 300, useNativeDriver: true }),
-      ]).start();
-
-      // Navigate
-      doNav();
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(scaleAnim, {
+          toValue: 1.1, // Slight zoom out effect on exit
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        // Determine Route using root reset for robustness
+        import('../utils/rootNavigation')
+          .then(({ resetRoot }) => {
+            if (user) {
+              resetRoot({ index: 0, routes: [{ name: 'Main' as any }] });
+            } else if (onboardingCompleted) {
+              resetRoot({ index: 0, routes: [{ name: 'Auth' as any }] });
+            } else {
+              resetRoot({ index: 0, routes: [{ name: 'Onboarding' as any }] });
+            }
+          })
+          .catch(() => {
+            if (user) {
+              navigation.reset({ index: 0, routes: [{ name: 'Main' as any }] }); // Adjust 'Main' to your stack name
+            } else if (onboardingCompleted) {
+              navigation.reset({ index: 0, routes: [{ name: 'Auth' as any }] });
+            } else {
+              navigation.reset({ index: 0, routes: [{ name: 'Onboarding' as any }] });
+            }
+          });
+      });
     };
 
-    init();
+    initApp();
 
     return () => {
       mounted = false;
@@ -190,79 +225,74 @@ const SplashScreen = () => {
     outputRange: ['0%', '100%'],
   });
 
-  // Dynamic Sizing based on screen width
-  const logoSize = Math.min(width * 0.35, 150); // 35% of width, max 150px
-  const footerBottom = Math.max(insets.bottom + 20, 30); // Dynamic bottom padding
+  // Dynamic Sizing
+  const logoSize = Math.min(width * 0.3, 140);
+  const footerBottom = Math.max(insets.bottom + 20, 32);
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
-      {/* BACKGROUND SVG */}
-      <Svg style={StyleSheet.absoluteFill}>
-        <Defs>
-          <LinearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0%" stopColor={colors.background || '#ffffff'} stopOpacity={1} />
-            <Stop offset="100%" stopColor="#Eef2ff" stopOpacity={1} />
-          </LinearGradient>
-        </Defs>
-        <Rect width="100%" height="100%" fill="url(#bg)" />
-      </Svg>
+      {/* --- 1. BACKGROUND LAYER --- */}
+      <View style={StyleSheet.absoluteFill}>
+        <Svg style={StyleSheet.absoluteFill}>
+          <Defs>
+            <LinearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
+              <Stop offset="0" stopColor="#FFFFFF" stopOpacity="1" />
+              <Stop offset="1" stopColor="#F8FAFC" stopOpacity="1" />
+            </LinearGradient>
+          </Defs>
+          <Rect width="100%" height="100%" fill="url(#grad)" />
+        </Svg>
 
-      {/* ANIMATED BACKGROUND ORBS */}
-      <Animated.View
-        style={[
-          styles.orb,
-          {
-            top: -height * 0.1,
-            right: -width * 0.1,
-            backgroundColor: `${colors.primary || '#4F46E5'}15`,
-            transform: [{ scale: orbPulse }, { translateY: orbTranslate }],
-          },
-        ]}
-      />
-      <Animated.View
-        style={[
-          styles.orb,
-          {
-            bottom: -height * 0.1,
-            left: -width * 0.1,
-            backgroundColor: `${colors.secondary || '#EC4899'}15`,
-            transform: [{ scale: orbPulse }, { translateY: Animated.multiply(orbTranslate, -1) }],
-          },
-        ]}
-      />
-
-      {/* MAIN CONTENT CENTER */}
-      <View style={styles.centerContent}>
-        {/* LOGO */}
+        {/* Ambient Orbs */}
         <Animated.View
           style={[
-            styles.logoWrapper,
+            styles.orb,
+            {
+              top: -height * 0.15,
+              right: -width * 0.2,
+              backgroundColor: `${colors.primary || '#3B82F6'}15`, // Very low opacity
+              transform: [{ scale: orbPulse }, { translateY: orbTranslate }],
+            },
+          ]}
+        />
+        <Animated.View
+          style={[
+            styles.orb,
+            {
+              bottom: -height * 0.1,
+              left: -width * 0.2,
+              backgroundColor: `${colors.secondary || '#8B5CF6'}15`,
+              transform: [{ scale: orbPulse }, { translateY: Animated.multiply(orbTranslate, -1) }],
+            },
+          ]}
+        />
+      </View>
+
+      {/* --- 2. MAIN CONTENT --- */}
+      <View style={styles.centerContent}>
+        {/* Logo Box */}
+        <Animated.View
+          style={[
+            styles.logoContainer,
             {
               width: logoSize,
               height: logoSize,
-              borderRadius: logoSize * 0.25,
+              borderRadius: logoSize * 0.22,
               opacity: fadeAnim,
               transform: [{ scale: scaleAnim }, { translateY: slideAnim }],
             },
           ]}
         >
           <Image
-            source={(() => {
-              try {
-                // Safe require logic
-                return require('../../assets/splash-icon.png');
-              } catch (e) {
-                return { uri: 'https://via.placeholder.com/150' }; // Fallback
-              }
-            })()}
-            style={[styles.logo, { borderRadius: logoSize * 0.25 }]}
-            resizeMode="cover"
+            source={require('../../assets/splash-icon.png')} // Update path if needed
+            style={styles.logo}
+            resizeMode="contain"
           />
         </Animated.View>
 
-        {/* APP NAME & TAGLINE */}
+        {/* Text Content */}
         <Animated.View
           style={{
             opacity: fadeAnim,
@@ -270,40 +300,49 @@ const SplashScreen = () => {
             alignItems: 'center',
           }}
         >
-          <Text style={[styles.appName, { fontSize: Math.min(width * 0.1, 40) }]}>DhanDiary</Text>
-          <Text style={styles.tagline}>Intelligent Finance Tracker</Text>
+          <Text style={styles.appName}>DhanDiary</Text>
+          <Text style={styles.tagline}>Smart Finance Tracker</Text>
         </Animated.View>
 
-        {/* PROGRESS BAR */}
+        {/* Progress Bar */}
         <View style={styles.progressTrack}>
-          <Animated.View style={[styles.progressFill, { width: progressWidth }]} />
+          <Animated.View
+            style={[
+              styles.progressFill,
+              {
+                width: progressWidth,
+                backgroundColor: colors.primary || '#3B82F6',
+              },
+            ]}
+          />
         </View>
       </View>
 
-      {/* FOOTER BADGES - Safe Area Aware */}
+      {/* --- 3. FOOTER BADGES --- */}
       <Animated.View
         style={[
           styles.footer,
           {
-            opacity: fadeAnim,
             bottom: footerBottom,
+            opacity: fadeAnim,
           },
         ]}
       >
-        <View style={styles.badgeRow}>
+        {/* Trust Badges */}
+        <View style={styles.badgeContainer}>
           <View style={styles.badge}>
-            <MaterialIcon name="bolt" size={16} color={colors.accentOrange || '#F59E0B'} />
+            <MaterialIcon name="bolt" size={14} color={colors.accentOrange || '#F59E0B'} />
             <Text style={styles.badgeText}>Instant Sync</Text>
           </View>
-          <View style={styles.divider} />
+          <View style={styles.badgeDivider} />
           <View style={styles.badge}>
-            <MaterialIcon name="lock" size={16} color={colors.primary || '#4F46E5'} />
+            <MaterialIcon name="lock" size={14} color={colors.primary || '#3B82F6'} />
             <Text style={styles.badgeText}>Encrypted</Text>
           </View>
         </View>
 
-        <Text style={styles.powered}>
-          Powered by <Text style={styles.brand}>EllowDigital</Text>
+        <Text style={styles.poweredBy}>
+          Powered by <Text style={styles.brandName}>EllowDigital</Text>
         </Text>
       </Animated.View>
     </View>
@@ -315,127 +354,125 @@ export default SplashScreen;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.background || '#ffffff',
     overflow: 'hidden',
-  },
-  centerContent: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 10,
-    width: '100%',
-    paddingHorizontal: 20,
-  },
-
-  /* LOGO */
-  logoWrapper: {
-    marginBottom: 30,
-    backgroundColor: 'white',
-    shadowColor: colors.primary || '#4F46E5',
-    shadowOffset: { width: 0, height: 15 },
-    shadowOpacity: 0.25,
-    shadowRadius: 30,
-    elevation: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logo: {
-    width: '100%',
-    height: '100%',
-  },
-
-  /* TYPOGRAPHY */
-  appName: {
-    fontWeight: '800',
-    color: colors.text || '#111827',
-    textAlign: 'center',
-    letterSpacing: -1,
-    includeFontPadding: false,
-  },
-  tagline: {
-    fontSize: 16,
-    color: colors.muted || '#6B7280',
-    marginTop: 8,
-    textAlign: 'center',
-    fontWeight: '500',
-    letterSpacing: 0.5,
-  },
-
-  /* PROGRESS */
-  progressTrack: {
-    width: '50%',
-    maxWidth: 200,
-    height: 4,
-    borderRadius: 2,
-    marginTop: 45,
-    backgroundColor: 'rgba(0,0,0,0.06)',
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: colors.primary || '#4F46E5',
-    borderRadius: 2,
   },
 
   /* DECORATION */
   orb: {
     position: 'absolute',
-    width: 350,
-    height: 350,
-    borderRadius: 175,
+    width: 400,
+    height: 400,
+    borderRadius: 200,
+    // Blur effect works best on iOS, using opacity for cross-platform fallback
+    opacity: 0.8,
+  },
+
+  /* CONTENT */
+  centerContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    paddingHorizontal: 20,
+    zIndex: 10,
+  },
+  logoContainer: {
+    marginBottom: 32,
+    backgroundColor: '#FFFFFF',
+    // Premium Shadow
+    shadowColor: colors.primary || '#3B82F6',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
+    elevation: 12, // Android
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 2, // Slight border effect
+  },
+  logo: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 24, // Inner radius
+  },
+  appName: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: colors.text || '#1E293B',
+    letterSpacing: -0.5,
+    marginBottom: 8,
+  },
+  tagline: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: colors.muted || '#64748B',
+    letterSpacing: 0.5,
+  },
+
+  /* PROGRESS BAR */
+  progressTrack: {
+    width: 140,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    marginTop: 40,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 2,
   },
 
   /* FOOTER */
   footer: {
     position: 'absolute',
-    alignItems: 'center',
     width: '100%',
-    paddingHorizontal: 20,
-  },
-  badgeRow: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 30,
-    marginBottom: 20,
+  },
+  badgeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.8)',
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,1)',
+    borderColor: 'rgba(0,0,0,0.05)',
+    marginBottom: 16,
+    // Glassmorphism feel
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 4,
+    shadowRadius: 8,
+    elevation: 2,
   },
   badge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
   },
   badgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.text || '#111827',
-  },
-  divider: {
-    width: 1,
-    height: 14,
-    backgroundColor: colors.border || '#E5E7EB',
-    marginHorizontal: 16,
-  },
-  powered: {
-    fontSize: 12,
-    color: colors.muted || '#6B7280',
-    opacity: 0.8,
-  },
-  brand: {
+    fontSize: 11,
     fontWeight: '700',
-    color: colors.text || '#111827',
+    color: colors.text || '#334155',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  badgeDivider: {
+    width: 1,
+    height: 12,
+    backgroundColor: '#CBD5E1',
+    marginHorizontal: 12,
+  },
+  poweredBy: {
+    fontSize: 12,
+    color: colors.muted || '#94A3B8',
+    fontWeight: '500',
+  },
+  brandName: {
+    fontWeight: '700',
+    color: colors.text || '#1E293B',
   },
 });

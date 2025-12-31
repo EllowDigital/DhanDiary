@@ -17,9 +17,12 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { subscribeBanner, isBannerVisible } from '../utils/bannerState';
 import { Input, Button } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useUser } from '@clerk/clerk-expo';
+import { getSession } from '../db/session';
+import { subscribeSession } from '../utils/sessionEvents';
 import { useNavigation } from '@react-navigation/native';
 import * as SecureStore from 'expo-secure-store';
 import * as LocalAuthentication from 'expo-local-authentication';
@@ -127,8 +130,10 @@ const ExpandableCard = ({
 // --- MAIN SCREEN ---
 const AccountManagementScreen = () => {
   const { user, isLoaded } = useUser();
+  const [fallbackSession, setFallbackSession] = useState<any>(null);
   const navigation = useNavigation<any>();
   const { showToast } = useToast();
+  const [bannerVisible, setBannerVisible] = useState<boolean>(isBannerVisible());
 
   // State
   const [activeCard, setActiveCard] = useState<string | null>(null);
@@ -166,6 +171,34 @@ const AccountManagementScreen = () => {
     }).start();
 
     checkBiometrics();
+  }, []);
+
+  // subscribe to banner visibility so this screen doesn't add top safe-area twice
+  useEffect(() => {
+    const unsub = subscribeBanner((v) => setBannerVisible(!!v));
+    return () => {
+      if (unsub) unsub();
+    };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const s = await getSession();
+        if (mounted) setFallbackSession(s);
+      } catch (e) {}
+    };
+    load();
+    const unsub = subscribeSession((s) => {
+      if (mounted) setFallbackSession(s);
+    });
+    return () => {
+      mounted = false;
+      try {
+        unsub();
+      } catch (e) {}
+    };
   }, []);
 
   const checkBiometrics = async () => {
@@ -288,25 +321,57 @@ const AccountManagementScreen = () => {
               }
 
               // Ensure local cleanup runs even if Clerk deletion failed.
+              console.info('[Account] deletion initiated', { userId: (user as any)?.id || null });
+              let deletionResult: any = {};
               try {
-                await deleteAccount();
+                deletionResult = await deleteAccount({ clerkUserId: (user as any)?.id });
               } catch (localErr) {
                 console.warn('[Account] deleteAccount() failed', localErr);
               }
+              console.info('[Account] deletion completed', deletionResult || {});
+
+              // Re-initialize a fresh empty DB so the app resumes from a clean state
+              try {
+                const { initDB } = await import('../db/sqlite');
+                if (typeof initDB === 'function') {
+                  await initDB();
+                }
+              } catch (dbErr) {
+                console.warn('[Account] initDB after delete failed', dbErr);
+              }
 
               showToast('Account deleted');
-              // Force navigation to Auth screen and clear history to avoid any stale state
+              // Navigate via root navigation so nested stacks are targeted reliably
               try {
-                navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
+                const { resetRoot } = await import('../utils/rootNavigation');
+                resetRoot({
+                  index: 0,
+                  routes: [
+                    {
+                      name: 'Auth',
+                      state: { routes: [{ name: 'AccountDeleted' }] },
+                    },
+                  ],
+                });
               } catch (navErr) {
-                console.warn('[Account] navigation.reset failed', navErr);
+                console.warn('[Account] root reset failed', navErr);
+                try {
+                  navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
+                } catch (e) {
+                  console.warn('[Account] fallback navigation.reset failed', e);
+                }
               }
             } catch (err: any) {
               // Catch-all: surface message but still attempt to navigate to Auth so app isn't left in broken state
               console.warn('[Account] unexpected error during delete flow', err);
               try {
-                navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
-              } catch (navErr) {}
+                const { resetRoot } = await import('../utils/rootNavigation');
+                resetRoot({ index: 0, routes: [{ name: 'Auth' }] });
+              } catch (navErr) {
+                try {
+                  navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
+                } catch (e) {}
+              }
               Alert.alert('Error', err?.message || 'Failed to delete account');
             } finally {
               setDeletingAccount(false);
@@ -328,7 +393,10 @@ const AccountManagementScreen = () => {
   return (
     <View style={styles.mainContainer}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView
+        style={styles.safeArea}
+        edges={bannerVisible ? ['left', 'right'] : ['top', 'left', 'right']}
+      >
         <ScreenHeader
           title="Account"
           subtitle="Profile & Security"
@@ -350,13 +418,39 @@ const AccountManagementScreen = () => {
               {/* 1. HERO PROFILE ROW */}
               <View style={styles.heroRow}>
                 <View style={styles.heroAvatar}>
-                  <UserAvatar
-                    size={48}
-                    name={user?.fullName || user?.firstName}
-                    imageUrl={user?.imageUrl || (user as any)?.image}
-                  />
+                  {(() => {
+                    const effectiveName =
+                      (user &&
+                        ((user as any).fullName ||
+                          (user as any).firstName ||
+                          (user as any).name)) ||
+                      fallbackSession?.name ||
+                      null;
+                    const effectiveImage =
+                      (user as any)?.imageUrl ||
+                      (user as any)?.image ||
+                      fallbackSession?.imageUrl ||
+                      fallbackSession?.image;
+
+                    return (
+                      <View>
+                        <UserAvatar
+                          size={48}
+                          name={effectiveName || undefined}
+                          imageUrl={effectiveImage}
+                        />
+                        {fallbackSession && !user ? (
+                          <View style={styles.localBadgeInline}>
+                            <MaterialIcon name="cloud-off" size={12} color="#B91C1C" />
+                          </View>
+                        ) : null}
+                      </View>
+                    );
+                  })()}
                   {/* Verified Badge */}
-                  {user?.emailAddresses.some((e) => e.verification.status === 'verified') && (
+                  {(user as any)?.emailAddresses?.some(
+                    (e: any) => e.verification?.status === 'verified'
+                  ) && (
                     <View style={styles.verifiedBadge}>
                       <MaterialIcon name="check" size={12} color="white" />
                     </View>
@@ -364,9 +458,16 @@ const AccountManagementScreen = () => {
                 </View>
 
                 <View style={styles.heroInfo}>
-                  <Text style={styles.heroName}>{user?.fullName || 'User'}</Text>
+                  <Text style={styles.heroName}>
+                    {(user as any)?.fullName ||
+                      (user as any)?.name ||
+                      fallbackSession?.name ||
+                      'User'}
+                  </Text>
                   <Text style={styles.heroEmail}>
-                    {user?.primaryEmailAddress?.emailAddress || 'No email linked'}
+                    {(user as any)?.primaryEmailAddress?.emailAddress ||
+                      fallbackSession?.email ||
+                      'No email linked'}
                   </Text>
                   <View style={styles.authMethodContainer}>
                     <MaterialIcon
@@ -566,6 +667,16 @@ const styles = StyleSheet.create({
   heroAvatar: {
     position: 'relative',
     marginRight: 16,
+  },
+  localBadgeInline: {
+    position: 'absolute',
+    right: -6,
+    bottom: -6,
+    backgroundColor: '#FEF2F2',
+    borderRadius: 10,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(185,28,28,0.12)',
   },
   verifiedBadge: {
     position: 'absolute',

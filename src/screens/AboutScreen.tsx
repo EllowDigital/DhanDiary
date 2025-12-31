@@ -18,10 +18,13 @@ import {
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { subscribeBanner, isBannerVisible } from '../utils/bannerState';
 import { Button, Text } from '@rneui/themed';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Updates from 'expo-updates';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
+import { useInternetStatus } from '../hooks/useInternetStatus';
+import { useNeonStatus, describeNeonHealth } from '../hooks/useNeonStatus';
 
 // --- PLACEHOLDERS ---
 import ScreenHeader from '../components/ScreenHeader';
@@ -61,6 +64,15 @@ const AboutScreen: React.FC = () => {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const isExpoGo = Constants.appOwnership === 'expo';
+
+  const [bannerVisible, setBannerVisible] = useState<boolean>(false);
+  useEffect(() => {
+    setBannerVisible(isBannerVisible());
+    const unsub = subscribeBanner((v: boolean) => setBannerVisible(v));
+    return () => {
+      if (unsub) unsub();
+    };
+  }, []);
 
   // --- ANIMATIONS ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -190,7 +202,11 @@ const AboutScreen: React.FC = () => {
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
       <View
-        style={{ paddingTop: insets.top, paddingHorizontal: 20, backgroundColor: theme.background }}
+        style={{
+          paddingTop: bannerVisible ? 0 : insets.top,
+          paddingHorizontal: 20,
+          backgroundColor: theme.background,
+        }}
       >
         <ScreenHeader
           title="About"
@@ -220,10 +236,8 @@ const AboutScreen: React.FC = () => {
                 <Text style={styles.heroTitle}>DhanDiary</Text>
                 <Text style={styles.heroSubtitle}>Smart Finance Tracker</Text>
 
-                <View style={styles.activePill}>
-                  <View style={styles.activeDot} />
-                  <Text style={styles.activeText}>System Operational</Text>
-                </View>
+                {/* System status: depends on internet + Neon health */}
+                <SystemStatus />
               </View>
             </View>
 
@@ -424,6 +438,68 @@ const GridItem = ({ item, borderRight }: { item: GridItemProps; borderRight?: bo
 
 export default AboutScreen;
 
+/* ------------------------- System Status Component ------------------------- */
+const SystemStatus: React.FC = () => {
+  const isOnline = useInternetStatus();
+  const health = useNeonStatus(5000);
+  const desc = describeNeonHealth(health);
+
+  // Decide visual state
+  let dotColor = '#10B981';
+  let label = 'System Operational';
+  let tone: 'positive' | 'warning' | 'neutral' = 'positive';
+
+  if (!isOnline) {
+    label = 'You are offline';
+    dotColor = '#EF4444';
+    tone = 'warning';
+  } else {
+    // Online — inspect neon health
+    if (desc.tone === 'positive') {
+      label = 'System Operational';
+      dotColor = '#10B981';
+      tone = 'positive';
+      // append latency if available
+      if (desc.label && desc.label !== 'Cloud good') label = `Operational · ${desc.label}`;
+    } else if (desc.tone === 'warning') {
+      label = desc.label || 'Reconnecting…';
+      dotColor = '#F59E0B';
+      tone = 'warning';
+    } else {
+      label = desc.label || 'Checking link…';
+      dotColor = '#94A3B8';
+      tone = 'neutral';
+    }
+  }
+
+  return (
+    <View
+      style={[
+        styles.activePill,
+        tone === 'positive'
+          ? styles.pillPositive
+          : tone === 'warning'
+            ? styles.pillWarning
+            : styles.pillNeutral,
+      ]}
+    >
+      <View style={[styles.activeDot, { backgroundColor: dotColor }]} />
+      <Text
+        style={[
+          styles.activeText,
+          tone === 'positive'
+            ? { color: '#065F46' }
+            : tone === 'warning'
+              ? { color: '#92400E' }
+              : { color: '#475569' },
+        ]}
+      >
+        {label}
+      </Text>
+    </View>
+  );
+};
+
 // --- STYLES ---
 const styles = StyleSheet.create({
   mainContainer: { flex: 1, backgroundColor: theme.background },
@@ -466,6 +542,15 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     marginTop: 10,
     alignSelf: 'flex-start',
+  },
+  pillPositive: {
+    backgroundColor: 'rgba(16,185,129,0.08)',
+  },
+  pillWarning: {
+    backgroundColor: 'rgba(245,158,11,0.08)',
+  },
+  pillNeutral: {
+    backgroundColor: 'rgba(148,163,184,0.06)',
   },
   activeDot: {
     width: 6,

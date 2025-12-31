@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback, useEffect } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -10,7 +10,6 @@ import {
   InteractionManager,
   PixelRatio,
   UIManager,
-  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text, Button } from '@rneui/themed';
@@ -18,11 +17,13 @@ import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import dayjs from 'dayjs';
 
-// --- CUSTOM IMPORTS (Assumed paths) ---
+// --- CUSTOM IMPORTS ---
 import ScreenHeader from '../components/ScreenHeader';
+import { subscribeBanner, isBannerVisible } from '../utils/bannerState';
 import { useEntries } from '../hooks/useEntries';
 import { useAuth } from '../hooks/useAuth';
 import { colors } from '../utils/design';
+// FIX: Removed ensureExportPermissions import
 import { exportToFile, shareFile } from '../utils/reportExporter';
 import FullScreenSpinner from '../components/FullScreenSpinner';
 
@@ -37,7 +38,7 @@ if (Platform.OS === 'android') {
 const FILTERS = ['Today', 'Daily', 'Weekly', 'Monthly', 'Custom', 'All'] as const;
 type FilterLabel = (typeof FILTERS)[number];
 type InternalMode = 'Today' | 'Day' | 'Week' | 'Month' | 'Custom' | 'All';
-type ExportFormat = 'pdf' | 'excel';
+type ExportFormat = 'pdf' | 'excel' | 'csv' | 'json';
 
 // --- UTILS ---
 const fontScale = (size: number) => size / PixelRatio.getFontScale();
@@ -84,7 +85,15 @@ const FormatOption = React.memo(
       accessibilityState={{ selected: active }}
     >
       <MaterialIcon
-        name={type === 'pdf' ? 'picture-as-pdf' : 'grid-view'}
+        name={
+          type === 'pdf'
+            ? 'picture-as-pdf'
+            : type === 'excel'
+              ? 'grid-view'
+              : type === 'json'
+                ? 'code'
+                : 'file-download'
+        }
         size={28}
         color={active ? colors.primary : '#94A3B8'}
       />
@@ -101,6 +110,15 @@ const FormatOption = React.memo(
 );
 
 const ExportScreen = () => {
+  const [bannerVisible, setBannerVisible] = React.useState<boolean>(false);
+
+  React.useEffect(() => {
+    setBannerVisible(isBannerVisible());
+    const unsub = subscribeBanner((v: boolean) => setBannerVisible(v));
+    return () => {
+      if (unsub) unsub();
+    };
+  }, []);
   const { user } = useAuth();
   const { entries = [], refetch } = useEntries(user?.id);
 
@@ -133,7 +151,6 @@ const ExportScreen = () => {
           'pivot=',
           pivotDate.format()
         );
-        console.log('[ExportScreen] sample entries=', entries.slice(0, 3));
       } catch (e) {}
     }
 
@@ -221,7 +238,7 @@ const ExportScreen = () => {
 
   const handleDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
     const currentMode = pickerMode;
-    // On Android, the picker dismisses itself; on iOS we might need manual close logic if not in spinner mode
+    // On Android, the picker dismisses itself
     if (Platform.OS === 'android') setPickerMode(null);
 
     if (event.type === 'dismissed' || !selectedDate) {
@@ -237,7 +254,6 @@ const ExportScreen = () => {
       setCustomEnd(selectedDate);
     }
 
-    // Close picker for iOS spinner logic if we had a "Done" button, but standard picker behavior varies
     setPickerMode(null);
   };
 
@@ -262,12 +278,7 @@ const ExportScreen = () => {
         console.warn('[Export] Sync check failed, proceeding with local data', e);
       }
 
-      // 2. Prepare Data (Re-run filter on latest data)
-      // We re-use the logic but strictly on the *latest* entries from the hook if they updated
-      // For simplicity here, we use `targetEntries` which updates via effect,
-      // but in an async flow, we might be stale.
-      // A safer bet for production is to re-filter `entries` here directly.
-
+      // 2. Prepare Data
       let finalData = [...targetEntries];
 
       // Filter out notes if unchecked
@@ -324,7 +335,10 @@ const ExportScreen = () => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+    <SafeAreaView
+      style={styles.safeArea}
+      edges={bannerVisible ? (['left', 'right'] as any) : (['top', 'left', 'right'] as any)}
+    >
       {/* HEADER */}
       <View style={styles.headerContainer}>
         <ScreenHeader
@@ -447,7 +461,7 @@ const ExportScreen = () => {
           </View>
 
           <View style={styles.formatRow}>
-            {(['pdf', 'excel'] as const).map((f) => (
+            {(['pdf', 'excel', 'csv'] as const).map((f) => (
               <FormatOption key={f} type={f} active={format === f} onPress={() => setFormat(f)} />
             ))}
           </View>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { useWindowDimensions, Platform } from 'react-native';
+import { useWindowDimensions, Platform, View } from 'react-native';
 import { createDrawerNavigator, DrawerNavigationOptions } from '@react-navigation/drawer';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
@@ -21,6 +21,7 @@ import EulaScreen from '../screens/EulaScreen';
 // --- CUSTOM COMPONENTS ---
 import CustomDrawerContent from './CustomDrawerContent';
 import { colors } from '../utils/design';
+import SyncStatusBanner from '../components/SyncStatusBanner';
 
 // --- TYPES ---
 export type DrawerParamList = {
@@ -91,154 +92,159 @@ const DrawerNavigator = () => {
   };
 
   return (
-    <Drawer.Navigator
-      drawerContent={(props) => <CustomDrawerContent {...props} />}
-      screenOptions={screenOptions}
-      initialRouteName="Dashboard"
-    >
-      {/* --- 1. MAIN DASHBOARD --- */}
-      <Drawer.Screen
-        name="Dashboard"
-        component={BottomTabNavigator}
-        options={{
-          title: 'Home',
-          drawerIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="home-variant-outline" color={color} size={22} />
-          ),
-        }}
-      />
+    <View style={{ flex: 1 }}>
+      {/* Place banner inside drawer layout so it pushes screen content down */}
+      <SyncStatusBanner />
 
-      {/* --- 2. CORE ACTIONS --- */}
-      <Drawer.Screen
-        name="AddEntry"
-        component={AddEntryScreen}
-        options={{
-          title: 'New Transaction',
-          drawerIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="plus-circle-outline" color={color} size={22} />
-          ),
-        }}
-      />
+      <Drawer.Navigator
+        drawerContent={(props) => <CustomDrawerContent {...props} />}
+        screenOptions={screenOptions}
+        initialRouteName="Dashboard"
+      >
+        {/* --- 1. MAIN DASHBOARD --- */}
+        <Drawer.Screen
+          name="Dashboard"
+          component={BottomTabNavigator}
+          options={{
+            title: 'Home',
+            drawerIcon: ({ color, size }) => (
+              <MaterialCommunityIcons name="home-variant-outline" color={color} size={22} />
+            ),
+          }}
+        />
 
-      <Drawer.Screen
-        name="History"
-        component={HistoryScreen}
-        options={{
-          title: 'History Log',
-          drawerIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="history" color={color} size={22} />
-          ),
-        }}
-      />
+        {/* --- 2. CORE ACTIONS --- */}
+        <Drawer.Screen
+          name="AddEntry"
+          component={AddEntryScreen}
+          options={{
+            title: 'New Transaction',
+            drawerIcon: ({ color, size }) => (
+              <MaterialCommunityIcons name="plus-circle-outline" color={color} size={22} />
+            ),
+          }}
+        />
 
-      {/* --- 3. CATEGORIES & LISTS --- */}
-      <Drawer.Screen
-        name="Income"
-        component={CashInList}
-        options={{
-          title: 'Income',
-          drawerIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="arrow-down-bold-box-outline" color={color} size={22} />
-          ),
-        }}
-      />
+        <Drawer.Screen
+          name="History"
+          component={HistoryScreen}
+          options={{
+            title: 'History Log',
+            drawerIcon: ({ color, size }) => (
+              <MaterialCommunityIcons name="history" color={color} size={22} />
+            ),
+          }}
+        />
 
-      <Drawer.Screen
-        name="Expenses"
-        component={CashOutList}
-        options={{
-          title: 'Expenses',
-          drawerIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="arrow-up-bold-box-outline" color={color} size={22} />
-          ),
-        }}
-      />
+        {/* --- 3. CATEGORIES & LISTS --- */}
+        <Drawer.Screen
+          name="Income"
+          component={CashInList}
+          options={{
+            title: 'Income',
+            drawerIcon: ({ color, size }) => (
+              <MaterialCommunityIcons name="arrow-down-bold-box-outline" color={color} size={22} />
+            ),
+          }}
+        />
 
-      {/* --- 4. DATA & ANALYTICS --- */}
-      <Drawer.Screen
-        name="Analytics"
-        component={StatsScreen}
-        options={{
-          title: 'Analytics & Charts',
-          drawerIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="chart-bar" color={color} size={22} />
-          ),
-        }}
-      />
+        <Drawer.Screen
+          name="Expenses"
+          component={CashOutList}
+          options={{
+            title: 'Expenses',
+            drawerIcon: ({ color, size }) => (
+              <MaterialCommunityIcons name="arrow-up-bold-box-outline" color={color} size={22} />
+            ),
+          }}
+        />
 
-      <Drawer.Screen
-        name="Export"
-        component={ExportScreen}
-        options={{
-          title: 'Export Data',
-          drawerIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="file-export-outline" color={color} size={22} />
-          ),
-        }}
-      />
+        {/* --- 4. DATA & ANALYTICS --- */}
+        <Drawer.Screen
+          name="Analytics"
+          component={StatsScreen}
+          options={{
+            title: 'Analytics & Charts',
+            drawerIcon: ({ color, size }) => (
+              <MaterialCommunityIcons name="chart-bar" color={color} size={22} />
+            ),
+          }}
+        />
 
-      {/* --- 5. USER & SETTINGS --- */}
-      <Drawer.Screen
-        name="Account"
-        component={AccountManagementScreen}
-        options={{
-          title: 'My Profile',
-          drawerIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="account-circle-outline" color={color} size={22} />
-          ),
-        }}
-      />
+        <Drawer.Screen
+          name="Export"
+          component={ExportScreen}
+          options={{
+            title: 'Export Data',
+            drawerIcon: ({ color, size }) => (
+              <MaterialCommunityIcons name="file-export-outline" color={color} size={22} />
+            ),
+          }}
+        />
 
-      <Drawer.Screen
-        name="Settings"
-        component={SettingsScreen}
-        options={{
-          title: 'App Settings',
-          drawerIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="cog-outline" color={color} size={22} />
-          ),
-        }}
-      />
+        {/* --- 5. USER & SETTINGS --- */}
+        <Drawer.Screen
+          name="Account"
+          component={AccountManagementScreen}
+          options={{
+            title: 'My Profile',
+            drawerIcon: ({ color, size }) => (
+              <MaterialCommunityIcons name="account-circle-outline" color={color} size={22} />
+            ),
+          }}
+        />
 
-      <Drawer.Screen
-        name="About"
-        component={AboutScreen}
-        options={{
-          title: 'About App',
-          drawerIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="information-outline" color={color} size={22} />
-          ),
-        }}
-      />
+        <Drawer.Screen
+          name="Settings"
+          component={SettingsScreen}
+          options={{
+            title: 'App Settings',
+            drawerIcon: ({ color, size }) => (
+              <MaterialCommunityIcons name="cog-outline" color={color} size={22} />
+            ),
+          }}
+        />
 
-      {/* --- HIDDEN SCREENS (Accessible via navigation, hidden from menu) --- */}
-      <Drawer.Screen
-        name="PrivacyPolicy"
-        component={PrivacyPolicyScreen}
-        options={{
-          drawerItemStyle: { display: 'none' },
-          title: 'Privacy Policy',
-        }}
-      />
+        <Drawer.Screen
+          name="About"
+          component={AboutScreen}
+          options={{
+            title: 'About App',
+            drawerIcon: ({ color, size }) => (
+              <MaterialCommunityIcons name="information-outline" color={color} size={22} />
+            ),
+          }}
+        />
 
-      <Drawer.Screen
-        name="Terms"
-        component={TermsScreen}
-        options={{
-          drawerItemStyle: { display: 'none' },
-          title: 'Terms of Use',
-        }}
-      />
+        {/* --- HIDDEN SCREENS (Accessible via navigation, hidden from menu) --- */}
+        <Drawer.Screen
+          name="PrivacyPolicy"
+          component={PrivacyPolicyScreen}
+          options={{
+            drawerItemStyle: { display: 'none' },
+            title: 'Privacy Policy',
+          }}
+        />
 
-      <Drawer.Screen
-        name="Eula"
-        component={EulaScreen}
-        options={{
-          drawerItemStyle: { display: 'none' },
-          title: 'EULA',
-        }}
-      />
-    </Drawer.Navigator>
+        <Drawer.Screen
+          name="Terms"
+          component={TermsScreen}
+          options={{
+            drawerItemStyle: { display: 'none' },
+            title: 'Terms of Use',
+          }}
+        />
+
+        <Drawer.Screen
+          name="Eula"
+          component={EulaScreen}
+          options={{
+            drawerItemStyle: { display: 'none' },
+            title: 'EULA',
+          }}
+        />
+      </Drawer.Navigator>
+    </View>
   );
 };
 

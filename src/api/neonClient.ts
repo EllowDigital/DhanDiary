@@ -1,4 +1,5 @@
 import { neon } from '@neondatabase/serverless';
+import { validate as uuidValidate } from 'uuid';
 import Constants from 'expo-constants';
 import NetInfo from '@react-native-community/netinfo';
 
@@ -99,20 +100,34 @@ export const warmNeonConnection = async () => {
   if (warmPromise) return warmPromise;
 
   warmPromise = (async () => {
-    try {
-      const start = Date.now();
-      if (typeof (sql as any).query === 'function') {
-        await withTimeout((sql as any).query('SELECT 1', []), 15000);
-        recordSuccess(Date.now() - start);
-      } else {
-        throw new Error('Neon client missing .query() method');
+    const maxAttempts = 2;
+    let attempt = 0;
+    while (attempt < maxAttempts) {
+      attempt += 1;
+      try {
+        const start = Date.now();
+        if (typeof (sql as any).query === 'function') {
+          // Increase timeout for warm-up and allow a retry attempt with backoff
+          const timeoutMs = attempt === 1 ? 15000 : 30000;
+          await withTimeout((sql as any).query('SELECT 1', []), timeoutMs);
+          recordSuccess(Date.now() - start);
+          break;
+        } else {
+          throw new Error('Neon client missing .query() method');
+        }
+      } catch (err) {
+        recordFailure(err);
+        if (typeof __DEV__ !== 'undefined' && __DEV__) {
+          console.warn('[Neon] Warm-up failed (attempt', attempt, '):', err);
+        }
+        if (attempt >= maxAttempts) {
+          break;
+        }
+        // Backoff before retrying
+        await sleep(1000 * attempt);
       }
-    } catch (err) {
-      recordFailure(err);
-      console.warn('[Neon] Warm-up failed', err);
-    } finally {
-      warmPromise = null;
     }
+    warmPromise = null;
   })();
 
   return warmPromise;
@@ -206,7 +221,27 @@ export const query = async <T = any>(
             console.warn('Neon Query permanent error (remote table missing):', msg);
           }
         } else {
-          console.error('Neon Query Error (permanent):', error);
+          // Handle common permanent errors more gracefully in production so LogBox
+          // does not surface raw Postgres/driver errors to end-users (for example
+          // when a non-UUID guest id is passed to a uuid column).
+          if (
+            msg.includes('invalid input syntax for type uuid') ||
+            msg.includes('invalid input syntax for type')
+          ) {
+            if (typeof __DEV__ !== 'undefined' && __DEV__) {
+              console.error('Neon Query permanent error (invalid input):', error);
+            } else {
+              console.warn('Neon Query encountered an invalid input (suppressed)');
+            }
+            // Throw a generic error in production so UI does not show raw DB details.
+            throw new Error('Server temporarily unavailable. Please try again later.');
+          }
+
+          if (typeof __DEV__ !== 'undefined' && __DEV__) {
+            console.error('Neon Query Error (permanent):', error);
+          } else {
+            console.warn('Neon Query encountered an error (suppressed)');
+          }
         }
         throw error;
       }
@@ -224,6 +259,12 @@ export const query = async <T = any>(
     }
   }
 
-  console.error('Neon Query failed after retries:', lastErr);
-  throw lastErr;
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
+    console.error('Neon Query failed after retries:', lastErr);
+    throw lastErr;
+  } else {
+    // Hide implementation details from end-users; rethrow a generic error
+    console.warn('Neon Query failed after retries (suppressed)');
+    throw new Error('Server temporarily unavailable. Please try again later.');
+  }
 };

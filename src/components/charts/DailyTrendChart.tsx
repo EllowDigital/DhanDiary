@@ -47,7 +47,20 @@ const DailyTrendChart = ({ data, height = 220, width, currency = 'INR' }: Props)
     // Safety check for empty data
     if (!data || data.length === 0) return { labels: [], datasets: [{ data: [0] }] };
 
-    const labels = data.map((d) => d.label);
+    // Smart X-axis label thinning: show up to 6 labels evenly spaced to avoid overlap
+    const maxLabels = 6;
+    const step = data.length <= maxLabels ? 1 : Math.ceil(data.length / (maxLabels - 1));
+    const labels = data.map((d, i) => {
+      // Derive a compact label: prefer day number to reduce width
+      let raw = d.label || '';
+      // If label looks like YYYY-MM-DD keep DD/MM
+      const parts = String(raw).split('-');
+      if (parts.length === 3) raw = `${parts[2]}/${parts[1]}`;
+      // If label contains space (e.g., "01 Nov"), keep only the day part
+      if (raw.includes(' ')) raw = String(raw).split(' ')[0];
+      return i % step === 0 ? raw : '';
+    });
+
     const values = data.map((d) => d.value);
 
     return {
