@@ -190,6 +190,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
     zIndex: 100, // Ensure header sits above scroll content
+    elevation: 16,
     // Default shadow props (controlled by animated style)
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
