@@ -114,7 +114,7 @@ const AppContent = () => {
           try {
             const del = await s.getAccountDeletedAt();
             setAccountDeletedAt(del);
-          } catch (e) { }
+          } catch (e) {}
         }
       } catch (e) {
         if (__DEV__) console.warn('[AppContent] failed to load local session', e);
@@ -133,16 +133,16 @@ const AppContent = () => {
             if (mod && typeof mod.getAccountDeletedAt === 'function') {
               mod.getAccountDeletedAt().then((v: any) => setAccountDeletedAt(v));
             }
-          } catch (e) { }
-        } catch (e) { }
+          } catch (e) {}
+        } catch (e) {}
       });
-    } catch (e) { }
+    } catch (e) {}
 
     return () => {
       mounted = false;
       try {
         if (unsub) unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, []);
 
@@ -152,7 +152,7 @@ const AppContent = () => {
 
   // 2. Health Check (Neon)
   useEffect(() => {
-    checkNeonConnection().catch(() => { });
+    checkNeonConnection().catch(() => {});
   }, []);
 
   // 3. User Synchronization
@@ -202,13 +202,14 @@ const AppContent = () => {
       <BiometricAuth />
 
       {/* Signed-out modal: shown only when an account-delete marker exists */}
-      {(accountDeletedAt != null) && (
+      {accountDeletedAt != null && (
         <Modal transparent visible animationType="fade">
           <View style={styles.modalBackdrop}>
             <View style={styles.modalCard}>
               <Text style={styles.modalTitle}>Account Deleted</Text>
               <Text style={styles.modalBody}>
-                Your account was deleted. All local data has been cleared. Sign in to create a new account.
+                Your account was deleted. All local data has been cleared. Sign in to create a new
+                account.
               </Text>
               <TouchableOpacity
                 style={styles.modalButton}
@@ -218,8 +219,11 @@ const AppContent = () => {
                     if (mod && typeof mod.setAccountDeletedAt === 'function') {
                       void mod.setAccountDeletedAt(null);
                     }
-                    resetRoot({ index: 0, routes: [{ name: 'Auth', state: { routes: [{ name: 'Login' }] } }] });
-                  } catch (e) { }
+                    resetRoot({
+                      index: 0,
+                      routes: [{ name: 'Auth', state: { routes: [{ name: 'Login' }] } }],
+                    });
+                  } catch (e) {}
                 }}
               >
                 <Text style={styles.modalButtonText}>Sign In</Text>
@@ -268,7 +272,7 @@ function AppWithDb() {
     try {
       const holder = require('./src/utils/queryClientHolder');
       if (holder?.setQueryClient) holder.setQueryClient(queryClient);
-    } catch (e) { }
+    } catch (e) {}
   }, [queryClient]);
 
   const initializeDatabase = useCallback(async () => {
@@ -294,11 +298,11 @@ function AppWithDb() {
     if (!dbReady) return;
 
     if (AppState.currentState === 'active') {
-      runFullSync().catch(() => { });
+      runFullSync().catch(() => {});
     }
 
     startForegroundSyncScheduler(15000);
-    startBackgroundFetch().catch(() => { });
+    startBackgroundFetch().catch(() => {});
 
     return () => {
       stopForegroundSyncScheduler();
@@ -312,7 +316,7 @@ function AppWithDb() {
     const handleAppStateChange = (nextState: AppStateStatus) => {
       if (nextState === 'active' && !isSyncRunning) {
         setTimeout(() => {
-          runFullSync().catch(() => { });
+          runFullSync().catch(() => {});
         }, 500);
       }
     };
@@ -388,11 +392,11 @@ export default function App() {
                 '[App] JS Error suppressed in production:',
                 error && error.message ? error.message : error
               );
-            } catch (e) { }
+            } catch (e) {}
             // Optionally send to analytics here
           });
         }
-      } catch (e) { }
+      } catch (e) {}
 
       // Catch unhandled promise rejections
       try {
@@ -403,9 +407,9 @@ export default function App() {
               '[App] Unhandled Promise Rejection suppressed in production:',
               reason && reason.message ? reason.message : reason
             );
-          } catch (e) { }
+          } catch (e) {}
         };
-      } catch (e) { }
+      } catch (e) {}
     }
     // Warn if CLERK_SECRET exists in runtime config — this is insecure for clients
     try {
@@ -416,8 +420,8 @@ export default function App() {
           '[App] SECURITY WARNING: CLERK_SECRET is present in client runtime. Do NOT ship admin secrets to mobile clients. Prefer a server-side deletion endpoint.'
         );
       }
-    } catch (e) { }
-  } catch (e) { }
+    } catch (e) {}
+  } catch (e) {}
   if (!CLERK_PUBLISHABLE_KEY) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>

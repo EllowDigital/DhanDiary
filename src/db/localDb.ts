@@ -181,32 +181,34 @@ export const wipeLocalDatabase = async (..._args: any[]) => {
   try {
     // Drop/clear key tables if they exist to ensure a fresh DB state.
     // Use DROP TABLE IF EXISTS so this is safe across schema versions.
-    try {
-      await execAsync('DROP TABLE IF EXISTS transactions;');
-    } catch (e) {
-      // ignore
-    }
-    try {
-      await execAsync('DROP TABLE IF EXISTS categories;');
-    } catch (e) {}
-    try {
-      await execAsync('DROP TABLE IF EXISTS meta;');
-    } catch (e) {}
+    const stmts = [
+      'DROP TABLE IF EXISTS transactions;',
+      'DROP TABLE IF EXISTS categories;',
+      'DROP TABLE IF EXISTS meta;',
+      'VACUUM;',
+    ];
 
-    // Vacuum / rebuild DB to reclaim space (best-effort)
-    try {
-      await execAsync('VACUUM;');
-    } catch (e) {}
+    for (const sql of stmts) {
+      try {
+        await execAsync(sql);
+      } catch (e) {
+        // best-effort: ignore individual failures
+      }
+    }
 
     // Clear persisted session keys to avoid auto-login
     try {
       await session.clearSession();
-    } catch (e) {}
+    } catch (e) {
+      /* ignore */
+    }
 
     // Ensure no-guest mode is set so app won't auto-create guest sessions
     try {
       await session.setNoGuestMode(true);
-    } catch (e) {}
+    } catch (e) {
+      /* ignore */
+    }
 
     return { ok: true };
   } catch (e) {
