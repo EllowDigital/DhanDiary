@@ -19,8 +19,8 @@ import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 
 // Optional Haptics: prefer runtime require so builds without expo-haptics still work.
 let Haptics: any = {
-  impactAsync: async () => {},
-  notificationAsync: async () => {},
+  impactAsync: async () => { },
+  notificationAsync: async () => { },
   ImpactFeedbackStyle: { Medium: 'medium' },
   NotificationFeedbackType: { Warning: 'warning' },
 };
@@ -147,13 +147,13 @@ const SettingsScreen = () => {
         const d = new Date(last);
         setLastSyncTime(`${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`);
       }
-    } catch (e) {}
+    } catch (e) { }
 
     return () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -231,8 +231,13 @@ const SettingsScreen = () => {
 
             if (ok) showToast('Signed out successfully');
 
-            // Force navigation reset
-            navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
+            // Force navigation reset (root)
+            try {
+              const { resetRoot } = await import('../utils/rootNavigation');
+              resetRoot({ index: 0, routes: [{ name: 'Auth' }] });
+            } catch (e) {
+              navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
+            }
           } catch (e) {
             console.warn('[Settings] logout failed', e);
             showToast('Sign out failed. Please try again.', 'error');
@@ -258,7 +263,12 @@ const SettingsScreen = () => {
             await logout();
             query.clear();
             showToast('App has been reset');
-            navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
+            try {
+              const { resetRoot } = await import('../utils/rootNavigation');
+              resetRoot({ index: 0, routes: [{ name: 'Auth' }] });
+            } catch (e) {
+              navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
+            }
           },
         },
       ]

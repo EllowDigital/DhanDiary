@@ -220,11 +220,13 @@ const OnboardingScreen = () => {
     if (completing) return;
     setCompleting(true);
     await markOnboardingComplete();
-    // Use reset to prevent going back to onboarding
-    navigation.reset({
-      index: 0,
-      routes: [{ name: 'Auth' }],
-    });
+    // Use root reset to prevent going back to onboarding
+    try {
+      const { resetRoot } = await import('../utils/rootNavigation');
+      resetRoot({ index: 0, routes: [{ name: 'Auth' }] });
+    } catch (e) {
+      navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
+    }
   };
 
   const [bannerVisible, setBannerVisible] = React.useState<boolean>(false);

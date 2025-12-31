@@ -365,8 +365,13 @@ const AccountManagementScreen = () => {
               // Catch-all: surface message but still attempt to navigate to Auth so app isn't left in broken state
               console.warn('[Account] unexpected error during delete flow', err);
               try {
-                navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
-              } catch (navErr) { }
+                const { resetRoot } = await import('../utils/rootNavigation');
+                resetRoot({ index: 0, routes: [{ name: 'Auth' }] });
+              } catch (navErr) {
+                try {
+                  navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
+                } catch (e) { }
+              }
               Alert.alert('Error', err?.message || 'Failed to delete account');
             } finally {
               setDeletingAccount(false);

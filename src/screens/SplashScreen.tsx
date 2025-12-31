@@ -190,14 +190,26 @@ const SplashScreen = () => {
           useNativeDriver: true,
         }),
       ]).start(() => {
-        // Determine Route
-        if (user) {
-          navigation.reset({ index: 0, routes: [{ name: 'Main' as any }] }); // Adjust 'Main' to your stack name
-        } else if (onboardingCompleted) {
-          navigation.reset({ index: 0, routes: [{ name: 'Auth' as any }] });
-        } else {
-          navigation.reset({ index: 0, routes: [{ name: 'Onboarding' as any }] });
-        }
+        // Determine Route using root reset for robustness
+        import('../utils/rootNavigation')
+          .then(({ resetRoot }) => {
+            if (user) {
+              resetRoot({ index: 0, routes: [{ name: 'Main' as any }] });
+            } else if (onboardingCompleted) {
+              resetRoot({ index: 0, routes: [{ name: 'Auth' as any }] });
+            } else {
+              resetRoot({ index: 0, routes: [{ name: 'Onboarding' as any }] });
+            }
+          })
+          .catch(() => {
+            if (user) {
+              navigation.reset({ index: 0, routes: [{ name: 'Main' as any }] }); // Adjust 'Main' to your stack name
+            } else if (onboardingCompleted) {
+              navigation.reset({ index: 0, routes: [{ name: 'Auth' as any }] });
+            } else {
+              navigation.reset({ index: 0, routes: [{ name: 'Onboarding' as any }] });
+            }
+          });
       });
     };
 

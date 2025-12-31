@@ -57,7 +57,7 @@ async function postEvent(event: string, payload: Payload) {
   } catch (e) {
     // Best-effort: don't throw from analytics
     try {
-      console.warn('[Analytics] event delivery failed', event, e?.message || e);
+      console.warn('[Analytics] event delivery failed', event, (e as any)?.message || e);
     } catch (ee) {}
   } finally {
     if (timer) clearTimeout(timer);

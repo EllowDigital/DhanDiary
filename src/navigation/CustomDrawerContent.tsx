@@ -22,6 +22,7 @@ import Constants from 'expo-constants'; // Standard way to access version
 import { colors } from '../utils/design';
 import UserAvatar from '../components/UserAvatar';
 import { logout } from '../services/auth';
+import { resetRoot } from '../utils/rootNavigation';
 import { getSession } from '../db/session';
 import { subscribeSession } from '../utils/sessionEvents';
 
@@ -81,7 +82,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -109,10 +110,12 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
             await logout(); // Local storage clean up
 
             // Reset nav stack to prevent going back
-            props.navigation.reset({
-              index: 0,
-              routes: [{ name: 'Auth' }], // Ensure 'Auth' matches your root stack name
-            });
+            try {
+              resetRoot({ index: 0, routes: [{ name: 'Auth' }] });
+            } catch (e) {
+              // fallback
+              props.navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
+            }
           } catch (e) {
             console.error('[Drawer] Logout failed', e);
             Alert.alert('Error', 'Failed to sign out. Please try again.');
