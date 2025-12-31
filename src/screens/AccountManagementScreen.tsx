@@ -401,7 +401,7 @@ const AccountManagementScreen = () => {
                             String((user as any).id || '') !==
                               String(fallbackSession.clerk_id || ''))) ? (
                           <View style={styles.localBadgeInline}>
-                            <MaterialIcon name="cloud_off" size={12} color="#B91C1C" />
+                            <MaterialIcon name="cloud-off" size={12} color="#B91C1C" />
                           </View>
                         ) : null}
                       </View>
@@ -409,7 +409,7 @@ const AccountManagementScreen = () => {
                   })()}
                   {/* Verified Badge */}
                   {(user as any)?.emailAddresses?.some(
-                    (e) => e.verification?.status === 'verified'
+                    (e: any) => e.verification?.status === 'verified'
                   ) && (
                     <View style={styles.verifiedBadge}>
                       <MaterialIcon name="check" size={12} color="white" />

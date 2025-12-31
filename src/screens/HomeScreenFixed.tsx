@@ -414,7 +414,7 @@ const HomeScreen = () => {
                       String(user.id || '') !== String(fallbackSession.id || '') &&
                       String(user.id || '') !== String(fallbackSession.clerk_id || ''))) ? (
                     <View style={styles.localBadge}>
-                      <MaterialIcon name="cloud_off" size={12} color="#B91C1C" />
+                      <MaterialIcon name="cloud-off" size={12} color="#B91C1C" />
                     </View>
                   ) : null}
                 </View>

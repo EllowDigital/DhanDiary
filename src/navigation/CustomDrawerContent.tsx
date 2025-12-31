@@ -196,7 +196,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
                 if (!usingLocal) return null;
                 return (
                   <View style={styles.localBadge}>
-                    <MaterialIcon name="cloud_off" size={12} color="#B91C1C" />
+                    <MaterialIcon name="cloud-off" size={12} color="#B91C1C" />
                   </View>
                 );
               })()}
