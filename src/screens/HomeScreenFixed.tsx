@@ -24,6 +24,8 @@ import dayjs from 'dayjs';
 // --- CUSTOM HOOKS & UTILS IMPORTS ---
 // Assuming these paths exist based on your snippets.
 import { useAuth } from '../hooks/useAuth';
+import { getSession } from '../db/session';
+import { subscribeSession } from '../utils/sessionEvents';
 import { useEntries } from '../hooks/useEntries';
 import useDelayedLoading from '../hooks/useDelayedLoading';
 import UserAvatar from '../components/UserAvatar';
@@ -244,6 +246,7 @@ const TransactionItem = React.memo(
 const HomeScreen = () => {
   const navigation = useNavigation<any>();
   const { user } = useAuth();
+  const [fallbackSession, setFallbackSession] = useState<any>(null);
   const { entries, isLoading, refetch } = useEntries(user?.id);
 
   // Use slightly longer delay for loading spinner to avoid flicker
@@ -273,6 +276,27 @@ const HomeScreen = () => {
       } catch (e) {}
     };
   }, [fadeAnim]);
+
+  // Load local fallback session and subscribe to changes so avatar/name are available
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const s = await getSession();
+        if (mounted) setFallbackSession(s);
+      } catch (e) {}
+    };
+    load();
+    const unsub = subscribeSession((s) => {
+      if (mounted) setFallbackSession(s);
+    });
+    return () => {
+      mounted = false;
+      try {
+        unsub();
+      } catch (e) {}
+    };
+  }, []);
 
   // Dev logging removed — production-ready
 

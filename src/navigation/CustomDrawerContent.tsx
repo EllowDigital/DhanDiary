@@ -189,7 +189,9 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
                 {user?.fullName || user?.firstName || fallbackSession?.name || 'Guest User'}
               </Text>
               <Text style={styles.profileEmail} numberOfLines={1}>
-                {user?.primaryEmailAddress?.emailAddress || fallbackSession?.email || 'Sign in to sync'}
+                {user?.primaryEmailAddress?.emailAddress ||
+                  fallbackSession?.email ||
+                  'Sign in to sync'}
               </Text>
             </View>
             <MaterialIcon name="chevron-right" size={24} color={colors.border || '#CBD5E1'} />

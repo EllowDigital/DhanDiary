@@ -38,7 +38,7 @@ const AnimatedTabIcon: React.FC<AnimatedTabIconProps> = ({
       toValue: focused ? 1 : 0,
       useNativeDriver: true,
       bounciness: 12, // Playful bounce
-      speed: 14,      // Snappy response
+      speed: 14, // Snappy response
     }).start();
   }, [focused, anim]);
 
@@ -61,7 +61,7 @@ const AnimatedTabIcon: React.FC<AnimatedTabIconProps> = ({
     // Optional: Subtle opacity shift for inactive state
     opacity: anim.interpolate({
       inputRange: [0, 1],
-      outputRange: [0.8, 1], 
+      outputRange: [0.8, 1],
     }),
   };
 

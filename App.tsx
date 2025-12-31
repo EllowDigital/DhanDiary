@@ -1,5 +1,15 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
-import { LogBox, View, Text, Button, ActivityIndicator, AppState, AppStateStatus, Platform, UIManager } from 'react-native';
+import {
+  LogBox,
+  View,
+  Text,
+  Button,
+  ActivityIndicator,
+  AppState,
+  AppStateStatus,
+  Platform,
+  UIManager,
+} from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -88,7 +98,7 @@ const AppContent = () => {
 
   // 2. Health Check (Neon)
   useEffect(() => {
-    checkNeonConnection().catch(() => { });
+    checkNeonConnection().catch(() => {});
   }, []);
 
   // 3. User Synchronization
@@ -98,7 +108,8 @@ const AppContent = () => {
     const syncUser = async () => {
       try {
         const id = clerkUser.id;
-        const emails = clerkUser.emailAddresses?.map(e => ({ emailAddress: e.emailAddress })) || [];
+        const emails =
+          clerkUser.emailAddresses?.map((e) => ({ emailAddress: e.emailAddress })) || [];
 
         if (emails.length === 0 && clerkUser.primaryEmailAddress?.emailAddress) {
           emails.push({ emailAddress: clerkUser.primaryEmailAddress.emailAddress });
@@ -134,7 +145,10 @@ const AppContent = () => {
       </RootStack.Navigator>
 
       {/* Global Overlays (Must be AFTER Navigator to sit on top) */}
-      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100 }} pointerEvents="box-none">
+      <View
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100 }}
+        pointerEvents="box-none"
+      >
         <SyncStatusBanner />
       </View>
       <BiometricAuth />
@@ -153,7 +167,7 @@ function AppWithDb() {
     try {
       const holder = require('./src/utils/queryClientHolder');
       if (holder?.setQueryClient) holder.setQueryClient(queryClient);
-    } catch (e) { }
+    } catch (e) {}
   }, [queryClient]);
 
   const initializeDatabase = useCallback(async () => {
@@ -179,11 +193,11 @@ function AppWithDb() {
     if (!dbReady) return;
 
     if (AppState.currentState === 'active') {
-      runFullSync().catch(() => { });
+      runFullSync().catch(() => {});
     }
 
     startForegroundSyncScheduler(15000);
-    startBackgroundFetch().catch(() => { });
+    startBackgroundFetch().catch(() => {});
 
     return () => {
       stopForegroundSyncScheduler();
@@ -197,7 +211,7 @@ function AppWithDb() {
     const handleAppStateChange = (nextState: AppStateStatus) => {
       if (nextState === 'active' && !isSyncRunning) {
         setTimeout(() => {
-          runFullSync().catch(() => { });
+          runFullSync().catch(() => {});
         }, 500);
       }
     };
@@ -211,7 +225,13 @@ function AppWithDb() {
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
         <Text style={{ marginBottom: 10, fontSize: 16 }}>Initialization Failed</Text>
         <Text style={{ marginBottom: 20, color: 'red', textAlign: 'center' }}>{dbInitError}</Text>
-        <Button title="Retry" onPress={() => { setDbInitError(null); initializeDatabase(); }} />
+        <Button
+          title="Retry"
+          onPress={() => {
+            setDbInitError(null);
+            initializeDatabase();
+          }}
+        />
       </View>
     );
   }
@@ -219,7 +239,9 @@ function AppWithDb() {
   // 2. Loading State
   if (!dbReady) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
+      <View
+        style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}
+      >
         <ActivityIndicator size="large" color="#2563EB" />
       </View>
     );

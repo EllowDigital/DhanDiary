@@ -52,7 +52,7 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
 }) => {
   const navigation = useNavigation<NavigationProp<any>>();
   const insets = useSafeAreaInsets();
-  
+
   // Determine navigation state safely
   const canGoBack = navigation.canGoBack?.() ?? false;
 
@@ -62,7 +62,7 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
   const handleNav = () => {
     if (backAction) return backAction();
     if (canGoBack) return navigation.goBack();
-    
+
     // Drawer fallback logic
     const nav: any = navigation;
     if (nav.openDrawer) return nav.openDrawer();
@@ -90,7 +90,7 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
   // Lift effect on scroll: Background opacity + Shadow ONLY (No Border Line)
   const headerAnimatedStyle = useAnimatedStyle(() => {
     const isScrolled = scrollOffset > 10;
-    
+
     return {
       backgroundColor: themeColors.background || '#F8FAFC',
       // Removed borderBottomWidth/Color to fix the "black line" issue
@@ -107,16 +107,10 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
 
   return (
     <Animated.View
-      style={[
-        styles.wrapper,
-        { paddingTop: topPadding },
-        headerAnimatedStyle,
-        style
-      ]}
+      style={[styles.wrapper, { paddingTop: topPadding }, headerAnimatedStyle, style]}
       accessibilityRole="header"
     >
       <View style={styles.contentRow}>
-        
         {/* LEFT ACTION AREA */}
         <View style={styles.leftContainer}>
           {!hideLeftAction ? (
@@ -125,13 +119,13 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
               onPress={handleNav}
               activeOpacity={0.6}
               hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-              accessibilityLabel={canGoBack ? "Go Back" : "Open Menu"}
+              accessibilityLabel={canGoBack ? 'Go Back' : 'Open Menu'}
               accessibilityRole="button"
             >
-              <MaterialIcons 
-                name={canGoBack ? "arrow-back" : "menu"} 
-                size={22} 
-                color={themeColors.text} 
+              <MaterialIcons
+                name={canGoBack ? 'arrow-back' : 'menu'}
+                size={22}
+                color={themeColors.text}
               />
             </TouchableOpacity>
           ) : (
@@ -145,14 +139,14 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
             {showAppIcon && (
               <View style={styles.appIconContainer}>
                 {/* Safe require for asset */}
-                <Image 
-                  source={require('../../assets/splash-icon.png')} 
-                  style={styles.appIcon} 
-                  resizeMode="contain" 
+                <Image
+                  source={require('../../assets/splash-icon.png')}
+                  style={styles.appIcon}
+                  resizeMode="contain"
                 />
               </View>
             )}
-            
+
             <View style={styles.textStack}>
               <Text style={styles.title} numberOfLines={1} ellipsizeMode="tail">
                 {title}
@@ -170,7 +164,6 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
         <View style={styles.rightContainer}>
           {rightSlot || <View style={styles.iconPlaceholder} />}
         </View>
-
       </View>
 
       {/* SCROLL HINT (Floating Pill) */}
@@ -181,11 +174,7 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
           style={styles.hintWrapper}
           pointerEvents="box-none"
         >
-          <TouchableOpacity 
-            onPress={handleDismissHint} 
-            style={styles.hintPill} 
-            activeOpacity={0.9}
-          >
+          <TouchableOpacity onPress={handleDismissHint} style={styles.hintPill} activeOpacity={0.9}>
             <MaterialIcons name="keyboard-arrow-down" size={16} color={themeColors.primary} />
             <Text style={styles.hintText}>Scroll for more</Text>
           </TouchableOpacity>
@@ -213,7 +202,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     minHeight: 44, // Standard touch target height
   },
-  
+
   // Left Area
   leftContainer: {
     minWidth: 40,
@@ -231,8 +220,8 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(0,0,0,0.03)', // Subtle border
   },
   iconPlaceholder: {
-    width: 40, 
-    height: 40 
+    width: 40,
+    height: 40,
   },
 
   // Title Area
@@ -301,14 +290,14 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 14,
     borderRadius: 20,
-    
+
     // Float Shadow
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
     shadowRadius: 6,
     elevation: 3,
-    
+
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.02)',
   },
