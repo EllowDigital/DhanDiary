@@ -46,25 +46,42 @@ interface MutationContext {
    Helpers
 ---------------------------------------------------------- */
 
-// Resolve an effective user ID (explicit → session → guest)
+// Resolve an effective user ID (explicit → session → existing-local → guest)
 const resolveUserId = async (passedId?: string | null): Promise<string> => {
   if (passedId) return passedId;
 
-  // 1) Try persisted fallback session
-  const s = await getSession();
-  if (s?.id) return s.id;
+  // 1) Read persisted fallback session (if any)
+  let s: any = null;
+  try {
+    s = await getSession();
+  } catch (e) {
+    if (__DEV__) console.warn('[resolveUserId] getSession failed', e);
+  }
 
-  // 2) If no session but there are existing transactions for a stored user_id,
-  //    prefer that user_id so previously stored offline data is visible.
+  // 2) Read any existing user_id already present in local transactions
+  let existingUser: string | null = null;
   try {
     const { getAnyUserWithTransactions } = require('../db/transactions');
-    const existingUser = await getAnyUserWithTransactions();
-    if (existingUser) return existingUser;
+    existingUser = await getAnyUserWithTransactions();
   } catch (e) {
     if (__DEV__) console.warn('[resolveUserId] getAnyUserWithTransactions failed', e);
   }
 
-  // 3) Fallback: create guest session id and persist it
+  // If the persisted session contains an original clerk_id that looks like
+  // a guest token (guest_...) prefer returning that so it matches rows written
+  // earlier (saveSession generates an internal UUID for non-UUID ids).
+  if (s?.clerk_id && typeof s.clerk_id === 'string' && s.clerk_id.startsWith('guest_')) {
+    return s.clerk_id;
+  }
+
+  // If we have local transactions for a user, prefer that id so offline data
+  // remains visible on cold start even if the stored session id is a generated UUID.
+  if (existingUser) return existingUser;
+
+  // If we have a persisted session id (likely a real user), use it.
+  if (s?.id) return s.id;
+
+  // Otherwise create a guest id and persist it (this will store the guest under clerk_id)
   const guestId = `guest_${Date.now()}`;
   try {
     await saveSession(guestId, 'Guest', '');

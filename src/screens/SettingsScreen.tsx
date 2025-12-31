@@ -41,6 +41,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '../context/ToastContext';
 import { colors, spacing } from '../utils/design';
 import ScreenHeader from '../components/ScreenHeader';
+import { subscribeBanner, isBannerVisible } from '../utils/bannerState';
 import appConfig from '../../app.json';
 
 // Safe Package Import for Version
@@ -98,6 +99,13 @@ const SettingsScreen = () => {
   const { width } = useWindowDimensions();
   const isTablet = width >= 768;
   const contentWidth = Math.min(width - (isTablet ? spacing(8) : spacing(4)), 600);
+
+  const [bannerVisible, setBannerVisible] = useState<boolean>(false);
+  useEffect(() => {
+    setBannerVisible(isBannerVisible());
+    const unsub = subscribeBanner((v: boolean) => setBannerVisible(v));
+    return () => unsub();
+  }, []);
 
   // Animations
   const animValues = useRef([...Array(6)].map(() => new Animated.Value(0))).current;
@@ -262,7 +270,10 @@ const SettingsScreen = () => {
   return (
     <View style={styles.mainContainer}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background || '#F8FAFC'} />
-      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+      <SafeAreaView
+        style={styles.safeArea}
+        edges={bannerVisible ? (['left', 'right'] as any) : (['top', 'left', 'right'] as any)}
+      >
         <View style={{ width: contentWidth, alignSelf: 'center' }}>
           <ScreenHeader
             title="Settings"

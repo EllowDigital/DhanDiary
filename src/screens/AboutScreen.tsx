@@ -18,6 +18,7 @@ import {
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { subscribeBanner, isBannerVisible } from '../utils/bannerState';
 import { Button, Text } from '@rneui/themed';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Updates from 'expo-updates';
@@ -63,6 +64,13 @@ const AboutScreen: React.FC = () => {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const isExpoGo = Constants.appOwnership === 'expo';
+
+  const [bannerVisible, setBannerVisible] = useState<boolean>(false);
+  useEffect(() => {
+    setBannerVisible(isBannerVisible());
+    const unsub = subscribeBanner((v: boolean) => setBannerVisible(v));
+    return () => unsub();
+  }, []);
 
   // --- ANIMATIONS ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -192,7 +200,11 @@ const AboutScreen: React.FC = () => {
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
       <View
-        style={{ paddingTop: insets.top, paddingHorizontal: 20, backgroundColor: theme.background }}
+        style={{
+          paddingTop: bannerVisible ? 0 : insets.top,
+          paddingHorizontal: 20,
+          backgroundColor: theme.background,
+        }}
       >
         <ScreenHeader
           title="About"
