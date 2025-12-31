@@ -1,11 +1,10 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
-import { LogBox, View, Text, Button, ActivityIndicator } from 'react-native';
+import { LogBox, View, Text, Button, ActivityIndicator, AppState, AppStateStatus, Platform, UIManager } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ClerkProvider, useAuth as useClerkAuth } from '@clerk/clerk-expo';
+import { ClerkProvider, useAuth as useClerkAuth, useUser } from '@clerk/clerk-expo';
 import Constants from 'expo-constants';
 
 // --- Local Imports ---
@@ -19,14 +18,13 @@ import PrivacyPolicyScreen from './src/screens/PrivacyPolicyScreen';
 import TermsScreen from './src/screens/TermsScreen';
 import EulaScreen from './src/screens/EulaScreen';
 
-import { RootStackParamList, AuthStackParamList, MainStackParamList } from './src/types/navigation';
+import { RootStackParamList, AuthStackParamList } from './src/types/navigation';
 import { ToastProvider } from './src/context/ToastContext';
 import { enableLegacyLayoutAnimations } from './src/utils/layoutAnimation';
 import DrawerNavigator from './src/navigation/DrawerNavigator';
 import { useOfflineSync } from './src/hooks/useOfflineSync';
 import { useAuth } from './src/hooks/useAuth';
 import { checkNeonConnection } from './src/api/neonClient';
-import { useUser } from '@clerk/clerk-expo';
 import { syncClerkUserToNeon } from './src/services/clerkUserSync';
 import { saveSession as saveLocalSession } from './src/db/session';
 import { BiometricAuth } from './src/components/BiometricAuth';
@@ -39,24 +37,24 @@ import {
   startBackgroundFetch,
   stopBackgroundFetch,
 } from './src/services/syncManager';
-import { AppState } from 'react-native';
 import runFullSync, { isSyncRunning } from './src/sync/runFullSync';
 
 // --- Configuration ---
 LogBox.ignoreLogs([
   'setLayoutAnimationEnabledExperimental',
-  'setLayoutAnimationEnabledExperimental is currently a no-op in the New Architecture.',
-  "The action 'GO_BACK' was not handled by any navigator.",
+  'setLayoutAnimationEnabledExperimental is currently a no-op',
+  "The action 'GO_BACK' was not handled",
   'Process ID',
 ]);
 
-if (__DEV__) {
-  require('./src/utils/devDiagnostics');
+// Enable LayoutAnimation
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-// Prefer values injected via app.config.js / app.json
+// Environment Variables
 const CLERK_PUBLISHABLE_KEY =
-  ((Constants?.expoConfig?.extra as any)?.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY as string) ||
+  Constants.expoConfig?.extra?.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ||
   process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ||
   '';
 
@@ -79,276 +77,184 @@ const AuthNavigator = () => (
 
 const MainNavigator = () => <DrawerNavigator />;
 
-// --- Inner App Content (Authenticated Logic) ---
+// --- Inner App Content ---
+// This component is now a CHILD of NavigationContainer, so hooks using navigation are safe here.
 const AppContent = () => {
   const { user } = useAuth();
-  // Clerk user (when signed in via Clerk SDK)
   const { user: clerkUser, isLoaded: clerkLoaded } = useUser();
 
-  // Provide user id to offline sync so it only runs when a user is present
+  // 1. Setup Offline Sync Hook
   useOfflineSync(user?.id);
 
-  // Warm Neon connection and log health (non-blocking)
-  React.useEffect(() => {
-    (async () => {
-      try {
-        const ok = await checkNeonConnection();
-        console.log('[App] Neon connection ok:', ok);
-      } catch (e) {
-        console.warn('[App] Neon connection check failed', e);
-      }
-    })();
+  // 2. Health Check (Neon)
+  useEffect(() => {
+    checkNeonConnection().catch(() => { });
   }, []);
 
-  // When Clerk user becomes available, ensure they are synced to Neon and local session saved.
-  React.useEffect(() => {
+  // 3. User Synchronization
+  useEffect(() => {
     if (!clerkLoaded || !clerkUser) return;
 
-    (async () => {
+    const syncUser = async () => {
       try {
-        const id = (clerkUser as any).id || (clerkUser as any).userId || null;
-        // Gather email addresses in the shapes Clerk may expose
-        let emails: Array<{ emailAddress: string }> = [];
-        try {
-          if (
-            (clerkUser as any).primaryEmailAddress &&
-            (clerkUser as any).primaryEmailAddress.emailAddress
-          ) {
-            emails = [{ emailAddress: (clerkUser as any).primaryEmailAddress.emailAddress }];
-          } else if (
-            (clerkUser as any).emailAddresses &&
-            (clerkUser as any).emailAddresses.length
-          ) {
-            emails = (clerkUser as any).emailAddresses.map((e: any) => ({
-              emailAddress: e.emailAddress,
-            }));
-          }
-        } catch (e) {
-          // leave emails empty
+        const id = clerkUser.id;
+        const emails = clerkUser.emailAddresses?.map(e => ({ emailAddress: e.emailAddress })) || [];
+
+        if (emails.length === 0 && clerkUser.primaryEmailAddress?.emailAddress) {
+          emails.push({ emailAddress: clerkUser.primaryEmailAddress.emailAddress });
         }
 
-        if (!id) {
-          console.warn('[App] clerk user missing id, skipping sync');
-          return;
-        }
+        if (!id) return;
 
-        // Call bridge to ensure Neon has the user and save session locally.
-        try {
-          const bridgeUser = await syncClerkUserToNeon({
-            id,
-            emailAddresses: emails,
-            fullName: (clerkUser as any).fullName || null,
-          });
-          if (bridgeUser && bridgeUser.uuid) {
-            try {
-              await saveLocalSession(bridgeUser.uuid, bridgeUser.name || 'User', bridgeUser.email);
-              console.log('[App] saved local session for', bridgeUser.email);
-            } catch (e) {
-              console.warn('[App] failed to save local session', e);
-            }
-          }
-        } catch (e) {
-          console.warn('[App] syncClerkUserToNeon failed', e);
+        const bridgeUser = await syncClerkUserToNeon({
+          id,
+          emailAddresses: emails,
+          fullName: clerkUser.fullName || clerkUser.firstName || null,
+        });
+
+        if (bridgeUser?.uuid) {
+          await saveLocalSession(bridgeUser.uuid, bridgeUser.name || 'User', bridgeUser.email);
         }
       } catch (e) {
-        console.warn('[App] clerk sync effect error', e);
+        console.warn('[App] User sync failed:', e);
       }
-    })();
+    };
+
+    syncUser();
   }, [clerkLoaded, clerkUser]);
 
   return (
-    <>
+    <View style={{ flex: 1 }}>
+      {/* Main Navigator */}
+      <RootStack.Navigator screenOptions={{ headerShown: false }}>
+        <RootStack.Screen name="Splash" component={SplashScreen} />
+        <RootStack.Screen name="Onboarding" component={OnboardingScreen} />
+        <RootStack.Screen name="Auth" component={AuthNavigator} />
+        <RootStack.Screen name="Main" component={MainNavigator} />
+      </RootStack.Navigator>
+
+      {/* Global Overlays (Must be AFTER Navigator to sit on top) */}
+      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100 }} pointerEvents="box-none">
+        <SyncStatusBanner />
+      </View>
       <BiometricAuth />
-      <SyncStatusBanner />
-      <NavigationContainer>
-        <RootStack.Navigator screenOptions={{ headerShown: false }}>
-          <RootStack.Screen name="Splash" component={SplashScreen} />
-          <RootStack.Screen name="Onboarding" component={OnboardingScreen} />
-          <RootStack.Screen name="Auth" component={AuthNavigator} />
-          <RootStack.Screen name="Main" component={MainNavigator} />
-        </RootStack.Navigator>
-      </NavigationContainer>
-    </>
+    </View>
   );
 };
 
-// --- App that initializes DB and app services (runs after Clerk loaded) ---
+// --- App Shell (Database, Navigation Container & Service Initialization) ---
 function AppWithDb() {
   const [dbReady, setDbReady] = useState(false);
   const [dbInitError, setDbInitError] = useState<string | null>(null);
 
   const queryClient = useMemo(() => new QueryClient(), []);
-  // expose queryClient to other modules so logout can clear cache globally
-  try {
-    const holder = require('./src/utils/queryClientHolder');
-    if (holder && typeof holder.setQueryClient === 'function') holder.setQueryClient(queryClient);
-  } catch (e) {}
 
-  // Initialize SQLite DB on startup and expose readiness to the app shell.
+  useEffect(() => {
+    try {
+      const holder = require('./src/utils/queryClientHolder');
+      if (holder?.setQueryClient) holder.setQueryClient(queryClient);
+    } catch (e) { }
+  }, [queryClient]);
+
   const initializeDatabase = useCallback(async () => {
     try {
+      enableLegacyLayoutAnimations();
       const { initDB } = await import('./src/db/sqlite');
       await initDB();
       setDbReady(true);
       setDbInitError(null);
     } catch (e: any) {
-      console.warn('[App] DB init failed', e);
-      setDbInitError(String(e?.message || e));
+      console.error('[App] DB Init Fatal:', e);
+      setDbInitError(e.message || 'Unknown database error');
       setDbReady(false);
     }
   }, []);
 
-  // 1. Initial Config Logging
-  useEffect(() => {
-    // Enable legacy LayoutAnimation on Android when appropriate (centralized)
-    try {
-      enableLegacyLayoutAnimations();
-    } catch (e) {}
-    try {
-      const extra = (Constants?.expoConfig?.extra as any) || {};
-      const neonUrl = extra.NEON_URL || process.env.NEON_URL || null;
-      let host: string | null = null;
-      if (neonUrl) {
-        try {
-          host = new URL(neonUrl).hostname;
-        } catch (e) {
-          host = String(neonUrl).split('@').pop()?.split('/')[0] || null;
-        }
-      }
-      console.log(
-        'Startup config — neon host:',
-        host || '(not configured)',
-        'clerkKey present:',
-        !!CLERK_PUBLISHABLE_KEY
-      );
-    } catch (e) {
-      // ignore
-    }
-  }, []);
-
-  // Run DB init on mount (no-op)
   useEffect(() => {
     initializeDatabase();
   }, [initializeDatabase]);
 
-  // Start schedulers when DB is ready
+  // Sync Schedulers
   useEffect(() => {
     if (!dbReady) return;
-    // Run a foreground sync once when the DB is ready and app is active.
-    try {
-      const current = AppState.currentState;
-      if (current === 'active') {
-        // call but don't await — safe non-blocking
-        runFullSync().catch((e) => {
-          if (__DEV__) console.warn('[App] initial runFullSync failed', e);
-        });
-      }
-    } catch (e) {}
 
-    try {
-      startForegroundSyncScheduler(15000);
-    } catch (e) {
-      console.warn('Failed to start foreground scheduler', e);
+    if (AppState.currentState === 'active') {
+      runFullSync().catch(() => { });
     }
 
-    (async () => {
-      try {
-        await startBackgroundFetch();
-      } catch (e) {
-        console.warn('Background fetch start failed or unavailable', e);
-      }
-    })();
+    startForegroundSyncScheduler(15000);
+    startBackgroundFetch().catch(() => { });
 
     return () => {
-      try {
-        stopForegroundSyncScheduler();
-        stopBackgroundFetch();
-      } catch (e) {}
+      stopForegroundSyncScheduler();
+      stopBackgroundFetch();
     };
   }, [dbReady]);
 
-  // Listen for app coming to foreground and trigger a safe sync.
+  // App State Listener
   useEffect(() => {
     if (!dbReady) return;
-
-    const handler = (nextState: string) => {
-      if (nextState === 'active') {
-        // Avoid overlapping runs — runFullSync has its own lock but check early too.
-        if (isSyncRunning) return;
-        // Debounce quick state changes
+    const handleAppStateChange = (nextState: AppStateStatus) => {
+      if (nextState === 'active' && !isSyncRunning) {
         setTimeout(() => {
-          runFullSync().catch((e) => {
-            if (__DEV__) console.warn('[App] foreground runFullSync failed', e);
-          });
-        }, 250);
+          runFullSync().catch(() => { });
+        }, 500);
       }
     };
-
-    // Use the modern subscription API and always call `remove()` on cleanup.
-    const sub: any = AppState.addEventListener
-      ? AppState.addEventListener('change', handler)
-      : { remove: () => {} };
-
-    return () => {
-      try {
-        if (sub && typeof sub.remove === 'function') sub.remove();
-      } catch (e) {}
-    };
+    const sub = AppState.addEventListener('change', handleAppStateChange);
+    return () => sub.remove();
   }, [dbReady]);
 
+  // 1. Error State
   if (!dbReady && dbInitError) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-        <Text style={{ marginBottom: 12 }}>Database initialization failed:</Text>
-        <Text style={{ marginBottom: 18, color: 'red', textAlign: 'center' }}>{dbInitError}</Text>
-        <Button
-          title="Retry Init"
-          onPress={() => {
-            setDbInitError(null);
-            initializeDatabase();
-          }}
-        />
+        <Text style={{ marginBottom: 10, fontSize: 16 }}>Initialization Failed</Text>
+        <Text style={{ marginBottom: 20, color: 'red', textAlign: 'center' }}>{dbInitError}</Text>
+        <Button title="Retry" onPress={() => { setDbInitError(null); initializeDatabase(); }} />
       </View>
     );
   }
 
+  // 2. Loading State
   if (!dbReady) {
     return (
-      <View
-        style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}
-      >
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
         <ActivityIndicator size="large" color="#2563EB" />
-        <Text style={{ marginTop: 12 }}>Starting app...</Text>
       </View>
     );
   }
 
+  // 3. Ready State - NavigationContainer lives HERE
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
         <ToastProvider>
-          <AppContent />
+          {/* FIX: NavigationContainer wraps AppContent, providing context to hooks inside AppContent */}
+          <NavigationContainer>
+            <AppContent />
+          </NavigationContainer>
         </ToastProvider>
       </QueryClientProvider>
     </SafeAreaProvider>
   );
 }
 
-// --- Bootstrap: wait for Clerk SDK to load session state before initializing DB ---
+// --- Bootstrap ---
 function AppBootstrap() {
-  const { isLoaded } = useClerkAuth();
-
-  // Wait until Clerk SDK resolves session state. Render nothing (or a splash)
-  // while Clerk is initializing so we don't assume logged-out before Clerk is ready.
-  // Previously we returned `null` while Clerk initialized which could leave
-  // the app as a blank white screen on resume. Instead render the app shell
-  // and let internal components handle loading states. This avoids a white
-  // screen when the process was backgrounded and resumed.
   return <AppWithDb />;
 }
 
-// Top-level App: provide Clerk then bootstrap rest of app
+// --- Root App ---
 export default function App() {
+  if (!CLERK_PUBLISHABLE_KEY) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ color: 'red' }}>Configuration Error: Missing Clerk Key</Text>
+      </View>
+    );
+  }
+
   return (
     <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY} tokenCache={tokenCache}>
       <AppBootstrap />

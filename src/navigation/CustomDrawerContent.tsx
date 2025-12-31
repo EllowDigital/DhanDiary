@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -21,6 +21,8 @@ import Constants from 'expo-constants'; // Standard way to access version
 import { colors } from '../utils/design';
 import UserAvatar from '../components/UserAvatar';
 import { logout } from '../services/auth';
+import { getSession } from '../db/session';
+import { subscribeSession } from '../utils/sessionEvents';
 
 // --- CONSTANTS ---
 const ACTIVE_COLOR = (colors as any).primary || '#2563EB';
@@ -34,6 +36,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   const insets = useSafeAreaInsets();
   const { signOut } = useAuth();
   const { user } = useUser();
+  const [fallbackSession, setFallbackSession] = useState<any>(null);
 
   // Animation Refs
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -55,6 +58,29 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
         stiffness: 90,
       }),
     ]).start();
+    let mounted = true;
+    // Load persisted fallback session (used when Clerk user isn't available, e.g., offline)
+    const load = async () => {
+      try {
+        const s = await getSession();
+        if (mounted) setFallbackSession(s);
+      } catch (e) {
+        // ignore
+      }
+    };
+    load();
+
+    // Subscribe to session changes so UI updates when login/logout/saveSession runs
+    const unsub = subscribeSession((s) => {
+      if (mounted) setFallbackSession(s);
+    });
+
+    return () => {
+      mounted = false;
+      try {
+        unsub();
+      } catch (e) {}
+    };
   }, []);
 
   const handleNavigate = (routeName: string) => {
@@ -152,17 +178,18 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
             activeOpacity={0.8}
             onPress={() => props.navigation.navigate('Account')}
           >
+            {/* Prefer Clerk user when available, otherwise fall back to locally persisted session */}
             <UserAvatar
               size={56}
-              name={user?.fullName || user?.firstName}
-              imageUrl={user?.imageUrl}
+              name={user?.fullName || user?.firstName || fallbackSession?.name}
+              imageUrl={user?.imageUrl || fallbackSession?.imageUrl || fallbackSession?.image}
             />
             <View style={styles.profileInfo}>
               <Text style={styles.profileName} numberOfLines={1}>
-                {user?.fullName || user?.firstName || 'Guest User'}
+                {user?.fullName || user?.firstName || fallbackSession?.name || 'Guest User'}
               </Text>
               <Text style={styles.profileEmail} numberOfLines={1}>
-                {user?.primaryEmailAddress?.emailAddress || 'Sign in to sync'}
+                {user?.primaryEmailAddress?.emailAddress || fallbackSession?.email || 'Sign in to sync'}
               </Text>
             </View>
             <MaterialIcon name="chevron-right" size={24} color={colors.border || '#CBD5E1'} />
