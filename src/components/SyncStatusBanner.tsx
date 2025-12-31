@@ -6,8 +6,8 @@ import {
   Animated,
   Easing,
   Platform,
-  LayoutAnimation,
   UIManager,
+  LayoutChangeEvent,
 } from 'react-native';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,7 +25,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 }
 
 /* -------------------------------------------------------------------------- */
-/* Types                                   */
+/* Types                                                                      */
 /* -------------------------------------------------------------------------- */
 
 type BannerState = 'offline' | 'syncing' | 'synced' | 'hidden' | 'error';
@@ -36,29 +36,25 @@ interface BannerConfig {
   subtext?: string;
   icon: keyof typeof MaterialIcon.glyphMap;
   color: string;
-  accent: string;
 }
 
 /* -------------------------------------------------------------------------- */
-/* Constants                                 */
+/* Constants                                                                  */
 /* -------------------------------------------------------------------------- */
 
-const DEBOUNCE_MS = 400; // Delay before showing state change to prevent flickering
-const SHOW_SYNCED_MS = 2000; // Duration to show "Synced" success message
-const SHOW_OFFLINE_MS = 5000; // Show offline banner briefly then hide so it doesn't block header
+const DEBOUNCE_MS = 300;
+const SHOW_SYNCED_MS = 3000;
 const ANIMATION_DURATION = 300;
+const DEFAULT_HEIGHT = 80; // Fallback height
 
 /* -------------------------------------------------------------------------- */
-/* Helpers                                    */
+/* Helpers                                                                    */
 /* -------------------------------------------------------------------------- */
 
 const formatRelativeTime = (ts: number) => {
   if (!ts) return '';
   const diff = Date.now() - ts;
-  if (diff < 5 * 1000) return 'just now';
-  if (diff < 60 * 1000) return `${Math.floor(diff / 1000)}s ago`;
-  if (diff < 60 * 60 * 1000) return `${Math.floor(diff / (60 * 1000))}m ago`;
-  if (diff < 24 * 60 * 60 * 1000) return `${Math.floor(diff / (60 * 60 * 1000))}h ago`;
+  if (diff < 60 * 1000) return 'just now';
   const d = new Date(ts);
   return d.toLocaleDateString(undefined, {
     month: 'short',
@@ -69,7 +65,7 @@ const formatRelativeTime = (ts: number) => {
 };
 
 /* -------------------------------------------------------------------------- */
-/* Main Component                               */
+/* Main Component                                                             */
 /* -------------------------------------------------------------------------- */
 
 const SyncStatusBanner = () => {
@@ -80,47 +76,29 @@ const SyncStatusBanner = () => {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
   const [bannerState, setBannerState] = useState<BannerState>('hidden');
   const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
+  
+  // Height State
+  const [contentHeight, setContentHeight] = useState<number>(DEFAULT_HEIGHT + insets.top);
 
-  // Animation Values
-  // We use translateY to slide it in from top (-100) to 0
-  const slideAnim = useRef(new Animated.Value(-100)).current;
-  const opacityAnim = useRef(new Animated.Value(0)).current;
+  // Animation Values: 0 = Hidden, 1 = Visible
+  const animController = useRef(new Animated.Value(0)).current;
 
-  // Refs for timers
+  // Refs
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  /* ------------------------- 1. Listen to Sync Manager ------------------------ */
+  // --- 1. Sync Listener ---
   useEffect(() => {
-    const unsub = subscribeSyncStatus((s) => {
-      setSyncStatus(s);
-    });
-    return () => {
-      try {
-        unsub();
-      } catch (e) {
-        // safety catch
-      }
-    };
+    const unsub = subscribeSyncStatus((s) => setSyncStatus(s));
+    return () => { try { unsub(); } catch (e) {} };
   }, []);
 
-  /* ------------------------- 2. Determine Banner State ------------------------ */
+  // --- 2. State Logic ---
   useEffect(() => {
-    // Clear existing debounce timer
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-      debounceRef.current = null;
-    }
+    if (debounceRef.current) clearTimeout(debounceRef.current);
 
-    // Debounce the state calculation to avoid rapid UI flashing
     debounceRef.current = setTimeout(() => {
       let nextState: BannerState = 'hidden';
-
-      // Priority Logic:
-      // 1. Offline (Highest Priority)
-      // 2. Error
-      // 3. Syncing
-      // 4. Synced (Transient)
 
       if (!isOnline) {
         nextState = 'offline';
@@ -128,43 +106,20 @@ const SyncStatusBanner = () => {
         nextState = 'error';
       } else if (syncStatus === 'syncing') {
         nextState = 'syncing';
-      } else {
-        // If we were previously syncing or had an error, and now we are idle/success,
-        // we show the "synced" success state briefly.
-        // We only transition to 'synced' if the PREVIOUS state wasn't hidden/offline
-        // to avoid showing "Synced" immediately on app launch.
-        if (bannerState === 'syncing' || bannerState === 'error') {
-          nextState = 'synced';
-        } else if (bannerState === 'synced') {
-          // Keep it synced until timer runs out
-          nextState = 'synced';
-        } else {
-          nextState = 'hidden';
-        }
+      } else if (bannerState !== 'hidden') {
+        // Only show 'synced' success if we were previously showing something else
+        nextState = 'synced';
       }
 
-      // Handle the transition logic
+      // Logic to auto-hide 'synced' state
       if (nextState === 'synced') {
         setBannerState('synced');
-
-        // Schedule auto-hide for synced
         if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
         hideTimerRef.current = setTimeout(() => {
           setBannerState('hidden');
         }, SHOW_SYNCED_MS);
-      } else if (nextState === 'offline') {
-        // Show offline briefly then auto-hide so header isn't blocked long-term
-        setBannerState('offline');
-        if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-        hideTimerRef.current = setTimeout(() => {
-          setBannerState('hidden');
-        }, SHOW_OFFLINE_MS);
       } else {
-        // For other states (error, syncing, hidden), cancel any auto-hide timer
-        if (hideTimerRef.current) {
-          clearTimeout(hideTimerRef.current);
-          hideTimerRef.current = null;
-        }
+        if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
         setBannerState(nextState);
       }
     }, DEBOUNCE_MS);
@@ -174,125 +129,93 @@ const SyncStatusBanner = () => {
     };
   }, [isOnline, syncStatus, bannerState]);
 
-  /* ------------------------- 3. Fetch Last Sync Time ------------------------ */
-  useEffect(() => {
-    let mounted = true;
-    const loadTime = async () => {
-      if (bannerState !== 'synced') return;
-
-      // Try in-memory first
-      const inMem = getLastSuccessfulSyncAt && getLastSuccessfulSyncAt();
-      if (inMem) {
-        if (mounted) setLastSyncAt(inMem);
-        return;
-      }
-
-      // Fallback to storage
-      try {
-        const v = await getLastSyncTime();
-        if (v && mounted) {
-          const n = Number(v);
-          if (!isNaN(n)) setLastSyncAt(n);
-        }
-      } catch (e) {
-        // ignore
-      }
-    };
-
-    if (bannerState === 'synced') {
-      loadTime();
-    }
-
-    return () => {
-      mounted = false;
-    };
-  }, [bannerState]);
-
-  /* ------------------------- 4. Run Animations ------------------------ */
+  // --- 3. Animation Driver ---
   useEffect(() => {
     const isVisible = bannerState !== 'hidden';
+    
+    Animated.timing(animController, {
+      toValue: isVisible ? 1 : 0,
+      duration: ANIMATION_DURATION,
+      easing: Easing.out(Easing.poly(4)),
+      useNativeDriver: false, // Height prop needs false
+    }).start();
+  }, [bannerState, animController]);
 
-    Animated.parallel([
-      Animated.timing(slideAnim, {
-        toValue: isVisible ? 0 : -100, // 0 is natural position, -100 is pushed up
-        duration: ANIMATION_DURATION,
-        easing: Easing.out(Easing.poly(4)),
-        useNativeDriver: true,
-      }),
-      Animated.timing(opacityAnim, {
-        toValue: isVisible ? 1 : 0,
-        duration: ANIMATION_DURATION,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [bannerState, slideAnim, opacityAnim]);
-
-  // Cleanup timers on unmount
+  // --- 4. Get Last Sync Time ---
   useEffect(() => {
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-    };
-  }, []);
+    if (bannerState === 'synced') {
+      const inMem = getLastSuccessfulSyncAt?.();
+      if (inMem) setLastSyncAt(inMem);
+      else {
+        getLastSyncTime().then((v) => {
+          const n = Number(v);
+          if (!isNaN(n)) setLastSyncAt(n);
+        }).catch(() => {});
+      }
+    }
+  }, [bannerState]);
 
-  /* ------------------------- 5. Render Configuration ------------------------ */
-  const getConfig = (): BannerConfig => {
+  // --- 5. Config ---
+  const config = useMemo((): BannerConfig => {
     switch (bannerState) {
       case 'offline':
         return {
-          bg: '#1F2937', // Dark Grey (Modern Dark Mode feel)
+          bg: '#1F2937',
           color: '#F3F4F6',
-          accent: '#9CA3AF',
           icon: 'cloud-off',
           text: 'You are offline',
           subtext: 'Changes saved locally',
         };
       case 'syncing':
         return {
-          bg: '#EFF6FF', // Light Blue
+          bg: '#EFF6FF',
           color: '#1E40AF',
-          accent: '#3B82F6',
           icon: 'sync',
           text: 'Syncing changes...',
           subtext: 'Keeping data up to date',
         };
       case 'error':
         return {
-          bg: '#FEF2F2', // Light Red
+          bg: '#FEF2F2',
           color: '#991B1B',
-          accent: '#EF4444',
           icon: 'error-outline',
           text: 'Sync failed',
           subtext: 'Retrying automatically...',
         };
       case 'synced':
         return {
-          bg: '#ECFDF5', // Light Emerald
+          bg: '#ECFDF5',
           color: '#065F46',
-          accent: '#10B981',
           icon: 'check-circle',
           text: 'All changes synced',
           subtext: lastSyncAt ? `Last synced ${formatRelativeTime(lastSyncAt)}` : 'Up to date',
         };
       default:
-        // Hidden state fallback
+        // Return a neutral config instead of transparent to prevent text vanishing during exit
         return {
-          bg: 'transparent',
-          color: 'transparent',
-          accent: 'transparent',
-          icon: 'check',
-          text: '',
+          bg: '#ECFDF5',
+          color: '#065F46',
+          icon: 'check-circle',
+          text: 'All changes synced',
         };
     }
-  };
+  }, [bannerState, lastSyncAt]);
 
-  const config = getConfig();
-  const isSpinning = bannerState === 'syncing';
+  // Height Interpolation
+  const heightAnim = animController.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, contentHeight],
+  });
 
-  // Rotation animation for sync icon
+  const opacityAnim = animController.interpolate({
+    inputRange: [0, 0.3, 1],
+    outputRange: [0, 0, 1],
+  });
+
+  // Spin Animation for Sync Icon
   const spinValue = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    if (isSpinning) {
+    if (bannerState === 'syncing') {
       Animated.loop(
         Animated.timing(spinValue, {
           toValue: 1,
@@ -302,86 +225,91 @@ const SyncStatusBanner = () => {
         })
       ).start();
     } else {
+      spinValue.stopAnimation();
       spinValue.setValue(0);
     }
-  }, [isSpinning, spinValue]);
+  }, [bannerState]);
 
   const spin = spinValue.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
   });
 
-  /* ------------------------- Render ------------------------ */
-  // If hidden, don't render at all so it doesn't overlay or reserve space
-  if (bannerState === 'hidden') return null;
-
   return (
     <Animated.View
       style={[
-        styles.container,
+        styles.wrapper,
         {
+          height: heightAnim,
           backgroundColor: config.bg,
-          paddingTop: insets.top + 8, // Respect Safe Area + Padding
-          paddingBottom: 10,
-          transform: [{ translateY: slideAnim }],
-          opacity: opacityAnim,
         },
       ]}
     >
-      <View style={styles.contentContainer}>
-        <Animated.View
-          style={{
-            transform: [{ rotate: isSpinning ? spin : '0deg' }],
-          }}
-        >
-          <MaterialIcon name={config.icon} size={20} color={config.color} />
-        </Animated.View>
+      <Animated.View
+        style={[
+          styles.innerContent,
+          {
+            opacity: opacityAnim,
+            paddingTop: insets.top > 0 ? insets.top + 6 : 12, // Safe area padding
+          },
+        ]}
+        onLayout={(e: LayoutChangeEvent) => {
+          // Dynamically measure height to support multiline text
+          const h = e.nativeEvent.layout.height;
+          if (h > 0 && Math.abs(h - contentHeight) > 2) {
+            setContentHeight(h);
+          }
+        }}
+      >
+        <View style={styles.row}>
+          <Animated.View style={{ transform: [{ rotate: bannerState === 'syncing' ? spin : '0deg' }] }}>
+            <MaterialIcon name={config.icon} size={20} color={config.color} />
+          </Animated.View>
 
-        <View style={styles.textContainer}>
-          <Text style={[styles.title, { color: config.color }]}>{config.text}</Text>
-          {config.subtext ? (
-            <Text style={[styles.subtitle, { color: config.color, opacity: 0.8 }]}>
-              {config.subtext}
+          <View style={styles.textStack}>
+            <Text style={[styles.title, { color: config.color }]}>
+              {config.text}
             </Text>
-          ) : null}
+            {config.subtext ? (
+              <Text style={[styles.subtitle, { color: config.color, opacity: 0.85 }]}>
+                {config.subtext}
+              </Text>
+            ) : null}
+          </View>
+
+          {bannerState === 'offline' && (
+            <View style={[styles.dot, { backgroundColor: '#EF4444' }]} />
+          )}
         </View>
-
-        {/* Optional Right Indicator (e.g., a small dot or close) */}
-        {bannerState === 'offline' && (
-          <View style={[styles.indicator, { backgroundColor: '#EF4444' }]} />
-        )}
-      </View>
-
-      {/* Subtle bottom border line */}
-      <View style={[styles.bottomLine, { backgroundColor: config.color, opacity: 0.1 }]} />
+        
+        {/* Bottom Border Line */}
+        <View style={[styles.borderLine, { backgroundColor: config.color, opacity: 0.1 }]} />
+      </Animated.View>
     </Animated.View>
   );
 };
 
-/* -------------------------------------------------------------------------- */
-/* Styles                                   */
-/* -------------------------------------------------------------------------- */
-
 const styles = StyleSheet.create({
-  container: {
-    // Render in normal flow so banner pushes content down instead of overlapping header
-    position: 'relative',
-    paddingHorizontal: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 4,
+  wrapper: {
+    width: '100%',
+    overflow: 'hidden',
+    zIndex: 9999, // Ensure it's on top
+    // No absolute positioning here so it pushes content down. 
+    // To overlay, add `position: 'absolute', top: 0, left: 0, right: 0`
   },
-  contentContainer: {
+  innerContent: {
+    width: '100%',
+    paddingBottom: 12,
+    paddingHorizontal: 16,
+    justifyContent: 'center',
+  },
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-start',
   },
-  textContainer: {
+  textStack: {
     marginLeft: 12,
     flex: 1,
-    flexDirection: 'column',
     justifyContent: 'center',
   },
   title: {
@@ -394,13 +322,13 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     marginTop: 2,
   },
-  indicator: {
+  dot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    marginLeft: 8,
+    marginLeft: 10,
   },
-  bottomLine: {
+  borderLine: {
     position: 'absolute',
     bottom: 0,
     left: 0,

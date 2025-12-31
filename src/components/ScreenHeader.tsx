@@ -6,7 +6,7 @@ import {
   StyleProp,
   ViewStyle,
   Text,
-  Platform,
+  Image,
 } from 'react-native';
 import { useNavigation, NavigationProp } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,8 +17,9 @@ import Animated, {
   useAnimatedStyle,
   withTiming,
 } from 'react-native-reanimated';
-import { colors as themeColors, spacing as themeSpacing } from '../utils/design';
+import { colors as themeColors } from '../utils/design';
 
+// --- TYPES ---
 export type ScreenHeaderProps = {
   title: string;
   subtitle?: string;
@@ -31,8 +32,10 @@ export type ScreenHeaderProps = {
   useSafeAreaPadding?: boolean;
   showAppIcon?: boolean;
   hideLeftAction?: boolean;
+  backAction?: () => void; // Optional override
 };
 
+// --- COMPONENT ---
 const ScreenHeader: React.FC<ScreenHeaderProps> = ({
   title,
   subtitle,
@@ -45,17 +48,23 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
   useSafeAreaPadding = true,
   showAppIcon = false,
   hideLeftAction = false,
+  backAction,
 }) => {
   const navigation = useNavigation<NavigationProp<any>>();
   const insets = useSafeAreaInsets();
-  const canGoBack = navigation.canGoBack();
+  
+  // Determine navigation state safely
+  const canGoBack = navigation.canGoBack?.() ?? false;
 
   const [hintVisible, setHintVisible] = useState(showScrollHint);
 
+  // --- HANDLERS ---
   const handleNav = () => {
-    const nav: any = navigation;
+    if (backAction) return backAction();
     if (canGoBack) return navigation.goBack();
-    // Prefer opening the drawer so users can access navigation when available
+    
+    // Drawer fallback logic
+    const nav: any = navigation;
     if (nav.openDrawer) return nav.openDrawer();
     if (nav.toggleDrawer) return nav.toggleDrawer();
   };
@@ -65,93 +74,118 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
     onDismissScrollHint?.();
   };
 
+  // Sync prop changes
   useEffect(() => {
     setHintVisible(showScrollHint);
   }, [showScrollHint]);
 
+  // Auto-dismiss on scroll
   useEffect(() => {
     if (hintVisible && scrollOffset > scrollHintThreshold) {
-      setHintVisible(false);
-      onDismissScrollHint?.();
+      handleDismissHint();
     }
   }, [scrollOffset, hintVisible, scrollHintThreshold]);
 
-  // --- Animation: Lift on Scroll (No Borders) ---
+  // --- ANIMATIONS ---
+  // Lift effect on scroll: Background opacity + Shadow ONLY (No Border Line)
   const headerAnimatedStyle = useAnimatedStyle(() => {
     const isScrolled = scrollOffset > 10;
+    
     return {
-      backgroundColor: themeColors.background,
-      // Instead of a border, we fade in a soft shadow
-      shadowOpacity: withTiming(isScrolled ? 0.05 : 0, { duration: 300 }),
+      backgroundColor: themeColors.background || '#F8FAFC',
+      // Removed borderBottomWidth/Color to fix the "black line" issue
+      // Elevation / Shadow only appears when scrolled for depth
+      shadowOpacity: withTiming(isScrolled ? 0.08 : 0, { duration: 300 }),
       elevation: withTiming(isScrolled ? 4 : 0, { duration: 300 }),
+      // Optional: Add a very subtle border radius at bottom when scrolled if you want a "floating" feel
+      // borderBottomLeftRadius: withTiming(isScrolled ? 16 : 0, { duration: 300 }),
+      // borderBottomRightRadius: withTiming(isScrolled ? 16 : 0, { duration: 300 }),
     };
   });
 
-  const topPadding = (useSafeAreaPadding ? insets.top : 0) + themeSpacing(1);
+  const topPadding = (useSafeAreaPadding ? insets.top : 0) + 12; // Base padding
 
   return (
     <Animated.View
-      style={[styles.wrapper, { paddingTop: topPadding }, headerAnimatedStyle, style]}
+      style={[
+        styles.wrapper,
+        { paddingTop: topPadding },
+        headerAnimatedStyle,
+        style
+      ]}
       accessibilityRole="header"
     >
-      <View style={styles.row}>
-        {/* Left Action */}
-        {!hideLeftAction ? (
-          <TouchableOpacity
-            style={styles.iconButton}
-            onPress={handleNav}
-            activeOpacity={0.7}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            {canGoBack ? (
-              <MaterialIcons name="arrow-back" size={20} color={themeColors.text} />
-            ) : (
-              <MaterialIcons name="menu" size={20} color={themeColors.text} />
-            )}
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.iconPlaceholder} />
-        )}
-
-        {/* Title (optionally with app icon) */}
-        <View style={[styles.titleWrap, showAppIcon ? styles.titleWithIcon : undefined]}>
-          {showAppIcon && (
-            <View style={styles.appIconWrap}>
-              {(() => {
-                try {
-                  if (typeof require !== 'function') return null;
-                  const src = require('../../assets/splash-icon.png');
-                  return <Animated.Image source={src} style={styles.appIcon} resizeMode="cover" />;
-                } catch (e) {
-                  return null;
-                }
-              })()}
-            </View>
+      <View style={styles.contentRow}>
+        
+        {/* LEFT ACTION AREA */}
+        <View style={styles.leftContainer}>
+          {!hideLeftAction ? (
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={handleNav}
+              activeOpacity={0.6}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              accessibilityLabel={canGoBack ? "Go Back" : "Open Menu"}
+              accessibilityRole="button"
+            >
+              <MaterialIcons 
+                name={canGoBack ? "arrow-back" : "menu"} 
+                size={22} 
+                color={themeColors.text} 
+              />
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.iconPlaceholder} /> // Spacer
           )}
-          <View style={styles.titleTexts}>
-            <Text style={styles.title} numberOfLines={1}>
-              {title}
-            </Text>
-            {subtitle && (
-              <Text style={styles.subtitle} numberOfLines={1}>
-                {subtitle}
-              </Text>
+        </View>
+
+        {/* TITLE AREA */}
+        <View style={styles.titleContainer}>
+          <View style={styles.titleRow}>
+            {showAppIcon && (
+              <View style={styles.appIconContainer}>
+                {/* Safe require for asset */}
+                <Image 
+                  source={require('../../assets/splash-icon.png')} 
+                  style={styles.appIcon} 
+                  resizeMode="contain" 
+                />
+              </View>
             )}
+            
+            <View style={styles.textStack}>
+              <Text style={styles.title} numberOfLines={1} ellipsizeMode="tail">
+                {title}
+              </Text>
+              {subtitle ? (
+                <Text style={styles.subtitle} numberOfLines={1} ellipsizeMode="tail">
+                  {subtitle}
+                </Text>
+              ) : null}
+            </View>
           </View>
         </View>
 
-        {/* Right Slot */}
-        <View style={styles.rightContainer}>{rightSlot || <View style={{ width: 40 }} />}</View>
+        {/* RIGHT ACTION AREA */}
+        <View style={styles.rightContainer}>
+          {rightSlot || <View style={styles.iconPlaceholder} />}
+        </View>
+
       </View>
 
-      {/* Scroll Hint (Floating Pill) */}
+      {/* SCROLL HINT (Floating Pill) */}
       {hintVisible && (
         <Animated.View
-          entering={FadeInUp.duration(400).springify()}
+          entering={FadeInUp.duration(500).springify().damping(12)}
           exiting={FadeOutUp.duration(300)}
-          style={styles.hintContainer}
+          style={styles.hintWrapper}
+          pointerEvents="box-none"
         >
-          <TouchableOpacity onPress={handleDismissHint} style={styles.hintPill} activeOpacity={0.8}>
+          <TouchableOpacity 
+            onPress={handleDismissHint} 
+            style={styles.hintPill} 
+            activeOpacity={0.9}
+          >
             <MaterialIcons name="keyboard-arrow-down" size={16} color={themeColors.primary} />
             <Text style={styles.hintText}>Scroll for more</Text>
           </TouchableOpacity>
@@ -161,94 +195,127 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
   );
 };
 
+// --- STYLES ---
 const styles = StyleSheet.create({
   wrapper: {
-    paddingHorizontal: themeSpacing(2),
-    paddingBottom: themeSpacing(1.5),
-    zIndex: 10,
-    // Default Shadow Config (hidden by opacity in animation)
-    shadowColor: themeColors.shadow,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    zIndex: 100, // Ensure header sits above scroll content
+    // Default shadow props (controlled by animated style)
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowRadius: 12,
+    backgroundColor: themeColors.background,
   },
-  row: {
+  contentRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    minHeight: 44, // Standard touch target height
+  },
+  
+  // Left Area
+  leftContainer: {
+    minWidth: 40,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
   },
   iconButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 14, // Slightly rounder squircle
-    backgroundColor: themeColors.card, // Soft light gray background
+    width: 40,
+    height: 40,
+    borderRadius: 12, // Modern squircle-ish
+    backgroundColor: themeColors.card || '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
-    // No border here
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.03)', // Subtle border
   },
-  titleWrap: {
+  iconPlaceholder: {
+    width: 40, 
+    height: 40 
+  },
+
+  // Title Area
+  titleContainer: {
     flex: 1,
-    paddingHorizontal: themeSpacing(1.5),
+    paddingHorizontal: 12,
     justifyContent: 'center',
   },
-  iconPlaceholder: { width: 42, height: 42 },
-  titleWithIcon: { flexDirection: 'row', alignItems: 'center' },
-  titleTexts: { flex: 1 },
-  appIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    backgroundColor: 'transparent',
+  titleRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: themeSpacing(1.5),
+    justifyContent: 'center', // Center align title if desired, remove if left-align preferred
   },
-  appIcon: { width: 34, height: 34, borderRadius: 8 },
+  textStack: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center', // Center align text stack
+  },
+  appIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    marginRight: 8,
+    overflow: 'hidden',
+    backgroundColor: 'transparent',
+  },
+  appIcon: {
+    width: '100%',
+    height: '100%',
+  },
   title: {
-    fontSize: 20, // Slightly larger
-    fontWeight: '800', // Bold modern font
-    color: themeColors.text,
-    letterSpacing: -0.5,
+    fontSize: 18,
+    fontWeight: '800',
+    color: themeColors.text || '#1E293B',
+    letterSpacing: -0.3,
+    textAlign: 'center',
   },
   subtitle: {
-    marginTop: 2,
-    color: themeColors.subtleText,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '500',
+    color: themeColors.subtleText || '#64748B',
+    marginTop: 1,
+    textAlign: 'center',
   },
+
+  // Right Area
   rightContainer: {
-    minWidth: 42,
+    minWidth: 40,
     alignItems: 'flex-end',
     justifyContent: 'center',
   },
 
-  // --- Hint Styles ---
-  hintContainer: {
+  // Hint Pill
+  hintWrapper: {
     position: 'absolute',
-    bottom: -20,
+    bottom: -24, // Hang off the bottom edge
     left: 0,
     right: 0,
     alignItems: 'center',
-    zIndex: -1,
+    zIndex: -1, // Behind main header interaction layer
   },
   hintPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: themeColors.background,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 30, // Full capsule
-
-    // Soft Floating Shadow (Instead of border)
-    shadowColor: themeColors.shadow,
+    backgroundColor: themeColors.surface || '#FFFFFF',
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    
+    // Float Shadow
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
+    
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.02)',
   },
   hintText: {
     fontSize: 11,
-    color: themeColors.subtleText,
     fontWeight: '700',
+    color: themeColors.subtleText || '#94A3B8',
     marginLeft: 6,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
