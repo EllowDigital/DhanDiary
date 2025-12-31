@@ -181,6 +181,18 @@ export const useEntries = (userId?: string | null) => {
     };
   }, [userId]);
 
+  // Debug: log when the resolved user id changes so we can trace handover
+  const _prevResolvedId = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    const prev = _prevResolvedId.current;
+    if (prev !== resolvedId) {
+      try {
+        console.log(`[useEntries] User ID changed: ${prev} -> ${resolvedId}`);
+      } catch (e) {}
+      _prevResolvedId.current = resolvedId;
+    }
+  }, [resolvedId]);
+
   const syncKickRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Consolidated Sync Logic

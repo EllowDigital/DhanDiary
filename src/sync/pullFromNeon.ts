@@ -57,6 +57,11 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
   }
 
   try {
+    // DEV DEBUG: log the lastSync param we'll send to Neon
+    try {
+      if (__DEV__) console.log('[sync] pullFromNeon: querying remote with lastSync=', lastSync);
+    } catch (e) {}
+
     // CORRECT SQL:
     // Uses EXTRACT(EPOCH FROM ...) to get seconds, multiplies by 1000 for ms,
     // and explicitly casts to BIGINT for JavaScript compatibility.
@@ -86,6 +91,13 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
     // Pass lastSync as is (milliseconds). The SQL handles conversion.
     const params = [lastSync || 0];
     remoteRows = (await neonQuery(sql, params)) || [];
+    try {
+      if (__DEV__)
+        console.log(
+          '[sync] pullFromNeon: remoteRows.length=',
+          (remoteRows && remoteRows.length) || 0
+        );
+    } catch (e) {}
   } catch (e: any) {
     const msg = (e && (e.message || String(e))).toLowerCase();
 
@@ -208,6 +220,10 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
   // the remote user_id so subsequent UI queries use the correct user key.
   try {
     if (seenUserIds.size > 0) {
+      try {
+        if (__DEV__) console.log('[sync] pullFromNeon: seenUserIds=', Array.from(seenUserIds));
+      } catch (e) {}
+
       const sess = await getSession();
       // If there's no session or we previously used a guest id, prefer the remote user id
       const needPersist =
@@ -219,6 +235,7 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
         const firstUser = Array.from(seenUserIds.values())[0];
         if (firstUser) {
           try {
+            if (__DEV__) console.log('[sync] pullFromNeon: persisting remote user_id=', firstUser);
             await saveSession(firstUser, '', '');
             // notify subscribers (saveSession calls notifySessionChanged internally, but call again defensively)
             try {
@@ -228,6 +245,11 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
             if (__DEV__) console.warn('[sync] pullFromNeon: failed to save remote user session', e);
           }
         }
+      } else {
+        try {
+          if (__DEV__)
+            console.log('[sync] pullFromNeon: session already exists, not persisting remote user');
+        } catch (e) {}
       }
     }
   } catch (e) {

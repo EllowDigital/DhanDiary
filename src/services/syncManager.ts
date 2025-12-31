@@ -373,27 +373,35 @@ export const startBackgroundFetch = async () => {
           try {
             if (!_syncInProgress) await syncBothWays();
           } catch (err) {
-          try {
-            // Invalidate React Query caches related to entries so UI refreshes immediately.
+            if (__DEV__) console.warn('[BackgroundFetch] sync failed', err);
+          } finally {
             try {
-              const holder = require('../utils/queryClientHolder');
-              const qc = holder && holder.getQueryClient ? holder.getQueryClient() : null;
-              if (qc) {
-                // Invalidate any queries whose key starts with ['entries'] so guest -> real user
-                // switches cause immediate refetch.
-                try {
-                  await qc.invalidateQueries({ queryKey: ['entries'] });
-                } catch (e) {}
-                // Also invalidate generic balances/summary keys if present.
-                try {
-                  await qc.invalidateQueries({ queryKey: ['balances'] });
-                } catch (e) {}
-              }
+              // Invalidate React Query caches related to entries so UI refreshes immediately.
+              try {
+                const holder = require('../utils/queryClientHolder');
+                const qc = holder && holder.getQueryClient ? holder.getQueryClient() : null;
+                if (qc) {
+                  // Invalidate any queries whose key starts with ['entries'] so guest -> real user
+                  // switches cause immediate refetch.
+                  try {
+                    await qc.invalidateQueries({ queryKey: ['entries'] });
+                  } catch (e) {}
+                  // Also invalidate generic balances/summary keys if present.
+                  try {
+                    await qc.invalidateQueries({ queryKey: ['balances'] });
+                  } catch (e) {}
+                }
+              } catch (e) {}
+
+              const { notifyEntriesChanged } = require('../utils/dbEvents');
+              notifyEntriesChanged();
             } catch (e) {}
 
-            const { notifyEntriesChanged } = require('../utils/dbEvents');
-            notifyEntriesChanged();
-          } catch (e) {}
+            // Signal task complete to BackgroundFetch
+            try {
+              if (typeof BackgroundFetch.finish === 'function') BackgroundFetch.finish(taskId);
+            } catch (e) {}
+          }
         },
         (error: any) => console.warn('BackgroundFetch configure failed', error)
       );
