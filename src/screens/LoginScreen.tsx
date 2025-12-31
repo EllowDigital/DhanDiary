@@ -172,6 +172,10 @@ const LoginScreen = () => {
         setOfflineRetrying(false);
         setLoading(true);
         try {
+          if (!signIn) {
+            setLoading(false);
+            return;
+          }
           const result = await signIn.create({ identifier: email, password });
           if (result.status === 'complete') {
             await setActive({ session: result.createdSessionId });
@@ -203,6 +207,10 @@ const LoginScreen = () => {
 
     const doSignIn = async () => {
       try {
+        if (!signIn) {
+          setLoading(false);
+          return false;
+        }
         const result = await signIn.create({ identifier: email, password });
 
         if (result.status === 'complete') {

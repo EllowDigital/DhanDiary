@@ -69,7 +69,9 @@ const RegisterScreen = () => {
   React.useEffect(() => {
     setBannerVisible(isBannerVisible());
     const unsub = subscribeBanner((v: boolean) => setBannerVisible(v));
-    return () => unsub();
+    return () => {
+      if (unsub) unsub();
+    };
   }, []);
 
   const onSignUpPress = async () => {
@@ -86,6 +88,7 @@ const RegisterScreen = () => {
 
     const doSignUp = async () => {
       try {
+        if (!signUp) return false;
         // 1. Create the user in Clerk
         await signUp.create({
           firstName,
