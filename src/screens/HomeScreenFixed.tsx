@@ -273,7 +273,7 @@ const HomeScreen = () => {
     return () => {
       try {
         if (unsub) unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, [fadeAnim]);
 
@@ -284,7 +284,7 @@ const HomeScreen = () => {
       try {
         const s = await getSession();
         if (mounted) setFallbackSession(s);
-      } catch (e) {}
+      } catch (e) { }
     };
     load();
     const unsub = subscribeSession((s) => {
@@ -294,7 +294,7 @@ const HomeScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -408,11 +408,7 @@ const HomeScreen = () => {
                     imageUrl={effectiveImage}
                     onPress={() => navigation.navigate('Account')}
                   />
-                  {fallbackSession &&
-                  (!user ||
-                    (user &&
-                      String(user.id || '') !== String(fallbackSession.id || '') &&
-                      String(user.id || '') !== String(fallbackSession.clerk_id || ''))) ? (
+                  {fallbackSession && !user ? (
                     <View style={styles.localBadge}>
                       <MaterialIcon name="cloud-off" size={12} color="#B91C1C" />
                     </View>

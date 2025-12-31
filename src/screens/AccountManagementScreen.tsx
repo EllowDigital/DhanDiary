@@ -177,7 +177,7 @@ const AccountManagementScreen = () => {
       try {
         const s = await getSession();
         if (mounted) setFallbackSession(s);
-      } catch (e) {}
+      } catch (e) { }
     };
     load();
     const unsub = subscribeSession((s) => {
@@ -187,7 +187,7 @@ const AccountManagementScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -329,7 +329,7 @@ const AccountManagementScreen = () => {
               console.warn('[Account] unexpected error during delete flow', err);
               try {
                 navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
-              } catch (navErr) {}
+              } catch (navErr) { }
               Alert.alert('Error', err?.message || 'Failed to delete account');
             } finally {
               setDeletingAccount(false);
@@ -394,12 +394,7 @@ const AccountManagementScreen = () => {
                           name={effectiveName || undefined}
                           imageUrl={effectiveImage}
                         />
-                        {fallbackSession &&
-                        (!user ||
-                          (user &&
-                            String((user as any).id || '') !== String(fallbackSession.id || '') &&
-                            String((user as any).id || '') !==
-                              String(fallbackSession.clerk_id || ''))) ? (
+                        {fallbackSession && !user ? (
                           <View style={styles.localBadgeInline}>
                             <MaterialIcon name="cloud-off" size={12} color="#B91C1C" />
                           </View>
@@ -411,10 +406,10 @@ const AccountManagementScreen = () => {
                   {(user as any)?.emailAddresses?.some(
                     (e: any) => e.verification?.status === 'verified'
                   ) && (
-                    <View style={styles.verifiedBadge}>
-                      <MaterialIcon name="check" size={12} color="white" />
-                    </View>
-                  )}
+                      <View style={styles.verifiedBadge}>
+                        <MaterialIcon name="check" size={12} color="white" />
+                      </View>
+                    )}
                 </View>
 
                 <View style={styles.heroInfo}>
