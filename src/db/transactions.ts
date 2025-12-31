@@ -208,6 +208,21 @@ export async function getUnsyncedTransactions() {
 }
 
 /**
+ * Return any user_id present in the transactions table. Useful when the app
+ * has local data but no persisted session (e.g., app opened offline).
+ * Returns first found user_id or null.
+ */
+export async function getAnyUserWithTransactions(): Promise<string | null> {
+  const sql = `SELECT user_id FROM transactions WHERE deleted_at IS NULL LIMIT 1;`;
+  const [, res] = await executeSqlAsync(sql, []);
+  if (res && res.rows && res.rows.length > 0) {
+    const it = res.rows.item(0);
+    return it?.user_id || null;
+  }
+  return null;
+}
+
+/**
  * Upsert from Remote (Sync Pull)
  * Aligns with Schema: respects server_version and existing tombstones
  */

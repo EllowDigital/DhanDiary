@@ -92,9 +92,44 @@ const MainNavigator = () => <DrawerNavigator />;
 const AppContent = () => {
   const { user } = useAuth();
   const { user: clerkUser, isLoaded: clerkLoaded } = useUser();
+  const [localSessionId, setLocalSessionId] = React.useState<string | null>(null);
+
+  // Load persisted fallback session early so offline sync features work even when Clerk user
+  // isn't immediately available (e.g., cold start without internet).
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const s = await import('./src/db/session');
+        const sess = await s.getSession();
+        if (mounted) setLocalSessionId(sess?.id ?? null);
+      } catch (e) {
+        if (__DEV__) console.warn('[AppContent] failed to load local session', e);
+      }
+    })();
+
+    // subscribe to session changes to keep localSessionId up-to-date
+    let unsub: any = null;
+    try {
+      const se = require('./src/utils/sessionEvents');
+      unsub = se.subscribeSession((s: any) => {
+        try {
+          setLocalSessionId(s?.id ?? null);
+        } catch (e) { }
+      });
+    } catch (e) { }
+
+    return () => {
+      mounted = false;
+      try {
+        if (unsub) unsub();
+      } catch (e) { }
+    };
+  }, []);
 
   // 1. Setup Offline Sync Hook
-  useOfflineSync(user?.id);
+  // Prefer Clerk user id when available; otherwise use persisted local session id.
+  useOfflineSync(user?.id || localSessionId);
 
   // 2. Health Check (Neon)
   useEffect(() => {
@@ -263,6 +298,34 @@ function AppBootstrap() {
 
 // --- Root App ---
 export default function App() {
+  // Install a production-only global JS error handler to avoid showing
+  // developer redbox to end-users. We still log minimal info for diagnostics.
+  try {
+    if (typeof __DEV__ === 'undefined' || !__DEV__) {
+      const globalAny: any = global as any;
+      try {
+        const prevHandler = globalAny.ErrorUtils && globalAny.ErrorUtils.getGlobalHandler && globalAny.ErrorUtils.getGlobalHandler();
+        globalAny.ErrorUtils && globalAny.ErrorUtils.setGlobalHandler &&
+          globalAny.ErrorUtils.setGlobalHandler((error: any, isFatal?: boolean) => {
+            try {
+              // Minimal log in production; do not rethrow or show redbox
+              console.warn('[App] JS Error suppressed in production:', error && error.message ? error.message : error);
+            } catch (e) { }
+            // Optionally send to analytics here
+          });
+      } catch (e) { }
+
+      // Catch unhandled promise rejections
+      try {
+        (global as any).onunhandledrejection = (ev: any) => {
+          try {
+            const reason = ev && (ev.reason || ev);
+            console.warn('[App] Unhandled Promise Rejection suppressed in production:', reason && reason.message ? reason.message : reason);
+          } catch (e) { }
+        };
+      } catch (e) { }
+    }
+  } catch (e) { }
   if (!CLERK_PUBLISHABLE_KEY) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>

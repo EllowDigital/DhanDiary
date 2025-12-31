@@ -50,10 +50,21 @@ interface MutationContext {
 const resolveUserId = async (passedId?: string | null): Promise<string> => {
   if (passedId) return passedId;
 
+  // 1) Try persisted fallback session
   const s = await getSession();
   if (s?.id) return s.id;
 
-  // Create guest session
+  // 2) If no session but there are existing transactions for a stored user_id,
+  //    prefer that user_id so previously stored offline data is visible.
+  try {
+    const { getAnyUserWithTransactions } = require('../db/transactions');
+    const existingUser = await getAnyUserWithTransactions();
+    if (existingUser) return existingUser;
+  } catch (e) {
+    if (__DEV__) console.warn('[resolveUserId] getAnyUserWithTransactions failed', e);
+  }
+
+  // 3) Fallback: create guest session id and persist it
   const guestId = `guest_${Date.now()}`;
   try {
     await saveSession(guestId, 'Guest', '');

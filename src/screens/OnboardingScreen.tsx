@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -71,15 +71,15 @@ const OnboardingItem = ({
   index: number;
   scrollX: Animated.Value;
 }) => {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
 
   // Responsive sizing logic
-  const isSmallScreen = width < 380;
+  const isSmallScreen = width < 380 || height < 700;
   const isTablet = width > 700;
 
   // Circle Sizing
-  const circleSize = isTablet ? 360 : isSmallScreen ? 240 : 280;
-  const iconSize = isTablet ? 80 : 56;
+  const circleSize = isTablet ? 360 : isSmallScreen ? 220 : 280;
+  const iconSize = isTablet ? 80 : isSmallScreen ? 48 : 56;
 
   // ANIMATION: Input Range based on current scroll position
   const inputRange = [(index - 1) * width, index * width, (index + 1) * width];
@@ -87,7 +87,7 @@ const OnboardingItem = ({
   // 1. Image Scale Animation (Bounces slightly)
   const imageScale = scrollX.interpolate({
     inputRange,
-    outputRange: [0.3, 1, 0.3],
+    outputRange: [0.6, 1, 0.6],
     extrapolate: 'clamp',
   });
 
@@ -127,9 +127,9 @@ const OnboardingItem = ({
               styles.iconBubble,
               {
                 backgroundColor: item.accent,
-                width: circleSize * 0.36,
-                height: circleSize * 0.36,
-                borderRadius: (circleSize * 0.36) / 2,
+                width: circleSize * 0.4,
+                height: circleSize * 0.4,
+                borderRadius: (circleSize * 0.4) / 2,
               },
             ]}
           >
@@ -206,7 +206,7 @@ const OnboardingScreen = () => {
   const listRef = useRef<FlatList>(null);
   const [completing, setCompleting] = useState(false);
 
-  // Optimizing FlatList updates
+  // Optimizing FlatList updates with useMemo
   const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
     if (viewableItems && viewableItems.length > 0) {
       setCurrentIndex(viewableItems[0].index);
@@ -242,7 +242,7 @@ const OnboardingScreen = () => {
       <View style={styles.header}>
         <TouchableOpacity
           onPress={completeOnboarding}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
         >
           <Text style={styles.skipText}>Skip</Text>
         </TouchableOpacity>
@@ -271,7 +271,7 @@ const OnboardingScreen = () => {
       </View>
 
       {/* Footer: Dots & Button */}
-      <View style={[styles.footer, { paddingBottom: Platform.OS === 'android' ? 40 : 20 }]}>
+      <View style={[styles.footer, { paddingBottom: Platform.OS === 'android' ? 24 : 10 }]}>
         <Paginator data={SLIDES} scrollX={scrollX} />
 
         <TouchableOpacity
@@ -308,6 +308,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'flex-end',
     alignItems: 'center',
+    zIndex: 10,
   },
   skipText: {
     color: colors.muted || '#6B7280',
@@ -334,9 +335,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
+    shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.2,
-    shadowRadius: 20,
+    shadowRadius: 16,
     elevation: 10, // Android Shadow
   },
   textContainer: {
@@ -362,8 +363,9 @@ const styles = StyleSheet.create({
   footer: {
     flex: 1, // Takes up remaining space
     width: '100%',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     paddingHorizontal: 24,
+    gap: 30, // Space between dots and button
   },
   dotsContainer: {
     flexDirection: 'row',
