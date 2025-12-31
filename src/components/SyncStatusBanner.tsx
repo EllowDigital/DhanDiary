@@ -86,7 +86,7 @@ const SyncStatusBanner = () => {
     return () => {
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -155,7 +155,7 @@ const SyncStatusBanner = () => {
           .then((v) => {
             if (v && !isNaN(Number(v))) setLastSyncAt(Number(v));
           })
-          .catch(() => {});
+          .catch(() => { });
       }
     }
   }, [bannerState]);
@@ -265,7 +265,7 @@ const SyncStatusBanner = () => {
 const styles = StyleSheet.create({
   wrapper: {
     width: '100%',
-    zIndex: 9999, // Ensures it sits above other absolute elements if they exist
+    // Keep default stacking so banner stays in normal layout flow
     // No absolute positioning! This allows it to push content down.
   },
   container: {
