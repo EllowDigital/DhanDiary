@@ -391,16 +391,29 @@ const HomeScreen = () => {
       {/* 1. Top Bar */}
       <View style={styles.topBar}>
         <View style={styles.userInfoRow}>
-          <UserAvatar
-            size={42}
-            name={user?.name}
-            imageUrl={user?.imageUrl || user?.image}
-            onPress={() => navigation.navigate('Account')}
-          />
-          <View style={{ marginLeft: 12 }}>
-            <Text style={styles.greetingText}>Welcome Back,</Text>
-            <Text style={styles.userName}>{user?.name || 'User'}</Text>
-          </View>
+          {(() => {
+            const effectiveName =
+              (user && (user.name || (user as any).fullName || (user as any).firstName)) ||
+              fallbackSession?.name ||
+              null;
+            const effectiveImage =
+              user?.imageUrl || user?.image || fallbackSession?.imageUrl || fallbackSession?.image;
+
+            return (
+              <>
+                <UserAvatar
+                  size={42}
+                  name={effectiveName || undefined}
+                  imageUrl={effectiveImage}
+                  onPress={() => navigation.navigate('Account')}
+                />
+                <View style={{ marginLeft: 12 }}>
+                  <Text style={styles.greetingText}>Welcome Back,</Text>
+                  <Text style={styles.userName}>{effectiveName || 'User'}</Text>
+                </View>
+              </>
+            );
+          })()}
         </View>
         <TouchableOpacity
           onPress={() => navigation.openDrawer()}

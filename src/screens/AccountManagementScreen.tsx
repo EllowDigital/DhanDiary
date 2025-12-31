@@ -20,6 +20,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Input, Button } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useUser } from '@clerk/clerk-expo';
+import { getSession } from '../db/session';
+import { subscribeSession } from '../utils/sessionEvents';
 import { useNavigation } from '@react-navigation/native';
 import * as SecureStore from 'expo-secure-store';
 import * as LocalAuthentication from 'expo-local-authentication';
@@ -127,6 +129,7 @@ const ExpandableCard = ({
 // --- MAIN SCREEN ---
 const AccountManagementScreen = () => {
   const { user, isLoaded } = useUser();
+  const [fallbackSession, setFallbackSession] = useState<any>(null);
   const navigation = useNavigation<any>();
   const { showToast } = useToast();
 
@@ -166,6 +169,26 @@ const AccountManagementScreen = () => {
     }).start();
 
     checkBiometrics();
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const s = await getSession();
+        if (mounted) setFallbackSession(s);
+      } catch (e) { }
+    };
+    load();
+    const unsub = subscribeSession((s) => {
+      if (mounted) setFallbackSession(s);
+    });
+    return () => {
+      mounted = false;
+      try {
+        unsub();
+      } catch (e) { }
+    };
   }, []);
 
   const checkBiometrics = async () => {
@@ -306,7 +329,7 @@ const AccountManagementScreen = () => {
               console.warn('[Account] unexpected error during delete flow', err);
               try {
                 navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
-              } catch (navErr) {}
+              } catch (navErr) { }
               Alert.alert('Error', err?.message || 'Failed to delete account');
             } finally {
               setDeletingAccount(false);
