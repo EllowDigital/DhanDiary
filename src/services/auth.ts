@@ -296,29 +296,56 @@ export const deleteAccount = async (opts?: { clerkUserId?: string }) => {
     console.warn('[Auth] initDB after wipe failed', e);
   }
 
-  // 3. Clerk Deletion (Best Effort)
+  // 3. Clerk Deletion
   try {
-    // If caller provided a clerkUserId and a server-side Clerk secret is available
-    // attempt to delete the user via Clerk Admin API. This is only attempted
-    // when `CLERK_SECRET` is configured in native/env (best-effort).
-    const clerkSecret =
-      Constants.expoConfig?.extra?.CLERK_SECRET || process.env.CLERK_SECRET || null;
+    // Prefer calling a backend delete endpoint (recommended). If your app
+    // configures `CLERK_DELETE_URL` (in expo extra or env), we'll POST to it
+    // with the clerk user id. The backend should authenticate the request and
+    // call Clerk Admin API server-side.
+    const BACKEND_DELETE_URL =
+      (Constants.expoConfig && (Constants.expoConfig.extra as any)?.CLERK_DELETE_URL) ||
+      process.env.CLERK_DELETE_URL ||
+      null;
 
-    if (opts?.clerkUserId && clerkSecret) {
+    if (opts?.clerkUserId && BACKEND_DELETE_URL) {
       try {
-        const url = `https://api.clerk.com/v1/users/${opts.clerkUserId}`;
         await withTimeout(
-          fetch(url, {
-            method: 'DELETE',
-            headers: {
-              Authorization: `Bearer ${clerkSecret}`,
-            },
+          fetch(BACKEND_DELETE_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: opts.clerkUserId }),
           }),
           10000
         );
         clerkDeleted = true;
       } catch (e) {
-        console.warn('[Auth] Clerk admin delete failed', e);
+        console.warn('[Auth] backend clerk delete failed', (e as any)?.message || e);
+      }
+    } else {
+      // No backend URL — fall back to best-effort client-side admin call only
+      // if a CLERK_SECRET is present (NOT recommended). Warn in dev.
+      const clerkSecret =
+        Constants.expoConfig?.extra?.CLERK_SECRET || process.env.CLERK_SECRET || null;
+
+      if (clerkSecret && opts?.clerkUserId) {
+        if (typeof __DEV__ !== 'undefined' && __DEV__) {
+          console.warn(
+            '[Auth] WARNING: CLERK_SECRET is present in client config. Storing or shipping admin secrets in a mobile client is insecure. Prefer a server endpoint.'
+          );
+        }
+        try {
+          const url = `https://api.clerk.com/v1/users/${opts.clerkUserId}`;
+          await withTimeout(
+            fetch(url, {
+              method: 'DELETE',
+              headers: { Authorization: `Bearer ${clerkSecret}` },
+            }),
+            10000
+          );
+          clerkDeleted = true;
+        } catch (e) {
+          console.warn('[Auth] Clerk admin delete failed', (e as any)?.message || e);
+        }
       }
     }
 
@@ -328,7 +355,7 @@ export const deleteAccount = async (opts?: { clerkUserId?: string }) => {
       await clerk.signOut();
     }
   } catch (e) {
-    console.warn('[Auth] Clerk clean up failed', e);
+    console.warn('[Auth] Clerk clean up failed', (e as any)?.message || e);
   }
 
   // Ensure we run standard logout cleanup (stop sync, clear caches/storage)
