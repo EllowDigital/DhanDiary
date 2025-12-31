@@ -206,7 +206,11 @@ export const query = async <T = any>(
             console.warn('Neon Query permanent error (remote table missing):', msg);
           }
         } else {
-          console.error('Neon Query Error (permanent):', error);
+          if (typeof __DEV__ !== 'undefined' && __DEV__) {
+            console.error('Neon Query Error (permanent):', error);
+          } else {
+            console.warn('Neon Query encountered an error (suppressed)');
+          }
         }
         throw error;
       }
@@ -224,6 +228,12 @@ export const query = async <T = any>(
     }
   }
 
-  console.error('Neon Query failed after retries:', lastErr);
-  throw lastErr;
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
+    console.error('Neon Query failed after retries:', lastErr);
+    throw lastErr;
+  } else {
+    // Hide implementation details from end-users; rethrow a generic error
+    console.warn('Neon Query failed after retries (suppressed)');
+    throw new Error('Server temporarily unavailable. Please try again later.');
+  }
 };

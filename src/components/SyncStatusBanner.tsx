@@ -13,12 +13,8 @@ import {
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useInternetStatus } from '../hooks/useInternetStatus';
-import {
-  subscribeSyncStatus,
-  SyncStatus,
-  getLastSuccessfulSyncAt,
-  getLastSyncTime,
-} from '../services/syncManager';
+import { subscribeSyncStatus, SyncStatus, getLastSuccessfulSyncAt, getLastSyncTime } from '../services/syncManager';
+import { setBannerVisible } from '../utils/bannerState';
 
 // 1. Enable LayoutAnimation for Android (Critical for smooth header slide)
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -220,6 +216,11 @@ const SyncStatusBanner = () => {
       spinValue.stopAnimation();
     }
   }, [isSpinning]);
+
+  // Notify other components (headers) when banner visibility changes
+  useEffect(() => {
+    setBannerVisible(bannerState !== 'hidden');
+  }, [bannerState]);
 
   const spin = spinValue.interpolate({
     inputRange: [0, 1],
