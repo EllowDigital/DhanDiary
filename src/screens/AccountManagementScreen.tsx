@@ -373,13 +373,20 @@ const AccountManagementScreen = () => {
               {/* 1. HERO PROFILE ROW */}
               <View style={styles.heroRow}>
                 <View style={styles.heroAvatar}>
-                  <UserAvatar
-                    size={48}
-                    name={user?.fullName || user?.firstName}
-                    imageUrl={user?.imageUrl || (user as any)?.image}
-                  />
+                  {(() => {
+                    const effectiveName =
+                      (user && ((user as any).fullName || (user as any).firstName || (user as any).name)) ||
+                      fallbackSession?.name ||
+                      null;
+                    const effectiveImage =
+                      (user as any)?.imageUrl || (user as any)?.image || fallbackSession?.imageUrl || fallbackSession?.image;
+
+                    return (
+                      <UserAvatar size={48} name={effectiveName || undefined} imageUrl={effectiveImage} />
+                    );
+                  })()}
                   {/* Verified Badge */}
-                  {user?.emailAddresses.some((e) => e.verification.status === 'verified') && (
+                  {(user as any)?.emailAddresses?.some((e) => e.verification?.status === 'verified') && (
                     <View style={styles.verifiedBadge}>
                       <MaterialIcon name="check" size={12} color="white" />
                     </View>
@@ -387,9 +394,9 @@ const AccountManagementScreen = () => {
                 </View>
 
                 <View style={styles.heroInfo}>
-                  <Text style={styles.heroName}>{user?.fullName || 'User'}</Text>
+                  <Text style={styles.heroName}>{(user as any)?.fullName || (user as any)?.name || fallbackSession?.name || 'User'}</Text>
                   <Text style={styles.heroEmail}>
-                    {user?.primaryEmailAddress?.emailAddress || 'No email linked'}
+                    {(user as any)?.primaryEmailAddress?.emailAddress || fallbackSession?.email || 'No email linked'}
                   </Text>
                   <View style={styles.authMethodContainer}>
                     <MaterialIcon
