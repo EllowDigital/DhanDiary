@@ -11,6 +11,7 @@ import {
   UIManager,
 } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
+import navigationRef from './src/utils/rootNavigation';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -284,7 +285,7 @@ function AppWithDb() {
       <QueryClientProvider client={queryClient}>
         <ToastProvider>
           {/* FIX: NavigationContainer wraps AppContent, providing context to hooks inside AppContent */}
-          <NavigationContainer>
+          <NavigationContainer ref={navigationRef}>
             <AppContent />
           </NavigationContainer>
         </ToastProvider>

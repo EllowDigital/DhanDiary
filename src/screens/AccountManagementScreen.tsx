@@ -341,9 +341,9 @@ const AccountManagementScreen = () => {
               }
 
               showToast('Account deleted');
-              // Navigate to a dedicated goodbye screen to allow re-create or sign-in
+              // Navigate to the Auth stack and open the AccountDeleted screen
               try {
-                navigation.reset({ index: 0, routes: [{ name: 'AccountDeleted' }] });
+                navigation.reset({ index: 0, routes: [{ name: 'Auth', params: { screen: 'AccountDeleted' } }] });
               } catch (navErr) {
                 console.warn('[Account] navigation.reset failed', navErr);
               }
