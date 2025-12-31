@@ -321,11 +321,14 @@ const AccountManagementScreen = () => {
               }
 
               // Ensure local cleanup runs even if Clerk deletion failed.
+              console.info('[Account] deletion initiated', { userId: (user as any)?.id || null });
+              let deletionResult: any = {};
               try {
-                await deleteAccount();
+                deletionResult = await deleteAccount();
               } catch (localErr) {
                 console.warn('[Account] deleteAccount() failed', localErr);
               }
+              console.info('[Account] deletion completed', deletionResult || {});
 
               // Re-initialize a fresh empty DB so the app resumes from a clean state
               try {

@@ -307,6 +307,32 @@ export const deleteAccount = async () => {
     console.warn('[Auth] logout during deleteAccount failed', e);
   }
 
+  const deletionInfo = {
+    timestamp: new Date().toISOString(),
+    remoteDeleted,
+    userDeleted,
+  };
+
+  // Emit analytics event if analytics helper available (best-effort)
+  try {
+    // Attempt to require a project analytics helper if present
+    const analytics = require('../utils/analytics');
+    if (analytics && typeof analytics.trackEvent === 'function') {
+      try {
+        analytics.trackEvent('account_deleted', deletionInfo);
+      } catch (aErr) {
+        console.warn('[Auth] analytics.trackEvent failed', aErr);
+      }
+    }
+  } catch (e) {
+    // No analytics util — fall back to console
+  }
+
+  // Always log deletion info for server-side ingestion or debugging
+  try {
+    console.info('[Auth] account deleted', deletionInfo);
+  } catch (e) {}
+
   return { remoteDeleted, userDeleted };
 };
 
