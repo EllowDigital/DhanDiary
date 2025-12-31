@@ -69,7 +69,9 @@ const AboutScreen: React.FC = () => {
   useEffect(() => {
     setBannerVisible(isBannerVisible());
     const unsub = subscribeBanner((v: boolean) => setBannerVisible(v));
-    return () => unsub();
+    return () => {
+      if (unsub) unsub();
+    };
   }, []);
 
   // --- ANIMATIONS ---

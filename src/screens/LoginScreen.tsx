@@ -102,14 +102,16 @@ const LoginScreen = () => {
     ]).start();
 
     // Pre-warm DB connection
-    warmNeonConnection().catch(() => { });
+    warmNeonConnection().catch(() => {});
   }, []);
 
   const [bannerVisible, setBannerVisible] = React.useState<boolean>(false);
   React.useEffect(() => {
     setBannerVisible(isBannerVisible());
     const unsub = subscribeBanner((v: boolean) => setBannerVisible(v));
-    return () => unsub();
+    return () => {
+      if (unsub) unsub();
+    };
   }, []);
 
   // --- AUTO-SYNC LOGIC ---
@@ -179,10 +181,16 @@ const LoginScreen = () => {
           const result = await signIn.create({ identifier: email, password });
           if (result.status === 'complete') {
             await setActive({ session: result.createdSessionId });
-          } else if (result.status === 'needs_first_factor' || result.status === 'needs_second_factor') {
+          } else if (
+            result.status === 'needs_first_factor' ||
+            result.status === 'needs_second_factor'
+          ) {
             navigation.navigate('VerifyEmail', { email, mode: 'signin' });
           } else {
-            Alert.alert('Verification Required', `Status: ${result.status}. Please check your email.`);
+            Alert.alert(
+              'Verification Required',
+              `Status: ${result.status}. Please check your email.`
+            );
             setLoading(false);
           }
         } catch (err: any) {
@@ -232,9 +240,15 @@ const LoginScreen = () => {
         const code = err.errors?.[0]?.code;
 
         if (code === 'strategy_for_user_invalid') {
-          Alert.alert('Wrong Method', 'This email uses social login. Please click the Google or GitHub button below.');
+          Alert.alert(
+            'Wrong Method',
+            'This email uses social login. Please click the Google or GitHub button below.'
+          );
         } else if (code === 'form_identifier_not_found') {
-          Alert.alert('Account Not Found', 'No account found with this email. Please create an account.');
+          Alert.alert(
+            'Account Not Found',
+            'No account found with this email. Please create an account.'
+          );
         } else {
           Alert.alert('Login Failed', msg);
         }
@@ -318,7 +332,10 @@ const LoginScreen = () => {
         end={{ x: 1, y: 1 }}
       />
 
-      <SafeAreaView style={{ flex: 1 }} edges={bannerVisible ? (['left', 'right'] as any) : (['top', 'left', 'right'] as any)}>
+      <SafeAreaView
+        style={{ flex: 1 }}
+        edges={bannerVisible ? (['left', 'right'] as any) : (['top', 'left', 'right'] as any)}
+      >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}

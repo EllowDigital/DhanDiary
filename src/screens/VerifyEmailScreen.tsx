@@ -182,7 +182,7 @@ const VerifyEmailScreen = () => {
           setOfflineVisible(true);
           return;
         }
-      } catch (e) { }
+      } catch (e) {}
       Alert.alert('Error', msg);
     } finally {
       setLoading(false);
@@ -260,7 +260,7 @@ const VerifyEmailScreen = () => {
           setOfflineVisible(true);
           return;
         }
-      } catch (e) { }
+      } catch (e) {}
 
       if (errCode === 'verification_failed') {
         Alert.alert('Incorrect Code', 'The code you entered is invalid. Please try again.');
@@ -313,7 +313,10 @@ const VerifyEmailScreen = () => {
         end={{ x: 1, y: 1 }}
       />
 
-      <SafeAreaView style={{ flex: 1 }} edges={bannerVisible ? ['left', 'right'] as any : (['top', 'left', 'right'] as any)}>
+      <SafeAreaView
+        style={{ flex: 1 }}
+        edges={bannerVisible ? (['left', 'right'] as any) : (['top', 'left', 'right'] as any)}
+      >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}

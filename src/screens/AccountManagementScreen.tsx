@@ -176,7 +176,9 @@ const AccountManagementScreen = () => {
   // subscribe to banner visibility so this screen doesn't add top safe-area twice
   useEffect(() => {
     const unsub = subscribeBanner((v) => setBannerVisible(!!v));
-    return () => unsub && unsub();
+    return () => {
+      if (unsub) unsub();
+    };
   }, []);
 
   useEffect(() => {

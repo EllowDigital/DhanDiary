@@ -134,7 +134,9 @@ const AddEntryScreen: React.FC = () => {
 
   useEffect(() => {
     const unsub = subscribeBanner((v) => setBannerVisible(!!v));
-    return () => unsub && unsub();
+    return () => {
+      if (unsub) unsub();
+    };
   }, []);
 
   // Trigger Color Animation on Type Change

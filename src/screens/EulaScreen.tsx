@@ -120,7 +120,9 @@ const EulaScreen = () => {
   React.useEffect(() => {
     setBannerVisible(isBannerVisible());
     const unsub = subscribeBanner((v: boolean) => setBannerVisible(v));
-    return () => unsub();
+    return () => {
+      if (unsub) unsub();
+    };
   }, []);
 
   return (

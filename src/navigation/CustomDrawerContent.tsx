@@ -88,7 +88,9 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   // subscribe to banner visibility so drawer top padding doesn't double-up
   useEffect(() => {
     const unsub = subscribeBanner((v) => setBannerVisible(!!v));
-    return () => unsub && unsub();
+    return () => {
+      if (unsub) unsub();
+    };
   }, []);
 
   const handleNavigate = (routeName: string) => {

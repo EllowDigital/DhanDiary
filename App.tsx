@@ -115,15 +115,15 @@ const AppContent = () => {
       unsub = se.subscribeSession((s: any) => {
         try {
           setLocalSessionId(s?.id ?? null);
-        } catch (e) { }
+        } catch (e) {}
       });
-    } catch (e) { }
+    } catch (e) {}
 
     return () => {
       mounted = false;
       try {
         if (unsub) unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, []);
 
@@ -133,7 +133,7 @@ const AppContent = () => {
 
   // 2. Health Check (Neon)
   useEffect(() => {
-    checkNeonConnection().catch(() => { });
+    checkNeonConnection().catch(() => {});
   }, []);
 
   // 3. User Synchronization
@@ -196,7 +196,7 @@ function AppWithDb() {
     try {
       const holder = require('./src/utils/queryClientHolder');
       if (holder?.setQueryClient) holder.setQueryClient(queryClient);
-    } catch (e) { }
+    } catch (e) {}
   }, [queryClient]);
 
   const initializeDatabase = useCallback(async () => {
@@ -222,11 +222,11 @@ function AppWithDb() {
     if (!dbReady) return;
 
     if (AppState.currentState === 'active') {
-      runFullSync().catch(() => { });
+      runFullSync().catch(() => {});
     }
 
     startForegroundSyncScheduler(15000);
-    startBackgroundFetch().catch(() => { });
+    startBackgroundFetch().catch(() => {});
 
     return () => {
       stopForegroundSyncScheduler();
@@ -240,7 +240,7 @@ function AppWithDb() {
     const handleAppStateChange = (nextState: AppStateStatus) => {
       if (nextState === 'active' && !isSyncRunning) {
         setTimeout(() => {
-          runFullSync().catch(() => { });
+          runFullSync().catch(() => {});
         }, 500);
       }
     };
@@ -316,11 +316,11 @@ export default function App() {
                 '[App] JS Error suppressed in production:',
                 error && error.message ? error.message : error
               );
-            } catch (e) { }
+            } catch (e) {}
             // Optionally send to analytics here
           });
         }
-      } catch (e) { }
+      } catch (e) {}
 
       // Catch unhandled promise rejections
       try {
@@ -331,11 +331,11 @@ export default function App() {
               '[App] Unhandled Promise Rejection suppressed in production:',
               reason && reason.message ? reason.message : reason
             );
-          } catch (e) { }
+          } catch (e) {}
         };
-      } catch (e) { }
+      } catch (e) {}
     }
-  } catch (e) { }
+  } catch (e) {}
   if (!CLERK_PUBLISHABLE_KEY) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>

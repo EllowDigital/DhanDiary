@@ -369,7 +369,9 @@ export const useEntries = (userId?: string | null) => {
         if (__DEV__) console.warn('[useEntries] refetch failed inside subscription', e);
       }
     });
-    return () => unsub();
+    return () => {
+      if (unsub) unsub();
+    };
   }, [refetch]);
 
   /* ----------------------------------------------------------

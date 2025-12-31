@@ -178,6 +178,7 @@ const RegisterScreen = () => {
         setLoading(true);
         try {
           // attempt signup once
+          if (!signUp) throw new Error('Signup not available');
           await signUp.create({
             firstName,
             lastName,
@@ -210,7 +211,10 @@ const RegisterScreen = () => {
         end={{ x: 1, y: 1 }}
       />
 
-      <SafeAreaView style={{ flex: 1 }} edges={bannerVisible ? (['left', 'right'] as any) : (['top', 'left', 'right'] as any)}>
+      <SafeAreaView
+        style={{ flex: 1 }}
+        edges={bannerVisible ? (['left', 'right'] as any) : (['top', 'left', 'right'] as any)}
+      >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}

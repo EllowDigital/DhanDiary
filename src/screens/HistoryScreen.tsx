@@ -416,7 +416,9 @@ const HistoryScreen = () => {
 
   useEffect(() => {
     const unsub = subscribeBanner((v) => setBannerVisible(!!v));
-    return () => unsub && unsub();
+    return () => {
+      if (unsub) unsub();
+    };
   }, []);
 
   const summary = useMemo(() => {
