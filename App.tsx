@@ -9,9 +9,12 @@ import {
   AppStateStatus,
   Platform,
   UIManager,
+  Modal,
+  TouchableOpacity,
+  StyleSheet,
 } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
-import navigationRef from './src/utils/rootNavigation';
+import navigationRef, { resetRoot } from './src/utils/rootNavigation';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -184,9 +187,58 @@ const AppContent = () => {
 
       {/* Biometric overlay (keeps being an overlay) */}
       <BiometricAuth />
+
+      {/* Signed-out modal: shown when there is no persisted session and no Clerk user */}
+      {(!user && !localSessionId) && (
+        <Modal transparent visible animationType="fade">
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>Signed Out</Text>
+              <Text style={styles.modalBody}>
+                You have been signed out. Please sign in to continue using DhanDiary.
+              </Text>
+              <TouchableOpacity
+                style={styles.modalButton}
+                onPress={() => {
+                  try {
+                    resetRoot({ index: 0, routes: [{ name: 'Auth', state: { routes: [{ name: 'Login' }] } }] });
+                  } catch (e) { }
+                }}
+              >
+                <Text style={styles.modalButtonText}>Sign In</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      )}
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalCard: {
+    width: '85%',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 20,
+    alignItems: 'center',
+  },
+  modalTitle: { fontSize: 18, fontWeight: '600', marginBottom: 8 },
+  modalBody: { fontSize: 14, color: '#444', textAlign: 'center', marginBottom: 16 },
+  modalButton: {
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  modalButtonText: { color: '#fff', fontWeight: '600' },
+});
 
 // --- App Shell (Database, Navigation Container & Service Initialization) ---
 function AppWithDb() {

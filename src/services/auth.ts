@@ -2,7 +2,7 @@ import NetInfo from '@react-native-community/netinfo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import bcrypt from 'bcryptjs';
-import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuidv4, validate as uuidValidate } from 'uuid';
 // NOTE: Ensure 'react-native-get-random-values' is imported in your App.tsx or index.js for uuid to work.
 
 import { query } from '../api/neonClient';
@@ -141,6 +141,14 @@ export const registerOnline = async (
 
     const user = result[0];
     await saveSession(user.id, user.name || '', user.email);
+    // Ensure guest-mode is cleared on successful registration so app can create
+    // normal sessions going forward.
+    try {
+      const sessMod = require('../db/session');
+      if (sessMod && typeof sessMod.setNoGuestMode === 'function') {
+        await sessMod.setNoGuestMode(false);
+      }
+    } catch (e) {}
     await prepareOfflineWorkspace(user.id);
 
     return { id: user.id, name: user.name || '', email: user.email };
@@ -176,6 +184,14 @@ export const loginOnline = async (email: string, password: string): Promise<Auth
   }
 
   await saveSession(user.id, user.name || '', user.email);
+  // Clear no-guest flag when a user successfully logs in so guest creation is allowed
+  // again in case the user logs out later.
+  try {
+    const sessMod = require('../db/session');
+    if (sessMod && typeof sessMod.setNoGuestMode === 'function') {
+      await sessMod.setNoGuestMode(false);
+    }
+  } catch (e) {}
   await prepareOfflineWorkspace(user.id);
 
   return { id: user.id, name: user.name || '', email: user.email };
@@ -266,19 +282,31 @@ export const deleteAccount = async (opts?: { clerkUserId?: string }) => {
   // 1. Remote Deletion (if online and configured)
   if (NEON_URL) {
     try {
-      // Delete dependent entries first
-      const entriesRes = await withTimeout(
-        query('DELETE FROM transactions WHERE user_id = $1 RETURNING id', [session.id]),
-        10_000
-      );
-      if (entriesRes && Array.isArray(entriesRes)) remoteDeleted = entriesRes.length;
+      // If the session id is not a UUID (e.g. guest_xxx created for offline-only users),
+      // skip remote deletion — Postgres uuid columns will reject non-UUID input.
+      const isUuid = typeof session.id === 'string' && uuidValidate(session.id);
+      if (!isUuid) {
+        console.info('[Auth] Skipping remote Neon deletion for non-UUID session id', session.id);
+      } else {
+        try {
+          // Delete dependent entries first
+          const entriesRes = await withTimeout(
+            query('DELETE FROM transactions WHERE user_id = $1 RETURNING id', [session.id]),
+            10_000
+          );
+          if (entriesRes && Array.isArray(entriesRes)) remoteDeleted = entriesRes.length;
 
-      // Delete user record
-      const userRes = await withTimeout(
-        query('DELETE FROM users WHERE id = $1 RETURNING id', [session.id]),
-        10_000
-      );
-      if (userRes && Array.isArray(userRes)) userDeleted = userRes.length;
+          // Delete user record
+          const userRes = await withTimeout(
+            query('DELETE FROM users WHERE id = $1 RETURNING id', [session.id]),
+            10_000
+          );
+          if (userRes && Array.isArray(userRes)) userDeleted = userRes.length;
+        } catch (err) {
+          console.warn('[Auth] Failed to connect or delete remote account:', err);
+          // Proceed to wipe local data anyway
+        }
+      }
     } catch (err) {
       console.warn('[Auth] Failed to connect or delete remote account:', err);
       // Proceed to wipe local data anyway
@@ -364,6 +392,17 @@ export const deleteAccount = async (opts?: { clerkUserId?: string }) => {
   } catch (e) {
     // best-effort: ignore errors here but log for diagnostics
     console.warn('[Auth] logout during deleteAccount failed', e);
+  }
+
+  // Prevent the app from auto-creating a guest session after account deletion.
+  try {
+    const sessMod = require('../db/session');
+    if (sessMod && typeof sessMod.setNoGuestMode === 'function') {
+      // Persist 'no guest' so on next cold start the app won't create guest_... sessions.
+      await sessMod.setNoGuestMode(true);
+    }
+  } catch (e) {
+    if (typeof __DEV__ !== 'undefined' && __DEV__) console.warn('[Auth] setNoGuestMode failed', e);
   }
 
   const deletionInfo = {

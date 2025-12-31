@@ -11,6 +11,7 @@ export type Session = {
 } | null;
 
 const KEY = 'FALLBACK_SESSION';
+const NO_GUEST_KEY = 'NO_GUEST_MODE';
 
 const uuidValidate = (s: any) =>
   typeof s === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(s);
@@ -88,6 +89,27 @@ export const clearSession = async () => {
     } catch (e) {}
   } catch (e) {
     console.warn('[Session] Failed to clear session', e);
+  }
+};
+
+export const setNoGuestMode = async (noGuest: boolean) => {
+  try {
+    if (noGuest) {
+      await AsyncStorage.setItem(NO_GUEST_KEY, '1');
+    } else {
+      await AsyncStorage.removeItem(NO_GUEST_KEY);
+    }
+  } catch (e) {
+    console.warn('[Session] Failed to set no-guest mode', e);
+  }
+};
+
+export const getNoGuestMode = async (): Promise<boolean> => {
+  try {
+    const v = await AsyncStorage.getItem(NO_GUEST_KEY);
+    return v === '1';
+  } catch (e) {
+    return false;
   }
 };
 

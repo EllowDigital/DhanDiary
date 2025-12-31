@@ -1,6 +1,7 @@
 import { executeSqlAsync } from '../db/sqlite';
 import { upsertTransactionFromRemote } from '../db/transactions';
 import { query as neonQuery, getNeonHealth } from '../api/neonClient';
+import { validate as uuidValidate } from 'uuid';
 import { getSession, saveSession } from '../db/session';
 import { notifySessionChanged } from '../utils/sessionEvents';
 
@@ -234,15 +235,27 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
         // If multiple user_ids exist, pick the first — apps typically use a single account per install.
         const firstUser = Array.from(seenUserIds.values())[0];
         if (firstUser) {
-          try {
-            if (__DEV__) console.log('[sync] pullFromNeon: persisting remote user_id=', firstUser);
-            await saveSession(firstUser, '', '');
-            // notify subscribers (saveSession calls notifySessionChanged internally, but call again defensively)
+          // Only persist remote user ids that are valid UUIDs. Skip guest/non-UUID ids.
+          const isUuid = typeof firstUser === 'string' && uuidValidate(firstUser);
+          if (!isUuid) {
+            if (__DEV__)
+              console.warn(
+                '[sync] pullFromNeon: remote user_id is not a UUID, skipping persist',
+                firstUser
+              );
+          } else {
             try {
-              await notifySessionChanged();
-            } catch (e) {}
-          } catch (e) {
-            if (__DEV__) console.warn('[sync] pullFromNeon: failed to save remote user session', e);
+              if (__DEV__)
+                console.log('[sync] pullFromNeon: persisting remote user_id=', firstUser);
+              await saveSession(firstUser, '', '');
+              // notify subscribers (saveSession calls notifySessionChanged internally, but call again defensively)
+              try {
+                await notifySessionChanged();
+              } catch (e) {}
+            } catch (e) {
+              if (__DEV__)
+                console.warn('[sync] pullFromNeon: failed to save remote user session', e);
+            }
           }
         }
       } else {

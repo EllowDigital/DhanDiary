@@ -16,6 +16,7 @@ import {
 import { subscribeEntries } from '../utils/dbEvents';
 import { subscribeSession } from '../utils/sessionEvents';
 import { getSession, saveSession } from '../db/session';
+import { resetRoot } from '../utils/rootNavigation';
 import { ensureCategory, DEFAULT_CATEGORY } from '../constants/categories';
 import { toCanonical, isIncome } from '../utils/transactionType';
 import { syncBothWays } from '../services/syncManager';
@@ -82,14 +83,13 @@ const resolveUserId = async (passedId?: string | null): Promise<string> => {
   // If we have a persisted session id (likely a real user), use it.
   if (s?.id) return s.id;
 
-  // Otherwise create a guest id and persist it (this will store the guest under clerk_id)
-  const guestId = `guest_${Date.now()}`;
-  try {
-    await saveSession(guestId, 'Guest', '');
-  } catch (e) {
-    if (__DEV__) console.warn('[resolveUserId] Failed to save guest session', e);
-  }
-  return guestId;
+  // We do not create guest sessions in this app. If no persisted session or
+  // local user exists, return null so UI can show the Auth flow.
+  if (__DEV__)
+    console.log(
+      '[resolveUserId] No persisted session or local user — returning null (no guest mode)'
+    );
+  return null as any;
 };
 
 // Normalize any date input
@@ -161,7 +161,18 @@ export const useEntries = (userId?: string | null) => {
     const runResolve = async () => {
       try {
         const sid = await resolveUserId(userId);
-        if (mounted) setResolvedId(sid);
+        if (mounted) {
+          setResolvedId(sid);
+          if (sid == null) {
+            // No session — ensure user lands on Auth/Login screen
+            try {
+              resetRoot({
+                index: 0,
+                routes: [{ name: 'Auth', state: { routes: [{ name: 'Login' }] } }],
+              });
+            } catch (e) {}
+          }
+        }
       } catch (e) {
         if (mounted) setResolvedId(null);
       }

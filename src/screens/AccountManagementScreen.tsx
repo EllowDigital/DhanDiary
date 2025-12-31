@@ -187,7 +187,7 @@ const AccountManagementScreen = () => {
       try {
         const s = await getSession();
         if (mounted) setFallbackSession(s);
-      } catch (e) { }
+      } catch (e) {}
     };
     load();
     const unsub = subscribeSession((s) => {
@@ -197,7 +197,7 @@ const AccountManagementScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, []);
 
@@ -370,7 +370,7 @@ const AccountManagementScreen = () => {
               } catch (navErr) {
                 try {
                   navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
-                } catch (e) { }
+                } catch (e) {}
               }
               Alert.alert('Error', err?.message || 'Failed to delete account');
             } finally {
@@ -451,10 +451,10 @@ const AccountManagementScreen = () => {
                   {(user as any)?.emailAddresses?.some(
                     (e: any) => e.verification?.status === 'verified'
                   ) && (
-                      <View style={styles.verifiedBadge}>
-                        <MaterialIcon name="check" size={12} color="white" />
-                      </View>
-                    )}
+                    <View style={styles.verifiedBadge}>
+                      <MaterialIcon name="check" size={12} color="white" />
+                    </View>
+                  )}
                 </View>
 
                 <View style={styles.heroInfo}>
