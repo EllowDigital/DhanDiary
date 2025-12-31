@@ -400,7 +400,7 @@ const HomeScreen = () => {
 
   // --- RENDER HEADER ---
   const renderHeader = () => (
-    <View style={[styles.headerContainer, bannerVisible ? { marginTop: -insets.top } : null]}>
+    <View style={styles.headerContainer}>
       {/* 1. Top Bar */}
       <View style={styles.topBar}>
         <View style={styles.userInfoRow}>
@@ -598,7 +598,10 @@ const HomeScreen = () => {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
-      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+      <SafeAreaView
+        style={styles.safeArea}
+        edges={bannerVisible ? ['left', 'right'] : ['top', 'left', 'right']}
+      >
         {/* Loading Overlay */}
         {showLoading && (
           <View style={styles.loadingOverlay}>
