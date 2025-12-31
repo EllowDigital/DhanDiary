@@ -64,7 +64,25 @@ const resolveUserId = async (passedId?: string | null): Promise<string> => {
   let existingUser: string | null = null;
   try {
     const { getAnyUserWithTransactions } = require('../db/transactions');
-    existingUser = await getAnyUserWithTransactions();
+    try {
+      existingUser = await getAnyUserWithTransactions();
+    } catch (innerErr: any) {
+      // If the DB schema is not yet upgraded (missing column errors), try to run initDB
+      // and retry once. This helps races where other modules query the DB before
+      // migrations complete.
+      const msg = innerErr && innerErr.message ? String(innerErr.message) : String(innerErr);
+      if (msg.includes('no such column') || msg.includes('no such table')) {
+        try {
+          const { initDB } = await import('../db/sqlite');
+          if (typeof initDB === 'function') await initDB();
+          existingUser = await getAnyUserWithTransactions();
+        } catch (e) {
+          if (__DEV__) console.warn('[resolveUserId] retry initDB failed', e);
+        }
+      } else {
+        throw innerErr;
+      }
+    }
   } catch (e) {
     if (__DEV__) console.warn('[resolveUserId] getAnyUserWithTransactions failed', e);
   }
