@@ -98,7 +98,7 @@ const AppContent = () => {
 
   // 2. Health Check (Neon)
   useEffect(() => {
-    checkNeonConnection().catch(() => { });
+    checkNeonConnection().catch(() => {});
   }, []);
 
   // 3. User Synchronization
@@ -164,7 +164,7 @@ function AppWithDb() {
     try {
       const holder = require('./src/utils/queryClientHolder');
       if (holder?.setQueryClient) holder.setQueryClient(queryClient);
-    } catch (e) { }
+    } catch (e) {}
   }, [queryClient]);
 
   const initializeDatabase = useCallback(async () => {
@@ -190,11 +190,11 @@ function AppWithDb() {
     if (!dbReady) return;
 
     if (AppState.currentState === 'active') {
-      runFullSync().catch(() => { });
+      runFullSync().catch(() => {});
     }
 
     startForegroundSyncScheduler(15000);
-    startBackgroundFetch().catch(() => { });
+    startBackgroundFetch().catch(() => {});
 
     return () => {
       stopForegroundSyncScheduler();
@@ -208,7 +208,7 @@ function AppWithDb() {
     const handleAppStateChange = (nextState: AppStateStatus) => {
       if (nextState === 'active' && !isSyncRunning) {
         setTimeout(() => {
-          runFullSync().catch(() => { });
+          runFullSync().catch(() => {});
         }, 500);
       }
     };

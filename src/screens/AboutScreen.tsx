@@ -459,9 +459,27 @@ const SystemStatus: React.FC = () => {
   }
 
   return (
-    <View style={[styles.activePill, tone === 'positive' ? styles.pillPositive : tone === 'warning' ? styles.pillWarning : styles.pillNeutral]}>
+    <View
+      style={[
+        styles.activePill,
+        tone === 'positive'
+          ? styles.pillPositive
+          : tone === 'warning'
+            ? styles.pillWarning
+            : styles.pillNeutral,
+      ]}
+    >
       <View style={[styles.activeDot, { backgroundColor: dotColor }]} />
-      <Text style={[styles.activeText, tone === 'positive' ? { color: '#065F46' } : tone === 'warning' ? { color: '#92400E' } : { color: '#475569' }]}>
+      <Text
+        style={[
+          styles.activeText,
+          tone === 'positive'
+            ? { color: '#065F46' }
+            : tone === 'warning'
+              ? { color: '#92400E' }
+              : { color: '#475569' },
+        ]}
+      >
         {label}
       </Text>
     </View>
