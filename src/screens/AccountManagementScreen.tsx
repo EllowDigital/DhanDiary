@@ -324,7 +324,7 @@ const AccountManagementScreen = () => {
               console.info('[Account] deletion initiated', { userId: (user as any)?.id || null });
               let deletionResult: any = {};
               try {
-                deletionResult = await deleteAccount();
+                deletionResult = await deleteAccount({ clerkUserId: (user as any)?.id });
               } catch (localErr) {
                 console.warn('[Account] deleteAccount() failed', localErr);
               }

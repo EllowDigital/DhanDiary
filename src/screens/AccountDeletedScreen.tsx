@@ -48,7 +48,7 @@ const AccountDeletedScreen = () => {
   const handleCreateAccount = async () => {
     // Attempt global reset if utility exists
     try {
-      // @ts-ignore - Dynamic import for optional module
+      // Dynamic import is valid, removed @ts-expect-error
       const { resetRoot } = await import('../utils/rootNavigation');
       resetRoot({
         index: 0,
@@ -71,7 +71,7 @@ const AccountDeletedScreen = () => {
 
   const handleSignIn = async () => {
     try {
-      // @ts-ignore
+      // Dynamic import is valid, removed @ts-expect-error
       const { resetRoot } = await import('../utils/rootNavigation');
       resetRoot({
         index: 0,
@@ -98,13 +98,15 @@ const AccountDeletedScreen = () => {
         bounces={false}
       >
         <Animated.View
-          style={[
-            styles.content,
-            { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
-          ]}
+          style={[styles.content, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
         >
           {/* Visual Icon */}
-          <View style={[styles.iconCircle, { width: ICON_SIZE, height: ICON_SIZE, borderRadius: ICON_SIZE / 2 }]}>
+          <View
+            style={[
+              styles.iconCircle,
+              { width: ICON_SIZE, height: ICON_SIZE, borderRadius: ICON_SIZE / 2 },
+            ]}
+          >
             <MaterialCommunityIcons name="heart-broken" size={ICON_SIZE * 0.5} color="#EF4444" />
           </View>
 
@@ -112,7 +114,8 @@ const AccountDeletedScreen = () => {
           <View style={styles.textContainer}>
             <Text style={styles.title}>So sad to see you go...</Text>
             <Text style={styles.subtitle}>
-              Your account and all local data have been permanently deleted. We hope to see you again someday.
+              Your account and all local data have been permanently deleted. We hope to see you
+              again someday.
             </Text>
           </View>
 
@@ -127,11 +130,7 @@ const AccountDeletedScreen = () => {
               <MaterialCommunityIcons name="arrow-right" size={20} color="#fff" />
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.ghostButton}
-              onPress={handleSignIn}
-              activeOpacity={0.7}
-            >
+            <TouchableOpacity style={styles.ghostButton} onPress={handleSignIn} activeOpacity={0.7}>
               <Text style={styles.ghostText}>Sign In to Existing Account</Text>
             </TouchableOpacity>
           </View>

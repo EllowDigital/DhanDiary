@@ -253,7 +253,7 @@ export const logout = async (): Promise<boolean> => {
   return true;
 };
 
-export const deleteAccount = async () => {
+export const deleteAccount = async (opts?: { clerkUserId?: string }) => {
   const NEON_URL = resolveNeonUrl();
   const session = await getSession();
 
@@ -261,6 +261,7 @@ export const deleteAccount = async () => {
 
   let remoteDeleted = 0;
   let userDeleted = 0;
+  let clerkDeleted = false;
 
   // 1. Remote Deletion (if online and configured)
   if (NEON_URL) {
@@ -287,14 +288,45 @@ export const deleteAccount = async () => {
   // 2. Wipe Local Data
   await wipeLocalDatabase();
 
+  // Re-initialize DB schema so app restarts in clean state
+  try {
+    const { initDB } = await import('../db/sqlite');
+    if (typeof initDB === 'function') await initDB();
+  } catch (e) {
+    console.warn('[Auth] initDB after wipe failed', e);
+  }
+
   // 3. Clerk Deletion (Best Effort)
   try {
+    // If caller provided a clerkUserId and a server-side Clerk secret is available
+    // attempt to delete the user via Clerk Admin API. This is only attempted
+    // when `CLERK_SECRET` is configured in native/env (best-effort).
+    const clerkSecret =
+      Constants.expoConfig?.extra?.CLERK_SECRET || process.env.CLERK_SECRET || null;
+
+    if (opts?.clerkUserId && clerkSecret) {
+      try {
+        const url = `https://api.clerk.com/v1/users/${opts.clerkUserId}`;
+        await withTimeout(
+          fetch(url, {
+            method: 'DELETE',
+            headers: {
+              Authorization: `Bearer ${clerkSecret}`,
+            },
+          }),
+          10000
+        );
+        clerkDeleted = true;
+      } catch (e) {
+        console.warn('[Auth] Clerk admin delete failed', e);
+      }
+    }
+
+    // Also attempt client-side best-effort signOut if available
     const clerk = require('@clerk/clerk-expo');
     if (clerk && typeof clerk.signOut === 'function') {
       await clerk.signOut();
     }
-    // Note: Actual user deletion usually requires a backend API call to Clerk
-    // rather than a client-side call, unless using useUser().delete().
   } catch (e) {
     console.warn('[Auth] Clerk clean up failed', e);
   }
