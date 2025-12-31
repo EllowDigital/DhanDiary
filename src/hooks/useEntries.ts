@@ -14,6 +14,7 @@ import {
   upsertTransactionFromRemote,
 } from '../db/transactions';
 import { subscribeEntries } from '../utils/dbEvents';
+import { subscribeSession } from '../utils/sessionEvents';
 import { getSession, saveSession } from '../db/session';
 import { ensureCategory, DEFAULT_CATEGORY } from '../constants/categories';
 import { toCanonical, isIncome } from '../utils/transactionType';
@@ -157,16 +158,26 @@ export const useEntries = (userId?: string | null) => {
   // Resolve effective user id (may create guest) and keep stable for the hook
   React.useEffect(() => {
     let mounted = true;
-    (async () => {
+    const runResolve = async () => {
       try {
         const sid = await resolveUserId(userId);
         if (mounted) setResolvedId(sid);
       } catch (e) {
         if (mounted) setResolvedId(null);
       }
-    })();
+    };
+    runResolve();
+
+    // Also re-resolve when session changes so UI picks up migrated remote user_id
+    const unsubSession = subscribeSession(() => {
+      // Re-run resolution; do not await (fire-and-forget)
+      void runResolve();
+    });
     return () => {
       mounted = false;
+      try {
+        unsubSession();
+      } catch (e) {}
     };
   }, [userId]);
 
