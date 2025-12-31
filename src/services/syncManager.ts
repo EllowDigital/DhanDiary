@@ -91,7 +91,12 @@ const safeQ = async (sql: string, params: any[] = []) => {
     return await Q(sql, params);
   } catch (err) {
     try {
-      console.error('Neon query failed', { sql: sql.substring(0, 50) + '...', err });
+      if (__DEV__) {
+        console.error('Neon query failed', { sql: sql.substring(0, 50) + '...', err });
+      } else {
+        // In production avoid noisy, raw internal errors; keep a compact warning for diagnostics
+        console.warn('Neon query failed (suppressed details in production)');
+      }
     } catch (e) {}
     throw err;
   }
@@ -248,7 +253,8 @@ export const syncBothWays = async () => {
     return { ok: true } as any;
   } catch (err) {
     try {
-      console.error('Sync failed', err);
+      if (__DEV__) console.error('Sync failed', err);
+      else console.warn('Sync failed (suppressed details in production)');
     } catch (e) {}
     _syncFailureCount = Math.min(5, _syncFailureCount + 1);
     // Enter error state — callers should only set this if runFullSync truly failed

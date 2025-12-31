@@ -279,7 +279,10 @@ const AddEntryScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={bannerVisible ? ['left', 'right'] : ['top', 'left', 'right']}>
+    <SafeAreaView
+      style={styles.safeArea}
+      edges={bannerVisible ? ['left', 'right'] : ['top', 'left', 'right']}
+    >
       <StatusBar barStyle="dark-content" backgroundColor={colors.background || '#F8FAFC'} />
 
       <ScreenHeader

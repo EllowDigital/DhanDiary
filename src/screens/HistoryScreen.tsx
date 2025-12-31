@@ -542,7 +542,10 @@ const HistoryScreen = () => {
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={bannerVisible ? ['left', 'right'] : ['top', 'left', 'right']}>
+    <SafeAreaView
+      style={styles.container}
+      edges={bannerVisible ? ['left', 'right'] : ['top', 'left', 'right']}
+    >
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
 
       <View style={{ paddingHorizontal: width >= 768 ? spacing(4) : 0 }}>

@@ -115,7 +115,7 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
     return () => {
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, []);
 

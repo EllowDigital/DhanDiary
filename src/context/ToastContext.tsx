@@ -28,8 +28,8 @@ interface ToastContextType {
 
 // --- Context ---
 const ToastContext = createContext<ToastContextType>({
-  showToast: () => { },
-  hideToast: () => { },
+  showToast: () => {},
+  hideToast: () => {},
 });
 
 export const useToast = () => useContext(ToastContext);
@@ -81,7 +81,7 @@ export const ToastProvider = ({ children }: { children: React.ReactNode }) => {
           return; // don't surface implementation details to users
         }
       }
-    } catch (e) { }
+    } catch (e) {}
 
     setToast({ message, type, duration });
 

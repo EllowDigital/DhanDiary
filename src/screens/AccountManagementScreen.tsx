@@ -185,7 +185,7 @@ const AccountManagementScreen = () => {
       try {
         const s = await getSession();
         if (mounted) setFallbackSession(s);
-      } catch (e) { }
+      } catch (e) {}
     };
     load();
     const unsub = subscribeSession((s) => {
@@ -195,7 +195,7 @@ const AccountManagementScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, []);
 
@@ -337,7 +337,7 @@ const AccountManagementScreen = () => {
               console.warn('[Account] unexpected error during delete flow', err);
               try {
                 navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
-              } catch (navErr) { }
+              } catch (navErr) {}
               Alert.alert('Error', err?.message || 'Failed to delete account');
             } finally {
               setDeletingAccount(false);
@@ -359,7 +359,10 @@ const AccountManagementScreen = () => {
   return (
     <View style={styles.mainContainer}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-      <SafeAreaView style={styles.safeArea} edges={bannerVisible ? ['left', 'right'] : ['top', 'left', 'right']}>
+      <SafeAreaView
+        style={styles.safeArea}
+        edges={bannerVisible ? ['left', 'right'] : ['top', 'left', 'right']}
+      >
         <ScreenHeader
           title="Account"
           subtitle="Profile & Security"
@@ -414,10 +417,10 @@ const AccountManagementScreen = () => {
                   {(user as any)?.emailAddresses?.some(
                     (e: any) => e.verification?.status === 'verified'
                   ) && (
-                      <View style={styles.verifiedBadge}>
-                        <MaterialIcon name="check" size={12} color="white" />
-                      </View>
-                    )}
+                    <View style={styles.verifiedBadge}>
+                      <MaterialIcon name="check" size={12} color="white" />
+                    </View>
+                  )}
                 </View>
 
                 <View style={styles.heroInfo}>

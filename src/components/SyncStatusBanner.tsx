@@ -13,7 +13,12 @@ import {
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useInternetStatus } from '../hooks/useInternetStatus';
-import { subscribeSyncStatus, SyncStatus, getLastSuccessfulSyncAt, getLastSyncTime } from '../services/syncManager';
+import {
+  subscribeSyncStatus,
+  SyncStatus,
+  getLastSuccessfulSyncAt,
+  getLastSyncTime,
+} from '../services/syncManager';
 import { setBannerVisible } from '../utils/bannerState';
 
 // 1. Enable LayoutAnimation for Android (Critical for smooth header slide)
@@ -82,7 +87,7 @@ const SyncStatusBanner = () => {
     return () => {
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, []);
 
@@ -151,7 +156,7 @@ const SyncStatusBanner = () => {
           .then((v) => {
             if (v && !isNaN(Number(v))) setLastSyncAt(Number(v));
           })
-          .catch(() => { });
+          .catch(() => {});
       }
     }
   }, [bannerState]);
