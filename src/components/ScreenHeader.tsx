@@ -112,7 +112,11 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
 
   useEffect(() => {
     const unsub = subscribeBanner((v) => setBannerVisible(v));
-    return () => unsub();
+    return () => {
+      try {
+        unsub();
+      } catch (e) { }
+    };
   }, []);
 
   const effectiveTopPadding = bannerVisible && useSafeAreaPadding ? 12 : topPadding;
