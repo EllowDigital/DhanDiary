@@ -79,7 +79,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -186,13 +186,11 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
                 imageUrl={user?.imageUrl || fallbackSession?.imageUrl || fallbackSession?.image}
               />
               {(() => {
-                const usingLocal = Boolean(
-                  fallbackSession &&
-                  (!user ||
-                    (user &&
-                      String(user.id || '') !== String(fallbackSession.id || '') &&
-                      String(user.id || '') !== String(fallbackSession.clerk_id || '')))
-                );
+                // Show local badge only when there is no active Clerk `user` and
+                // we have a persisted fallback session. This avoids showing both
+                // the verified badge (which belongs to a live Clerk user) and
+                // the local badge at the same time.
+                const usingLocal = Boolean(fallbackSession && !user);
                 if (!usingLocal) return null;
                 return (
                   <View style={styles.localBadge}>
