@@ -1,6 +1,8 @@
 import { executeSqlAsync } from '../db/sqlite';
 import { upsertTransactionFromRemote } from '../db/transactions';
 import { query as neonQuery, getNeonHealth } from '../api/neonClient';
+import { getSession, saveSession } from '../db/session';
+import { notifySessionChanged } from '../utils/sessionEvents';
 
 // If the remote Neon DB doesn't have the `transactions` table, avoid
 // repeatedly attempting the same query during this app session which
@@ -111,6 +113,7 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
 
   // 4. Process fetched rows
   const processedIds = new Set<string>();
+  const seenUserIds = new Set<string>();
   for (const remote of remoteRows) {
     if (!remote || !remote.id) continue;
     if (processedIds.has(remote.id)) {
@@ -121,6 +124,7 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
     processedIds.add(remote.id);
     try {
       const remoteUpdatedAt = Number(remote.updated_at || 0);
+      if (remote && remote.user_id) seenUserIds.add(String(remote.user_id));
 
       // Get local version to compare timestamps and sync status
       const localRow = await executeSqlAsync(
@@ -198,6 +202,36 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
       if (__DEV__) console.warn('[sync] pullFromNeon: row upsert failed', e, remote && remote.id);
       // Continue processing other rows even if one fails
     }
+  }
+
+  // 4b. If we pulled rows and there is no meaningful persisted session, persist
+  // the remote user_id so subsequent UI queries use the correct user key.
+  try {
+    if (seenUserIds.size > 0) {
+      const sess = await getSession();
+      // If there's no session or we previously used a guest id, prefer the remote user id
+      const needPersist =
+        !sess ||
+        String(sess.id).startsWith('guest_') ||
+        (sess?.clerk_id && String(sess.clerk_id).startsWith('guest_'));
+      if (needPersist) {
+        // If multiple user_ids exist, pick the first — apps typically use a single account per install.
+        const firstUser = Array.from(seenUserIds.values())[0];
+        if (firstUser) {
+          try {
+            await saveSession(firstUser, '', '');
+            // notify subscribers (saveSession calls notifySessionChanged internally, but call again defensively)
+            try {
+              await notifySessionChanged();
+            } catch (e) {}
+          } catch (e) {
+            if (__DEV__) console.warn('[sync] pullFromNeon: failed to save remote user session', e);
+          }
+        }
+      }
+    }
+  } catch (e) {
+    if (__DEV__) console.warn('[sync] pullFromNeon: session persist check failed', e);
   }
 
   // 5. Update local checkpoint
