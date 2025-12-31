@@ -247,9 +247,15 @@ export const query = async <T = any>(
   while (attempt <= retries) {
     try {
       // Execute Query with Timeout
-      const result = await withTimeout(sql(text, params), timeoutMs);
+      const start = Date.now();
+      const result = await withTimeout((sql as any).query(text, params), timeoutMs);
 
-      // Success! Reset circuit stats.
+      // Success! Reset circuit stats and update health
+      const latency = Date.now() - start;
+      lastHealthyAt = Date.now();
+      lastLatencyMs = latency;
+      lastErrorMessage = null;
+
       if (circuit.failures > 0) {
         circuit.failures = 0;
         circuit.isOpen = false;
@@ -319,10 +325,30 @@ export const checkNeonConnection = async (timeoutMs = 5000): Promise<HealthCheck
       latency: Date.now() - start,
     };
   } catch (e: any) {
-    return {
-      healthy: false,
-      latency: 0,
-      message: e.message || 'Unknown error',
-    };
+    return { healthy: false, latency: 0, message: e.message || 'Unknown error' };
   }
 };
+
+/**
+ * Backwards-compatible convenience: returns boolean reachable (used around the app).
+ */
+export const checkNeonConnectionBoolean = async (timeoutMs = 5000): Promise<boolean> => {
+  try {
+    const isOnline = await checkNetwork();
+    if (!isOnline) return false;
+    await withTimeout((getSql() as any)?.query('SELECT 1'), timeoutMs);
+    return true;
+  } catch (e) {
+    return false;
+  }
+};
+
+// Keep older function name for compatibility by exporting boolean checker as default name
+export const checkNeonConnection = checkNeonConnectionBoolean;
+export const getNeonHealth = (): NeonHealthSnapshot => ({
+  isConfigured: !!getSql(),
+  lastHealthyAt,
+  lastLatencyMs,
+  lastErrorMessage,
+  circuitOpenUntil: circuit.isOpen ? circuit.nextRetryAt : null,
+});
