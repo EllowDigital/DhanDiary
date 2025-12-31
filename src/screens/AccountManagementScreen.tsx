@@ -341,11 +341,25 @@ const AccountManagementScreen = () => {
               }
 
               showToast('Account deleted');
-              // Navigate to the Auth stack and open the AccountDeleted screen
+              // Navigate via root navigation so nested stacks are targeted reliably
               try {
-                navigation.reset({ index: 0, routes: [{ name: 'Auth', params: { screen: 'AccountDeleted' } }] });
+                const { resetRoot } = await import('../utils/rootNavigation');
+                resetRoot({
+                  index: 0,
+                  routes: [
+                    {
+                      name: 'Auth',
+                      state: { routes: [{ name: 'AccountDeleted' }] },
+                    },
+                  ],
+                });
               } catch (navErr) {
-                console.warn('[Account] navigation.reset failed', navErr);
+                console.warn('[Account] root reset failed', navErr);
+                try {
+                  navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
+                } catch (e) {
+                  console.warn('[Account] fallback navigation.reset failed', e);
+                }
               }
             } catch (err: any) {
               // Catch-all: surface message but still attempt to navigate to Auth so app isn't left in broken state
