@@ -1,27 +1,38 @@
-import { neon } from '@neondatabase/serverless';
+import { neon, NeonQueryFunction } from '@neondatabase/serverless';
 import Constants from 'expo-constants';
-import NetInfo from '@react-native-community/netinfo';
+import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 
-// Read NEON_URL from Expo config (app.config.js) -> Constants.expoConfig?.extra
-const NEON_URL = (Constants?.expoConfig?.extra as any)?.NEON_URL || process.env.NEON_URL || null;
+/* -------------------------------------------------------------------------- */
+/* Configuration & Constants                                                  */
+/* -------------------------------------------------------------------------- */
 
-// neon() returns an http client. Prefer calling `.query(text, params)` on it.
-const sql = NEON_URL ? neon(NEON_URL) : null;
+// 1. Retrieve NEON_URL securely from Expo Config
+const NEON_URL = (Constants.expoConfig?.extra?.NEON_URL as string) || process.env.NEON_URL || null;
 
-// Timeouts / caches
-const DEFAULT_TIMEOUT_MS = 45000;
-const NETINFO_CACHE_MS = 10000;
-const CIRCUIT_FUSE_MAX_MS = 30000;
+// 2. Tuning Constants
+const DEFAULT_TIMEOUT_MS = 15000; // 15 seconds max per query (mobile networks are slow)
+const MAX_RETRIES = 3; // How many times to retry a transient failure
+const CIRCUIT_BREAKER_RESET_MS = 30000; // If circuit breaks, wait 30s before trying again
+const NET_CACHE_TTL = 5000; // Cache network status for 5s to avoid bridge overhead
+const WARMUP_TIMEOUT_MS = 10000; // Shorter timeout for background warm-up
 
-// State
-let lastHealthyAt: number | null = null;
-let lastLatencyMs: number | null = null;
-let lastErrorMessage: string | null = null;
-let circuitOpenUntil = 0;
-let cachedNetInfoAt = 0;
-let cachedIsConnected: boolean | null = null;
-let warmPromise: Promise<void> | null = null;
+/* -------------------------------------------------------------------------- */
+/* Types                                                                      */
+/* -------------------------------------------------------------------------- */
 
+interface CircuitState {
+  isOpen: boolean;
+  nextRetryAt: number;
+  failures: number;
+}
+
+export interface HealthCheckResult {
+  healthy: boolean;
+  latency: number;
+  message?: string;
+}
+
+/* ------------------ Health Snapshot (for UI hooks) ------------------ */
 export type NeonHealthSnapshot = {
   isConfigured: boolean;
   lastHealthyAt: number | null;
@@ -30,200 +41,288 @@ export type NeonHealthSnapshot = {
   circuitOpenUntil: number | null;
 };
 
-const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
+let lastHealthyAt: number | null = null;
+let lastLatencyMs: number | null = null;
+let lastErrorMessage: string | null = null;
 
-const withTimeout = <T>(p: Promise<T>, ms: number): Promise<T> =>
-  Promise.race([
-    p,
-    new Promise<T>((_, rej) =>
-      setTimeout(() => rej(new Error(`Request timed out after ${ms}ms`)), ms)
-    ),
-  ] as any);
+/* -------------------------------------------------------------------------- */
+/* State Management (Singletons)                                              */
+/* -------------------------------------------------------------------------- */
 
-const getHostFromUrl = (u: string | null) => {
-  try {
-    if (!u) return 'unknown';
-    const parsed = new URL(u);
-    return parsed.hostname;
-  } catch (e) {
-    return 'unknown';
-  }
+// Circuit Breaker State
+const circuit: CircuitState = {
+  isOpen: false,
+  nextRetryAt: 0,
+  failures: 0,
 };
 
-const recordSuccess = (latencyMs: number) => {
-  lastHealthyAt = Date.now();
-  lastLatencyMs = latencyMs;
-  lastErrorMessage = null;
-  circuitOpenUntil = 0;
-};
+// Singleton instance for the Neon client
+let sqlInstance: NeonQueryFunction<false, false> | null = null;
 
-const recordFailure = (err: unknown) => {
-  const message =
-    err instanceof Error ? err.message : typeof err === 'string' ? err : 'Unknown Neon error';
-  lastErrorMessage = message;
-};
+// Network Cache State
+let lastNetCheck = 0;
+let isConnectedCache = true; // Optimistic default to allow attempts
 
-const shouldShortCircuit = () => Date.now() < circuitOpenUntil;
+/* -------------------------------------------------------------------------- */
+/* Helper Functions                                                           */
+/* -------------------------------------------------------------------------- */
 
-const bumpCircuit = (attempt: number) => {
-  const backoff = Math.min(2000 * attempt, CIRCUIT_FUSE_MAX_MS);
-  circuitOpenUntil = Date.now() + backoff;
-};
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const ensureRecentNetState = async () => {
-  const now = Date.now();
-  if (cachedIsConnected !== null && now - cachedNetInfoAt < NETINFO_CACHE_MS) {
-    return cachedIsConnected;
+/**
+ * Lazy loads the Neon client.
+ * This prevents crashes if the app starts without config, and ensures a singleton.
+ */
+const getSql = () => {
+  if (sqlInstance) return sqlInstance;
+
+  if (!NEON_URL) {
+    console.error('[Neon] Critical: NEON_URL is missing in app.config.js or .env');
+    return null;
   }
 
-  cachedNetInfoAt = now;
+  // Initialize Neon client (HTTP mode)
   try {
-    const snapshot = await NetInfo.fetch();
-    cachedIsConnected = !!snapshot.isConnected;
+    sqlInstance = neon(NEON_URL);
+    return sqlInstance;
   } catch (err) {
-    cachedIsConnected = true;
+    console.error('[Neon] Failed to initialize client:', err);
+    return null;
   }
-  return cachedIsConnected;
 };
 
-export const getNeonHealth = (): NeonHealthSnapshot => ({
-  isConfigured: !!sql,
-  lastHealthyAt,
-  lastLatencyMs,
-  lastErrorMessage,
-  circuitOpenUntil: circuitOpenUntil > Date.now() ? circuitOpenUntil : null,
-});
+/**
+ * Checks internet connectivity with caching.
+ * Prevents excessive calls to the native bridge.
+ */
+const checkNetwork = async (): Promise<boolean> => {
+  const now = Date.now();
+  // Return cached value if fresh
+  if (now - lastNetCheck < NET_CACHE_TTL) {
+    return isConnectedCache;
+  }
 
-export const warmNeonConnection = async () => {
-  if (!sql) return;
-  if (warmPromise) return warmPromise;
-
-  warmPromise = (async () => {
-    try {
-      const start = Date.now();
-      if (typeof (sql as any).query === 'function') {
-        await withTimeout((sql as any).query('SELECT 1', []), 15000);
-        recordSuccess(Date.now() - start);
-      } else {
-        throw new Error('Neon client missing .query() method');
-      }
-    } catch (err) {
-      recordFailure(err);
-      console.warn('[Neon] Warm-up failed', err);
-    } finally {
-      warmPromise = null;
-    }
-  })();
-
-  return warmPromise;
-};
-
-export const checkNeonConnection = async (timeoutMs = 10000): Promise<boolean> => {
   try {
-    const p = warmNeonConnection();
-    await Promise.race([
-      p || Promise.resolve(),
-      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), timeoutMs)),
-    ]);
-    return !!lastHealthyAt && Date.now() - lastHealthyAt < 60000;
-  } catch (e) {
+    const state: NetInfoState = await NetInfo.fetch();
+    // Consider connected if we have an active connection AND internet is reachable
+    // Note: isInternetReachable can be null on some platforms initially, so we fallback to isConnected
+    const online = !!state.isConnected && (state.isInternetReachable ?? true);
+
+    isConnectedCache = online;
+    lastNetCheck = now;
+    return online;
+  } catch (error) {
+    console.warn('[Neon] NetInfo check failed, assuming online:', error);
+    return true; // Fail open to allow request attempts
+  }
+};
+
+/**
+ * Wraps a promise with a timeout rejection.
+ */
+const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> => {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`Query timed out after ${ms}ms`)), ms)
+    ),
+  ]);
+};
+
+/**
+ * Determines if an error is transient (worth retrying) or permanent.
+ */
+const isRetryableError = (error: any): boolean => {
+  if (!error) return false;
+
+  const msg = (error.message || String(error)).toLowerCase();
+  const code = error.code ? String(error.code) : '';
+
+  // 1. Permanent Errors (Do NOT Retry)
+  if (
+    code === '23505' || // Unique violation (duplicate key)
+    code === '42P01' || // Undefined table
+    code === '42601' || // Syntax error
+    msg.includes('duplicate key') ||
+    msg.includes('violates unique') ||
+    msg.includes('syntax error') ||
+    msg.includes('column does not exist') ||
+    (msg.includes('relation') && msg.includes('does not exist'))
+  ) {
     return false;
   }
+
+  // 2. Transient Errors (DO Retry)
+  // 502/503 (Bad Gateway/Service Unavailable) are common during Neon cold starts
+  return (
+    msg.includes('network') ||
+    msg.includes('timeout') ||
+    msg.includes('connection') ||
+    msg.includes('socket') ||
+    msg.includes('fetch failed') ||
+    msg.includes('502') ||
+    msg.includes('503') ||
+    msg.includes('econnreset')
+  );
 };
 
+/* -------------------------------------------------------------------------- */
+/* Core Exports                                                               */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Wakes up the Neon compute endpoint without throwing errors.
+ * Call this when the app comes to the foreground.
+ */
+export const warmNeonConnection = async (): Promise<void> => {
+  const sql = getSql();
+  if (!sql) return;
+
+  // Don't warm up if circuit is open (avoid spamming a down service)
+  if (circuit.isOpen && Date.now() < circuit.nextRetryAt) return;
+
+  checkNetwork().then((online) => {
+    if (!online) return;
+
+    // Fire and forget - simple lightweight query
+    // We use a short timeout because we don't want this to block anything
+    withTimeout((sql as any).query('SELECT 1'), WARMUP_TIMEOUT_MS)
+      .then(() => {
+        // Reset circuit on success
+        if (circuit.failures > 0) circuit.failures = 0;
+        circuit.isOpen = false;
+        lastHealthyAt = Date.now();
+        lastLatencyMs = 0;
+        lastErrorMessage = null;
+        if (__DEV__) console.log('[Neon] Connection warmed up');
+      })
+      .catch((err) => {
+        // Silent fail on warm-up is fine
+        lastErrorMessage = err?.message || String(err);
+        if (__DEV__) console.log('[Neon] Warm-up skipped/failed:', err.message);
+      });
+  });
+};
+
+/**
+ * Execute a SQL query safely with retries, timeout, and circuit breaking.
+ * * @param text - The SQL query string
+ * @param params - Array of parameters for the query
+ * @param options - Optional overrides for retries and timeout
+ */
 export const query = async <T = any>(
   text: string,
   params: any[] = [],
-  opts?: { retries?: number; timeoutMs?: number }
+  options: { retries?: number; timeoutMs?: number } = {}
 ): Promise<T[]> => {
+  const sql = getSql();
+
+  // 0. Configuration Guard
   if (!sql) {
-    throw new Error('Neon requires internet + NEON_URL');
+    throw new Error('Neon Database not configured. Check NEON_URL.');
   }
 
-  if (shouldShortCircuit()) {
-    throw new Error('Neon temporarily unavailable. Retrying shortly.');
+  // 1. Circuit Breaker Guard
+  if (circuit.isOpen) {
+    if (Date.now() < circuit.nextRetryAt) {
+      throw new Error('Service temporarily unavailable (Circuit Open). Please try again later.');
+    }
+    // Half-open state: Allow one request to pass through to test health
+    circuit.isOpen = false;
   }
 
-  const online = await ensureRecentNetState();
-  if (!online) {
-    bumpCircuit(1);
-    const offlineError = new Error('Offline');
-    recordFailure(offlineError);
-    throw offlineError;
+  // 2. Network Guard
+  const isOnline = await checkNetwork();
+  if (!isOnline) {
+    throw new Error('No internet connection.');
   }
 
-  const { retries = 3, timeoutMs = DEFAULT_TIMEOUT_MS } = opts || {};
+  const retries = options.retries ?? MAX_RETRIES;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   let attempt = 0;
-  let lastErr: any = null;
+  let lastError: any;
+
+  // 3. Retry Loop
   while (attempt <= retries) {
     try {
-      const start = Date.now();
-      if (typeof (sql as any).query === 'function') {
-        const result: any = await withTimeout((sql as any).query(text, params), timeoutMs);
-        recordSuccess(Date.now() - start);
-        return Array.isArray(result) ? result : result.rows || [];
-      } else {
-        throw new Error('Incompatible Neon client: expected .query() method');
+      // Execute Query with Timeout
+      const result = await withTimeout(sql(text, params), timeoutMs);
+
+      // Success! Reset circuit stats.
+      if (circuit.failures > 0) {
+        circuit.failures = 0;
+        circuit.isOpen = false;
       }
-    } catch (error) {
-      lastErr = error;
-      recordFailure(error);
 
-      const msg = String(((error as any) && ((error as any).message || error)) || '').toLowerCase();
+      return result as T[];
+    } catch (error: any) {
+      lastError = error;
 
-      const isTransient =
-        msg.includes('timeout') ||
-        msg.includes('timed out') ||
-        msg.includes('connection') ||
-        msg.includes('network') ||
-        msg.includes('socket') ||
-        msg.includes('websocket') ||
-        msg.includes('econnreset') ||
-        msg.includes('enotfound') ||
-        msg.includes('fetch') ||
-        msg.includes('502') ||
-        msg.includes('503');
-
-      if (
-        (error as any)?.code === '23505' ||
-        msg.includes('duplicate key') ||
-        msg.includes('unique constraint')
-      ) {
-        console.warn('Neon Query duplicate key (suppressed):', msg);
+      // Check if we should stop immediately (Permanent Error)
+      if (!isRetryableError(error)) {
+        console.error(`[Neon] Permanent Query Error: ${text}`, error);
         throw error;
       }
 
-      if (!isTransient) {
-        // Suppress noisy ERROR-level logs for missing remote tables (common in early deploys).
-        // The caller (e.g. pullFromNeon) may handle this and set a session guard.
-        if (
-          msg.includes('relation') &&
-          msg.includes('transactions') &&
-          msg.includes('does not exist')
-        ) {
-          if (typeof __DEV__ !== 'undefined' && __DEV__) {
-            console.warn('Neon Query permanent error (remote table missing):', msg);
-          }
-        } else {
-          console.error('Neon Query Error (permanent):', error);
-        }
-        throw error;
-      }
+      attempt++;
+      circuit.failures++;
 
-      attempt += 1;
-      const backoff = Math.min(2000 * attempt, 8000);
-      bumpCircuit(attempt);
-      const host = getHostFromUrl(NEON_URL as any);
-      console.warn(
-        `Neon Query transient error (${host || 'host unknown'}), retrying attempt ${attempt}/${retries} after ${backoff}ms`,
-        error
-      );
+      // If we've exhausted retries, break loop
       if (attempt > retries) break;
-      await sleep(backoff);
+
+      // Calculate Exponential Backoff:
+      // Attempt 1: ~1000ms, Attempt 2: ~2000ms, Attempt 3: ~4000ms + Jitter
+      const delay = Math.min(1000 * Math.pow(2, attempt) + Math.random() * 500, 10000);
+
+      if (__DEV__) {
+        console.warn(
+          `[Neon] Transient Error (Attempt ${attempt}/${retries}). Retrying in ${Math.round(delay)}ms...`,
+          error.message
+        );
+      }
+
+      await sleep(delay);
     }
   }
 
-  console.error('Neon Query failed after retries:', lastErr);
-  throw lastErr;
+  // 4. Failure Handling
+  // If we reach here, we exhausted all retries.
+  // If failures are high, trip the circuit breaker to protect the client/server.
+  if (circuit.failures >= 3) {
+    circuit.isOpen = true;
+    circuit.nextRetryAt = Date.now() + CIRCUIT_BREAKER_RESET_MS;
+    console.error('[Neon] Circuit Breaker OPENED. Requests paused for 30s.');
+  }
+
+  // Throw the last error encountered
+  throw lastError;
+};
+
+/**
+ * Active health check for UI Status Banner.
+ * Returns true if DB is reachable and responsive.
+ */
+export const checkNeonConnection = async (timeoutMs = 5000): Promise<HealthCheckResult> => {
+  try {
+    const isOnline = await checkNetwork();
+    if (!isOnline) {
+      return { healthy: false, latency: 0, message: 'Offline' };
+    }
+
+    const start = Date.now();
+    // Run a lightweight query with 0 retries to get "current" status
+    await query('SELECT 1', [], { retries: 0, timeoutMs });
+
+    return {
+      healthy: true,
+      latency: Date.now() - start,
+    };
+  } catch (e: any) {
+    return {
+      healthy: false,
+      latency: 0,
+      message: e.message || 'Unknown error',
+    };
+  }
 };

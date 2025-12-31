@@ -98,7 +98,7 @@ const AppContent = () => {
 
   // 2. Health Check (Neon)
   useEffect(() => {
-    checkNeonConnection().catch(() => {});
+    checkNeonConnection().catch(() => { });
   }, []);
 
   // 3. User Synchronization
@@ -136,6 +136,9 @@ const AppContent = () => {
 
   return (
     <View style={{ flex: 1 }}>
+      {/* Sync banner placed in normal flow so it pushes headers/content down */}
+      <SyncStatusBanner />
+
       {/* Main Navigator */}
       <RootStack.Navigator screenOptions={{ headerShown: false }}>
         <RootStack.Screen name="Splash" component={SplashScreen} />
@@ -144,13 +147,7 @@ const AppContent = () => {
         <RootStack.Screen name="Main" component={MainNavigator} />
       </RootStack.Navigator>
 
-      {/* Global Overlays (Must be AFTER Navigator to sit on top) */}
-      <View
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100 }}
-        pointerEvents="box-none"
-      >
-        <SyncStatusBanner />
-      </View>
+      {/* Biometric overlay (keeps being an overlay) */}
       <BiometricAuth />
     </View>
   );
@@ -167,7 +164,7 @@ function AppWithDb() {
     try {
       const holder = require('./src/utils/queryClientHolder');
       if (holder?.setQueryClient) holder.setQueryClient(queryClient);
-    } catch (e) {}
+    } catch (e) { }
   }, [queryClient]);
 
   const initializeDatabase = useCallback(async () => {
@@ -193,11 +190,11 @@ function AppWithDb() {
     if (!dbReady) return;
 
     if (AppState.currentState === 'active') {
-      runFullSync().catch(() => {});
+      runFullSync().catch(() => { });
     }
 
     startForegroundSyncScheduler(15000);
-    startBackgroundFetch().catch(() => {});
+    startBackgroundFetch().catch(() => { });
 
     return () => {
       stopForegroundSyncScheduler();
@@ -211,7 +208,7 @@ function AppWithDb() {
     const handleAppStateChange = (nextState: AppStateStatus) => {
       if (nextState === 'active' && !isSyncRunning) {
         setTimeout(() => {
-          runFullSync().catch(() => {});
+          runFullSync().catch(() => { });
         }, 500);
       }
     };
