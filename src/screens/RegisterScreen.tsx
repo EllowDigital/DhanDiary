@@ -18,6 +18,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { subscribeBanner, isBannerVisible } from '../utils/bannerState';
 import { LinearGradient } from 'expo-linear-gradient';
+import NetInfo from '@react-native-community/netinfo';
 import { Ionicons } from '@expo/vector-icons';
 import { useSignUp } from '@clerk/clerk-expo';
 import { useNavigation } from '@react-navigation/native';
@@ -77,6 +78,14 @@ const RegisterScreen = () => {
 
     setLoading(true);
     try {
+      const net = await NetInfo.fetch();
+      if (!net.isConnected) {
+        setLoading(false);
+        return Alert.alert('No internet', 'Please check your connection and try again.', [
+          { text: 'Retry', onPress: () => onSignUpPress() },
+          { text: 'Cancel', style: 'cancel' },
+        ]);
+      }
       // 1. Create the user in Clerk
       await signUp.create({
         firstName,

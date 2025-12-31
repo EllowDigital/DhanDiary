@@ -253,6 +253,27 @@ export const syncBothWays = async () => {
     } catch (e) {}
     _syncFailureCount = 0;
 
+    // Compute push/pull counts for callers and for last-sync metrics
+    let pushedCount = 0;
+    let pulledCount = 0;
+    try {
+      if (runResult) {
+        // push result may be an object { pushed: string[] } or an array
+        const pr: any = runResult.pushed;
+        if (pr) {
+          if (Array.isArray(pr)) pushedCount = pr.length;
+          else if (Array.isArray(pr.pushed)) pushedCount = pr.pushed.length;
+          else if (typeof pr === 'number') pushedCount = pr;
+        }
+
+        const pl: any = runResult.pulled;
+        if (pl) {
+          if (typeof pl.pulled === 'number') pulledCount = pl.pulled;
+          else if (typeof pl === 'number') pulledCount = pl;
+        }
+      }
+    } catch (e) {}
+
     try {
       const { notifyEntriesChanged } = require('../utils/dbEvents');
       notifyEntriesChanged();
@@ -263,7 +284,13 @@ export const syncBothWays = async () => {
       setSyncStatus('idle');
     } catch (e) {}
 
-    return { ok: true } as any;
+    try {
+      // persist last sync counts for diagnostics
+      try {
+        await AsyncStorage.setItem('last_sync_count', String(pulledCount));
+      } catch (e) {}
+    } catch (e) {}
+    return { ok: true, counts: { pushed: pushedCount, pulled: pulledCount } } as any;
   } catch (err) {
     try {
       if (__DEV__) console.error('Sync failed', err);

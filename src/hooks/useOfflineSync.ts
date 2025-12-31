@@ -44,7 +44,16 @@ export const useOfflineSync = (userId?: string | null) => {
           const res: any = await syncBothWays();
           // Only show success toast when an actual sync run occurred
           if (res && res.ok) {
-            showToast('Auto-sync complete');
+            const pushed = res.counts?.pushed || 0;
+            const pulled = res.counts?.pulled || 0;
+            if (pulled > 0 || pushed > 0) {
+              const parts = [] as string[];
+              if (pulled > 0) parts.push(`${pulled} pulled`);
+              if (pushed > 0) parts.push(`${pushed} pushed`);
+              showToast(`Auto-sync complete — ${parts.join(', ')}`);
+            } else {
+              showToast('Auto-sync complete');
+            }
           } else {
             if (__DEV__) console.log('[useOfflineSync] sync skipped or throttled', res);
           }

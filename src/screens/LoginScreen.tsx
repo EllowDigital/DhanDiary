@@ -26,6 +26,7 @@ import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
+import NetInfo from '@react-native-community/netinfo';
 
 // --- CUSTOM IMPORTS ---
 // Ensure these paths match your project structure
@@ -163,6 +164,18 @@ const LoginScreen = () => {
       return Alert.alert('Missing Info', 'Please enter both email and password.');
 
     setLoading(true);
+    try {
+      const net = await NetInfo.fetch();
+      if (!net.isConnected) {
+        setLoading(false);
+        return Alert.alert('No internet', 'Please check your connection and try again.', [
+          { text: 'Retry', onPress: () => onSignInPress() },
+          { text: 'Cancel', style: 'cancel' },
+        ]);
+      }
+    } catch (e) {
+      // ignore connectivity check failure and proceed
+    }
     try {
       const result = await signIn.create({ identifier: email, password });
 
