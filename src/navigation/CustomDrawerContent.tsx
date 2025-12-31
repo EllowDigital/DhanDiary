@@ -13,6 +13,7 @@ import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-nav
 import { Text } from '@rneui/themed';
 import { useAuth, useUser } from '@clerk/clerk-expo';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { subscribeBanner, isBannerVisible } from '../utils/bannerState';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import Constants from 'expo-constants'; // Standard way to access version
 
@@ -37,6 +38,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   const { signOut } = useAuth();
   const { user } = useUser();
   const [fallbackSession, setFallbackSession] = useState<any>(null);
+  const [bannerVisible, setBannerVisible] = useState<boolean>(isBannerVisible());
 
   // Animation Refs
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -79,8 +81,14 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
+  }, []);
+
+  // subscribe to banner visibility so drawer top padding doesn't double-up
+  useEffect(() => {
+    const unsub = subscribeBanner((v) => setBannerVisible(!!v));
+    return () => unsub && unsub();
   }, []);
 
   const handleNavigate = (routeName: string) => {
@@ -169,7 +177,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
           style={{
             opacity: fadeAnim,
             transform: [{ translateX: slideAnim }],
-            paddingTop: Platform.OS === 'ios' ? 0 : insets.top, // Handle Android StatusBar
+            paddingTop: bannerVisible ? 0 : Platform.OS === 'ios' ? 0 : insets.top, // Handle Android StatusBar and banner
           }}
         >
           {/* USER PROFILE SECTION */}

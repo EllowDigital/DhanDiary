@@ -17,6 +17,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { subscribeBanner, isBannerVisible } from '../utils/bannerState';
 import { Input, Button } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useUser } from '@clerk/clerk-expo';
@@ -132,6 +133,7 @@ const AccountManagementScreen = () => {
   const [fallbackSession, setFallbackSession] = useState<any>(null);
   const navigation = useNavigation<any>();
   const { showToast } = useToast();
+  const [bannerVisible, setBannerVisible] = useState<boolean>(isBannerVisible());
 
   // State
   const [activeCard, setActiveCard] = useState<string | null>(null);
@@ -171,13 +173,19 @@ const AccountManagementScreen = () => {
     checkBiometrics();
   }, []);
 
+  // subscribe to banner visibility so this screen doesn't add top safe-area twice
+  useEffect(() => {
+    const unsub = subscribeBanner((v) => setBannerVisible(!!v));
+    return () => unsub && unsub();
+  }, []);
+
   useEffect(() => {
     let mounted = true;
     const load = async () => {
       try {
         const s = await getSession();
         if (mounted) setFallbackSession(s);
-      } catch (e) {}
+      } catch (e) { }
     };
     load();
     const unsub = subscribeSession((s) => {
@@ -187,7 +195,7 @@ const AccountManagementScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -329,7 +337,7 @@ const AccountManagementScreen = () => {
               console.warn('[Account] unexpected error during delete flow', err);
               try {
                 navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
-              } catch (navErr) {}
+              } catch (navErr) { }
               Alert.alert('Error', err?.message || 'Failed to delete account');
             } finally {
               setDeletingAccount(false);
@@ -351,7 +359,7 @@ const AccountManagementScreen = () => {
   return (
     <View style={styles.mainContainer}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={bannerVisible ? ['left', 'right'] : ['top', 'left', 'right']}>
         <ScreenHeader
           title="Account"
           subtitle="Profile & Security"
@@ -406,10 +414,10 @@ const AccountManagementScreen = () => {
                   {(user as any)?.emailAddresses?.some(
                     (e: any) => e.verification?.status === 'verified'
                   ) && (
-                    <View style={styles.verifiedBadge}>
-                      <MaterialIcon name="check" size={12} color="white" />
-                    </View>
-                  )}
+                      <View style={styles.verifiedBadge}>
+                        <MaterialIcon name="check" size={12} color="white" />
+                      </View>
+                    )}
                 </View>
 
                 <View style={styles.heroInfo}>

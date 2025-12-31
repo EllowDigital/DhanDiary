@@ -28,8 +28,8 @@ interface ToastContextType {
 
 // --- Context ---
 const ToastContext = createContext<ToastContextType>({
-  showToast: () => {},
-  hideToast: () => {},
+  showToast: () => { },
+  hideToast: () => { },
 });
 
 export const useToast = () => useContext(ToastContext);
@@ -72,6 +72,16 @@ export const ToastProvider = ({ children }: { children: React.ReactNode }) => {
 
   const showToast = useCallback((message: string, type: ToastType = 'info', duration = 4000) => {
     if (timerRef.current) clearTimeout(timerRef.current);
+
+    // Suppress Neon/internal DB messages from being shown to end-users in production
+    try {
+      const lower = String(message || '').toLowerCase();
+      if (!(typeof __DEV__ !== 'undefined' && __DEV__)) {
+        if (lower.includes('neon') || lower.includes('neondb') || lower.includes('neondberror')) {
+          return; // don't surface implementation details to users
+        }
+      }
+    } catch (e) { }
 
     setToast({ message, type, duration });
 

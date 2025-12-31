@@ -109,7 +109,9 @@ export const warmNeonConnection = async () => {
       }
     } catch (err) {
       recordFailure(err);
-      console.warn('[Neon] Warm-up failed', err);
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.warn('[Neon] Warm-up failed', err);
+      }
     } finally {
       warmPromise = null;
     }
