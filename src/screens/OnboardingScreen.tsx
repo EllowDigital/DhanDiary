@@ -10,6 +10,7 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { subscribeBanner, isBannerVisible } from '../utils/bannerState';
 import { Text } from '@rneui/themed';
 import { useNavigation } from '@react-navigation/native';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
@@ -226,6 +227,13 @@ const OnboardingScreen = () => {
     });
   };
 
+  const [bannerVisible, setBannerVisible] = React.useState<boolean>(false);
+  React.useEffect(() => {
+    setBannerVisible(isBannerVisible());
+    const unsub = subscribeBanner((v: boolean) => setBannerVisible(v));
+    return () => unsub();
+  }, []);
+
   const handleNext = () => {
     if (currentIndex < SLIDES.length - 1) {
       listRef.current?.scrollToIndex({ index: currentIndex + 1, animated: true });
@@ -235,7 +243,10 @@ const OnboardingScreen = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView
+      style={styles.container}
+      edges={bannerVisible ? (['left', 'right'] as any) : (['top', 'left', 'right'] as any)}
+    >
       <StatusBar barStyle="dark-content" backgroundColor={colors.background || '#F9FAFB'} />
 
       {/* Header: Skip Button */}

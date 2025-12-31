@@ -16,6 +16,7 @@ import {
   Easing,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { subscribeBanner, isBannerVisible } from '../utils/bannerState';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSignUp } from '@clerk/clerk-expo';
@@ -57,6 +58,13 @@ const RegisterScreen = () => {
         useNativeDriver: true,
       }),
     ]).start();
+  }, []);
+
+  const [bannerVisible, setBannerVisible] = React.useState<boolean>(false);
+  React.useEffect(() => {
+    setBannerVisible(isBannerVisible());
+    const unsub = subscribeBanner((v: boolean) => setBannerVisible(v));
+    return () => unsub();
   }, []);
 
   const onSignUpPress = async () => {
@@ -122,7 +130,7 @@ const RegisterScreen = () => {
         end={{ x: 1, y: 1 }}
       />
 
-      <SafeAreaView style={{ flex: 1 }}>
+      <SafeAreaView style={{ flex: 1 }} edges={bannerVisible ? (['left', 'right'] as any) : (['top', 'left', 'right'] as any)}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
