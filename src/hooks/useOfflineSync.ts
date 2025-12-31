@@ -39,12 +39,20 @@ export const useOfflineSync = (userId?: string | null) => {
   useEffect(() => {
     if (!userId) return;
     if (isOnline) {
-      syncBothWays()
-        .then(() => showToast('Auto-sync complete'))
-        .catch((err) => {
+      (async () => {
+        try {
+          const res: any = await syncBothWays();
+          // Only show success toast when an actual sync run occurred
+          if (res && res.ok) {
+            showToast('Auto-sync complete');
+          } else {
+            if (__DEV__) console.log('[useOfflineSync] sync skipped or throttled', res);
+          }
+        } catch (err) {
           console.error('Sync failed', err);
           showToast('Auto-sync failed');
-        });
+        }
+      })();
     }
   }, [isOnline, userId, showToast]);
 };

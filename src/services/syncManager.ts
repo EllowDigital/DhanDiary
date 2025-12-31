@@ -231,7 +231,20 @@ export const syncBothWays = async () => {
 
   try {
     // Delegate actual sync work to runFullSync (single source of truth)
-    await runFullSync();
+    const runResult = await runFullSync();
+
+    // If runFullSync returned null, it was throttled or skipped — treat as no-op
+    if (!runResult) {
+      if (__DEV__)
+        console.log('[sync] syncBothWays: runFullSync returned null (throttled/skipped)');
+      // clear in-progress and mark idle, return not-ok so callers can decide whether to show UI
+      _lastSyncAttemptAt = Date.now();
+      _syncInProgress = false;
+      try {
+        setSyncStatus('idle');
+      } catch (e) {}
+      return { ok: false, reason: 'throttled' } as any;
+    }
 
     _lastSuccessfulSyncAt = Date.now();
     try {
