@@ -147,6 +147,10 @@ export const registerOnline = async (
       const sessMod = require('../db/session');
       if (sessMod && typeof sessMod.setNoGuestMode === 'function') {
         await sessMod.setNoGuestMode(false);
+        // Clear any account-deleted marker when user registers
+        if (typeof sessMod.setAccountDeletedAt === 'function') {
+          await sessMod.setAccountDeletedAt(null);
+        }
       }
     } catch (e) {}
     await prepareOfflineWorkspace(user.id);
@@ -190,6 +194,10 @@ export const loginOnline = async (email: string, password: string): Promise<Auth
     const sessMod = require('../db/session');
     if (sessMod && typeof sessMod.setNoGuestMode === 'function') {
       await sessMod.setNoGuestMode(false);
+      // Clear any account-deleted marker when user logs in
+      if (typeof sessMod.setAccountDeletedAt === 'function') {
+        await sessMod.setAccountDeletedAt(null);
+      }
     }
   } catch (e) {}
   await prepareOfflineWorkspace(user.id);
@@ -314,6 +322,14 @@ export const deleteAccount = async (opts?: { clerkUserId?: string }) => {
   }
 
   // 2. Wipe Local Data
+  // Mark account deleted flag (persisted) so UI can show a targeted message
+  try {
+    const sessMod = require('../db/session');
+    if (sessMod && typeof sessMod.setAccountDeletedAt === 'function') {
+      await sessMod.setAccountDeletedAt(new Date().toISOString());
+    }
+  } catch (e) {}
+
   await wipeLocalDatabase();
 
   // Re-initialize DB schema so app restarts in clean state

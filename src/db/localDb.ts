@@ -1,46 +1,29 @@
-// Offline/local DB support removed: provide safe no-op implementations so runtime
-// code running in online-only mode (Clerk + NeonDB) does not throw.
+// Local DB helpers: implement wipe/clear to fully remove local SQLite data
+import { execAsync, runAsync } from './sqliteClient';
+import AsyncStorage from '../utils/AsyncStorageWrapper';
+import * as session from './session';
 
-// Export functions with compatible signatures so callers across the app compile
 export const init = async (..._args: any[]): Promise<void> => {
-  // no-op initializer for online-only mode
+  // noop — actual init happens via src/db/sqlite.initDB
   return;
 };
-export const isDbOperational = async (..._args: any[]) => {
-  return false;
-};
-export const getDb = async (..._args: any[]) => {
-  return null;
-};
 
-export const addLocalEntry = async (..._args: any[]) => {
-  return null;
-};
-export const getEntries = async (..._args: any[]): Promise<any[]> => {
-  return [];
-};
-export const updateLocalEntry = async (..._args: any[]) => {
-  return null;
-};
-export const markEntryDeleted = async (..._args: any[]) => {
-  return null;
-};
-export const markEntrySynced = async (..._args: any[]) => {
-  return null;
-};
+export const isDbOperational = async () => true;
+export const getDb = async () => null;
+
+export const addLocalEntry = async (..._args: any[]) => null;
+export const getEntries = async (..._args: any[]): Promise<any[]> => [];
+export const updateLocalEntry = async (..._args: any[]) => null;
+export const markEntryDeleted = async (..._args: any[]) => null;
+export const markEntrySynced = async (..._args: any[]) => null;
 export const getEntryByLocalId = async (..._args: any[]): Promise<any | null> => null;
 export const getLocalByRemoteId = async (..._args: any[]): Promise<any | null> => null;
-export const upsertLocalFromRemote = async (..._args: any[]) => {
-  return null;
-};
+export const upsertLocalFromRemote = async (..._args: any[]) => null;
 export const getLocalByClientId = async (..._args: any[]): Promise<any | null> => null;
 export const getUnsyncedEntries = async (..._args: any[]): Promise<any[]> => [];
 
 // eslint-disable-next-line require-yield
-export const fetchEntriesGenerator = async function* (
-  ..._args: any[]
-): AsyncGenerator<any, void, unknown> {
-  // yields nothing in online-only mode
+export const fetchEntriesGenerator = async function* (..._args: any[]) {
   return;
 };
 
@@ -178,14 +161,60 @@ export const flushQueuedLocalRemoteMappings = async (..._args: any[]) => {
 export const flushFallbackLocalEntries = async (..._args: any[]) => ({ processed: 0 });
 
 export const clearAllData = async (..._args: any[]) => {
-  return null;
+  try {
+    // Clear persisted session and storage keys
+    await session.clearSession();
+    try {
+      await AsyncStorage.clear();
+    } catch (e) {}
+    // Also set no-guest to prevent auto guest creation after a full clear
+    try {
+      await session.setNoGuestMode(true);
+    } catch (e) {}
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e };
+  }
 };
+
 export const wipeLocalDatabase = async (..._args: any[]) => {
-  return null;
+  try {
+    // Drop/clear key tables if they exist to ensure a fresh DB state.
+    // Use DROP TABLE IF EXISTS so this is safe across schema versions.
+    try {
+      await execAsync('DROP TABLE IF EXISTS transactions;');
+    } catch (e) {
+      // ignore
+    }
+    try {
+      await execAsync('DROP TABLE IF EXISTS categories;');
+    } catch (e) {}
+    try {
+      await execAsync('DROP TABLE IF EXISTS meta;');
+    } catch (e) {}
+
+    // Vacuum / rebuild DB to reclaim space (best-effort)
+    try {
+      await execAsync('VACUUM;');
+    } catch (e) {}
+
+    // Clear persisted session keys to avoid auto-login
+    try {
+      await session.clearSession();
+    } catch (e) {}
+
+    // Ensure no-guest mode is set so app won't auto-create guest sessions
+    try {
+      await session.setNoGuestMode(true);
+    } catch (e) {}
+
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e };
+  }
 };
 
 // Provide compat exports for session helpers (redirect to session module)
-import * as session from './session';
 export const getSession = session.getSession;
 export const saveSession = session.saveSession;
 export const clearSession = session.clearSession;
