@@ -286,7 +286,7 @@ const styles = StyleSheet.create({
   hintPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: themeColors.surface || '#FFFFFF',
+    backgroundColor: themeColors.card || '#FFFFFF',
     paddingVertical: 6,
     paddingHorizontal: 14,
     borderRadius: 20,

@@ -179,11 +179,28 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
             onPress={() => props.navigation.navigate('Account')}
           >
             {/* Prefer Clerk user when available, otherwise fall back to locally persisted session */}
-            <UserAvatar
-              size={56}
-              name={user?.fullName || user?.firstName || fallbackSession?.name}
-              imageUrl={user?.imageUrl || fallbackSession?.imageUrl || fallbackSession?.image}
-            />
+            <View style={styles.avatarWrap}>
+              <UserAvatar
+                size={56}
+                name={user?.fullName || user?.firstName || fallbackSession?.name}
+                imageUrl={user?.imageUrl || fallbackSession?.imageUrl || fallbackSession?.image}
+              />
+              {(() => {
+                const usingLocal = Boolean(
+                  fallbackSession &&
+                  (!user ||
+                    (user &&
+                      String(user.id || '') !== String(fallbackSession.id || '') &&
+                      String(user.id || '') !== String(fallbackSession.clerk_id || '')))
+                );
+                if (!usingLocal) return null;
+                return (
+                  <View style={styles.localBadge}>
+                    <MaterialIcon name="cloud_off" size={12} color="#B91C1C" />
+                  </View>
+                );
+              })()}
+            </View>
             <View style={styles.profileInfo}>
               <Text style={styles.profileName} numberOfLines={1}>
                 {user?.fullName || user?.firstName || fallbackSession?.name || 'Guest User'}
@@ -317,6 +334,25 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginVertical: 10,
     opacity: 0.6,
+  },
+
+  avatarWrap: {
+    width: 56,
+    height: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+
+  localBadge: {
+    position: 'absolute',
+    right: -6,
+    bottom: -6,
+    backgroundColor: '#FEF2F2',
+    borderRadius: 10,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(185,28,28,0.12)',
   },
 
   /* MENU */

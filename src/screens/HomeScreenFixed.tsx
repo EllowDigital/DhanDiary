@@ -273,7 +273,7 @@ const HomeScreen = () => {
     return () => {
       try {
         if (unsub) unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, [fadeAnim]);
 
@@ -284,7 +284,7 @@ const HomeScreen = () => {
       try {
         const s = await getSession();
         if (mounted) setFallbackSession(s);
-      } catch (e) { }
+      } catch (e) {}
     };
     load();
     const unsub = subscribeSession((s) => {
@@ -294,7 +294,7 @@ const HomeScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, []);
 
@@ -401,12 +401,23 @@ const HomeScreen = () => {
 
             return (
               <>
-                <UserAvatar
-                  size={42}
-                  name={effectiveName || undefined}
-                  imageUrl={effectiveImage}
-                  onPress={() => navigation.navigate('Account')}
-                />
+                <View style={styles.avatarWrap}>
+                  <UserAvatar
+                    size={42}
+                    name={effectiveName || undefined}
+                    imageUrl={effectiveImage}
+                    onPress={() => navigation.navigate('Account')}
+                  />
+                  {fallbackSession &&
+                  (!user ||
+                    (user &&
+                      String(user.id || '') !== String(fallbackSession.id || '') &&
+                      String(user.id || '') !== String(fallbackSession.clerk_id || ''))) ? (
+                    <View style={styles.localBadge}>
+                      <MaterialIcon name="cloud_off" size={12} color="#B91C1C" />
+                    </View>
+                  ) : null}
+                </View>
                 <View style={{ marginLeft: 12 }}>
                   <Text style={styles.greetingText}>Welcome Back,</Text>
                   <Text style={styles.userName}>{effectiveName || 'User'}</Text>
@@ -648,6 +659,24 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   userInfoRow: { flexDirection: 'row', alignItems: 'center' },
+  avatarWrap: {
+    width: 42,
+    height: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+
+  localBadge: {
+    position: 'absolute',
+    right: -6,
+    bottom: -6,
+    backgroundColor: '#FEF2F2',
+    borderRadius: 10,
+    padding: 3,
+    borderWidth: 1,
+    borderColor: 'rgba(185,28,28,0.12)',
+  },
   greetingText: { fontSize: 12, color: COLORS.textSub, fontWeight: '500' },
   userName: { fontSize: 18, fontWeight: '700', color: COLORS.textMain },
   menuBtn: {
