@@ -187,7 +187,7 @@ const AccountManagementScreen = () => {
       try {
         const s = await getSession();
         if (mounted) setFallbackSession(s);
-      } catch (e) {}
+      } catch (e) { }
     };
     load();
     const unsub = subscribeSession((s) => {
@@ -197,7 +197,7 @@ const AccountManagementScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -327,10 +327,20 @@ const AccountManagementScreen = () => {
                 console.warn('[Account] deleteAccount() failed', localErr);
               }
 
-              showToast('Account deleted');
-              // Force navigation to Auth screen and clear history to avoid any stale state
+              // Re-initialize a fresh empty DB so the app resumes from a clean state
               try {
-                navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
+                const { initDB } = await import('../db/sqlite');
+                if (typeof initDB === 'function') {
+                  await initDB();
+                }
+              } catch (dbErr) {
+                console.warn('[Account] initDB after delete failed', dbErr);
+              }
+
+              showToast('Account deleted');
+              // Navigate to a dedicated goodbye screen to allow re-create or sign-in
+              try {
+                navigation.reset({ index: 0, routes: [{ name: 'AccountDeleted' }] });
               } catch (navErr) {
                 console.warn('[Account] navigation.reset failed', navErr);
               }
@@ -339,7 +349,7 @@ const AccountManagementScreen = () => {
               console.warn('[Account] unexpected error during delete flow', err);
               try {
                 navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
-              } catch (navErr) {}
+              } catch (navErr) { }
               Alert.alert('Error', err?.message || 'Failed to delete account');
             } finally {
               setDeletingAccount(false);
@@ -419,10 +429,10 @@ const AccountManagementScreen = () => {
                   {(user as any)?.emailAddresses?.some(
                     (e: any) => e.verification?.status === 'verified'
                   ) && (
-                    <View style={styles.verifiedBadge}>
-                      <MaterialIcon name="check" size={12} color="white" />
-                    </View>
-                  )}
+                      <View style={styles.verifiedBadge}>
+                        <MaterialIcon name="check" size={12} color="white" />
+                      </View>
+                    )}
                 </View>
 
                 <View style={styles.heroInfo}>
