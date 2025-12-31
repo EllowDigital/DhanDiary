@@ -123,6 +123,14 @@ const RegisterScreen = () => {
             'Please choose a stronger password (min 8 chars, mixed case/numbers).'
           );
         } else {
+          try {
+            const net = await NetInfo.fetch();
+            if (!net.isConnected) {
+              setOfflineAttemptsLeft(3);
+              setOfflineVisible(true);
+              return false;
+            }
+          } catch (e) { }
           Alert.alert('Registration Failed', errorMsg);
         }
         return false;

@@ -102,7 +102,7 @@ const LoginScreen = () => {
     ]).start();
 
     // Pre-warm DB connection
-    warmNeonConnection().catch(() => {});
+    warmNeonConnection().catch(() => { });
   }, []);
 
   const [bannerVisible, setBannerVisible] = React.useState<boolean>(false);
@@ -195,6 +195,15 @@ const LoginScreen = () => {
           }
         } catch (err: any) {
           const msg = err.errors?.[0]?.message || 'Invalid credentials.';
+          try {
+            const net = await NetInfo.fetch();
+            if (!net.isConnected) {
+              setOfflineAttemptsLeft(3);
+              setOfflineVisible(true);
+              setLoading(false);
+              return false;
+            }
+          } catch (e) { }
           Alert.alert('Login Failed', msg);
           setLoading(false);
         }
@@ -238,6 +247,15 @@ const LoginScreen = () => {
       } catch (err: any) {
         const msg = err.errors?.[0]?.message || 'Invalid credentials.';
         const code = err.errors?.[0]?.code;
+        try {
+          const net = await NetInfo.fetch();
+          if (!net.isConnected) {
+            setOfflineAttemptsLeft(3);
+            setOfflineVisible(true);
+            setLoading(false);
+            return false;
+          }
+        } catch (e) { }
 
         if (code === 'strategy_for_user_invalid') {
           Alert.alert(
