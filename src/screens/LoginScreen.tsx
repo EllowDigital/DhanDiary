@@ -27,6 +27,7 @@ import * as AuthSession from 'expo-auth-session';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import NetInfo from '@react-native-community/netinfo';
+import OfflineNotice from '../components/OfflineNotice';
 
 // --- CUSTOM IMPORTS ---
 // Ensure these paths match your project structure
@@ -76,6 +77,9 @@ const LoginScreen = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [offlineVisible, setOfflineVisible] = useState(false);
+  const [offlineRetrying, setOfflineRetrying] = useState(false);
+  const [offlineAttemptsLeft, setOfflineAttemptsLeft] = useState<number | undefined>(undefined);
 
   // --- ANIMATIONS ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -158,59 +162,116 @@ const LoginScreen = () => {
     await syncPromise;
   };
 
+  const offlineManualRetry = async () => {
+    setOfflineRetrying(true);
+    setOfflineAttemptsLeft((v) => (typeof v === 'number' ? Math.max(0, v - 1) : undefined));
+    try {
+      const net = await NetInfo.fetch();
+      if (net.isConnected) {
+        setOfflineVisible(false);
+        setOfflineRetrying(false);
+        setLoading(true);
+        try {
+          const result = await signIn.create({ identifier: email, password });
+          if (result.status === 'complete') {
+            await setActive({ session: result.createdSessionId });
+          } else if (result.status === 'needs_first_factor' || result.status === 'needs_second_factor') {
+            navigation.navigate('VerifyEmail', { email, mode: 'signin' });
+          } else {
+            Alert.alert('Verification Required', `Status: ${result.status}. Please check your email.`);
+            setLoading(false);
+          }
+        } catch (err: any) {
+          const msg = err.errors?.[0]?.message || 'Invalid credentials.';
+          Alert.alert('Login Failed', msg);
+          setLoading(false);
+        }
+      }
+    } catch (e) {
+      setOfflineRetrying(false);
+    }
+  };
+
   const onSignInPress = async () => {
     if (!isLoaded) return;
     if (!email || !password)
       return Alert.alert('Missing Info', 'Please enter both email and password.');
 
     setLoading(true);
-    try {
-      const net = await NetInfo.fetch();
-      if (!net.isConnected) {
-        setLoading(false);
-        return Alert.alert('No internet', 'Please check your connection and try again.', [
-          { text: 'Retry', onPress: () => onSignInPress() },
-          { text: 'Cancel', style: 'cancel' },
-        ]);
-      }
-    } catch (e) {
-      // ignore connectivity check failure and proceed
-    }
-    try {
-      const result = await signIn.create({ identifier: email, password });
 
-      if (result.status === 'complete') {
-        await setActive({ session: result.createdSessionId });
-      } else {
+    const MAX_ATTEMPTS = 3;
+
+    const doSignIn = async () => {
+      try {
+        const result = await signIn.create({ identifier: email, password });
+
+        if (result.status === 'complete') {
+          await setActive({ session: result.createdSessionId });
+          return true;
+        }
+
         if (result.status === 'needs_first_factor' || result.status === 'needs_second_factor') {
           navigation.navigate('VerifyEmail', { email, mode: 'signin' });
+          setLoading(false);
+          return true;
+        }
+
+        Alert.alert('Verification Required', `Status: ${result.status}. Please check your email.`);
+        setLoading(false);
+        return false;
+      } catch (err: any) {
+        const msg = err.errors?.[0]?.message || 'Invalid credentials.';
+        const code = err.errors?.[0]?.code;
+
+        if (code === 'strategy_for_user_invalid') {
+          Alert.alert('Wrong Method', 'This email uses social login. Please click the Google or GitHub button below.');
+        } else if (code === 'form_identifier_not_found') {
+          Alert.alert('Account Not Found', 'No account found with this email. Please create an account.');
         } else {
-          Alert.alert(
-            'Verification Required',
-            `Status: ${result.status}. Please check your email.`
-          );
+          Alert.alert('Login Failed', msg);
         }
         setLoading(false);
+        return false;
       }
-    } catch (err: any) {
-      const msg = err.errors?.[0]?.message || 'Invalid credentials.';
-      const code = err.errors?.[0]?.code;
+    };
 
-      if (code === 'strategy_for_user_invalid') {
-        Alert.alert(
-          'Wrong Method',
-          'This email uses social login. Please click the Google or GitHub button below.'
-        );
-      } else if (code === 'form_identifier_not_found') {
-        Alert.alert(
-          'Account Not Found',
-          'No account found with this email. Please create an account.'
-        );
-      } else {
-        Alert.alert('Login Failed', msg);
+    try {
+      const net = await NetInfo.fetch();
+      if (net.isConnected) {
+        await doSignIn();
+        return;
       }
-      setLoading(false);
+    } catch (e) {
+      // ignore net check error
     }
+
+    // Offline: show OfflineNotice and attempt exponential backoff retries
+    setOfflineVisible(true);
+    setOfflineRetrying(true);
+    setOfflineAttemptsLeft(MAX_ATTEMPTS);
+
+    let attemptsLeft = MAX_ATTEMPTS;
+    while (attemptsLeft > 0) {
+      const waitMs = Math.pow(2, MAX_ATTEMPTS - attemptsLeft) * 1000; // 1s,2s,4s
+      await new Promise((r) => setTimeout(r, waitMs));
+      try {
+        const net = await NetInfo.fetch();
+        if (net.isConnected) {
+          setOfflineVisible(false);
+          setOfflineRetrying(false);
+          await doSignIn();
+          return;
+        }
+      } catch (e) {
+        // continue
+      }
+      attemptsLeft -= 1;
+      setOfflineAttemptsLeft(attemptsLeft);
+    }
+
+    // exhausted
+    setOfflineRetrying(false);
+    setLoading(false);
   };
 
   const onSocialLogin = async (strategy: 'google' | 'github') => {
@@ -389,6 +450,19 @@ const LoginScreen = () => {
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
+
+      {/* Offline Notice */}
+      <OfflineNotice
+        visible={offlineVisible}
+        retrying={offlineRetrying}
+        attemptsLeft={offlineAttemptsLeft}
+        onRetry={offlineManualRetry}
+        onClose={() => {
+          setOfflineVisible(false);
+          setOfflineRetrying(false);
+          setLoading(false);
+        }}
+      />
 
       {/* Sync Overlay */}
       {syncing && (
