@@ -103,25 +103,26 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   const drawerFocusedRoute = props.state.routes[props.state.index];
   const nestedFocusedRouteName = getDeepestActiveRouteName(drawerFocusedRoute);
 
-  const handleNavigate = (routeName: string) => {
-    // Close drawer first to avoid weird "still on same screen" perception.
+  const closeDrawerSafely = () => {
     try {
       (props.navigation as any).closeDrawer?.();
     } catch (e) {
       // ignore
     }
+  };
 
-    // Dashboard is a nested BottomTabNavigator. Ensure Home/History go to the correct tab.
+  const goToDashboardTab = (screen: 'Home' | 'History') => {
+    closeDrawerSafely();
+    props.navigation.navigate('Dashboard' as never, { screen } as never);
+  };
+
+  const handleNavigate = (routeName: string) => {
     if (routeName === 'Dashboard') {
-      props.navigation.navigate('Dashboard' as never, { screen: 'Home' } as never);
+      goToDashboardTab('Home');
       return;
     }
 
-    if (routeName === 'History') {
-      props.navigation.navigate('Dashboard' as never, { screen: 'History' } as never);
-      return;
-    }
-
+    closeDrawerSafely();
     props.navigation.navigate(routeName as never);
   };
 
@@ -257,18 +258,87 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
           {/* NAVIGATION MENU */}
           <View style={styles.menuSection}>
             <Text style={styles.sectionTitle}>MENU</Text>
-            {props.state.routes.map((route, index) => {
-              // Drawer focus doesn't change when switching tabs inside Dashboard.
-              // Derive the real "active" menu item by looking at the nested focused route.
-              const isDrawerFocused = props.state.index === index;
+            {/* Home tab */}
+            {(() => {
               const focused =
-                (route.name === 'Dashboard' &&
-                  isDrawerFocused &&
-                  (nestedFocusedRouteName === 'Home' || !nestedFocusedRouteName)) ||
-                (route.name === 'History' &&
-                  ((isDrawerFocused && drawerFocusedRoute.name === 'History') ||
-                    (drawerFocusedRoute.name === 'Dashboard' && nestedFocusedRouteName === 'History'))) ||
-                (route.name !== 'Dashboard' && route.name !== 'History' && isDrawerFocused);
+                drawerFocusedRoute.name === 'Dashboard' &&
+                (nestedFocusedRouteName === 'Home' || !nestedFocusedRouteName);
+              const iconName = getIconName('Home', 'Home');
+              return (
+                <TouchableOpacity
+                  key="__drawer_home"
+                  onPress={() => goToDashboardTab('Home')}
+                  style={[styles.menuItem, focused && styles.menuItemActive]}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: focused }}
+                >
+                  <View style={styles.iconWrapper}>
+                    <View
+                      style={[
+                        styles.iconCircle,
+                        focused
+                          ? { backgroundColor: ACTIVE_COLOR }
+                          : { backgroundColor: '#E6EEF8' },
+                      ]}
+                    >
+                      <MaterialIcon
+                        name={iconName as any}
+                        size={18}
+                        color={focused ? '#fff' : INACTIVE_COLOR}
+                      />
+                    </View>
+                  </View>
+                  <Text style={[styles.menuText, focused && styles.menuTextActive]}>Home</Text>
+                  {focused && <View style={styles.activeIndicator} />}
+                </TouchableOpacity>
+              );
+            })()}
+
+            {/* History tab */}
+            {(() => {
+              const focused =
+                drawerFocusedRoute.name === 'Dashboard' && nestedFocusedRouteName === 'History';
+              const iconName = getIconName('History', 'History');
+              return (
+                <TouchableOpacity
+                  key="__drawer_history"
+                  onPress={() => goToDashboardTab('History')}
+                  style={[styles.menuItem, focused && styles.menuItemActive]}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: focused }}
+                >
+                  <View style={styles.iconWrapper}>
+                    <View
+                      style={[
+                        styles.iconCircle,
+                        focused
+                          ? { backgroundColor: ACTIVE_COLOR }
+                          : { backgroundColor: '#E6EEF8' },
+                      ]}
+                    >
+                      <MaterialIcon
+                        name={iconName as any}
+                        size={18}
+                        color={focused ? '#fff' : INACTIVE_COLOR}
+                      />
+                    </View>
+                  </View>
+                  <Text style={[styles.menuText, focused && styles.menuTextActive]}>
+                    History Log
+                  </Text>
+                  {focused && <View style={styles.activeIndicator} />}
+                </TouchableOpacity>
+              );
+            })()}
+
+            {/* All other drawer routes */}
+            {props.state.routes.map((route, index) => {
+              if (route.name === 'Dashboard' || route.name === 'History') return null;
+
+              const isDrawerFocused = props.state.index === index;
+              const focused = isDrawerFocused;
               const { options } = props.descriptors[route.key];
 
               // Filter hidden routes
@@ -304,8 +374,6 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
                     </View>
                   </View>
                   <Text style={[styles.menuText, focused && styles.menuTextActive]}>{label}</Text>
-
-                  {/* Active Pill Indicator */}
                   {focused && <View style={styles.activeIndicator} />}
                 </TouchableOpacity>
               );

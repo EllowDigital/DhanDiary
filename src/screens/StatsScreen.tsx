@@ -360,7 +360,7 @@ const StatsScreen = () => {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right'] as any}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
 
       <View style={[styles.headerWrapper, containerStyle]}>
         <ScreenHeader
@@ -648,7 +648,7 @@ const StatsScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#F8FAFC' },
+  safeArea: { flex: 1, backgroundColor: colors.background },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { marginTop: 10, color: '#94A3B8', fontWeight: '600' },
 

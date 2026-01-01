@@ -24,6 +24,7 @@ import * as Updates from 'expo-updates';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useInternetStatus } from '../hooks/useInternetStatus';
 import { useNeonStatus, describeNeonHealth } from '../hooks/useNeonStatus';
+import { colors } from '../utils/design';
 
 // --- PLACEHOLDERS ---
 import ScreenHeader from '../components/ScreenHeader';
@@ -41,16 +42,16 @@ try {
 
 // --- THEME ---
 const theme = {
-  background: '#F8F9FA',
-  surface: '#FFFFFF',
-  primary: '#2563EB',
-  primarySoft: '#EFF6FF',
-  text: '#1E293B',
-  textSecondary: '#64748B',
-  accentGreen: '#10B981',
-  accentRed: '#EF4444',
+  background: colors.background,
+  surface: colors.card,
+  primary: colors.primary,
+  primarySoft: colors.primarySoft,
+  text: colors.text,
+  textSecondary: colors.muted,
+  accentGreen: colors.accentGreen,
+  accentRed: colors.accentRed,
   heroBg: '#0F172A',
-  border: '#E2E8F0',
+  border: colors.border,
 };
 
 // --- CONSTANTS ---

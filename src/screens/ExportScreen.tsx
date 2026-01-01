@@ -141,7 +141,7 @@ const ExportScreen = () => {
           'pivot=',
           pivotDate.format()
         );
-      } catch (e) {}
+      } catch (e) { }
     }
 
     let startUnix = -Infinity;
@@ -532,7 +532,7 @@ const ExportScreen = () => {
 
 // --- STYLES ---
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#F8FAFC' },
+  safeArea: { flex: 1, backgroundColor: colors.background },
   headerContainer: { paddingHorizontal: 16, paddingBottom: 8 },
   scrollContent: { padding: 16 },
 
