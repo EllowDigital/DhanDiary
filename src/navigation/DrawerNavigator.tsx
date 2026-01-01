@@ -8,7 +8,6 @@ import BottomTabNavigator from './BottomTabNavigator';
 import AddEntryScreen from '../screens/AddEntryScreen';
 import CashInList from '../screens/CashInList';
 import CashOutList from '../screens/CashOutList';
-import HistoryScreen from '../screens/HistoryScreen';
 import StatsScreen from '../screens/StatsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import AccountManagementScreen from '../screens/AccountManagementScreen';
@@ -27,7 +26,6 @@ import SyncStatusBanner from '../components/SyncStatusBanner';
 export type DrawerParamList = {
   Dashboard: undefined;
   AddEntry: { local_id?: string } | undefined;
-  History: undefined;
   Income: undefined;
   Expenses: undefined;
   Analytics: undefined;
@@ -127,17 +125,6 @@ const DrawerNavigator = () => {
             title: 'New Transaction',
             drawerIcon: ({ color, size }) => (
               <MaterialCommunityIcons name="plus-circle-outline" color={color} size={22} />
-            ),
-          }}
-        />
-
-        <Drawer.Screen
-          name="History"
-          component={HistoryScreen}
-          options={{
-            title: 'History Log',
-            drawerIcon: ({ color, size }) => (
-              <MaterialCommunityIcons name="history" color={color} size={22} />
             ),
           }}
         />
