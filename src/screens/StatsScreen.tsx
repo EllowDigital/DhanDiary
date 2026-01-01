@@ -23,6 +23,7 @@ import dayjs from 'dayjs';
 // --- CUSTOM IMPORTS (Assumed based on your context) ---
 import { useEntries } from '../hooks/useEntries';
 import { useAuth } from '../hooks/useAuth';
+import { useInternetStatus } from '../hooks/useInternetStatus';
 import { colors } from '../utils/design';
 import ScreenHeader from '../components/ScreenHeader';
 import DailyTrendChart from '../components/charts/DailyTrendChart';
@@ -121,6 +122,7 @@ const CategoryRow = memo(({ item, currency }: { item: any; currency: string }) =
 const StatsScreen = () => {
   const { width } = useWindowDimensions();
   const { user, loading: authLoading } = useAuth();
+  const isOnline = useInternetStatus();
   const { entries: entriesRaw = [], isLoading } = useEntries(user?.id);
   const entries = entriesRaw as LocalEntry[];
 
@@ -253,6 +255,7 @@ const StatsScreen = () => {
         result = await aggregateWithPreferSummary(user.id, rangeStart, rangeEnd, {
           signal: controller.signal,
           cacheBuster: entriesCacheBuster,
+          allowRemote: Boolean(isOnline),
         });
       } else if (filter === 'All' || entries.length > 5000) {
         // Stream entries in pages for heavy loads (Offline mode)
@@ -306,7 +309,7 @@ const StatsScreen = () => {
           totalOut,
           net: totalIn - totalOut,
           avgPerDay: totalOut / daysDiff,
-          savingsRate: Math.max(0, savingsRate),
+          savingsRate,
           pieData: pieDataColored,
           currency: result.currency || 'INR',
         };
@@ -331,7 +334,16 @@ const StatsScreen = () => {
     return () => {
       if (abortControllerRef.current) abortControllerRef.current.abort();
     };
-  }, [filter, rangeStart?.valueOf(), rangeEnd?.valueOf(), entries?.length, user?.id]);
+  }, [
+    filter,
+    rangeStart?.valueOf(),
+    rangeEnd?.valueOf(),
+    entries?.length,
+    entriesCacheBuster,
+    user?.id,
+    isOnline,
+  ]);
+
 
   // --- RENDER HELPERS ---
   const currencySymbol = stats?.currency === 'USD' ? '$' : '₹';
