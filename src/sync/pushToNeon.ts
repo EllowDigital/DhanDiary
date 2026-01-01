@@ -2,6 +2,8 @@ import { getUnsyncedTransactions } from '../db/transactions';
 import { executeSqlAsync } from '../db/sqlite';
 import { query as neonQuery, getNeonHealth } from '../api/neonClient';
 
+const CHUNK_SIZE = 50;
+
 /**
  * pushToNeon
  * - Reads local rows with sync_status IN (0,2)
@@ -38,8 +40,11 @@ export async function pushToNeon(): Promise<{ pushed: string[]; deleted: string[
     if (__DEV__) console.warn('[sync] pushToNeon: debug log failed', e);
   }
 
-  const toPush = rows.filter((r) => r.sync_status === 0);
-  const toDelete = rows.filter((r) => r.sync_status === 2);
+  // In this app, `sync_status=0` means "dirty" (create/update/delete).
+  // Deletions are identified by `deleted_at IS NOT NULL`.
+  const dirty = rows.filter((r) => r && r.sync_status === 0);
+  const toDelete = dirty.filter((r) => !!r.deleted_at);
+  const toUpsert = dirty.filter((r) => !r.deleted_at);
 
   const pushedIds: string[] = [];
   const deletedIds: string[] = [];
@@ -55,87 +60,121 @@ export async function pushToNeon(): Promise<{ pushed: string[]; deleted: string[
     if (__DEV__) console.warn('[sync] pushToNeon: failed to check neon health', e);
   }
 
-  // Push (upsert) each changed row to Neon using SQL client.
+  const normalizeToEpoch = (v: any) => {
+    if (v === null || v === undefined) return null;
+    if (typeof v === 'number') return v;
+    const asNum = Number(v);
+    if (!Number.isNaN(asNum)) return asNum;
+    const d = new Date(v);
+    const t = d.getTime();
+    return Number.isNaN(t) ? null : t;
+  };
+
+  const buildBatchUpsertSql = (batchSize: number) => {
+    // Columns we control from client. Do NOT send updated_at/server_version; server triggers handle them.
+    const cols =
+      '(id, user_id, client_id, type, amount, category, note, currency, date, created_at, deleted_at)';
+    const values: string[] = [];
+    let p = 1;
+    for (let i = 0; i < batchSize; i++) {
+      values.push(
+        `($${p++}::uuid,$${p++}::uuid,$${p++}::uuid,$${p++}::text,$${p++}::numeric,$${p++}::text,$${p++}::text,$${p++}::text,` +
+          `CASE WHEN $${p}::bigint IS NULL OR $${p}::bigint = 0 THEN NULL ELSE to_timestamp($${p}::bigint / 1000.0) END,` +
+          `CASE WHEN $${p + 1}::bigint IS NULL OR $${p + 1}::bigint = 0 THEN NULL ELSE to_timestamp($${p + 1}::bigint / 1000.0) END,` +
+          `CASE WHEN $${p + 2}::bigint IS NULL OR $${p + 2}::bigint = 0 THEN NULL ELSE to_timestamp($${p + 2}::bigint / 1000.0) END)`
+      );
+      p += 3;
+    }
+
+    return `
+      INSERT INTO transactions ${cols}
+      VALUES ${values.join(',\n')}
+      ON CONFLICT (id) DO UPDATE SET
+        user_id = EXCLUDED.user_id,
+        client_id = COALESCE(transactions.client_id, EXCLUDED.client_id),
+        amount = EXCLUDED.amount,
+        type = EXCLUDED.type,
+        category = EXCLUDED.category,
+        note = EXCLUDED.note,
+        currency = EXCLUDED.currency,
+        date = EXCLUDED.date,
+        deleted_at = EXCLUDED.deleted_at
+      RETURNING id, server_version, (EXTRACT(EPOCH FROM updated_at) * 1000)::bigint as updated_at;
+    `;
+  };
+
+  const pushBatch = async (batch: any[]) => {
+    const sql = buildBatchUpsertSql(batch.length);
+    const params: any[] = [];
+    for (const row of batch) {
+      params.push(
+        row.id,
+        row.user_id,
+        row.client_id ?? null,
+        row.type,
+        row.amount,
+        row.category ?? null,
+        row.note ?? null,
+        row.currency ?? 'INR',
+        normalizeToEpoch(row.date ?? null),
+        normalizeToEpoch(row.created_at ?? null),
+        normalizeToEpoch(row.deleted_at ?? null)
+      );
+    }
+    return (await neonQuery(sql, params)) || [];
+  };
+
   try {
-    for (const row of toPush) {
+    // Push changes in chunks to reduce query count (compute wakeups)
+    const chunks: any[][] = [];
+    for (let i = 0; i < dirty.length; i += CHUNK_SIZE) chunks.push(dirty.slice(i, i + CHUNK_SIZE));
+
+    for (const chunk of chunks) {
       try {
-        const sql = `INSERT INTO transactions
-          (id, user_id, amount, type, category, note, date)
-          VALUES ($1::uuid,$2::uuid,$3::numeric,$4::text,$5::text,$6::text,CASE WHEN $7::bigint IS NULL OR $7::bigint = 0 THEN NULL ELSE to_timestamp($7::bigint / 1000) END)
-          ON CONFLICT (id) DO UPDATE SET
-            user_id = EXCLUDED.user_id,
-            amount = EXCLUDED.amount,
-            type = EXCLUDED.type,
-            category = EXCLUDED.category,
-            note = EXCLUDED.note,
-            date = EXCLUDED.date
-          RETURNING id, server_version, (EXTRACT(EPOCH FROM updated_at) * 1000)::bigint as updated_at`;
+        const returnedRows = await pushBatch(chunk);
 
-        // Ensure we pass numeric epoch-ms values for date/updated_at so the
-        // server-side SQL casting ($7::bigint / $8::bigint) doesn't attempt
-        // to cast a timestamp value to bigint (which errors).
-        // Do NOT send `updated_at` from client — let Postgres triggers set it.
-        // Normalize date to epoch-ms or null (server SQL will convert epoch-ms to timestamptz)
-        const normalizeToEpoch = (v: any) => {
-          if (v === null || v === undefined) return null;
-          if (typeof v === 'number') return v;
-          const asNum = Number(v);
-          if (!Number.isNaN(asNum)) return asNum;
-          const d = new Date(v);
-          const t = d.getTime();
-          return Number.isNaN(t) ? null : t;
-        };
+        // Mark local as synced using server metadata (best effort)
+        const byId = new Map<string, any>();
+        for (const r of returnedRows) if (r && r.id) byId.set(String(r.id), r);
 
-        const dateParam = normalizeToEpoch(row.date ?? null);
+        for (const row of chunk) {
+          const ret = byId.get(String(row.id)) || null;
+          const serverVer = ret && typeof ret.server_version === 'number' ? ret.server_version : 0;
+          const returnedUpdatedAt = ret && ret.updated_at ? Number(ret.updated_at) : Date.now();
 
-        const res = await neonQuery(sql, [
-          row.id,
-          row.user_id,
-          row.amount,
-          row.type,
-          row.category ?? null,
-          row.note ?? null,
-          dateParam,
-        ]);
-
-        // Neon returns the updated row metadata; update local row to mark synced
-        const returned = Array.isArray(res) && res.length ? res[0] : null;
-        const serverVer =
-          returned && typeof returned.server_version === 'number' ? returned.server_version : null;
-        const returnedUpdatedAt =
-          returned && returned.updated_at ? Number(returned.updated_at) : null;
-
-        if (returned) {
-          // update local row: set sync_status=1 and sync updated_at/server_version
           try {
             await executeSqlAsync(
               'UPDATE transactions SET sync_status = 1, server_version = ?, updated_at = ? WHERE id = ?;',
-              [serverVer ?? 0, returnedUpdatedAt ?? Date.now(), row.id]
+              [serverVer, returnedUpdatedAt, row.id]
             );
           } catch (e) {
-            // best-effort: if update fails, still mark pushedIds so we don't block
             if (__DEV__)
               console.warn('[sync] pushToNeon: failed to update local metadata', e, row.id);
           }
-        } else {
-          // No return - fall back to marking synced
-          await executeSqlAsync('UPDATE transactions SET sync_status = 1 WHERE id = ?;', [row.id]);
-        }
-        pushedIds.push(row.id);
-      } catch (err) {
-        if (__DEV__) console.warn('[sync] pushToNeon: failed to push row', row.id, err);
-        // continue with other rows
-      }
-    }
 
-    for (const row of toDelete) {
-      try {
-        await neonQuery('DELETE FROM transactions WHERE id = $1', [row.id]);
-        // Remove local tombstone after successful remote delete so it does not reappear
-        await executeSqlAsync('DELETE FROM transactions WHERE id = ?;', [row.id]);
-        deletedIds.push(row.id);
+          if (row.deleted_at) deletedIds.push(String(row.id));
+          else pushedIds.push(String(row.id));
+        }
       } catch (err) {
-        if (__DEV__) console.warn('[sync] pushToNeon: failed to delete row', row.id, err);
+        // Fallback: if a chunk fails (e.g., one bad row), try per-row so others still sync.
+        if (__DEV__) console.warn('[sync] pushToNeon: batch failed, falling back to per-row', err);
+        for (const row of chunk) {
+          try {
+            const returnedRows = await pushBatch([row]);
+            const ret = Array.isArray(returnedRows) && returnedRows.length ? returnedRows[0] : null;
+            const serverVer =
+              ret && typeof ret.server_version === 'number' ? ret.server_version : 0;
+            const returnedUpdatedAt = ret && ret.updated_at ? Number(ret.updated_at) : Date.now();
+            await executeSqlAsync(
+              'UPDATE transactions SET sync_status = 1, server_version = ?, updated_at = ? WHERE id = ?;',
+              [serverVer, returnedUpdatedAt, row.id]
+            );
+            if (row.deleted_at) deletedIds.push(String(row.id));
+            else pushedIds.push(String(row.id));
+          } catch (rowErr) {
+            if (__DEV__) console.warn('[sync] pushToNeon: failed to push row', row.id, rowErr);
+          }
+        }
       }
     }
   } catch (e) {
