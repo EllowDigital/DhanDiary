@@ -301,10 +301,18 @@ try {
         const { getTransactionsByUser } = require('../db/transactions');
         const rows = await getTransactionsByUser(s.id);
         if (!rows || rows.length === 0) {
+          // Reset pull cursor so the first pull after login fetches everything.
+          // Only do this when local DB is empty to avoid re-pulling on every login.
+          try {
+            const { executeSqlAsync } = require('../db/sqlite');
+            const metaKey = `last_pull_server_version:${s.id}`;
+            await executeSqlAsync('DELETE FROM meta WHERE key = ?;', [metaKey]);
+          } catch (ee) {}
+
           // bootstrap from server via the central sync manager
           try {
             const { scheduleSync } = require('../services/syncManager');
-            scheduleSync({ source: 'auto' });
+            scheduleSync({ source: 'auto', force: true } as any);
           } catch (ee) {}
         }
       } catch (e) {}
