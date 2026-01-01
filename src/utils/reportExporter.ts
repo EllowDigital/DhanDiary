@@ -9,7 +9,6 @@ import { isIncome } from './transactionType';
 // If not installed, we fall back to the existing `xlsx` dependency.
 const XLSX: any = (() => {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     return require('xlsx-js-style');
   } catch (e) {
     return XLSXBase as any;
