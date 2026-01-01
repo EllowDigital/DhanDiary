@@ -100,6 +100,22 @@ const AboutScreen: React.FC = () => {
   }, []);
 
   // --- UPDATE LOGIC ---
+  const applyUpdate = useCallback(async () => {
+    if (isExpoGo) return;
+    setChecking(true);
+    try {
+      await Updates.fetchUpdateAsync();
+      await Updates.reloadAsync();
+    } catch (err: any) {
+      showToast(err?.message || 'Update failed. Please try again.', 'error');
+      const newCount = failureCount + 1;
+      setFailureCount(newCount);
+      AsyncStorage.setItem('UPDATE_FAIL_COUNT', String(newCount));
+    } finally {
+      setChecking(false);
+    }
+  }, [failureCount, isExpoGo, showToast]);
+
   const checkForUpdates = useCallback(async () => {
     if (isExpoGo) {
       showToast('Over-the-air updates are disabled in Expo Go.', 'error');
@@ -124,22 +140,6 @@ const AboutScreen: React.FC = () => {
       setChecking(false);
     }
   }, [applyUpdate, isExpoGo, showActionToast, showToast]);
-
-  const applyUpdate = useCallback(async () => {
-    if (isExpoGo) return;
-    setChecking(true);
-    try {
-      await Updates.fetchUpdateAsync();
-      await Updates.reloadAsync();
-    } catch (err: any) {
-      showToast(err?.message || 'Update failed. Please try again.', 'error');
-      const newCount = failureCount + 1;
-      setFailureCount(newCount);
-      AsyncStorage.setItem('UPDATE_FAIL_COUNT', String(newCount));
-    } finally {
-      setChecking(false);
-    }
-  }, [failureCount, isExpoGo, showToast]);
 
   const clearRetryState = async () => {
     await AsyncStorage.removeItem('UPDATE_FAIL_COUNT');
