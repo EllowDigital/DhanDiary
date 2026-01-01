@@ -19,7 +19,6 @@ import {
   Easing,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { subscribeBanner, isBannerVisible } from '../utils/bannerState';
 import { useSignIn, useOAuth, useUser, useAuth } from '@clerk/clerk-expo';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
@@ -102,16 +101,7 @@ const LoginScreen = () => {
     ]).start();
 
     // Pre-warm DB connection
-    warmNeonConnection().catch(() => {});
-  }, []);
-
-  const [bannerVisible, setBannerVisible] = React.useState<boolean>(false);
-  React.useEffect(() => {
-    setBannerVisible(isBannerVisible());
-    const unsub = subscribeBanner((v: boolean) => setBannerVisible(v));
-    return () => {
-      if (unsub) unsub();
-    };
+    warmNeonConnection().catch(() => { });
   }, []);
 
   // --- AUTO-SYNC LOGIC ---
@@ -203,7 +193,7 @@ const LoginScreen = () => {
               setLoading(false);
               return false;
             }
-          } catch (e) {}
+          } catch (e) { }
           Alert.alert('Login Failed', msg);
           setLoading(false);
         }
@@ -255,7 +245,7 @@ const LoginScreen = () => {
             setLoading(false);
             return false;
           }
-        } catch (e) {}
+        } catch (e) { }
 
         if (code === 'strategy_for_user_invalid') {
           Alert.alert(
@@ -350,10 +340,7 @@ const LoginScreen = () => {
         end={{ x: 1, y: 1 }}
       />
 
-      <SafeAreaView
-        style={{ flex: 1 }}
-        edges={bannerVisible ? (['left', 'right'] as any) : (['top', 'left', 'right'] as any)}
-      >
+      <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right'] as any}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
