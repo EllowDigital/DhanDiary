@@ -12,14 +12,17 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useNavigation } from '@react-navigation/native';
+import * as Updates from 'expo-updates';
 
 import { colors, shadows } from '../utils/design';
-import type { AnnouncementConfig } from '../announcements/announcementConfig';
+import { OTA_UPDATE_ANNOUNCEMENT, type AnnouncementConfig } from '../announcements/announcementConfig';
 import {
     markCurrentAnnouncementSeen,
     shouldShowCurrentAnnouncement,
     getCurrentAnnouncement,
 } from '../announcements/announcementState';
+
+import { getCurrentAnnouncementAsync } from '../announcements/announcementState';
 
 const ENTRY_DURATION = 500;
 const EXIT_DURATION = 300;
@@ -31,6 +34,7 @@ const AnnouncementScreen = () => {
 
     const [readyToShow, setReadyToShow] = useState(false);
     const [isDismissing, setIsDismissing] = useState(false);
+    const [isApplyingUpdate, setIsApplyingUpdate] = useState(false);
     const [announcement, setAnnouncement] = useState<AnnouncementConfig | null>(null);
 
     // Animation Values
@@ -88,11 +92,35 @@ const AnnouncementScreen = () => {
         });
     };
 
+    const applyOtaUpdate = async () => {
+        if (isApplyingUpdate) return;
+        setIsApplyingUpdate(true);
+
+        try {
+            // Mark as seen so it doesn't re-show if reload fails.
+            await markCurrentAnnouncementSeen();
+
+            // Fetch and reload into the new update.
+            if (Updates.isEnabled) {
+                await Updates.fetchUpdateAsync();
+                await Updates.reloadAsync();
+                return;
+            }
+        } catch (e) {
+            // Fall through to proceed into the app.
+        } finally {
+            setIsApplyingUpdate(false);
+        }
+
+        // If updates are disabled or fetch/reload fails, continue to app.
+        goToMain();
+    };
+
     useEffect(() => {
         let mounted = true;
 
         const init = async () => {
-            const current = getCurrentAnnouncement();
+            const current = await getCurrentAnnouncementAsync();
             if (!mounted) return;
 
             if (!current) {
@@ -198,7 +226,7 @@ const AnnouncementScreen = () => {
 
                     {/* Action Button */}
                     <Pressable
-                        onPress={dismiss}
+                        onPress={announcement.id === OTA_UPDATE_ANNOUNCEMENT.id ? applyOtaUpdate : dismiss}
                         style={({ pressed }) => [
                             styles.button,
                             {
@@ -207,8 +235,15 @@ const AnnouncementScreen = () => {
                                 transform: [{ scale: pressed ? 0.98 : 1 }],
                             },
                         ]}
+                        disabled={isApplyingUpdate}
                     >
-                        <Text style={styles.buttonText}>Got it!</Text>
+                        <Text style={styles.buttonText}>
+                            {announcement.id === OTA_UPDATE_ANNOUNCEMENT.id
+                                ? isApplyingUpdate
+                                    ? 'Updating...'
+                                    : 'Update Now'
+                                : 'Got it!'}
+                        </Text>
                         <MaterialIcon name="arrow-forward" size={18} color="#FFF" />
                     </Pressable>
 

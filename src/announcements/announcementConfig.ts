@@ -34,8 +34,25 @@ export const CURRENT_ANNOUNCEMENT: AnnouncementContent = {
   title: 'Happy New Year 2026',
   message: 'Wishing you a fresh start and a financially strong year ahead.',
   emoji: '🎉',
-  autoHideMs: 10000,
+  autoHideMs: 5000,
   accentColor: colors.primary,
+};
+
+// OTA update announcement (shown only when an update is actually available).
+// Configure via Expo Updates by changing its id, dates, type, and content.
+export const OTA_UPDATE_ANNOUNCEMENT: AnnouncementConfig = {
+  id: 'ota_update_prompt_2026_01',
+  // Use 'critical' if you want it to show every launch until disabled.
+  type: 'festival',
+  title: 'Update Available',
+  message: 'A new version is ready. Tap Update to install now.',
+  emoji: '⬆️',
+  autoHideMs: null,
+  accentColor: colors.primary,
+  // Optional window; keep empty to allow any day.
+  // startDate: '2026-01-01',
+  // endDate: '2026-01-31',
+  isActive: true,
 };
 
 const DEFAULT_ANNOUNCEMENTS: AnnouncementConfig[] = [
@@ -67,7 +84,7 @@ const toLocalYmd = (d: Date): string => {
   return `${year}-${month}-${day}`;
 };
 
-const isActiveForLocalDate = (a: AnnouncementConfig, now: Date): boolean => {
+export const isAnnouncementActiveForLocalDate = (a: AnnouncementConfig, now: Date): boolean => {
   if (a.isActive === false) return false;
 
   const today = toLocalYmd(now);
@@ -99,7 +116,7 @@ export const getActiveAnnouncement = (now: Date = new Date()): AnnouncementConfi
   const list = getAnnouncements();
 
   // Priority: first active critical, otherwise first active non-critical.
-  const active = list.filter((a) => isActiveForLocalDate(a, now));
+  const active = list.filter((a) => isAnnouncementActiveForLocalDate(a, now));
   const critical = active.find((a) => a.type === 'critical');
   return critical ?? active[0] ?? null;
 };
@@ -112,5 +129,5 @@ export const __TESTING__ = {
     announcements = DEFAULT_ANNOUNCEMENTS;
   },
   toLocalYmd,
-  isActiveForLocalDate,
+  isActiveForLocalDate: isAnnouncementActiveForLocalDate,
 };

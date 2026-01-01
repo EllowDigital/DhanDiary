@@ -5,6 +5,34 @@ const STORAGE_KEY = 'last_ota_update_check_at';
 
 const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
 
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> => {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return promise;
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  try {
+    const res = await Promise.race([
+      promise,
+      new Promise<null>((resolve) => {
+        timeout = setTimeout(() => resolve(null), timeoutMs);
+      }),
+    ]);
+    return res as T | null;
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+};
+
+export const checkForOtaUpdateAvailable = async (timeoutMs = 2000): Promise<boolean> => {
+  try {
+    if (!Updates.isEnabled) return false;
+    if (typeof Updates.checkForUpdateAsync !== 'function') return false;
+
+    const result = await withTimeout(Updates.checkForUpdateAsync(), timeoutMs);
+    return Boolean(result && (result as any).isAvailable);
+  } catch (e) {
+    return false;
+  }
+};
+
 // Background update strategy:
 // - Never blocks app launch
 // - Fetches OTA updates quietly
