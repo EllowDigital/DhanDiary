@@ -51,7 +51,13 @@ export const useAuth = () => {
                   const u = rows[0];
                   // persist fresh profile locally
                   await saveSession(u.id, u.name || '', u.email || '');
-                  setUser({ id: u.id, name: u.name || '', email: u.email || '' });
+                  setUser({
+                    id: u.id,
+                    name: u.name || '',
+                    email: u.email || '',
+                    image: (session as any)?.image ?? null,
+                    imageUrl: (session as any)?.imageUrl ?? (session as any)?.image ?? null,
+                  });
                 } else {
                   setUser(session || null);
                 }

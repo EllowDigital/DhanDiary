@@ -1,4 +1,4 @@
-type Session = { id: string; name: string; email: string } | null;
+import type { Session } from '../db/session';
 
 const subs: Array<(s: Session) => void> = [];
 

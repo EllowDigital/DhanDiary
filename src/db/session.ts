@@ -44,8 +44,8 @@ export const saveSession = async (
   id: string,
   name: string,
   email: string,
-  image: string | null = null,
-  imageUrl: string | null = null
+  image?: string | null,
+  imageUrl?: string | null
 ) => {
   try {
     // Read existing session if present so we can preserve image fields when callers
