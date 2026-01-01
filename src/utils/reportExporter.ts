@@ -123,12 +123,65 @@ const getWritablePath = async (filename: string): Promise<string> => {
   }
 };
 
-const formatMoney = (amount: number, currency = 'INR') => {
-  return new Intl.NumberFormat('en-IN', {
+const moneyFormatterCache = new Map<string, Intl.NumberFormat>();
+const getMoneyFormatter = (currency: string) => {
+  const key = `en-IN|${currency}|0`;
+  const existing = moneyFormatterCache.get(key);
+  if (existing) return existing;
+  const created = new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency,
     minimumFractionDigits: 0,
-  }).format(amount);
+  });
+  moneyFormatterCache.set(key, created);
+  return created;
+};
+
+const formatMoney = (amount: number, currency = 'INR') => {
+  try {
+    return getMoneyFormatter(currency).format(amount);
+  } catch {
+    // Fallback: Intl can throw for unknown currency codes.
+    return String(amount);
+  }
+};
+
+const escapeHtml = (value: any) => {
+  const s = value === null || value === undefined ? '' : String(value);
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+};
+
+const safeDateYMD = (input: any): string => {
+  if (!input) return '';
+  if (input instanceof Date && Number.isFinite(input.getTime())) {
+    const y = input.getFullYear();
+    const m = String(input.getMonth() + 1).padStart(2, '0');
+    const d = String(input.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  if (typeof input === 'string') {
+    // Fast-path common ISO-like dates
+    if (input.length >= 10 && /\d{4}-\d{2}-\d{2}/.test(input.slice(0, 10)))
+      return input.slice(0, 10);
+    const dt = new Date(input);
+    if (Number.isFinite(dt.getTime())) return safeDateYMD(dt);
+    return input;
+  }
+  if (typeof input === 'number') {
+    const ms = input > 32503680000 ? input : input * 1000;
+    const dt = new Date(ms);
+    if (Number.isFinite(dt.getTime())) return safeDateYMD(dt);
+  }
+  try {
+    return formatDate(input, 'YYYY-MM-DD');
+  } catch {
+    return '';
+  }
 };
 
 const sanitizeFilename = (name: string) => name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
@@ -142,34 +195,54 @@ const generatePdf = async (data: TransactionItem[], options: ExportOptions): Pro
   let totalExpense = 0;
   let contentHtml = '';
 
-  // Calculate totals
-  data.forEach((item) => {
-    if (isIncome(item.type)) totalIncome += Number(item.amount);
-    else totalExpense += Number(item.amount);
-  });
+  const grouped: Record<string, { in: number; out: number }> | null =
+    groupBy === 'category' ? {} : null;
 
-  // Generate Grouped or Linear Content
-  if (groupBy === 'category') {
-    const grouped: Record<string, { in: number; out: number }> = {};
-    data.forEach((item) => {
+  // Build transaction rows + totals in one pass (faster + fewer allocations)
+  const transactionRowParts: string[] = new Array(data.length);
+  for (let idx = 0; idx < data.length; idx++) {
+    const item = data[idx];
+    const income = isIncome(item.type);
+    const amt = Number(item.amount || 0);
+    if (income) totalIncome += amt;
+    else totalExpense += amt;
+
+    if (grouped) {
       const cat = item.category || 'Uncategorized';
       if (!grouped[cat]) grouped[cat] = { in: 0, out: 0 };
-      if (isIncome(item.type)) grouped[cat].in += Number(item.amount);
-      else grouped[cat].out += Number(item.amount);
-    });
+      if (income) grouped[cat].in += amt;
+      else grouped[cat].out += amt;
+    }
 
-    const rows = Object.keys(grouped)
-      .map(
-        (cat) => `
+    transactionRowParts[idx] = `
+    <tr style="border-bottom: 1px solid #e2e8f0; background-color: ${idx % 2 === 0 ? '#fff' : '#f8fafc'};">
+      <td style="padding: 6px;">${escapeHtml(formatDate(item.date, 'DD MMM YYYY'))}</td>
+      <td style="padding: 6px;">${escapeHtml(item.category || '')}</td>
+      <td style="padding: 6px; color: #64748b;">${escapeHtml(item.note || '')}</td>
+      <td style="padding: 6px; text-align: right; color: ${income ? '#166534' : '#991B1B'}; font-weight: 600;">
+        ${income ? '+' : '-'} ${escapeHtml(formatMoney(amt, item.currency))}
+      </td>
+    </tr>
+  `;
+  }
+
+  // Generate Grouped or Linear Content
+  if (grouped) {
+    const keys = Object.keys(grouped);
+    const rowParts: string[] = new Array(keys.length);
+    for (let i = 0; i < keys.length; i++) {
+      const cat = keys[i];
+      const g = grouped[cat];
+      rowParts[i] = `
       <tr style="border-bottom: 1px solid #e2e8f0;">
-        <td style="padding: 8px; font-weight: 600;">${cat}</td>
-        <td style="padding: 8px; text-align: right; color: #166534;">${grouped[cat].in > 0 ? formatMoney(grouped[cat].in) : '-'}</td>
-        <td style="padding: 8px; text-align: right; color: #991B1B;">${grouped[cat].out > 0 ? formatMoney(grouped[cat].out) : '-'}</td>
-        <td style="padding: 8px; text-align: right; font-weight: bold;">${formatMoney(grouped[cat].in - grouped[cat].out)}</td>
+        <td style="padding: 8px; font-weight: 600;">${escapeHtml(cat)}</td>
+        <td style="padding: 8px; text-align: right; color: #166534;">${g.in > 0 ? escapeHtml(formatMoney(g.in)) : '-'}</td>
+        <td style="padding: 8px; text-align: right; color: #991B1B;">${g.out > 0 ? escapeHtml(formatMoney(g.out)) : '-'}</td>
+        <td style="padding: 8px; text-align: right; font-weight: bold;">${escapeHtml(formatMoney(g.in - g.out))}</td>
       </tr>
-    `
-      )
-      .join('');
+    `;
+    }
+    const rows = rowParts.join('');
 
     contentHtml += `
       <div style="margin-bottom: 20px;">
@@ -187,20 +260,7 @@ const generatePdf = async (data: TransactionItem[], options: ExportOptions): Pro
   }
 
   // Transaction List
-  const transactionRows = data
-    .map(
-      (item, idx) => `
-    <tr style="border-bottom: 1px solid #e2e8f0; background-color: ${idx % 2 === 0 ? '#fff' : '#f8fafc'};">
-      <td style="padding: 6px;">${formatDate(item.date, 'DD MMM YYYY')}</td>
-      <td style="padding: 6px;">${item.category}</td>
-      <td style="padding: 6px; color: #64748b;">${item.note || ''}</td>
-      <td style="padding: 6px; text-align: right; color: ${isIncome(item.type) ? '#166534' : '#991B1B'}; font-weight: 600;">
-        ${isIncome(item.type) ? '+' : '-'} ${formatMoney(item.amount, item.currency)}
-      </td>
-    </tr>
-  `
-    )
-    .join('');
+  const transactionRows = transactionRowParts.join('');
 
   const html = `
     <html>
@@ -258,13 +318,17 @@ const generateCsv = async (data: TransactionItem[], options: ExportOptions): Pro
     if (isIncome(item.type)) totalIncome += amt;
     else totalExpense += amt;
 
+    const safeNote = String(item.note || '')
+      .replace(/\r?\n/g, ' ')
+      .replace(/"/g, '""');
+
     const row = [
-      formatDate(item.date, 'YYYY-MM-DD'),
+      safeDateYMD(item.date),
       item.type,
       item.category || '',
       amt,
       item.currency || 'INR',
-      `"${(item.note || '').replace(/"/g, '""')}"`, // escape quotes
+      `"${safeNote}"`, // escape quotes
       item.created_at || '',
     ];
     csvRows.push(row.join(','));
@@ -286,34 +350,6 @@ const generateCsv = async (data: TransactionItem[], options: ExportOptions): Pro
 const generateExcel = async (data: TransactionItem[], options: ExportOptions): Promise<string> => {
   const currency = (data[0]?.currency || 'INR') as string;
   const now = new Date();
-
-  const safeDateYMD = (input: any): string => {
-    if (!input) return '';
-    if (input instanceof Date && Number.isFinite(input.getTime())) {
-      const y = input.getFullYear();
-      const m = String(input.getMonth() + 1).padStart(2, '0');
-      const d = String(input.getDate()).padStart(2, '0');
-      return `${y}-${m}-${d}`;
-    }
-    if (typeof input === 'string') {
-      // Fast-path common ISO-like dates
-      if (input.length >= 10 && /\d{4}-\d{2}-\d{2}/.test(input.slice(0, 10)))
-        return input.slice(0, 10);
-      const dt = new Date(input);
-      if (Number.isFinite(dt.getTime())) return safeDateYMD(dt);
-      return input;
-    }
-    if (typeof input === 'number') {
-      const ms = input > 32503680000 ? input : input * 1000;
-      const dt = new Date(ms);
-      if (Number.isFinite(dt.getTime())) return safeDateYMD(dt);
-    }
-    try {
-      return formatDate(input, 'YYYY-MM-DD');
-    } catch {
-      return '';
-    }
-  };
 
   let totalIncome = 0;
   let totalExpense = 0;
@@ -342,7 +378,7 @@ const generateExcel = async (data: TransactionItem[], options: ExportOptions): P
       safeDateYMD(item.date),
       item.category || '',
       item.note || '',
-      income ? 'Income (Credit)' : 'Expense (Debit)',
+      income ? 'Credit' : 'Debit',
       signed,
       item.currency || currency || 'INR',
       item.created_at || '',
