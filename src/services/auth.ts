@@ -219,6 +219,11 @@ export const logout = async (): Promise<boolean> => {
   await safeRun(async () => {
     const sync = require('./syncManager'); // Ensure this path matches your file structure
     if (sync) {
+      // Preferred: single helper that cancels timers + listeners + background fetch.
+      if (typeof sync.stopSyncEngine === 'function') {
+        await sync.stopSyncEngine();
+        return;
+      }
       // Immediately cancel any in-flight sync loops so logout remains responsive.
       if (typeof sync.cancelSyncWork === 'function') sync.cancelSyncWork();
       if (typeof sync.stopAutoSyncListener === 'function') sync.stopAutoSyncListener();

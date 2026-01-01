@@ -125,6 +125,39 @@ export const cancelSyncWork = () => {
   } catch (e) {}
 };
 
+// Public: stop all sync triggers and cancel queued work.
+// Used for logout flows to guarantee no background sync continues.
+export const stopSyncEngine = async () => {
+  try {
+    cancelSyncWork();
+  } catch (e) {}
+
+  try {
+    stopAutoSyncListener();
+  } catch (e) {}
+
+  try {
+    stopForegroundSyncScheduler();
+  } catch (e) {}
+
+  try {
+    await stopBackgroundFetch();
+  } catch (e) {}
+
+  // Cancel scheduled/debounced timers
+  try {
+    if (_scheduledSyncTimer) clearTimeout(_scheduledSyncTimer);
+  } catch (e) {}
+  _scheduledSyncTimer = null;
+
+  try {
+    if (_entriesSyncTimer) clearTimeout(_entriesSyncTimer);
+  } catch (e) {}
+  _entriesSyncTimer = null;
+
+  _pendingSyncRequested = false;
+};
+
 // Public: schedule a sync to run after interactions (UI-first) and de-dupe rapid triggers.
 export const scheduleSync = (options?: { force?: boolean; source?: 'manual' | 'auto' }) => {
   try {
