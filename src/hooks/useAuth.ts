@@ -260,17 +260,11 @@ try {
         const { getTransactionsByUser } = require('../db/transactions');
         const rows = await getTransactionsByUser(s.id);
         if (!rows || rows.length === 0) {
-          // bootstrap from server
+          // bootstrap from server via the central sync manager
           try {
-            const pull = await import('../sync/pullFromNeon');
-            await pull.default();
-          } catch (e) {
-            // fallback to sync manager
-            try {
-              const { syncBothWays } = require('../services/syncManager');
-              await syncBothWays();
-            } catch (ee) {}
-          }
+            const { syncBothWays } = require('../services/syncManager');
+            await syncBothWays({ source: 'auto' });
+          } catch (ee) {}
         }
       } catch (e) {}
     } catch (e) {}

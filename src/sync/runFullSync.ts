@@ -21,25 +21,30 @@ const isJest = typeof process !== 'undefined' && !!process.env?.JEST_WORKER_ID;
  * - Errors in push do not abort pull; both are attempted in order.
  * - This function is safe to call manually and from background schedulers.
  */
-export async function runFullSync(): Promise<{ pushed?: any; pulled?: any } | null> {
+export type RunFullSyncResult =
+  | { status: 'skipped'; reason: 'already_running' | 'throttled' }
+  | { status: 'ran'; pushed?: any; pulled?: any };
+
+export async function runFullSync(options?: { force?: boolean }): Promise<RunFullSyncResult> {
   const now = Date.now();
+  const force = !!options?.force;
 
   // 1. Concurrency Check
   if (isSyncRunning) {
     if (__DEV__) console.log('[sync] runFullSync: already running, skipping');
-    return null;
+    return { status: 'skipped', reason: 'already_running' };
   }
 
   // 2. Throttling Check
   // Skip throttling during Jest tests to keep unit tests deterministic
-  if (!isJest && now - lastSyncAt < MIN_SYNC_INTERVAL_MS) {
+  if (!force && !isJest && now - lastSyncAt < MIN_SYNC_INTERVAL_MS) {
     if (__DEV__) {
       console.log(
         '[sync] runFullSync: throttled',
         `${Math.round((now - lastSyncAt) / 1000)}s since last sync`
       );
     }
-    return null;
+    return { status: 'skipped', reason: 'throttled' };
   }
 
   // 3. execution
@@ -85,7 +90,7 @@ export async function runFullSync(): Promise<{ pushed?: any; pulled?: any } | nu
     if (__DEV__) console.log('[sync] runFullSync: finished');
   }
 
-  return { pushed: pushResult, pulled: pullResult };
+  return { status: 'ran', pushed: pushResult, pulled: pullResult };
 }
 
 export default runFullSync;

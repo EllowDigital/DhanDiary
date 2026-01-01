@@ -51,11 +51,11 @@ describe('runFullSync', () => {
     pullFromNeon.mockImplementation(async () => ({ pulled: 0 }));
 
     const first = runFullSync();
-    // second call should return null immediately (lock prevents overlap)
+    // second call should be skipped immediately (lock prevents overlap)
     const second = runFullSync();
 
     const secondRes = await second;
-    expect(secondRes).toBeNull();
+    expect(secondRes).toEqual({ status: 'skipped', reason: 'already_running' });
 
     // finish first
     resolvePush!();

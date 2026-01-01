@@ -19,8 +19,8 @@ import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 
 // Optional Haptics: prefer runtime require so builds without expo-haptics still work.
 let Haptics: any = {
-  impactAsync: async () => {},
-  notificationAsync: async () => {},
+  impactAsync: async () => { },
+  notificationAsync: async () => { },
   ImpactFeedbackStyle: { Medium: 'medium' },
   NotificationFeedbackType: { Warning: 'warning' },
 };
@@ -148,13 +148,13 @@ const SettingsScreen = () => {
         const d = new Date(last);
         setLastSyncTime(`${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`);
       }
-    } catch (e) {}
+    } catch (e) { }
 
     return () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -186,7 +186,7 @@ const SettingsScreen = () => {
         showToast('Cloud sync is disabled in this build.', 'error');
         return;
       }
-    } catch (e) {}
+    } catch (e) { }
 
     // Haptic feedback
     if (Platform.OS !== 'web') {
@@ -195,14 +195,26 @@ const SettingsScreen = () => {
 
     setIsSyncing(true);
     try {
-      const res: any = await syncBothWays();
+      const res: any = await syncBothWays({ force: true, source: 'manual' });
       if (res && res.ok) {
         const now = new Date();
         setLastSyncTime(`${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`);
-        showToast('Sync completed successfully');
+        const pushed = res.counts?.pushed || 0;
+        const pulled = res.counts?.pulled || 0;
+        const upToDate = Boolean(res.upToDate) || (pushed === 0 && pulled === 0);
+        if (upToDate) {
+          showToast("You're up to date.");
+        } else {
+          showToast('Sync complete.');
+        }
       } else {
         if (res && res.reason === 'not_configured') {
           showToast('Cloud sync is disabled in this build.', 'error');
+          return;
+        }
+        // Treat throttled/already-running as a non-error for manual sync: user is effectively up to date.
+        if (res && (res.reason === 'throttled' || res.reason === 'already_running')) {
+          showToast("You're up to date.");
           return;
         }
         // Could be offline or an internal failure

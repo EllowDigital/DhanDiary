@@ -215,26 +215,40 @@ const flushPendingProfileUpdates = async () => {
 import runFullSync from '../sync/runFullSync';
 import { getNeonHealth } from '../api/neonClient';
 
-export const syncBothWays = async () => {
+export type SyncResult = {
+  ok: boolean;
+  reason?:
+    | 'success'
+    | 'up_to_date'
+    | 'already_running'
+    | 'throttled'
+    | 'offline'
+    | 'not_configured'
+    | 'error';
+  upToDate?: boolean;
+  counts?: { pushed: number; pulled: number };
+};
+
+export const syncBothWays = async (options?: { force?: boolean; source?: 'manual' | 'auto' }) => {
   // If cloud sync isn't configured in this build, fail fast with a clear reason.
   try {
     const h = getNeonHealth();
     if (!h.isConfigured) {
       if (__DEV__) console.warn('[sync] cloud sync not configured (missing NEON_URL)');
-      return { ok: false, reason: 'not_configured' } as any;
+      return { ok: false, reason: 'not_configured' } satisfies SyncResult;
     }
   } catch (e) {}
 
   if (_syncInProgress) {
     _pendingSyncRequested = true;
     if (__DEV__) console.log('Sync already running, scheduling follow-up');
-    return { ok: false } as any;
+    return { ok: true, reason: 'already_running', upToDate: true } satisfies SyncResult;
   }
 
   _lastSyncAttemptAt = Date.now();
 
   const state = await NetInfo.fetch();
-  if (!state.isConnected) return { ok: false } as any;
+  if (!state.isConnected) return { ok: false, reason: 'offline' } satisfies SyncResult;
 
   _syncInProgress = true;
   // notify listeners that sync started
@@ -244,19 +258,22 @@ export const syncBothWays = async () => {
 
   try {
     // Delegate actual sync work to runFullSync (single source of truth)
-    const runResult = await runFullSync();
+    const runResult = await runFullSync({ force: !!options?.force });
 
-    // If runFullSync returned null, it was throttled or skipped — treat as no-op
-    if (!runResult) {
-      if (__DEV__)
-        console.log('[sync] syncBothWays: runFullSync returned null (throttled/skipped)');
-      // clear in-progress and mark idle, return not-ok so callers can decide whether to show UI
+    // If runFullSync was skipped (throttled/already running), treat as non-error no-op.
+    if (runResult?.status === 'skipped') {
+      if (__DEV__) console.log('[sync] syncBothWays: runFullSync skipped', runResult.reason);
       _lastSyncAttemptAt = Date.now();
       _syncInProgress = false;
       try {
         setSyncStatus('idle');
       } catch (e) {}
-      return { ok: false, reason: 'throttled' } as any;
+      return {
+        ok: true,
+        reason: runResult.reason,
+        upToDate: true,
+        counts: { pushed: 0, pulled: 0 },
+      } satisfies SyncResult;
     }
 
     _lastSuccessfulSyncAt = Date.now();
@@ -270,7 +287,7 @@ export const syncBothWays = async () => {
     let pushedCount = 0;
     let pulledCount = 0;
     try {
-      if (runResult) {
+      if (runResult && runResult.status === 'ran') {
         // push result may be an object { pushed: string[] } or an array
         const pr: any = runResult.pushed;
         if (pr) {
@@ -303,7 +320,13 @@ export const syncBothWays = async () => {
         await AsyncStorage.setItem('last_sync_count', String(pulledCount));
       } catch (e) {}
     } catch (e) {}
-    return { ok: true, counts: { pushed: pushedCount, pulled: pulledCount } } as any;
+    const upToDate = pushedCount === 0 && pulledCount === 0;
+    return {
+      ok: true,
+      reason: upToDate ? 'up_to_date' : 'success',
+      upToDate,
+      counts: { pushed: pushedCount, pulled: pulledCount },
+    } satisfies SyncResult;
   } catch (err) {
     try {
       if (__DEV__) console.error('Sync failed', err);
@@ -314,7 +337,7 @@ export const syncBothWays = async () => {
     try {
       setSyncStatus('error');
     } catch (e) {}
-    return { ok: false } as any;
+    return { ok: false, reason: 'error' } satisfies SyncResult;
   } finally {
     _syncInProgress = false;
     // notify listeners that sync finished (if not errored, set to idle above)

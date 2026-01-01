@@ -238,35 +238,14 @@ export const useEntries = (userId?: string | null) => {
             const net = await NetInfo.fetch();
 
             if (net.isConnected) {
-              // If online, push local changes immediately and then pull remote updates.
-              try {
-                const pushMod = await import('../sync/pushToNeon');
-                const pullMod = await import('../sync/pullFromNeon');
-
-                try {
-                  await pushMod.default();
-                } catch (e) {
-                  if (__DEV__) console.warn('[useEntries] Immediate push failed', e);
-                }
-
-                try {
-                  await pullMod.default();
-                } catch (e) {
-                  if (__DEV__) console.warn('[useEntries] Immediate pull failed', e);
-                }
-              } catch (e) {
-                // Fallback to the full sync manager if dynamic import fails
-                try {
-                  await syncBothWays();
-                } catch (ee) {
-                  if (__DEV__) console.warn('[useEntries] Fallback sync failed', ee);
-                }
-              }
+              // Use the central sync manager so locks/throttling apply consistently
+              // and we avoid overlapping push/pull work across the app.
+              await syncBothWays({ source: 'auto' } as any);
             } else {
               // Offline: queue sync for later via sync manager (auto-sync listener will trigger)
               try {
                 // This will no-op if offline and run when connection resumes logic is inside syncManager
-                void syncBothWays();
+                void syncBothWays({ source: 'auto' } as any);
               } catch (e) {
                 // Ignore offline errors
               }
