@@ -9,6 +9,7 @@ import { getSession, saveSession } from '../db/session';
 // only when needed.
 import { query } from '../api/neonClient';
 import { requestSyncCancel, resetSyncCancel } from '../sync/syncCancel';
+import { syncClerkUserToNeon } from './clerkUserSync';
 
 // --- Types & Constants ---
 
@@ -363,9 +364,36 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
         const v = created && created.length ? String((created as any)[0]?.id || '') : '';
         if (v && isUuid(v)) realId = v;
       } catch (e) {
-        // If email uniqueness conflicts with an existing legacy row, do not guess ownership.
-        // The dedicated bridge service handles safe linking when applicable.
+        // If email uniqueness conflicts with an existing legacy row, do not guess ownership here.
+        // We'll fall back to the dedicated bridge service below.
       }
+    }
+
+    // Final fallback: use the bridge service, which safely links legacy email-only rows
+    // ONLY when clerk_id is NULL, otherwise it fails closed.
+    if (!realId && email) {
+      try {
+        const bridged = await syncClerkUserToNeon({
+          id: clerkId,
+          emailAddresses: [{ emailAddress: email }],
+          fullName: name || null,
+        });
+        if (bridged?.uuid && isUuid(bridged.uuid) && !bridged.isOfflineFallback) {
+          realId = bridged.uuid;
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    // If still unresolved, skip sync to avoid FK violations when pushing transactions.
+    if (!realId || !isUuid(realId)) {
+      return {
+        ok: false,
+        reason: 'identity_unresolved',
+        upToDate: true,
+        counts: { pushed: 0, pulled: 0 },
+      } satisfies SyncResult;
     }
 
     // If we found a real Neon UUID and it differs from the current session uuid,
