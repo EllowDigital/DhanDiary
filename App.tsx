@@ -212,6 +212,30 @@ const AppContent = () => {
 
         if (!id) return;
 
+        // SECURITY: never reuse local SQLite across different Clerk users.
+        // If another user was previously active on this device, wipe local DB before proceeding.
+        try {
+          const ownerMod = await import('./src/db/offlineOwner');
+          const currentOwner = await ownerMod.getOfflineDbOwner();
+          if (currentOwner && String(currentOwner) !== String(id)) {
+            const db = await import('./src/db/sqlite');
+            if (typeof db.wipeLocalData === 'function') await db.wipeLocalData();
+            try {
+              const { notifyEntriesChanged } = require('./src/utils/dbEvents');
+              notifyEntriesChanged();
+            } catch (e) { }
+            try {
+              const holder = require('./src/utils/queryClientHolder');
+              if (holder && typeof holder.clearQueryCache === 'function') {
+                await holder.clearQueryCache();
+              }
+            } catch (e) { }
+          }
+          await ownerMod.setOfflineDbOwner(String(id));
+        } catch (e) {
+          // Best-effort; do not block login flow.
+        }
+
         const bridgeUser = await syncClerkUserToNeon({
           id,
           emailAddresses: emails,

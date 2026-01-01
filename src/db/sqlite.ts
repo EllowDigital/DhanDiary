@@ -238,4 +238,28 @@ export async function executeSqlAsync(sql: string, params: any[] = []) {
   return [null, result] as const;
 }
 
+/**
+ * Hard-wipe local SQLite content (per-user isolation).
+ * Keeps tables intact to avoid "no such table" races during navigation.
+ */
+export async function wipeLocalData(): Promise<void> {
+  // Ensure tables exist first.
+  try {
+    await initDB();
+  } catch (e) {
+    // If init fails, still attempt deletes best-effort.
+  }
+
+  // Delete rows (fast) rather than dropping tables (can be slow and racy).
+  try {
+    await executeSqlAsync('DELETE FROM transactions;', []);
+  } catch (e) {}
+  try {
+    await executeSqlAsync('DELETE FROM categories;', []);
+  } catch (e) {}
+  try {
+    await executeSqlAsync('DELETE FROM meta;', []);
+  } catch (e) {}
+}
+
 export default sqliteClient;
