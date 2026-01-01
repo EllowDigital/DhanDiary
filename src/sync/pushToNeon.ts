@@ -9,7 +9,7 @@ const CHUNK_SIZE = 50;
  * - Reads local rows with sync_status IN (0,2)
  * - Separates new/updated (0) from deletes (2)
  * - TODO: call Neon API to push changes
- * - On simulated success: mark rows sync_status = 1
+ * - On success: mark rows need_sync = 0 (and sync_status=1 for upserts, sync_status=2 for tombstones)
  *
  * Notes:
  * - MUST NOT block UI. Call this from a background worker or scheduler.
@@ -139,11 +139,12 @@ export async function pushToNeon(): Promise<{ pushed: string[]; deleted: string[
           const ret = byId.get(String(row.id)) || null;
           const serverVer = ret && typeof ret.server_version === 'number' ? ret.server_version : 0;
           const returnedUpdatedAt = ret && ret.updated_at ? Number(ret.updated_at) : Date.now();
+          const isDelete = !!row.deleted_at || Number((row as any).sync_status) === 2;
 
           try {
             await executeSqlAsync(
-              'UPDATE transactions SET sync_status = 1, need_sync = 0, server_version = ?, updated_at = ? WHERE id = ?;',
-              [serverVer, returnedUpdatedAt, row.id]
+              'UPDATE transactions SET sync_status = ?, need_sync = 0, server_version = ?, updated_at = ? WHERE id = ?;',
+              [isDelete ? 2 : 1, serverVer, returnedUpdatedAt, row.id]
             );
           } catch (e) {
             if (__DEV__)
@@ -164,9 +165,10 @@ export async function pushToNeon(): Promise<{ pushed: string[]; deleted: string[
             const serverVer =
               ret && typeof ret.server_version === 'number' ? ret.server_version : 0;
             const returnedUpdatedAt = ret && ret.updated_at ? Number(ret.updated_at) : Date.now();
+            const isDelete = !!row.deleted_at || Number((row as any).sync_status) === 2;
             await executeSqlAsync(
-              'UPDATE transactions SET sync_status = 1, need_sync = 0, server_version = ?, updated_at = ? WHERE id = ?;',
-              [serverVer, returnedUpdatedAt, row.id]
+              'UPDATE transactions SET sync_status = ?, need_sync = 0, server_version = ?, updated_at = ? WHERE id = ?;',
+              [isDelete ? 2 : 1, serverVer, returnedUpdatedAt, row.id]
             );
             if (row.deleted_at || Number((row as any).sync_status) === 2)
               deletedIds.push(String(row.id));

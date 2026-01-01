@@ -115,7 +115,10 @@ export async function updateTransaction(
   const now = Date.now();
 
   // Always merge with the current row to avoid accidental data loss from partial updates
-  const existing = await getTransactionById(txn.id, txn.user_id);
+  const existingByUser = await getTransactionById(txn.id, txn.user_id);
+  const existingById = existingByUser ? null : await getTransactionByLocalId(txn.id);
+  const existing = existingByUser || existingById;
+  const effectiveUserId = existing ? String((existing as any).user_id) : txn.user_id;
   const sql = `
     UPDATE transactions 
     SET amount = ?, type = ?, category = ?, note = ?, date = ?, currency = ?,
@@ -201,7 +204,7 @@ export async function updateTransaction(
     merged.currency ?? 'INR',
     now,
     txn.id,
-    txn.user_id,
+    effectiveUserId,
   ]);
 
   const affected = Number(res?.rowsAffected || 0);
@@ -231,7 +234,17 @@ export async function deleteTransaction(id: string, userId: string) {
     WHERE id = ? AND user_id = ?;
   `;
 
-  await executeSqlAsync(sql, [deletedAtIso, updatedAtMs, id, userId]);
+  const [, res] = await executeSqlAsync(sql, [deletedAtIso, updatedAtMs, id, userId]);
+
+  // If user_id mismatched (e.g. session migration edge case), fall back to id-only tombstone.
+  if (Number(res?.rowsAffected || 0) === 0) {
+    await executeSqlAsync(
+      `UPDATE transactions
+       SET deleted_at = COALESCE(deleted_at, ?), updated_at = ?, sync_status = 2, need_sync = 1
+       WHERE id = ?;`,
+      [deletedAtIso, updatedAtMs, id]
+    );
+  }
 
   if (__DEV__) console.log('[transactions] soft delete', id);
   try {
@@ -267,8 +280,8 @@ export async function getUnsyncedTransactions() {
   // Backwards-compatible selector:
   // - new writes use need_sync=1
   // - older dirty rows may only have sync_status=0
-  // - tombstones are sync_status=2
-  const sql = `SELECT * FROM transactions WHERE need_sync = 1 OR sync_status IN (0,2);`;
+  // NOTE: do NOT include sync_status=2 when need_sync=0, or we'll re-push already-synced tombstones.
+  const sql = `SELECT * FROM transactions WHERE need_sync = 1 OR sync_status = 0;`;
   const [, res] = await executeSqlAsync(sql, []);
   const rows: TransactionRow[] = [];
   for (let i = 0; i < res.rows.length; i++) {
@@ -302,7 +315,7 @@ export async function upsertTransactionFromRemote(txn: TransactionRow) {
     // Actually, usually "Server Wins" or "Last Write Wins".
     // If local has deleted_at set and sync_status=0, we might want to keep our local delete.
 
-    const checkSql = `SELECT sync_status, deleted_at, server_version, updated_at FROM transactions WHERE id = ? LIMIT 1;`;
+    const checkSql = `SELECT sync_status, need_sync, deleted_at, server_version, updated_at FROM transactions WHERE id = ? LIMIT 1;`;
     const [, res] = await executeSqlAsync(checkSql, [txn.id]);
 
     if (res && res.rows && res.rows.length > 0) {
@@ -313,6 +326,15 @@ export async function upsertTransactionFromRemote(txn: TransactionRow) {
 
       // OPTIONAL: If local has a pending deletion (deleted_at set and sync_status === 0), keep local tombstone.
       // Also treat sync_status === 2 as an explicit local tombstone marker (skip remote upsert).
+      // If local is deleted, never let a remote non-deleted row resurrect it.
+      const localHasDeletedAt = !!(existing && existing.deleted_at);
+      const remoteHasDeletedAt = !!(txn && txn.deleted_at);
+      if (localHasDeletedAt && !remoteHasDeletedAt) {
+        if ((globalThis as any).__SYNC_VERBOSE__)
+          console.debug('[transactions] skipping remote upsert, local deleted_at exists', txn.id);
+        return;
+      }
+
       const isLocalPendingDelete =
         existing &&
         existing.deleted_at &&
