@@ -184,6 +184,7 @@ const MoreScreen: React.FC = () => {
               scrollOffset={scrollOffset}
               showScrollHint
               useSafeAreaPadding={false}
+              density="compact"
             />
           </View>
         </View>
