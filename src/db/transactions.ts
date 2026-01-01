@@ -116,7 +116,61 @@ export async function updateTransaction(
 
   // Always merge with the current row to avoid accidental data loss from partial updates
   const existing = await getTransactionById(txn.id, txn.user_id);
-  if (!existing) throw new Error('Transaction not found');
+  const sql = `
+    UPDATE transactions 
+    SET amount = ?, type = ?, category = ?, note = ?, date = ?, currency = ?,
+        updated_at = ?, sync_status = 0, need_sync = 1
+    WHERE id = ? AND user_id = ?;
+  `;
+
+  if (!existing) {
+    // Backward-compatible: try UPDATE first (no-op if missing), then insert fallback.
+    const fallbackDate = (txn as any).date ?? new Date().toISOString();
+    const fallbackCurrency = (txn as any).currency ?? 'INR';
+    const [, res] = await executeSqlAsync(sql, [
+      (txn as any).amount ?? 0,
+      (txn as any).type ?? 'expense',
+      (txn as any).category ?? null,
+      (txn as any).note ?? null,
+      fallbackDate,
+      fallbackCurrency,
+      now,
+      txn.id,
+      txn.user_id,
+    ]);
+
+    const affected = Number(res?.rowsAffected || 0);
+    if (affected === 0) {
+      return await addTransaction({
+        ...txn,
+        date: fallbackDate,
+        currency: fallbackCurrency,
+        sync_status: 0,
+      } as any);
+    }
+
+    try {
+      notifyEntriesChanged();
+    } catch (e) {}
+
+    // If it unexpectedly updated, return a best-effort shape
+    return {
+      id: txn.id,
+      user_id: txn.user_id,
+      amount: (txn as any).amount ?? 0,
+      type: ((txn as any).type ?? 'expense') as any,
+      category: (txn as any).category ?? null,
+      note: (txn as any).note ?? null,
+      currency: fallbackCurrency,
+      date: fallbackDate,
+      created_at: (txn as any).created_at ?? new Date().toISOString(),
+      updated_at: now,
+      deleted_at: null,
+      server_version: (txn as any).server_version ?? 0,
+      sync_status: 0,
+      need_sync: 1,
+    } as TransactionRow;
+  }
 
   const existingDeletedAt = (existing as any).deleted_at ?? null;
   const existingSyncStatus = Number((existing as any).sync_status ?? 0);
@@ -137,13 +191,6 @@ export async function updateTransaction(
     sync_status: 0,
     need_sync: 1,
   } as TransactionRow;
-
-  const sql = `
-    UPDATE transactions 
-    SET amount = ?, type = ?, category = ?, note = ?, date = ?, currency = ?,
-        updated_at = ?, sync_status = 0, need_sync = 1
-    WHERE id = ? AND user_id = ?;
-  `;
 
   const [, res] = await executeSqlAsync(sql, [
     merged.amount,

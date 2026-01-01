@@ -43,8 +43,6 @@ export async function pushToNeon(): Promise<{ pushed: string[]; deleted: string[
   // Dirty selection comes from getUnsyncedTransactions().
   // Deletions are identified by tombstones: `sync_status=2` and/or `deleted_at IS NOT NULL`.
   const dirty = rows.filter((r) => !!r);
-  const toDelete = dirty.filter((r: any) => !!r.deleted_at || Number(r.sync_status) === 2);
-  const toUpsert = dirty.filter((r: any) => !r.deleted_at && Number(r.sync_status) !== 2);
 
   const pushedIds: string[] = [];
   const deletedIds: string[] = [];

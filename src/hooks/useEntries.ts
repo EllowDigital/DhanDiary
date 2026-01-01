@@ -36,6 +36,7 @@ interface TransactionRow {
   created_at?: string | number | null;
   updated_at?: string | number | null;
   sync_status?: number;
+  need_sync?: number;
   deleted_at?: string | number | null;
 }
 
@@ -162,6 +163,9 @@ const makeOptimisticEntry = (entry: Partial<LocalEntry>, sid: string): LocalEntr
     currency: entry.currency || 'INR',
     created_at: effectiveDate,
     updated_at: Date.now(), // LocalEntry usually expects number for updated_at based on usage
+    sync_status: 0,
+    need_sync: 1,
+    deleted_at: null,
     is_synced: false, // Optimistic entries are not synced yet
   };
 };
@@ -296,7 +300,10 @@ export const useEntries = (userId?: string | null) => {
           ),
           updated_at: normalizeUpdatedAt(r.updated_at),
           currency: 'INR',
-          is_synced: r.sync_status === 1,
+          sync_status: Number(r.sync_status ?? 0),
+          need_sync: Number(r.need_sync ?? 0),
+          deleted_at: r.deleted_at ?? null,
+          is_synced: Number(r.sync_status ?? 0) === 1 && Number(r.need_sync ?? 0) === 0,
         }));
 
         // DEV SAFETY: warn if tombstoned rows appear in the source (they should be filtered)
@@ -524,6 +531,8 @@ export const useEntries = (userId?: string | null) => {
                 updates.category !== undefined ? ensureCategory(updates.category) : item.category,
               updated_at: now,
               date: updates.date !== undefined ? normalizeDate(updates.date, item.date) : item.date,
+              sync_status: 0,
+              need_sync: 1,
             }
           : item
       );
