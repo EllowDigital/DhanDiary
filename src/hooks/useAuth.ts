@@ -132,7 +132,8 @@ export const useAuth = () => {
                     bridge?.name || name || '',
                     bridge?.email || email || '',
                     image || null,
-                    image || null
+                    image || null,
+                    id
                   );
                 } catch (e) {}
               } catch (e) {
@@ -148,7 +149,8 @@ export const useAuth = () => {
                       (existing as any)?.name || name || '',
                       (existing as any)?.email || email || '',
                       image || (existing as any)?.image || null,
-                      image || (existing as any)?.imageUrl || null
+                      image || (existing as any)?.imageUrl || null,
+                      id
                     );
                     setUser({
                       id: stableId,
@@ -159,7 +161,14 @@ export const useAuth = () => {
                     });
                   } else {
                     // No existing UUID session to preserve; create a fallback session.
-                    await saveSession(id, name || '', email || '', image || null, image || null);
+                    await saveSession(
+                      id,
+                      name || '',
+                      email || '',
+                      image || null,
+                      image || null,
+                      id
+                    );
                     const created = await getSession();
                     setUser((created as any) || null);
                   }
@@ -232,7 +241,8 @@ export const useAuth = () => {
             bridge?.name || name || '',
             bridge?.email || email || '',
             image || null,
-            image || null
+            image || null,
+            id
           );
         } catch (e) {}
         setUser({
@@ -254,7 +264,8 @@ export const useAuth = () => {
               (existing as any)?.name || name || '',
               (existing as any)?.email || email || '',
               image || (existing as any)?.image || null,
-              image || (existing as any)?.imageUrl || null
+              image || (existing as any)?.imageUrl || null,
+              id
             );
             setUser({
               id: stableId,
@@ -264,7 +275,7 @@ export const useAuth = () => {
               imageUrl: image || (existing as any)?.imageUrl || null,
             });
           } else {
-            await saveSession(id, name || '', email || '', image || null, image || null);
+            await saveSession(id, name || '', email || '', image || null, image || null, id);
             const created = await getSession();
             setUser((created as any) || null);
           }

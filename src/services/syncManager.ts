@@ -327,118 +327,100 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
   const state = await NetInfo.fetch();
   if (!state.isConnected) return { ok: false, reason: 'offline' } satisfies SyncResult;
 
-  // If the saved session id isn't a UUID (common when auth stores provider IDs like Clerk),
-  // attempt to resolve the real Neon user UUID by email so we can still pull/push.
-  // Without this, pullFromNeon always returns 0 and local SQLite stays empty.
-  let sessionUserId: string | null = null;
-  try {
-    const sess: any = await getSession();
-    const uidRaw = sess?.id ? String(sess.id) : null;
-    const email = sess?.email ? String(sess.email).trim().toLowerCase() : null;
-
-    if (!uidRaw && !email) {
-      return { ok: false, reason: 'no_session', upToDate: true, counts: { pushed: 0, pulled: 0 } };
-    }
-
-    if (uidRaw && isUuid(uidRaw)) {
-      sessionUserId = uidRaw;
-    } else if (email) {
-      try {
-        const rows = await safeQ(
-          'SELECT id, name, email FROM users WHERE lower(email) = $1 LIMIT 1',
-          [email]
-        );
-        const realId = rows && rows.length ? String((rows as any)[0]?.id || '') : '';
-        if (realId && isUuid(realId)) {
-          sessionUserId = realId;
-          try {
-            await saveSession(
-              realId,
-              String((rows as any)[0]?.name || sess?.name || ''),
-              String((rows as any)[0]?.email || email),
-              (sess as any)?.image ?? null,
-              (sess as any)?.imageUrl ?? null
-            );
-          } catch (e) {}
-        }
-      } catch (e) {
-        // If lookup fails, fall through to no_session.
-      }
-    }
-  } catch (e) {}
-
-  if (!sessionUserId || !isUuid(sessionUserId)) {
-    return { ok: false, reason: 'no_session', upToDate: true, counts: { pushed: 0, pulled: 0 } };
-  }
-
-  // If the saved session UUID doesn't exist in Neon (common after an offline fallback),
-  // try to recover by matching the user's email and migrating local rows to the real
-  // Neon user id. Without this, pullFromNeon will query a non-existent user_id and
-  // will always return 0 rows.
+  // Identity boundary (NON-NEGOTIABLE): Clerk is the source of truth.
+  // Resolve the canonical Neon user UUID by clerk_id, and migrate any local
+  // offline-placeholder UUID to the real Neon UUID when it becomes available.
   try {
     const sess: any = await getSession();
     const uid = sess?.id ? String(sess.id) : null;
-    const email = sess?.email ? String(sess.email).trim().toLowerCase() : null;
-    if (uid && isUuid(uid) && email) {
-      let exists = false;
+    const clerkId = sess?.clerk_id ? String(sess.clerk_id) : null;
+    const email = sess?.email ? String(sess.email) : '';
+    const name = sess?.name ? String(sess.name) : '';
+
+    if (!uid || !clerkId) {
+      return { ok: false, reason: 'no_session', upToDate: true, counts: { pushed: 0, pulled: 0 } };
+    }
+
+    // Look up by clerk_id (authoritative).
+    let realId: string | null = null;
+    try {
+      const rows = await safeQ('SELECT id, name, email FROM users WHERE clerk_id = $1 LIMIT 1', [
+        clerkId,
+      ]);
+      const v = rows && rows.length ? String((rows as any)[0]?.id || '') : '';
+      if (v && isUuid(v)) realId = v;
+    } catch (e) {
+      // ignore and fall through to optional create
+    }
+
+    // If missing on server but we're online, attempt to create the user row.
+    if (!realId) {
       try {
-        const rows = await safeQ('SELECT id FROM users WHERE id = $1 LIMIT 1', [uid]);
-        exists = !!(rows && rows.length);
+        const created = await safeQ(
+          "INSERT INTO users (clerk_id, email, name, password_hash, status) VALUES ($1, $2, $3, 'clerk_managed', 'active') RETURNING id",
+          [clerkId, String(email || ''), String(name || '')]
+        );
+        const v = created && created.length ? String((created as any)[0]?.id || '') : '';
+        if (v && isUuid(v)) realId = v;
       } catch (e) {
-        // ignore (Neon may be flaky); sync will fail later with an error state
-      }
-
-      if (!exists) {
-        try {
-          const byEmail = await safeQ('SELECT id FROM users WHERE lower(email) = $1 LIMIT 1', [
-            email,
-          ]);
-          const realId = byEmail && byEmail.length ? String((byEmail as any)[0]?.id || '') : '';
-          if (realId && isUuid(realId) && realId !== uid) {
-            try {
-              const { executeSqlAsync } = require('../db/sqlite');
-              // Move local rows under the real Neon user id so UI + pull use one identity.
-              await executeSqlAsync('UPDATE transactions SET user_id = ? WHERE user_id = ?;', [
-                realId,
-                uid,
-              ]);
-
-              // Reset pull checkpoints for both ids so we always re-bootstrap after migration.
-              try {
-                const oldKey = `last_pull_server_version:${uid}`;
-                const newKey = `last_pull_server_version:${realId}`;
-                const oldCursor = `last_pull_cursor_v2:${uid}`;
-                const newCursor = `last_pull_cursor_v2:${realId}`;
-                await executeSqlAsync('DELETE FROM meta WHERE key IN (?, ?, ?, ?);', [
-                  oldKey,
-                  newKey,
-                  oldCursor,
-                  newCursor,
-                ]);
-              } catch (e) {}
-            } catch (e) {}
-
-            try {
-              await saveSession(
-                realId,
-                String(sess?.name || ''),
-                String(sess?.email || ''),
-                (sess as any)?.image ?? null,
-                (sess as any)?.imageUrl ?? null
-              );
-            } catch (e) {}
-
-            try {
-              const { notifyEntriesChanged } = require('../utils/dbEvents');
-              notifyEntriesChanged();
-            } catch (e) {}
-          }
-        } catch (e) {
-          // If lookup fails, proceed; pull will likely return 0 and sync will be up_to_date.
-        }
+        // If email uniqueness conflicts with an existing legacy row, do not guess ownership.
+        // The dedicated bridge service handles safe linking when applicable.
       }
     }
-  } catch (e) {}
+
+    // If we found a real Neon UUID and it differs from the current session uuid,
+    // migrate local rows and reset pull cursors.
+    if (realId && isUuid(realId) && realId !== uid) {
+      try {
+        const { executeSqlAsync } = require('../db/sqlite');
+        await executeSqlAsync('UPDATE transactions SET user_id = ? WHERE user_id = ?;', [
+          realId,
+          uid,
+        ]);
+        try {
+          const oldKey = `last_pull_server_version:${uid}`;
+          const newKey = `last_pull_server_version:${realId}`;
+          const oldCursor = `last_pull_cursor_v2:${uid}`;
+          const newCursor = `last_pull_cursor_v2:${realId}`;
+          await executeSqlAsync('DELETE FROM meta WHERE key IN (?, ?, ?, ?);', [
+            oldKey,
+            newKey,
+            oldCursor,
+            newCursor,
+          ]);
+        } catch (e) {}
+      } catch (e) {}
+
+      try {
+        await saveSession(
+          realId,
+          name,
+          email,
+          (sess as any)?.image ?? null,
+          (sess as any)?.imageUrl ?? null,
+          clerkId
+        );
+      } catch (e) {}
+      try {
+        const { notifyEntriesChanged } = require('../utils/dbEvents');
+        notifyEntriesChanged();
+      } catch (e) {}
+    } else if (realId && isUuid(realId)) {
+      // Ensure clerk_id is persisted even when uuid already matches.
+      try {
+        await saveSession(
+          realId,
+          name,
+          email,
+          (sess as any)?.image ?? null,
+          (sess as any)?.imageUrl ?? null,
+          clerkId
+        );
+      } catch (e) {}
+    }
+  } catch (e) {
+    return { ok: false, reason: 'no_session', upToDate: true, counts: { pushed: 0, pulled: 0 } };
+  }
 
   // Legacy repair: ensure all local transaction ids are UUIDs before pushing to Neon.
   // (Older builds created ids like "local_..." which Neon rejects.)
