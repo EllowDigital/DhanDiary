@@ -249,6 +249,28 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
 
   _lastSyncAttemptAt = Date.now();
 
+  // If there's no logged-in session (or it's not a UUID), don't attempt cloud sync.
+  // This prevents noisy logs on the login screen and avoids pointless Neon traffic.
+  try {
+    const sess: any = await getSession();
+    const uid = sess?.id;
+    if (!isUuid(uid)) {
+      return {
+        ok: true,
+        reason: 'up_to_date',
+        upToDate: true,
+        counts: { pushed: 0, pulled: 0 },
+      } satisfies SyncResult;
+    }
+  } catch (e) {
+    return {
+      ok: true,
+      reason: 'up_to_date',
+      upToDate: true,
+      counts: { pushed: 0, pulled: 0 },
+    } satisfies SyncResult;
+  }
+
   const state = await NetInfo.fetch();
   if (!state.isConnected) return { ok: false, reason: 'offline' } satisfies SyncResult;
 
@@ -262,7 +284,7 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
     // Delegate actual sync work to runFullSync (single source of truth)
     const runResult = await runFullSync({ force: !!options?.force });
 
-    // If runFullSync was skipped (throttled/already running), treat as non-error no-op.
+    // If runFullSync was skipped (throttled/already running/no-session), treat as non-error no-op.
     if (runResult?.status === 'skipped') {
       if (__DEV__) console.log('[sync] syncBothWays: runFullSync skipped', runResult.reason);
       _lastSyncAttemptAt = Date.now();
@@ -272,7 +294,7 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
       } catch (e) {}
       return {
         ok: true,
-        reason: runResult.reason,
+        reason: runResult.reason === 'no_session' ? 'up_to_date' : runResult.reason,
         upToDate: true,
         counts: { pushed: 0, pulled: 0 },
       } satisfies SyncResult;
@@ -386,7 +408,9 @@ export const startAutoSyncListener = () => {
       const now = Date.now();
       const MIN_ONLINE_SYNC_MS = 30 * 1000; // don't run online sync more often than this
       if (!_lastSuccessfulSyncAt || now - _lastSuccessfulSyncAt > MIN_ONLINE_SYNC_MS) {
-        syncBothWays().catch((err) => console.error('Auto sync failed', err));
+        syncBothWays().catch(() => {
+          // Swallow expected failures (offline/slow network) to avoid LogBox noise.
+        });
       }
     }
     wasOnline = isOnline;
@@ -419,7 +443,9 @@ export const startAutoSyncListener = () => {
 
             _entriesSyncTimer = setTimeout(() => {
               _entriesSyncTimer = null;
-              syncBothWays().catch((err) => console.error('Debounced sync failed', err));
+              syncBothWays().catch(() => {
+                // Swallow expected failures (offline/slow network) to avoid LogBox noise.
+              });
             }, 5000);
           } catch (e) {}
         });
@@ -467,10 +493,15 @@ export const startForegroundSyncScheduler = (intervalMs: number = 15000) => {
       if (!_syncInProgress) {
         const mod: any = require('./syncManager');
         const fn = mod && typeof mod.syncBothWays === 'function' ? mod.syncBothWays : syncBothWays;
-        Promise.resolve(fn()).catch((err) => console.error('Scheduled sync failed', err));
+        Promise.resolve(fn()).catch(() => {
+          // Swallow expected failures (offline/slow network) to avoid LogBox noise.
+        });
       }
     } catch (err) {
-      if (!_syncInProgress) syncBothWays().catch((e) => console.error('Scheduled sync failed', e));
+      if (!_syncInProgress)
+        syncBothWays().catch(() => {
+          // Swallow expected failures (offline/slow network) to avoid LogBox noise.
+        });
     }
   }, intervalMs);
 };

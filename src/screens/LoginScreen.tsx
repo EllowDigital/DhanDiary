@@ -101,7 +101,7 @@ const LoginScreen = () => {
     ]).start();
 
     // Pre-warm DB connection
-    warmNeonConnection().catch(() => {});
+    warmNeonConnection().catch(() => { });
   }, []);
 
   // --- AUTO-SYNC LOGIC ---
@@ -136,22 +136,34 @@ const LoginScreen = () => {
     userEmail: string,
     userName?: string | null
   ) => {
+    // IMPORTANT: our local DB + Neon sync expect the internal UUID from Neon,
+    // not Clerk's user id. Bridge Clerk -> internal UUID first.
+    let bridged = null as any;
     try {
-      await saveSession(userId, userName || 'User', userEmail);
+      bridged = await syncClerkUserToNeon({
+        id: userId,
+        emailAddresses: [{ emailAddress: userEmail }],
+        fullName: userName,
+      });
+    } catch (e) {
+      bridged = null;
+    }
+
+    const internalUserId = bridged?.uuid || null;
+    const effectiveEmail = bridged?.email || userEmail;
+    const effectiveName = bridged?.name || userName || 'User';
+
+    try {
+      if (internalUserId) {
+        await saveSession(internalUserId, effectiveName, effectiveEmail);
+      }
     } catch (e) {
       console.warn('Local session save failed', e);
     }
 
-    const syncPromise = syncClerkUserToNeon({
-      id: userId,
-      emailAddresses: [{ emailAddress: userEmail }],
-      fullName: userName,
-    }).catch((err) => console.warn('Background sync failed', err));
-
     setSyncing(false);
     setLoading(false);
     navigation.reset({ index: 0, routes: [{ name: 'Announcement' }] });
-    await syncPromise;
   };
 
   const offlineManualRetry = async () => {
@@ -193,7 +205,7 @@ const LoginScreen = () => {
               setLoading(false);
               return false;
             }
-          } catch (e) {}
+          } catch (e) { }
           Alert.alert('Login Failed', msg);
           setLoading(false);
         }
@@ -245,7 +257,7 @@ const LoginScreen = () => {
             setLoading(false);
             return false;
           }
-        } catch (e) {}
+        } catch (e) { }
 
         if (code === 'strategy_for_user_invalid') {
           Alert.alert(
@@ -312,7 +324,9 @@ const LoginScreen = () => {
     try {
       const startFlow = strategy === 'google' ? startGoogleFlow : startGithubFlow;
       const { createdSessionId, setActive: setSession } = await startFlow({
-        redirectUrl: AuthSession.makeRedirectUri({ path: 'oauth-callback' }),
+        // Use the app scheme so Android can route back into the app.
+        // If running inside Expo Go, custom schemes won't work reliably.
+        redirectUrl: AuthSession.makeRedirectUri({ scheme: 'dhandiary', path: 'oauth-callback' }),
       });
 
       if (createdSessionId && setSession) {
@@ -453,18 +467,12 @@ const LoginScreen = () => {
               {/* Social Buttons */}
               <View style={styles.socialRow}>
                 <TouchableOpacity style={styles.socialBtn} onPress={() => onSocialLogin('google')}>
-                  <Image
-                    source={{ uri: 'https://cdn-icons-png.flaticon.com/512/300/300221.png' }}
-                    style={styles.socialIcon}
-                  />
+                  <Ionicons name="logo-google" size={18} color={colors.text || '#0F172A'} />
                   <Text style={styles.socialBtnText}>Google</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.socialBtn} onPress={() => onSocialLogin('github')}>
-                  <Image
-                    source={{ uri: 'https://cdn-icons-png.flaticon.com/512/25/25231.png' }}
-                    style={styles.socialIcon}
-                  />
+                  <Ionicons name="logo-github" size={18} color={colors.text || '#0F172A'} />
                   <Text style={styles.socialBtnText}>GitHub</Text>
                 </TouchableOpacity>
               </View>

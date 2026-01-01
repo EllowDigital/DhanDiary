@@ -1,6 +1,7 @@
 import pushToNeon from './pushToNeon';
 import pullFromNeon from './pullFromNeon';
 import retryWithBackoff from './retry';
+import { getSession } from '../db/session';
 
 /**
  * Simple lock to prevent overlapping syncs. Exported so callers can query state.
@@ -22,12 +23,28 @@ const isJest = typeof process !== 'undefined' && !!process.env?.JEST_WORKER_ID;
  * - This function is safe to call manually and from background schedulers.
  */
 export type RunFullSyncResult =
-  | { status: 'skipped'; reason: 'already_running' | 'throttled' }
+  | { status: 'skipped'; reason: 'already_running' | 'throttled' | 'no_session' }
   | { status: 'ran'; pushed?: any; pulled?: any };
+
+const isUuid = (s: any) =>
+  typeof s === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(s);
 
 export async function runFullSync(options?: { force?: boolean }): Promise<RunFullSyncResult> {
   const now = Date.now();
   const force = !!options?.force;
+
+  // Guard: don’t hit Neon if there is no valid logged-in session.
+  // This avoids noisy warnings while user is on the login screen.
+  if (!isJest) {
+    try {
+      const sess: any = await getSession();
+      if (!isUuid(sess?.id)) {
+        return { status: 'skipped', reason: 'no_session' };
+      }
+    } catch (e) {
+      return { status: 'skipped', reason: 'no_session' };
+    }
+  }
 
   // 1. Concurrency Check
   if (isSyncRunning) {

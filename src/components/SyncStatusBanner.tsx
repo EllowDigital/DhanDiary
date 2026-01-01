@@ -78,7 +78,7 @@ const SyncStatusBanner = () => {
     return () => {
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -191,7 +191,7 @@ const SyncStatusBanner = () => {
           .then((v) => {
             if (v && !isNaN(Number(v))) setLastSyncAt(Number(v));
           })
-          .catch(() => {});
+          .catch(() => { });
       }
     }
   }, [bannerState]);
@@ -264,7 +264,7 @@ const SyncStatusBanner = () => {
 
   const translateY = visibility.interpolate({
     inputRange: [0, 1],
-    outputRange: [10, 0],
+    outputRange: [-10, 0],
   });
 
   return (
@@ -273,7 +273,7 @@ const SyncStatusBanner = () => {
         style={[
           styles.pill,
           {
-            marginBottom: insets.bottom + 10,
+            marginTop: insets.top + 10,
             opacity: visibility,
             transform: [{ translateY }],
           },
@@ -311,7 +311,7 @@ const SyncStatusBanner = () => {
 const styles = StyleSheet.create({
   wrapper: {
     position: 'absolute',
-    bottom: 0,
+    top: 0,
     left: 0,
     right: 0,
     zIndex: 999,
