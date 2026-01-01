@@ -54,7 +54,14 @@ export const useAuth = () => {
                 if (rows && rows.length) {
                   const u = rows[0];
                   // persist fresh profile locally
-                  await saveSession(u.id, u.name || '', u.email || '');
+                  await saveSession(
+                    u.id,
+                    u.name || '',
+                    u.email || '',
+                    (session as any)?.image ?? null,
+                    (session as any)?.imageUrl ?? null,
+                    (session as any)?.clerk_id ?? null
+                  );
                   setUser({
                     id: u.id,
                     name: u.name || '',
@@ -63,7 +70,43 @@ export const useAuth = () => {
                     imageUrl: (session as any)?.imageUrl ?? (session as any)?.image ?? null,
                   });
                 } else {
-                  setUser(session || null);
+                  // If the stored UUID isn't present on the server (offline fallback or migration),
+                  // try to resolve by Clerk id (authoritative identity) when available.
+                  const clerkId = (session as any)?.clerk_id
+                    ? String((session as any).clerk_id)
+                    : null;
+                  if (clerkId) {
+                    try {
+                      const byClerk = await query(
+                        'SELECT id, name, email FROM users WHERE clerk_id = $1 LIMIT 1',
+                        [clerkId]
+                      );
+                      if (byClerk && byClerk.length) {
+                        const u2 = byClerk[0];
+                        await saveSession(
+                          u2.id,
+                          u2.name || '',
+                          u2.email || '',
+                          (session as any)?.image ?? null,
+                          (session as any)?.imageUrl ?? null,
+                          clerkId
+                        );
+                        setUser({
+                          id: u2.id,
+                          name: u2.name || '',
+                          email: u2.email || '',
+                          image: (session as any)?.image ?? null,
+                          imageUrl: (session as any)?.imageUrl ?? (session as any)?.image ?? null,
+                        });
+                      } else {
+                        setUser(session || null);
+                      }
+                    } catch (e) {
+                      setUser(session || null);
+                    }
+                  } else {
+                    setUser(session || null);
+                  }
                 }
               } catch (e) {
                 // network or query failed — fall back to local session
