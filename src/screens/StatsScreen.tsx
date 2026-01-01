@@ -347,6 +347,7 @@ const StatsScreen = () => {
 
   // --- RENDER HELPERS ---
   const currencySymbol = stats?.currency === 'USD' ? '$' : '₹';
+  const isEmptyPeriod = Boolean(stats && Number(stats.count || 0) === 0);
 
   if (isLoading || authLoading) {
     return (
@@ -439,6 +440,16 @@ const StatsScreen = () => {
             <View style={[styles.card, { height: 200, justifyContent: 'center' }]}>
               <ActivityIndicator color={colors.primary} />
             </View>
+          ) : isEmptyPeriod ? (
+            <View style={styles.card}>
+              <View style={styles.rowBetween}>
+                <Text style={styles.cardLabel}>ANALYTICS</Text>
+              </View>
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyText}>No transactions for this period yet.</Text>
+                <Text style={styles.emptySubText}>Add income/expense to see insights here.</Text>
+              </View>
+            </View>
           ) : (
             <View style={styles.card}>
               <View style={styles.rowBetween}>
@@ -485,26 +496,29 @@ const StatsScreen = () => {
             <View style={styles.gridContainer}>
               <MetricCard
                 title="MAX IN"
-                value={formatCompact(stats.maxIncome || 0, stats.currency)}
+                value={isEmptyPeriod ? '—' : formatCompact(stats.maxIncome || 0, stats.currency)}
                 icon="trending-up"
                 colorBg="#DBEAFE"
                 colorIcon="#1E40AF"
+                subTitle={isEmptyPeriod ? 'No data yet' : undefined}
                 style={{ flex: 1 }}
               />
               <MetricCard
                 title="MAX OUT"
-                value={formatCompact(stats.maxExpense || 0, stats.currency)}
+                value={isEmptyPeriod ? '—' : formatCompact(stats.maxExpense || 0, stats.currency)}
                 icon="trending-down"
                 colorBg="#FEE2E2"
                 colorIcon="#991B1B"
+                subTitle={isEmptyPeriod ? 'No data yet' : undefined}
                 style={{ flex: 1 }}
               />
               <MetricCard
                 title="SAVINGS"
-                value={`${Math.round(stats.savingsRate)}%`}
+                value={isEmptyPeriod ? '—' : `${Math.round(stats.savingsRate)}%`}
                 icon="savings"
                 colorBg="#F0FDF4"
                 colorIcon="#166534"
+                subTitle={isEmptyPeriod ? 'Add transactions' : undefined}
                 style={{ flex: 1 }}
               />
             </View>
@@ -515,10 +529,11 @@ const StatsScreen = () => {
             <View style={styles.gridContainer}>
               <MetricCard
                 title="AVG / DAY"
-                value={formatCompact(stats.avgPerDay || 0, stats.currency)}
+                value={isEmptyPeriod ? '—' : formatCompact(stats.avgPerDay || 0, stats.currency)}
                 icon="speed"
                 colorBg="#FFF7ED"
                 colorIcon="#EA580C"
+                subTitle={isEmptyPeriod ? 'No spending yet' : undefined}
                 style={{ flex: 1 }}
               />
               <MetricCard
@@ -527,6 +542,7 @@ const StatsScreen = () => {
                 icon="receipt"
                 colorBg="#F3F4F6"
                 colorIcon="#4B5563"
+                subTitle={isEmptyPeriod ? 'No transactions' : undefined}
                 style={{ flex: 1 }}
               />
             </View>
@@ -551,7 +567,8 @@ const StatsScreen = () => {
                     />
                   ) : (
                     <View style={styles.emptyState}>
-                      <Text style={styles.emptyText}>No transactions in this period</Text>
+                      <Text style={styles.emptyText}>No spending trend yet</Text>
+                      <Text style={styles.emptySubText}>Add expenses to see a chart here.</Text>
                     </View>
                   )}
                 </ScrollView>
@@ -597,7 +614,8 @@ const StatsScreen = () => {
                     </View>
                   ) : (
                     <View style={styles.emptyState}>
-                      <Text style={styles.emptyText}>No data</Text>
+                      <Text style={styles.emptyText}>No expenses to analyze</Text>
+                      <Text style={styles.emptySubText}>Add expenses to see distribution.</Text>
                     </View>
                   )}
                 </View>
@@ -612,7 +630,8 @@ const StatsScreen = () => {
                       ))
                     ) : (
                       <View style={styles.emptyState}>
-                        <Text style={styles.emptyText}>No categories found</Text>
+                        <Text style={styles.emptyText}>No categories yet</Text>
+                        <Text style={styles.emptySubText}>Add expenses to see top categories.</Text>
                       </View>
                     )}
                   </View>
@@ -770,6 +789,13 @@ const styles = StyleSheet.create({
 
   emptyState: { padding: 30, alignItems: 'center', justifyContent: 'center' },
   emptyText: { color: '#CBD5E1', fontStyle: 'italic', fontSize: fontScale(13) },
+  emptySubText: {
+    marginTop: 6,
+    color: '#94A3B8',
+    fontSize: fontScale(12),
+    fontWeight: '600',
+    textAlign: 'center',
+  },
 });
 
 export default StatsScreen;

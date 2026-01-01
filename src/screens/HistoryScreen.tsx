@@ -54,6 +54,14 @@ interface TransactionEntry {
   deleted_at?: string | null;
 }
 
+type PreparedEntry = TransactionEntry & {
+  __ts: number;
+  __amountNum: number;
+  __dateStr: string;
+  __amountStr: string;
+  __isIncome: boolean;
+};
+
 interface EditModalProps {
   visible: boolean;
   entryId: string | null;
@@ -80,6 +88,8 @@ const resolveEntryMoment = (entry: TransactionEntry) => {
   return dayjs(v);
 };
 
+const inrFormatter = new Intl.NumberFormat('en-IN');
+
 // --- 1. SWIPEABLE LIST ITEM ---
 const SwipeableHistoryItem = React.memo(
   ({
@@ -87,15 +97,15 @@ const SwipeableHistoryItem = React.memo(
     onEdit,
     onDelete,
   }: {
-    item: TransactionEntry;
-    onEdit: () => void;
-    onDelete: () => void;
+    item: PreparedEntry;
+    onEdit: (entry: PreparedEntry) => void;
+    onDelete: (id: string) => void;
   }) => {
-    const isInc = isIncome(item.type);
+    const isInc = item.__isIncome;
     const color = isInc ? colors.accentGreen || '#10B981' : colors.accentRed || '#EF4444';
     const catIcon = getIconForCategory(item.category);
     const iconName = catIcon || (isInc ? 'arrow-downward' : 'arrow-upward');
-    const dateStr = formatDate(item.date || item.created_at);
+    const dateStr = item.__dateStr;
     const swipeableRef = useRef<Swipeable>(null);
 
     const renderRightActions = (
@@ -112,7 +122,7 @@ const SwipeableHistoryItem = React.memo(
           style={styles.rightAction}
           onPress={() => {
             swipeableRef.current?.close();
-            onDelete();
+            onDelete(item.local_id);
           }}
         >
           <Animated.View style={{ transform: [{ scale }], alignItems: 'center' }}>
@@ -137,7 +147,7 @@ const SwipeableHistoryItem = React.memo(
           style={styles.leftAction}
           onPress={() => {
             swipeableRef.current?.close();
-            onEdit();
+            onEdit(item);
           }}
         >
           <Animated.View style={{ transform: [{ scale }], alignItems: 'center' }}>
@@ -168,7 +178,7 @@ const SwipeableHistoryItem = React.memo(
                 {item.category}
               </Text>
               {/* Sync Status Badge */}
-              <View style={{ marginLeft: 8, justifyContent: 'center' }}>
+              <View style={styles.syncIconWrapper}>
                 {item.sync_status === 1 ? (
                   <MaterialIcon name="check-circle" size={14} color="#10B981" />
                 ) : item.sync_status === 0 ? (
@@ -178,7 +188,7 @@ const SwipeableHistoryItem = React.memo(
                 ) : null}
               </View>
               <Text style={[styles.compactAmount, { color }]}>
-                {isInc ? '+' : '-'}₹{Number(item.amount).toLocaleString()}
+                {isInc ? '+' : '-'}₹{item.__amountStr}
               </Text>
             </View>
             <View style={styles.compactSubRow}>
@@ -437,27 +447,48 @@ const HistoryScreen = () => {
   const [quickFilter, setQuickFilter] = useState<'ALL' | 'WEEK' | 'MONTH'>('ALL');
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
 
-  // --- FILTER LOGIC ---
-  const filtered = useMemo(() => {
-    let list = entries || [];
-    const now = dayjs();
+  const toggleFilter = useCallback((f: 'ALL' | 'WEEK' | 'MONTH') => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setQuickFilter(f);
+  }, []);
 
+  // --- FILTER LOGIC ---
+  const preparedEntries = useMemo<PreparedEntry[]>(() => {
+    const list = entries || [];
+    return list.map((e) => {
+      const ts = resolveEntryMoment(e).valueOf();
+      const amountNum = Number(e.amount) || 0;
+      return {
+        ...e,
+        __ts: ts,
+        __amountNum: amountNum,
+        __dateStr: formatDate(e.date || e.created_at),
+        __amountStr: inrFormatter.format(amountNum),
+        __isIncome: isIncome(e.type),
+      };
+    });
+  }, [entries]);
+
+  const filtered = useMemo<PreparedEntry[]>(() => {
+    const now = dayjs();
+    const startWeekTs = now.subtract(6, 'day').startOf('day').valueOf();
+    const startMonthTs = now.startOf('month').valueOf();
+
+    let list = preparedEntries;
     if (quickFilter === 'WEEK') {
-      const start = now.subtract(6, 'day').startOf('day');
-      list = list.filter((e) => !resolveEntryMoment(e).isBefore(start));
+      list = preparedEntries.filter((e) => e.__ts >= startWeekTs);
     } else if (quickFilter === 'MONTH') {
-      const start = now.startOf('month');
-      list = list.filter((e) => resolveEntryMoment(e).isSame(start, 'month'));
+      list = preparedEntries.filter((e) => e.__ts >= startMonthTs);
     }
 
-    return list.sort((a, b) => resolveEntryMoment(b).valueOf() - resolveEntryMoment(a).valueOf());
-  }, [entries, quickFilter]);
+    // Avoid mutating the source array
+    return [...list].sort((a, b) => b.__ts - a.__ts);
+  }, [preparedEntries, quickFilter]);
 
   const summary = useMemo(() => {
     let net = 0;
     filtered.forEach((e) => {
-      const val = Number(e.amount) || 0;
-      net += isIncome(e.type) ? val : -val;
+      net += e.__isIncome ? e.__amountNum : -e.__amountNum;
     });
     return { net, count: filtered.length };
   }, [filtered]);
@@ -510,10 +541,12 @@ const HistoryScreen = () => {
     setEditingEntryId(item.local_id);
   }, []);
 
-  const toggleFilter = (f: 'ALL' | 'WEEK' | 'MONTH') => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setQuickFilter(f);
-  };
+  const renderItem = useCallback(
+    ({ item }: { item: PreparedEntry }) => (
+      <SwipeableHistoryItem item={item} onEdit={attemptEdit} onDelete={handleDelete} />
+    ),
+    [attemptEdit, handleDelete]
+  );
 
   const renderHeader = useMemo(
     () => (
@@ -578,18 +611,15 @@ const HistoryScreen = () => {
       <FlatList
         data={filtered}
         keyExtractor={(item) => item.local_id}
-        renderItem={({ item }) => (
-          <SwipeableHistoryItem
-            item={item}
-            onEdit={() => attemptEdit(item)}
-            onDelete={() => handleDelete(item.local_id)}
-          />
-        )}
+        renderItem={renderItem}
         ListHeaderComponent={renderHeader}
         contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 80 }]}
         initialNumToRender={10}
         windowSize={5}
         removeClippedSubviews={Platform.OS === 'android'}
+        maxToRenderPerBatch={10}
+        updateCellsBatchingPeriod={50}
+        showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           !showLoading ? (
             <View style={styles.emptyState}>
@@ -692,15 +722,17 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   compactContent: { flex: 1 },
-  compactHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 },
+  compactHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 2 },
   compactCategory: {
     fontSize: 15,
     fontWeight: '600',
     color: colors.text || '#1E293B',
     flex: 1,
     marginRight: 8,
+    flexShrink: 1,
   },
-  compactAmount: { fontSize: 15, fontWeight: '700' },
+  syncIconWrapper: { marginLeft: 8, justifyContent: 'center' },
+  compactAmount: { fontSize: 15, fontWeight: '700', marginLeft: 'auto' },
   compactSubRow: { flexDirection: 'row', justifyContent: 'space-between' },
   compactNote: { fontSize: 12, color: colors.muted || '#94A3B8', flex: 1, marginRight: 8 },
   compactDate: { fontSize: 11, color: colors.subtleText || '#CBD5E1' },
