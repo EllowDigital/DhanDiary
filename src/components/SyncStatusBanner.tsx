@@ -92,6 +92,15 @@ const SyncStatusBanner = () => {
         const ok = !!(s && s.id);
         if (mounted) hasSessionRef.current = ok;
         if (!ok) {
+          if (debounceRef.current) {
+            clearTimeout(debounceRef.current);
+            debounceRef.current = null;
+          }
+          if (hideTimerRef.current) {
+            clearTimeout(hideTimerRef.current);
+            hideTimerRef.current = null;
+          }
+
           // Immediately hide any banner on sign out
           setBannerState('hidden');
           setRenderState('hidden');
@@ -120,6 +129,30 @@ const SyncStatusBanner = () => {
       mounted = false;
       try {
         unsub();
+      } catch (e) { }
+    };
+  }, [spinValue, visibility]);
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+      if (hideTimerRef.current) {
+        clearTimeout(hideTimerRef.current);
+        hideTimerRef.current = null;
+      }
+      try {
+        spinAnimRef.current?.stop();
+      } catch (e) { }
+      spinAnimRef.current = null;
+      try {
+        spinValue.stopAnimation();
+      } catch (e) { }
+      spinValue.setValue(0);
+      try {
+        visibility.stopAnimation();
       } catch (e) { }
     };
   }, [spinValue, visibility]);
