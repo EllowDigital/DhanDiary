@@ -268,20 +268,24 @@ const CashInList = () => {
 
   const handleDelete = useCallback(
     (id: string) => {
-      Alert.alert('Delete Income', 'Are you sure you want to remove this record?', [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteEntry(id);
-            } catch (err) {
-              console.warn(err);
-            }
+      Alert.alert(
+        'Delete Income',
+        'This will delete it locally now and remove it from all devices after the next sync.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await deleteEntry(id);
+              } catch (err) {
+                console.warn(err);
+              }
+            },
           },
-        },
-      ]);
+        ]
+      );
     },
     [deleteEntry]
   );

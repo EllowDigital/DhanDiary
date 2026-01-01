@@ -93,7 +93,7 @@ const DrawerNavigator = () => {
 
   return (
     <View style={{ flex: 1 }}>
-      {/* Place banner inside drawer layout so it pushes screen content down */}
+      {/* Floating banner overlay (does not shift layout) */}
       <SyncStatusBanner />
 
       <Drawer.Navigator
