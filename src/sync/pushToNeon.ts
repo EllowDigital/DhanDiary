@@ -1,6 +1,7 @@
 import { getUnsyncedTransactions } from '../db/transactions';
 import { executeSqlAsync } from '../db/sqlite';
 import { query as neonQuery, getNeonHealth } from '../api/neonClient';
+import { throwIfSyncCancelled } from './syncCancel';
 
 const CHUNK_SIZE = 50;
 
@@ -133,6 +134,7 @@ export async function pushToNeon(): Promise<{ pushed: string[]; deleted: string[
     for (let i = 0; i < dirty.length; i += CHUNK_SIZE) chunks.push(dirty.slice(i, i + CHUNK_SIZE));
 
     for (const chunk of chunks) {
+      throwIfSyncCancelled();
       try {
         const returnedRows = await pushBatch(chunk);
 
@@ -166,6 +168,7 @@ export async function pushToNeon(): Promise<{ pushed: string[]; deleted: string[
         // Fallback: if a chunk fails (e.g., one bad row), try per-row so others still sync.
         if (__DEV__) console.warn('[sync] pushToNeon: batch failed, falling back to per-row', err);
         for (const row of chunk) {
+          throwIfSyncCancelled();
           try {
             const returnedRows = await pushBatch([row]);
             const ret = Array.isArray(returnedRows) && returnedRows.length ? returnedRows[0] : null;

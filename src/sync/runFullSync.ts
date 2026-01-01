@@ -2,6 +2,7 @@ import pushToNeon from './pushToNeon';
 import pullFromNeon from './pullFromNeon';
 import retryWithBackoff from './retry';
 import { getSession } from '../db/session';
+import { throwIfSyncCancelled } from './syncCancel';
 
 /**
  * Simple lock to prevent overlapping syncs. Exported so callers can query state.
@@ -23,7 +24,7 @@ const isJest = typeof process !== 'undefined' && !!process.env?.JEST_WORKER_ID;
  * - This function is safe to call manually and from background schedulers.
  */
 export type RunFullSyncResult =
-  | { status: 'skipped'; reason: 'already_running' | 'throttled' | 'no_session' }
+  | { status: 'skipped'; reason: 'already_running' | 'throttled' | 'no_session' | 'cancelled' }
   | { status: 'ran'; pushed?: any; pulled?: any };
 
 const isUuid = (s: any) =>
@@ -32,6 +33,13 @@ const isUuid = (s: any) =>
 export async function runFullSync(options?: { force?: boolean }): Promise<RunFullSyncResult> {
   const now = Date.now();
   const force = !!options?.force;
+
+  // Respect cancellation requests (e.g., logout/navigation)
+  try {
+    throwIfSyncCancelled();
+  } catch (e) {
+    return { status: 'skipped', reason: 'cancelled' };
+  }
 
   // Guard: don’t hit Neon if there is no valid logged-in session.
   // This avoids noisy warnings while user is on the login screen.
@@ -75,6 +83,7 @@ export async function runFullSync(options?: { force?: boolean }): Promise<RunFul
   try {
     // --- STEP A: PUSH ---
     try {
+      throwIfSyncCancelled();
       // Retry transient push failures with exponential backoff
       pushResult = await retryWithBackoff(() => pushToNeon(), {
         maxRetries: 3,
@@ -82,6 +91,9 @@ export async function runFullSync(options?: { force?: boolean }): Promise<RunFul
       });
       if (__DEV__) console.log('[sync] runFullSync: push result', pushResult);
     } catch (pushErr) {
+      if ((pushErr as any)?.message === 'sync_cancelled') {
+        return { status: 'skipped', reason: 'cancelled' };
+      }
       // Log warning only if we are not in a test environment (to keep test output clean)
       if (__DEV__ && !isJest) {
         console.warn('[sync] runFullSync: push failed after retries', pushErr);
@@ -91,6 +103,7 @@ export async function runFullSync(options?: { force?: boolean }): Promise<RunFul
 
     // --- STEP B: PULL ---
     try {
+      throwIfSyncCancelled();
       // Retry transient pull failures with exponential backoff
       pullResult = await retryWithBackoff(() => pullFromNeon(), {
         maxRetries: 3,
@@ -98,6 +111,9 @@ export async function runFullSync(options?: { force?: boolean }): Promise<RunFul
       });
       if (__DEV__) console.log('[sync] runFullSync: pull result', pullResult);
     } catch (pullErr) {
+      if ((pullErr as any)?.message === 'sync_cancelled') {
+        return { status: 'skipped', reason: 'cancelled' };
+      }
       if (__DEV__ && !isJest) {
         console.warn('[sync] runFullSync: pull failed after retries', pullErr);
       }

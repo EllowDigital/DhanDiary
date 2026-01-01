@@ -2,6 +2,7 @@ import { executeSqlAsync } from '../db/sqlite';
 import { upsertTransactionFromRemote } from '../db/transactions';
 import { query as neonQuery, getNeonHealth } from '../api/neonClient';
 import { getSession } from '../db/session';
+import { throwIfSyncCancelled } from './syncCancel';
 
 const isUuid = (s: any) =>
   typeof s === 'string' &&
@@ -111,6 +112,7 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
   };
 
   for (let page = 0; page < MAX_PAGES; page++) {
+    throwIfSyncCancelled();
     // DEV DEBUG: log the cursor param we'll send to Neon
     try {
       if (__DEV__) console.log('[sync] pullFromNeon: page', page + 1, 'cursor=', cursor);
@@ -146,9 +148,11 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
     // Process remote rows in small chunks to avoid blocking the JS thread.
     const UPSERT_CHUNK = 25;
     for (let i = 0; i < remoteRows.length; i += UPSERT_CHUNK) {
+      throwIfSyncCancelled();
       const batch = remoteRows.slice(i, i + UPSERT_CHUNK);
 
       for (const remote of batch) {
+        throwIfSyncCancelled();
         if (!remote || !remote.id) continue;
         if (processedIds.has(remote.id)) {
           if ((globalThis as any).__SYNC_VERBOSE__)

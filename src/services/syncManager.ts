@@ -8,6 +8,7 @@ import { getSession, saveSession } from '../db/session';
 // `syncManager` free of direct Neon/SQLite logic. Import from legacy module
 // only when needed.
 import { query } from '../api/neonClient';
+import { requestSyncCancel, resetSyncCancel } from '../sync/syncCancel';
 
 // --- Types & Constants ---
 
@@ -59,6 +60,7 @@ let _isOnline = false;
 let _entriesUnsubscribe: (() => void) | null = null;
 let _entriesSyncTimer: any = null;
 let _lastAlreadyRunningLogAt = 0;
+let _scheduledSyncTimer: any = null;
 // Sync status listeners (UI can subscribe to show progress or errors)
 export type SyncStatus = 'idle' | 'syncing' | 'error';
 let _syncStatus: SyncStatus = 'idle';
@@ -70,6 +72,31 @@ export const subscribeSyncStatus = (listener: (status: SyncStatus) => void) => {
 };
 
 export const isSyncInProgress = () => _syncStatus === 'syncing';
+
+// Public: request cancellation of any ongoing sync work.
+export const cancelSyncWork = () => {
+  try {
+    requestSyncCancel();
+  } catch (e) {}
+};
+
+// Public: schedule a sync to run after interactions (UI-first) and de-dupe rapid triggers.
+export const scheduleSync = (options?: { force?: boolean; source?: 'manual' | 'auto' }) => {
+  try {
+    if (_scheduledSyncTimer) return;
+    _scheduledSyncTimer = setTimeout(() => {
+      _scheduledSyncTimer = null;
+      InteractionManager.runAfterInteractions(() => {
+        syncBothWays(options).catch(() => {
+          // Swallow expected failures (offline/slow network) to avoid LogBox noise.
+        });
+      });
+    }, 250);
+  } catch (e) {
+    // Best-effort fallback
+    syncBothWays(options).catch(() => {});
+  }
+};
 
 const setSyncStatus = (s: SyncStatus) => {
   if (_syncStatus === s) return;
@@ -234,6 +261,10 @@ export type SyncResult = {
 };
 
 export const syncBothWays = async (options?: { force?: boolean; source?: 'manual' | 'auto' }) => {
+  // Starting a new sync implies we want to clear any previous cancel request.
+  try {
+    resetSyncCancel();
+  } catch (e) {}
   // If cloud sync isn't configured in this build, fail fast with a clear reason.
   try {
     const h = getNeonHealth();
@@ -313,7 +344,10 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
       } catch (e) {}
       return {
         ok: true,
-        reason: runResult.reason === 'no_session' ? 'up_to_date' : runResult.reason,
+        reason:
+          runResult.reason === 'no_session' || runResult.reason === 'cancelled'
+            ? 'up_to_date'
+            : (runResult.reason as any),
         upToDate: true,
         counts: { pushed: 0, pulled: 0 },
       } satisfies SyncResult;
@@ -371,6 +405,15 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
       counts: { pushed: pushedCount, pulled: pulledCount },
     } satisfies SyncResult;
   } catch (err) {
+    // Cancellation is a normal outcome (e.g., logout). Do not enter error state.
+    try {
+      if ((err as any)?.message === 'sync_cancelled') {
+        try {
+          setSyncStatus('idle');
+        } catch (e) {}
+        return { ok: true, reason: 'up_to_date', upToDate: true, counts: { pushed: 0, pulled: 0 } };
+      }
+    } catch (e) {}
     try {
       const verbose = Boolean(
         (globalThis as any).__NEON_VERBOSE__ || (globalThis as any).__SYNC_VERBOSE__
