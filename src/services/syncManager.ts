@@ -390,7 +390,7 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
     if (!realId || !isUuid(realId)) {
       return {
         ok: false,
-        reason: 'identity_unresolved',
+        reason: 'no_session',
         upToDate: true,
         counts: { pushed: 0, pulled: 0 },
       } satisfies SyncResult;
