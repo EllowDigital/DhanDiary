@@ -124,6 +124,21 @@ const StatsScreen = () => {
   const { entries: entriesRaw = [], isLoading } = useEntries(user?.id);
   const entries = entriesRaw as LocalEntry[];
 
+  // Bust aggregator cache when local entries change (sync/pull writes to SQLite).
+  // This prevents Analytics from staying stale for up to the cache TTL.
+  const entriesCacheBuster = useMemo(() => {
+    try {
+      let maxTs = 0;
+      for (const e of entries) {
+        const t = Number((e as any)?.updated_at || 0);
+        if (Number.isFinite(t) && t > maxTs) maxTs = t;
+      }
+      return String(maxTs);
+    } catch (e) {
+      return '';
+    }
+  }, [entries]);
+
   // --- REFS & ANIMATION ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
@@ -237,6 +252,7 @@ const StatsScreen = () => {
       if (user?.id) {
         result = await aggregateWithPreferSummary(user.id, rangeStart, rangeEnd, {
           signal: controller.signal,
+          cacheBuster: entriesCacheBuster,
         });
       } else if (filter === 'All' || entries.length > 5000) {
         // Stream entries in pages for heavy loads (Offline mode)

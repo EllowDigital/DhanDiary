@@ -13,8 +13,15 @@ type CacheEntry = { ts: number; value: StatResult };
 const AGG_CACHE = new Map<string, CacheEntry>();
 const CACHE_TTL_MS = 30 * 1000; // 30s Cache
 
-const cacheKey = (userId: string, start: dayjs.Dayjs, end: dayjs.Dayjs) =>
-  `${userId}:${start.startOf('day').valueOf()}:${end.startOf('day').valueOf()}`;
+const cacheKey = (
+  userId: string,
+  start: dayjs.Dayjs,
+  end: dayjs.Dayjs,
+  cacheBuster?: string | number
+) =>
+  `${userId}:${start.startOf('day').valueOf()}:${end.startOf('day').valueOf()}:$${
+    cacheBuster ?? ''
+  }`;
 
 /**
  * ------------------------------------------------------------------
@@ -227,7 +234,7 @@ export const aggregateWithPreferSummary = async (
   userId: string | undefined,
   start: dayjs.Dayjs,
   end: dayjs.Dayjs,
-  opts?: { signal?: AbortSignal }
+  opts?: { signal?: AbortSignal; cacheBuster?: string | number }
 ): Promise<StatResult> => {
   if (!userId) {
     return {
@@ -249,7 +256,7 @@ export const aggregateWithPreferSummary = async (
   }
 
   // 1. Check Cache
-  const key = cacheKey(userId, start, end);
+  const key = cacheKey(userId, start, end, opts?.cacheBuster);
   const cached = AGG_CACHE.get(key);
   if (cached && Date.now() - cached.ts < CACHE_TTL_MS) return cached.value;
 
