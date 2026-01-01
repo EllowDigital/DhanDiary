@@ -1,10 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import {
-  View,
-  StyleSheet,
-  Text,
-  BackHandler,
-} from 'react-native';
+import { View, StyleSheet, Text, BackHandler } from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { Button } from '@rneui/themed';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
