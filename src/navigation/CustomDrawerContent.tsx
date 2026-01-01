@@ -80,14 +80,49 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
   // Sync banner is a floating overlay now; drawer layout never needs adjusting.
 
+  const getDeepestActiveRouteName = (route: any): string => {
+    try {
+      let current = route;
+      while (current?.state && typeof current.state.index === 'number') {
+        const next = current.state.routes?.[current.state.index];
+        if (!next) break;
+        current = next;
+      }
+      return current?.name || route?.name || '';
+    } catch (e) {
+      return route?.name || '';
+    }
+  };
+
+  const drawerFocusedRoute = props.state.routes[props.state.index];
+  const nestedFocusedRouteName = getDeepestActiveRouteName(drawerFocusedRoute);
+
   const handleNavigate = (routeName: string) => {
-    props.navigation.navigate(routeName);
+    // Close drawer first to avoid weird "still on same screen" perception.
+    try {
+      (props.navigation as any).closeDrawer?.();
+    } catch (e) {
+      // ignore
+    }
+
+    // Dashboard is a nested BottomTabNavigator. Ensure Home/History go to the correct tab.
+    if (routeName === 'Dashboard') {
+      props.navigation.navigate('Dashboard' as never, { screen: 'Home' } as never);
+      return;
+    }
+
+    if (routeName === 'History') {
+      props.navigation.navigate('Dashboard' as never, { screen: 'History' } as never);
+      return;
+    }
+
+    props.navigation.navigate(routeName as never);
   };
 
   const handleLogout = () => {
@@ -223,7 +258,17 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
           <View style={styles.menuSection}>
             <Text style={styles.sectionTitle}>MENU</Text>
             {props.state.routes.map((route, index) => {
-              const focused = props.state.index === index;
+              // Drawer focus doesn't change when switching tabs inside Dashboard.
+              // Derive the real "active" menu item by looking at the nested focused route.
+              const isDrawerFocused = props.state.index === index;
+              const focused =
+                (route.name === 'Dashboard' &&
+                  isDrawerFocused &&
+                  (nestedFocusedRouteName === 'Home' || !nestedFocusedRouteName)) ||
+                (route.name === 'History' &&
+                  ((isDrawerFocused && drawerFocusedRoute.name === 'History') ||
+                    (drawerFocusedRoute.name === 'Dashboard' && nestedFocusedRouteName === 'History'))) ||
+                (route.name !== 'Dashboard' && route.name !== 'History' && isDrawerFocused);
               const { options } = props.descriptors[route.key];
 
               // Filter hidden routes
