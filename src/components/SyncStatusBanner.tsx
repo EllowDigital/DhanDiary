@@ -34,6 +34,7 @@ interface BannerConfig {
 
 const DEBOUNCE_MS = 500;
 const SHOW_SYNCED_MS = 2500;
+const SHOW_OFFLINE_MS = 5000;
 
 /* -------------------------------------------------------------------------- */
 /* Helpers                                                                    */
@@ -71,6 +72,20 @@ const SyncStatusBanner = () => {
   // Refs for timers
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Offline should not be a persistent banner that blocks headers.
+  // Show it once per offline period, then keep hidden until back online.
+  const offlineDismissedRef = useRef(false);
+
+  useEffect(() => {
+    if (isOnline) {
+      offlineDismissedRef.current = false;
+      if (hideTimerRef.current) {
+        clearTimeout(hideTimerRef.current);
+        hideTimerRef.current = null;
+      }
+    }
+  }, [isOnline]);
 
   /* ------------------------- 1. Listen to Sync Manager ------------------------ */
   useEffect(() => {
@@ -110,7 +125,7 @@ const SyncStatusBanner = () => {
 
       // --- Priority Logic ---
       if (!isOnline) {
-        nextState = 'offline';
+        nextState = offlineDismissedRef.current ? 'hidden' : 'offline';
       } else if (syncStatus === 'error') {
         // If the internet is "up" but Neon is unreachable (slow/blocked DNS/captive portal),
         // show a calm offline-style status rather than an alarming failure.
@@ -131,14 +146,22 @@ const SyncStatusBanner = () => {
       // --- Transition Handling ---
       if (nextState !== bannerState) setBannerState(nextState);
 
-      // --- Auto-Hide Logic for "Synced" Only ---
+      // --- Auto-Hide Logic ---
+      // - "Synced" is transient.
+      // - "Offline" should be a short notification (do not persist and cover headers).
       if (nextState === 'synced') {
         if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
         hideTimerRef.current = setTimeout(() => {
           setBannerState('hidden');
         }, SHOW_SYNCED_MS);
+      } else if (nextState === 'offline') {
+        if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+        hideTimerRef.current = setTimeout(() => {
+          offlineDismissedRef.current = true;
+          setBannerState('hidden');
+        }, SHOW_OFFLINE_MS);
       } else {
-        // For Offline/Syncing/Error -> Cancel hide timer, persist banner
+        // For Syncing/Error -> Cancel hide timer, persist banner
         if (hideTimerRef.current) {
           clearTimeout(hideTimerRef.current);
           hideTimerRef.current = null;
