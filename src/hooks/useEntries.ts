@@ -19,7 +19,7 @@ import { getSession, saveSession } from '../db/session';
 import { resetRoot } from '../utils/rootNavigation';
 import { ensureCategory, DEFAULT_CATEGORY } from '../constants/categories';
 import { toCanonical, isIncome } from '../utils/transactionType';
-import { syncBothWays } from '../services/syncManager';
+import { scheduleSync } from '../services/syncManager';
 
 /* ----------------------------------------------------------
    Types & Interfaces
@@ -255,7 +255,7 @@ export const useEntries = (userId?: string | null) => {
             if (net.isConnected) {
               // Use the central sync manager so locks/throttling apply consistently
               // and we avoid overlapping push/pull work across the app.
-              await syncBothWays({ source: 'auto' } as any);
+              scheduleSync({ source: 'auto' } as any);
             }
           } catch (e) {
             if (__DEV__) console.warn('[useEntries] requestSync execution failed', e);
@@ -265,7 +265,7 @@ export const useEntries = (userId?: string | null) => {
     } catch (e) {
       if (__DEV__) console.warn('[useEntries] requestSync trigger failed', e);
     }
-  }, []); // syncBothWays is imported, effectively stable
+  }, []); // scheduleSync is imported, effectively stable
 
   // Clean up timeout on unmount
   React.useEffect(() => {

@@ -61,6 +61,9 @@ let _entriesUnsubscribe: (() => void) | null = null;
 let _entriesSyncTimer: any = null;
 let _lastAlreadyRunningLogAt = 0;
 let _scheduledSyncTimer: any = null;
+let _scheduledSyncPromise: Promise<any> | null = null;
+let _scheduledSyncResolve: ((value: any) => void) | null = null;
+let _scheduledSyncReject: ((reason?: any) => void) | null = null;
 // Sync status listeners (UI can subscribe to show progress or errors)
 export type SyncStatus = 'idle' | 'syncing' | 'error';
 let _syncStatus: SyncStatus = 'idle';
@@ -83,18 +86,44 @@ export const cancelSyncWork = () => {
 // Public: schedule a sync to run after interactions (UI-first) and de-dupe rapid triggers.
 export const scheduleSync = (options?: { force?: boolean; source?: 'manual' | 'auto' }) => {
   try {
-    if (_scheduledSyncTimer) return;
+    if (_scheduledSyncPromise) return _scheduledSyncPromise;
+
+    _scheduledSyncPromise = new Promise((resolve, reject) => {
+      _scheduledSyncResolve = resolve;
+      _scheduledSyncReject = reject;
+    });
+
+    if (_scheduledSyncTimer) return _scheduledSyncPromise;
     _scheduledSyncTimer = setTimeout(() => {
       _scheduledSyncTimer = null;
       InteractionManager.runAfterInteractions(() => {
-        syncBothWays(options).catch(() => {
-          // Swallow expected failures (offline/slow network) to avoid LogBox noise.
-        });
+        syncBothWays(options)
+          .then((res) => {
+            try {
+              _scheduledSyncResolve?.(res);
+            } catch (e) {}
+          })
+          .catch((err) => {
+            try {
+              _scheduledSyncReject?.(err);
+            } catch (e) {}
+          })
+          .finally(() => {
+            _scheduledSyncPromise = null;
+            _scheduledSyncResolve = null;
+            _scheduledSyncReject = null;
+          });
       });
     }, 250);
+
+    return _scheduledSyncPromise;
   } catch (e) {
     // Best-effort fallback
-    syncBothWays(options).catch(() => {});
+    try {
+      return syncBothWays(options);
+    } catch (ee) {
+      return Promise.resolve({ ok: false, reason: 'error' } as any);
+    }
   }
 };
 

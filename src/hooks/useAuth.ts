@@ -303,8 +303,8 @@ try {
         if (!rows || rows.length === 0) {
           // bootstrap from server via the central sync manager
           try {
-            const { syncBothWays } = require('../services/syncManager');
-            await syncBothWays({ source: 'auto' });
+            const { scheduleSync } = require('../services/syncManager');
+            scheduleSync({ source: 'auto' });
           } catch (ee) {}
         }
       } catch (e) {}

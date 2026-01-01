@@ -2,12 +2,13 @@ import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useInternetStatus } from './useInternetStatus';
 import {
-  syncBothWays,
+  scheduleSync,
   startAutoSyncListener,
   stopAutoSyncListener,
   subscribeSyncConflicts,
 } from '../services/syncManager';
 import { useToast } from '../context/ToastContext';
+import { isSyncCancelRequested } from '../sync/syncCancel';
 
 /**
  * useOfflineSync now accepts an optional userId. Auto-sync will only run when a user is present.
@@ -54,7 +55,7 @@ export const useOfflineSync = (userId?: string | null) => {
 
       (async () => {
         try {
-          const res: any = await syncBothWays();
+          const res: any = await scheduleSync();
 
           // After sync completes, refresh any active entry lists again.
           try {
@@ -79,6 +80,10 @@ export const useOfflineSync = (userId?: string | null) => {
             }
           }
         } catch (err) {
+          // If logout/navigation requested cancellation, don't surface as a failure.
+          try {
+            if (isSyncCancelRequested() || (err as any)?.message === 'sync_cancelled') return;
+          } catch (e) {}
           console.error('Sync failed', err);
           showToast('Auto-sync failed');
         }

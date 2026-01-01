@@ -219,15 +219,12 @@ export const logout = async (): Promise<boolean> => {
   await safeRun(async () => {
     const sync = require('./syncManager'); // Ensure this path matches your file structure
     if (sync) {
+      // Immediately cancel any in-flight sync loops so logout remains responsive.
+      if (typeof sync.cancelSyncWork === 'function') sync.cancelSyncWork();
       if (typeof sync.stopAutoSyncListener === 'function') sync.stopAutoSyncListener();
       if (typeof sync.stopForegroundSyncScheduler === 'function')
         sync.stopForegroundSyncScheduler();
       if (typeof sync.stopBackgroundFetch === 'function') await sync.stopBackgroundFetch();
-
-      // Attempt a final quick sync, don't wait too long
-      if (typeof sync.syncBothWays === 'function') {
-        await withTimeout(sync.syncBothWays(), 3000).catch(() => {});
-      }
     }
   });
 
