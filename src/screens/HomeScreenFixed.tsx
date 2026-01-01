@@ -287,7 +287,7 @@ const HomeScreen = () => {
     return () => {
       try {
         if (unsub) unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, [fadeAnim]);
 
@@ -298,7 +298,7 @@ const HomeScreen = () => {
       try {
         const s = await getSession();
         if (mounted) setFallbackSession(s);
-      } catch (e) { }
+      } catch (e) {}
     };
     load();
     const unsub = subscribeSession((s) => {
@@ -308,7 +308,7 @@ const HomeScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, []);
 
@@ -433,7 +433,10 @@ const HomeScreen = () => {
                 fallbackSession?.name ||
                 null;
               const effectiveImage =
-                user?.imageUrl || user?.image || fallbackSession?.imageUrl || fallbackSession?.image;
+                user?.imageUrl ||
+                user?.image ||
+                fallbackSession?.imageUrl ||
+                fallbackSession?.image;
 
               return (
                 <>
@@ -548,7 +551,9 @@ const HomeScreen = () => {
               key={idx}
               style={[
                 styles.actionCard,
-                item.primary ? { backgroundColor: COLORS.primary } : { backgroundColor: COLORS.card },
+                item.primary
+                  ? { backgroundColor: COLORS.primary }
+                  : { backgroundColor: COLORS.card },
               ]}
               onPress={() => navigation.navigate(item.nav)}
               activeOpacity={0.8}

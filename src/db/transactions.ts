@@ -309,7 +309,14 @@ export async function getAnyUserWithTransactions(): Promise<string | null> {
  * Upsert from Remote (Sync Pull)
  * Aligns with Schema: respects server_version and existing tombstones
  */
-export async function upsertTransactionFromRemote(txn: TransactionRow) {
+export async function upsertTransactionFromRemote(
+  txn: TransactionRow,
+  opts?: {
+    // Avoid spamming UI refresh events during large pulls.
+    // In most cases, the sync orchestrator will notify once per sync.
+    notify?: boolean;
+  }
+) {
   try {
     // 1. Check if we have a newer local version or a deletion tombstone that hasn't synced yet?
     // Actually, usually "Server Wins" or "Last Write Wins".
@@ -425,10 +432,12 @@ export async function upsertTransactionFromRemote(txn: TransactionRow) {
     ]);
 
     if (__DEV__) console.log('[transactions] upsert remote', txn.id);
-    try {
-      const rowsAffected = Number(writeRes?.rowsAffected || 0);
-      if (rowsAffected > 0) notifyEntriesChanged();
-    } catch (e) {}
+    if (opts?.notify) {
+      try {
+        const rowsAffected = Number(writeRes?.rowsAffected || 0);
+        if (rowsAffected > 0) notifyEntriesChanged();
+      } catch (e) {}
+    }
   } catch (e) {
     if (__DEV__) console.warn('[transactions] upsertTransactionFromRemote failed', e, txn.id);
   }

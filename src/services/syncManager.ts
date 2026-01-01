@@ -464,7 +464,8 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
     if (_pendingSyncRequested) {
       _pendingSyncRequested = false;
       setTimeout(() => {
-        syncBothWays().catch(() => {
+        // Use the UI-friendly scheduler so follow-up sync doesn't block taps/gestures.
+        scheduleSync().catch(() => {
           // Swallow follow-up errors; banner/NetInfo will reflect offline state.
         });
       }, 500);
