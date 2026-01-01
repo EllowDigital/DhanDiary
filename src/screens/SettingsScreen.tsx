@@ -19,8 +19,8 @@ import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 
 // Optional Haptics: prefer runtime require so builds without expo-haptics still work.
 let Haptics: any = {
-  impactAsync: async () => {},
-  notificationAsync: async () => {},
+  impactAsync: async () => { },
+  notificationAsync: async () => { },
   ImpactFeedbackStyle: { Medium: 'medium' },
   NotificationFeedbackType: { Warning: 'warning' },
 };
@@ -140,13 +140,13 @@ const SettingsScreen = () => {
         const d = new Date(last);
         setLastSyncTime(`${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`);
       }
-    } catch (e) {}
+    } catch (e) { }
 
     return () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -178,7 +178,7 @@ const SettingsScreen = () => {
         showToast('Cloud sync is disabled in this build.', 'error');
         return;
       }
-    } catch (e) {}
+    } catch (e) { }
 
     // Haptic feedback
     if (Platform.OS !== 'web') {
@@ -202,6 +202,10 @@ const SettingsScreen = () => {
       } else {
         if (res && res.reason === 'not_configured') {
           showToast('Cloud sync is disabled in this build.', 'error');
+          return;
+        }
+        if (res && res.reason === 'no_session') {
+          showToast('Sign in to enable cloud sync.', 'error');
           return;
         }
         // Treat throttled/already-running as a non-error for manual sync: user is effectively up to date.

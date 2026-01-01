@@ -280,6 +280,7 @@ export type SyncResult = {
   reason?:
     | 'success'
     | 'up_to_date'
+    | 'no_session'
     | 'already_running'
     | 'throttled'
     | 'offline'
@@ -328,20 +329,10 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
     const sess: any = await getSession();
     const uid = sess?.id;
     if (!isUuid(uid)) {
-      return {
-        ok: true,
-        reason: 'up_to_date',
-        upToDate: true,
-        counts: { pushed: 0, pulled: 0 },
-      } satisfies SyncResult;
+      return { ok: false, reason: 'no_session', upToDate: true, counts: { pushed: 0, pulled: 0 } };
     }
   } catch (e) {
-    return {
-      ok: true,
-      reason: 'up_to_date',
-      upToDate: true,
-      counts: { pushed: 0, pulled: 0 },
-    } satisfies SyncResult;
+    return { ok: false, reason: 'no_session', upToDate: true, counts: { pushed: 0, pulled: 0 } };
   }
 
   const state = await NetInfo.fetch();
@@ -381,6 +372,20 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
         counts: { pushed: 0, pulled: 0 },
       } satisfies SyncResult;
     }
+
+    // If runFullSync reports push/pull failures, treat this as a sync error.
+    // (We still allow partial local progress, but UI should prompt the user to retry.)
+    try {
+      const errs: any = (runResult as any)?.errors || null;
+      const pushFailed = !!errs?.push;
+      const pullFailed = !!errs?.pull;
+      if (pushFailed || pullFailed) {
+        try {
+          setSyncStatus('error');
+        } catch (e) {}
+        return { ok: false, reason: 'error' } satisfies SyncResult;
+      }
+    } catch (e) {}
 
     _lastSuccessfulSyncAt = Date.now();
     try {

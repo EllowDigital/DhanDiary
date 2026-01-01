@@ -47,6 +47,7 @@ export async function pushToNeon(): Promise<{ pushed: string[]; deleted: string[
 
   const pushedIds: string[] = [];
   const deletedIds: string[] = [];
+  let lastError: unknown = null;
 
   // If Neon isn't configured, bail early (will be retried later).
   try {
@@ -128,72 +129,75 @@ export async function pushToNeon(): Promise<{ pushed: string[]; deleted: string[
     await new Promise((r) => setTimeout(r, 0));
   };
 
-  try {
-    // Push changes in chunks to reduce query count (compute wakeups)
-    const chunks: any[][] = [];
-    for (let i = 0; i < dirty.length; i += CHUNK_SIZE) chunks.push(dirty.slice(i, i + CHUNK_SIZE));
+  // Push changes in chunks to reduce query count (compute wakeups)
+  const chunks: any[][] = [];
+  for (let i = 0; i < dirty.length; i += CHUNK_SIZE) chunks.push(dirty.slice(i, i + CHUNK_SIZE));
 
-    for (const chunk of chunks) {
-      throwIfSyncCancelled();
-      try {
-        const returnedRows = await pushBatch(chunk);
+  for (const chunk of chunks) {
+    throwIfSyncCancelled();
+    try {
+      const returnedRows = await pushBatch(chunk);
 
-        // Mark local as synced using server metadata (best effort)
-        const byId = new Map<string, any>();
-        for (const r of returnedRows) if (r && r.id) byId.set(String(r.id), r);
+      // Mark local as synced using server metadata (best effort)
+      const byId = new Map<string, any>();
+      for (const r of returnedRows) if (r && r.id) byId.set(String(r.id), r);
 
-        for (const row of chunk) {
-          const ret = byId.get(String(row.id)) || null;
+      for (const row of chunk) {
+        const ret = byId.get(String(row.id)) || null;
+        const serverVer = ret && typeof ret.server_version === 'number' ? ret.server_version : 0;
+        const returnedUpdatedAt = ret && ret.updated_at ? Number(ret.updated_at) : Date.now();
+        const isDelete = !!row.deleted_at || Number((row as any).sync_status) === 2;
+
+        try {
+          await executeSqlAsync(
+            'UPDATE transactions SET sync_status = ?, need_sync = 0, server_version = ?, updated_at = ? WHERE id = ?;',
+            [isDelete ? 2 : 1, serverVer, returnedUpdatedAt, row.id]
+          );
+        } catch (e) {
+          if (__DEV__)
+            console.warn('[sync] pushToNeon: failed to update local metadata', e, row.id);
+        }
+
+        if (row.deleted_at || Number((row as any).sync_status) === 2)
+          deletedIds.push(String(row.id));
+        else pushedIds.push(String(row.id));
+      }
+
+      await yieldToUi();
+    } catch (err) {
+      lastError = err;
+      // Fallback: if a chunk fails (e.g., one bad row), try per-row so others still sync.
+      if (__DEV__) console.warn('[sync] pushToNeon: batch failed, falling back to per-row', err);
+      for (const row of chunk) {
+        throwIfSyncCancelled();
+        try {
+          const returnedRows = await pushBatch([row]);
+          const ret = Array.isArray(returnedRows) && returnedRows.length ? returnedRows[0] : null;
           const serverVer = ret && typeof ret.server_version === 'number' ? ret.server_version : 0;
           const returnedUpdatedAt = ret && ret.updated_at ? Number(ret.updated_at) : Date.now();
           const isDelete = !!row.deleted_at || Number((row as any).sync_status) === 2;
-
-          try {
-            await executeSqlAsync(
-              'UPDATE transactions SET sync_status = ?, need_sync = 0, server_version = ?, updated_at = ? WHERE id = ?;',
-              [isDelete ? 2 : 1, serverVer, returnedUpdatedAt, row.id]
-            );
-          } catch (e) {
-            if (__DEV__)
-              console.warn('[sync] pushToNeon: failed to update local metadata', e, row.id);
-          }
-
+          await executeSqlAsync(
+            'UPDATE transactions SET sync_status = ?, need_sync = 0, server_version = ?, updated_at = ? WHERE id = ?;',
+            [isDelete ? 2 : 1, serverVer, returnedUpdatedAt, row.id]
+          );
           if (row.deleted_at || Number((row as any).sync_status) === 2)
             deletedIds.push(String(row.id));
           else pushedIds.push(String(row.id));
+        } catch (rowErr) {
+          lastError = rowErr;
+          if (__DEV__) console.warn('[sync] pushToNeon: failed to push row', row.id, rowErr);
         }
 
+        // Yield periodically in fallback mode too
         await yieldToUi();
-      } catch (err) {
-        // Fallback: if a chunk fails (e.g., one bad row), try per-row so others still sync.
-        if (__DEV__) console.warn('[sync] pushToNeon: batch failed, falling back to per-row', err);
-        for (const row of chunk) {
-          throwIfSyncCancelled();
-          try {
-            const returnedRows = await pushBatch([row]);
-            const ret = Array.isArray(returnedRows) && returnedRows.length ? returnedRows[0] : null;
-            const serverVer =
-              ret && typeof ret.server_version === 'number' ? ret.server_version : 0;
-            const returnedUpdatedAt = ret && ret.updated_at ? Number(ret.updated_at) : Date.now();
-            const isDelete = !!row.deleted_at || Number((row as any).sync_status) === 2;
-            await executeSqlAsync(
-              'UPDATE transactions SET sync_status = ?, need_sync = 0, server_version = ?, updated_at = ? WHERE id = ?;',
-              [isDelete ? 2 : 1, serverVer, returnedUpdatedAt, row.id]
-            );
-            if (row.deleted_at || Number((row as any).sync_status) === 2)
-              deletedIds.push(String(row.id));
-            else pushedIds.push(String(row.id));
-          } catch (rowErr) {
-            if (__DEV__) console.warn('[sync] pushToNeon: failed to push row', row.id, rowErr);
-          }
-
-          // Yield periodically in fallback mode too
-          await yieldToUi();
-        }
       }
     }
-  } catch (e) {
-    if (__DEV__) console.warn('[sync] pushToNeon error', e);
+  }
+
+  // If we had local work to push but could not push a single row, bubble up an error.
+  // This prevents showing "up to date" when Neon is unreachable or rejects every write.
+  if (dirty.length > 0 && pushedIds.length + deletedIds.length === 0 && lastError) {
+    throw lastError;
   }
 
   if (__DEV__)

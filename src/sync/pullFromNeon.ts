@@ -139,8 +139,8 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
       }
 
       if (__DEV__) console.warn('[sync] pullFromNeon: neon query failed', e);
-      // Return gracefully so sync manager can try again later
-      return { pulled, lastSync: maxRemoteTs || 0 };
+      // Bubble up so retry/backoff can handle it and sync UI can reflect the failure.
+      throw e;
     }
 
     if (!remoteRows || remoteRows.length === 0) break;
