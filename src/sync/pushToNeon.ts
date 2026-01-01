@@ -40,11 +40,11 @@ export async function pushToNeon(): Promise<{ pushed: string[]; deleted: string[
     if (__DEV__) console.warn('[sync] pushToNeon: debug log failed', e);
   }
 
-  // In this app, `sync_status=0` means "dirty" (create/update/delete).
-  // Deletions are identified by `deleted_at IS NOT NULL`.
-  const dirty = rows.filter((r) => r && r.sync_status === 0);
-  const toDelete = dirty.filter((r) => !!r.deleted_at);
-  const toUpsert = dirty.filter((r) => !r.deleted_at);
+  // Dirty selection comes from getUnsyncedTransactions().
+  // Deletions are identified by tombstones: `sync_status=2` and/or `deleted_at IS NOT NULL`.
+  const dirty = rows.filter((r) => !!r);
+  const toDelete = dirty.filter((r: any) => !!r.deleted_at || Number(r.sync_status) === 2);
+  const toUpsert = dirty.filter((r: any) => !r.deleted_at && Number(r.sync_status) !== 2);
 
   const pushedIds: string[] = [];
   const deletedIds: string[] = [];
@@ -144,7 +144,7 @@ export async function pushToNeon(): Promise<{ pushed: string[]; deleted: string[
 
           try {
             await executeSqlAsync(
-              'UPDATE transactions SET sync_status = 1, server_version = ?, updated_at = ? WHERE id = ?;',
+              'UPDATE transactions SET sync_status = 1, need_sync = 0, server_version = ?, updated_at = ? WHERE id = ?;',
               [serverVer, returnedUpdatedAt, row.id]
             );
           } catch (e) {
@@ -152,7 +152,8 @@ export async function pushToNeon(): Promise<{ pushed: string[]; deleted: string[
               console.warn('[sync] pushToNeon: failed to update local metadata', e, row.id);
           }
 
-          if (row.deleted_at) deletedIds.push(String(row.id));
+          if (row.deleted_at || Number((row as any).sync_status) === 2)
+            deletedIds.push(String(row.id));
           else pushedIds.push(String(row.id));
         }
       } catch (err) {
@@ -166,10 +167,11 @@ export async function pushToNeon(): Promise<{ pushed: string[]; deleted: string[
               ret && typeof ret.server_version === 'number' ? ret.server_version : 0;
             const returnedUpdatedAt = ret && ret.updated_at ? Number(ret.updated_at) : Date.now();
             await executeSqlAsync(
-              'UPDATE transactions SET sync_status = 1, server_version = ?, updated_at = ? WHERE id = ?;',
+              'UPDATE transactions SET sync_status = 1, need_sync = 0, server_version = ?, updated_at = ? WHERE id = ?;',
               [serverVer, returnedUpdatedAt, row.id]
             );
-            if (row.deleted_at) deletedIds.push(String(row.id));
+            if (row.deleted_at || Number((row as any).sync_status) === 2)
+              deletedIds.push(String(row.id));
             else pushedIds.push(String(row.id));
           } catch (rowErr) {
             if (__DEV__) console.warn('[sync] pushToNeon: failed to push row', row.id, rowErr);
