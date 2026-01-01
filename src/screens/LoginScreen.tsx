@@ -467,14 +467,26 @@ const LoginScreen = () => {
               {/* Social Buttons */}
               <View style={styles.socialRow}>
                 <TouchableOpacity style={styles.socialBtn} onPress={() => onSocialLogin('google')}>
-                  <Ionicons name="logo-google" size={18} color={colors.text || '#0F172A'} />
+                  <Image
+                    source={{ uri: 'https://cdn-icons-png.flaticon.com/512/300/300221.png' }}
+                    style={styles.socialIcon}
+                  />
                   <Text style={styles.socialBtnText}>Google</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.socialBtn} onPress={() => onSocialLogin('github')}>
-                  <Ionicons name="logo-github" size={18} color={colors.text || '#0F172A'} />
+
+                <TouchableOpacity
+                  style={styles.socialBtn}
+                  onPress={() => onSocialLogin('github')}
+                >
+                  <Image
+                    source={{ uri: 'https://cdn-icons-png.flaticon.com/512/25/25231.png' }}
+                    style={styles.socialIcon}
+                    resizeMode="contain"
+                  />
                   <Text style={styles.socialBtnText}>GitHub</Text>
                 </TouchableOpacity>
+
               </View>
 
               {/* Footer */}

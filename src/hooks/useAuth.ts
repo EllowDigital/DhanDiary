@@ -26,6 +26,10 @@ type UserSession = {
   imageUrl?: string | null;
 };
 
+const isUuid = (s: any) =>
+  typeof s === 'string' &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+
 export const useAuth = () => {
   const [user, setUser] = useState<UserSession | null>(null);
   const [loading, setLoading] = useState(true);
@@ -132,17 +136,37 @@ export const useAuth = () => {
                   );
                 } catch (e) {}
               } catch (e) {
-                // Fallback: persist clerk id if bridge fails
-                setUser({
-                  id,
-                  name: name || '',
-                  email: email || '',
-                  image: image || null,
-                  imageUrl: image || null,
-                });
+                // Bridge failed (often offline). Do NOT overwrite an existing UUID session
+                // with a generated UUID derived from the Clerk id; that would orphan
+                // local SQLite rows and show 0 records offline.
                 try {
-                  void saveSession(id, name || '', email || '', image || null, image || null);
-                } catch (ee) {}
+                  const existing = await getSession();
+                  const stableId = existing?.id && isUuid(existing.id) ? existing.id : null;
+                  if (stableId) {
+                    await saveSession(
+                      stableId,
+                      (existing as any)?.name || name || '',
+                      (existing as any)?.email || email || '',
+                      image || (existing as any)?.image || null,
+                      image || (existing as any)?.imageUrl || null
+                    );
+                    setUser({
+                      id: stableId,
+                      name: (existing as any)?.name || name || '',
+                      email: (existing as any)?.email || email || '',
+                      image: image || (existing as any)?.image || null,
+                      imageUrl: image || (existing as any)?.imageUrl || null,
+                    });
+                  } else {
+                    // No existing UUID session to preserve; create a fallback session.
+                    await saveSession(id, name || '', email || '', image || null, image || null);
+                    const created = await getSession();
+                    setUser((created as any) || null);
+                  }
+                } catch (ee) {
+                  // As a last resort, keep user state as-is.
+                  setUser((prev) => prev || null);
+                }
               }
             })();
           }
@@ -219,17 +243,34 @@ export const useAuth = () => {
           imageUrl: image || null,
         });
       } catch (e) {
-        // fallback to clerk identity
-        setUser({
-          id: id,
-          name: name || '',
-          email: email || '',
-          image: image || null,
-          imageUrl: image || null,
-        });
+        // Bridge failed (often offline). Preserve existing UUID session when present
+        // so offline SQLite continues to show cached data.
         try {
-          await saveSession(id, name || '', email || '', image || null, image || null);
-        } catch (ee) {}
+          const existing = await getSession();
+          const stableId = existing?.id && isUuid(existing.id) ? existing.id : null;
+          if (stableId) {
+            await saveSession(
+              stableId,
+              (existing as any)?.name || name || '',
+              (existing as any)?.email || email || '',
+              image || (existing as any)?.image || null,
+              image || (existing as any)?.imageUrl || null
+            );
+            setUser({
+              id: stableId,
+              name: (existing as any)?.name || name || '',
+              email: (existing as any)?.email || email || '',
+              image: image || (existing as any)?.image || null,
+              imageUrl: image || (existing as any)?.imageUrl || null,
+            });
+          } else {
+            await saveSession(id, name || '', email || '', image || null, image || null);
+            const created = await getSession();
+            setUser((created as any) || null);
+          }
+        } catch (ee) {
+          setUser((prev) => prev || null);
+        }
       }
     })();
   }, [clerk.user, clerkAuth.isSignedIn]);
