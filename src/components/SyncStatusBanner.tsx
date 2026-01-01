@@ -9,6 +9,7 @@ import {
   getLastSuccessfulSyncAt,
   getLastSyncTime,
 } from '../services/syncManager';
+import { getNeonHealth } from '../api/neonClient';
 import { colors, shadows } from '../utils/design';
 import { setBannerVisible } from '../utils/bannerState';
 
@@ -88,11 +89,32 @@ const SyncStatusBanner = () => {
     debounceRef.current = setTimeout(() => {
       let nextState: BannerState = 'hidden';
 
+      const isNeonLikelyUnreachable = (() => {
+        try {
+          const h = getNeonHealth();
+          const msg = String(h.lastErrorMessage || '').toLowerCase();
+          const circuitOpen = !!h.circuitOpenUntil && h.circuitOpenUntil > Date.now();
+          return (
+            circuitOpen ||
+            msg.includes('offline') ||
+            msg.includes('network request failed') ||
+            msg.includes('timed out') ||
+            msg.includes('timeout') ||
+            msg.includes('fetch') ||
+            msg.includes('connection')
+          );
+        } catch (e) {
+          return false;
+        }
+      })();
+
       // --- Priority Logic ---
       if (!isOnline) {
         nextState = 'offline';
       } else if (syncStatus === 'error') {
-        nextState = 'error';
+        // If the internet is "up" but Neon is unreachable (slow/blocked DNS/captive portal),
+        // show a calm offline-style status rather than an alarming failure.
+        nextState = isNeonLikelyUnreachable ? 'offline' : 'error';
       } else if (syncStatus === 'syncing') {
         nextState = 'syncing';
       } else {
@@ -182,7 +204,7 @@ const SyncStatusBanner = () => {
           icon: 'wifi-off',
           iconColor: colors.accentRed,
           text: 'Offline',
-          subtext: 'Changes saved locally',
+          subtext: 'Will sync when online',
           showIndicator: true,
           dotColor: colors.accentRed,
         };
@@ -242,7 +264,7 @@ const SyncStatusBanner = () => {
 
   const translateY = visibility.interpolate({
     inputRange: [0, 1],
-    outputRange: [-10, 0],
+    outputRange: [10, 0],
   });
 
   return (
@@ -251,7 +273,7 @@ const SyncStatusBanner = () => {
         style={[
           styles.pill,
           {
-            marginTop: insets.top + 8,
+            marginBottom: insets.bottom + 10,
             opacity: visibility,
             transform: [{ translateY }],
           },
@@ -287,7 +309,7 @@ const SyncStatusBanner = () => {
 const styles = StyleSheet.create({
   wrapper: {
     position: 'absolute',
-    top: 0,
+    bottom: 0,
     left: 0,
     right: 0,
     zIndex: 999,

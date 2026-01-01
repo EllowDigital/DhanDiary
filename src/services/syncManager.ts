@@ -94,11 +94,13 @@ const safeQ = async (sql: string, params: any[] = []) => {
     return await Q(sql, params);
   } catch (err) {
     try {
-      if (__DEV__) {
-        console.error('Neon query failed', { sql: sql.substring(0, 50) + '...', err });
-      } else {
-        // In production avoid noisy, raw internal errors; keep a compact warning for diagnostics
-        console.warn('Neon query failed (suppressed details in production)');
+      // Avoid console.error here — it triggers LogBox "Console Error" overlays and is too noisy
+      // for offline/slow networks. Keep detailed logs behind a verbose flag.
+      const verbose = Boolean(
+        (globalThis as any).__NEON_VERBOSE__ || (globalThis as any).__SYNC_VERBOSE__
+      );
+      if (__DEV__ && verbose) {
+        console.warn('Neon query failed', { sql: sql.substring(0, 50) + '...', err });
       }
     } catch (e) {}
     throw err;
@@ -329,8 +331,10 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
     } satisfies SyncResult;
   } catch (err) {
     try {
-      if (__DEV__) console.error('Sync failed', err);
-      else console.warn('Sync failed (suppressed details in production)');
+      const verbose = Boolean(
+        (globalThis as any).__NEON_VERBOSE__ || (globalThis as any).__SYNC_VERBOSE__
+      );
+      if (__DEV__ && verbose) console.warn('Sync failed', err);
     } catch (e) {}
     _syncFailureCount = Math.min(5, _syncFailureCount + 1);
     // Enter error state — callers should only set this if runFullSync truly failed
@@ -347,7 +351,9 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
     if (_pendingSyncRequested) {
       _pendingSyncRequested = false;
       setTimeout(() => {
-        syncBothWays().catch((e) => console.error('Follow-up sync failed', e));
+        syncBothWays().catch(() => {
+          // Swallow follow-up errors; banner/NetInfo will reflect offline state.
+        });
       }, 500);
     }
   }
