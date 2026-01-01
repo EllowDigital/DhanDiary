@@ -52,7 +52,7 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
     const health = getNeonHealth();
     if (!health.isConfigured) {
       if (__DEV__) console.warn('[sync] pullFromNeon: Neon not configured, skipping pull');
-      return { pulled: 0, lastSync: lastSync || 0 };
+      return { pulled: 0, lastSync: 0 };
     }
   } catch (e) {
     if (__DEV__) console.warn('[sync] pullFromNeon: failed to get neon health', e);
@@ -63,7 +63,7 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
 
   if (neonMissingTransactionsTable) {
     if (__DEV__) console.log('[sync] pullFromNeon: skipping pull — remote table missing (cached)');
-    return { pulled: 0, lastSync: lastSync || 0 };
+    return { pulled: 0, lastSync: 0 };
   }
 
   try {
@@ -127,12 +127,12 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
         console.warn(
           '[sync] pullFromNeon: remote "transactions" table missing, skipping pulls until restart'
         );
-      return { pulled: 0, lastSync: lastSync || 0 };
+      return { pulled: 0, lastSync: 0 };
     }
 
     if (__DEV__) console.warn('[sync] pullFromNeon: neon query failed', e);
     // Return gracefully so sync manager can try again later
-    return { pulled: 0, lastSync: lastSync || 0 };
+    return { pulled: 0, lastSync: 0 };
   }
 
   let maxRemoteTs = 0;
