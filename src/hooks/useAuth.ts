@@ -3,6 +3,7 @@ import { getSession, saveSession } from '../db/session';
 import { subscribeSession } from '../utils/sessionEvents';
 import { query } from '../api/neonClient';
 import NetInfo from '@react-native-community/netinfo';
+import { isUuid, uuidv4 } from '../utils/uuid';
 // Optional Clerk integration: if Clerk is installed and user is signed in,
 // prefer Clerk's user as the authoritative session and persist it locally.
 let useClerkUser: any = null;
@@ -25,10 +26,6 @@ type UserSession = {
   image?: string | null;
   imageUrl?: string | null;
 };
-
-const isUuid = (s: any) =>
-  typeof s === 'string' &&
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
 
 export const useAuth = () => {
   const [user, setUser] = useState<UserSession | null>(null);
@@ -161,7 +158,14 @@ export const useAuth = () => {
                   emailAddresses: [{ emailAddress: email }],
                   fullName: name,
                 });
-                const uid = bridge?.uuid || id;
+
+                // Critical: never expose a non-UUID user id to the rest of the app.
+                // If the bridge cannot provide a Neon UUID, preserve an existing UUID
+                // session or generate one once and persist it.
+                const existing = await getSession();
+                const existingUuid = existing?.id && isUuid(existing.id) ? existing.id : null;
+                const bridgedUuid = bridge?.uuid && isUuid(bridge.uuid) ? bridge.uuid : null;
+                const uid = bridgedUuid || existingUuid || uuidv4();
                 setUser({
                   id: uid,
                   name: bridge?.name || name || '',
@@ -276,7 +280,14 @@ export const useAuth = () => {
           emailAddresses: email ? [{ emailAddress: email }] : [],
           fullName: name,
         });
-        const uid = bridge?.uuid || id;
+
+        // Critical: never expose a non-UUID user id to the rest of the app.
+        // If the bridge cannot provide a Neon UUID, preserve an existing UUID
+        // session or generate one once and persist it.
+        const existing = await getSession();
+        const existingUuid = existing?.id && isUuid(existing.id) ? existing.id : null;
+        const bridgedUuid = bridge?.uuid && isUuid(bridge.uuid) ? bridge.uuid : null;
+        const uid = bridgedUuid || existingUuid || uuidv4();
         // persist authoritative session info
         try {
           await saveSession(
@@ -318,7 +329,9 @@ export const useAuth = () => {
               imageUrl: image || (existing as any)?.imageUrl || null,
             });
           } else {
-            await saveSession(id, name || '', email || '', image || null, image || null, id);
+            // No UUID session exists yet; create a stable local UUID and store Clerk id separately.
+            const localId = uuidv4();
+            await saveSession(localId, name || '', email || '', image || null, image || null, id);
             const created = await getSession();
             setUser((created as any) || null);
           }

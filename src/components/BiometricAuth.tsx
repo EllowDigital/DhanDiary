@@ -3,7 +3,7 @@ import { View, StyleSheet, Text, BackHandler } from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { Button } from '@rneui/themed';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { colors } from '../utils/design';
+import { colors, shadows } from '../utils/design';
 
 export const BiometricAuth = (props: {
   enabled: boolean;
@@ -134,7 +134,7 @@ export const BiometricAuth = (props: {
 const styles = StyleSheet.create({
   container: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: colors.background || '#F8FAFC',
+    backgroundColor: colors.background,
     zIndex: 99999,
     elevation: 99, // Required for Android to sit on top of headers
     alignItems: 'center',
@@ -149,15 +149,11 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: '#EEF2FF',
+    backgroundColor: colors.softCard,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 5,
+    ...shadows.medium,
   },
   title: {
     fontSize: 26,
@@ -168,7 +164,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 16,
-    color: colors.muted || '#64748B',
+    color: colors.muted,
     textAlign: 'center',
     marginBottom: 40,
   },
@@ -179,7 +175,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     borderRadius: 14,
     paddingVertical: 14,
-    elevation: 4,
+    ...shadows.small,
   },
   buttonText: {
     fontWeight: '600',
