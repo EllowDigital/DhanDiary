@@ -287,7 +287,7 @@ const HomeScreen = () => {
     return () => {
       try {
         if (unsub) unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, [fadeAnim]);
 
@@ -298,7 +298,7 @@ const HomeScreen = () => {
       try {
         const s = await getSession();
         if (mounted) setFallbackSession(s);
-      } catch (e) { }
+      } catch (e) {}
     };
     load();
     const unsub = subscribeSession((s) => {
@@ -308,7 +308,7 @@ const HomeScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, []);
 
@@ -333,7 +333,9 @@ const HomeScreen = () => {
     const rawEntries = entries || [];
     // Precompute day-start timestamps to avoid timezone/parse inconsistencies
     const entriesWithDayStart = (rawEntries || []).map((e: any) => {
-      const dayStartMs = dayjsFrom(e.date ?? e.created_at ?? e.updated_at).startOf('day').valueOf();
+      const dayStartMs = dayjsFrom(e.date ?? e.created_at ?? e.updated_at)
+        .startOf('day')
+        .valueOf();
       return { ...e, __dayStartMs: dayStartMs };
     });
 
