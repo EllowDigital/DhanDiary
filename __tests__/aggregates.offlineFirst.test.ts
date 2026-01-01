@@ -81,7 +81,8 @@ describe('aggregateWithPreferSummary offline-first', () => {
   });
 
   test('does not probe Neon when allowRemote=false and computes correct savingsRate', async () => {
-    const { aggregateWithPreferSummary } = await import('../src/services/aggregates');
+    // Use require() to keep Jest compatible without experimental VM modules
+    const { aggregateWithPreferSummary } = require('../src/services/aggregates');
 
     const res = await aggregateWithPreferSummary(
       '11111111-1111-1111-1111-111111111111',
