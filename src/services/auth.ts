@@ -2,7 +2,7 @@ import NetInfo from '@react-native-community/netinfo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import bcrypt from 'bcryptjs';
-import { v4 as uuidv4, validate as uuidValidate } from 'uuid';
+import { uuidv4, isUuid } from '../utils/uuid';
 // NOTE: Ensure 'react-native-get-random-values' is imported in your App.tsx or index.js for uuid to work.
 
 import { query } from '../api/neonClient';
@@ -296,8 +296,8 @@ export const deleteAccount = async (opts?: { clerkUserId?: string }) => {
     try {
       // If the session id is not a UUID (e.g. guest_xxx created for offline-only users),
       // skip remote deletion — Postgres uuid columns will reject non-UUID input.
-      const isUuid = typeof session.id === 'string' && uuidValidate(session.id);
-      if (!isUuid) {
+      const uuidOk = typeof session.id === 'string' && isUuid(session.id);
+      if (!uuidOk) {
         console.info('[Auth] Skipping remote Neon deletion for non-UUID session id', session.id);
       } else {
         try {

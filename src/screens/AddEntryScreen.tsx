@@ -19,7 +19,7 @@ import { Button, Text } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useNavigation, useRoute, useFocusEffect, RouteProp } from '@react-navigation/native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { v4 as uuidv4 } from 'uuid';
+import { uuidv4 } from '../utils/uuid';
 import dayjs from 'dayjs';
 
 // --- CUSTOM IMPORTS ---

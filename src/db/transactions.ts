@@ -1,6 +1,6 @@
 import { executeSqlAsync } from './sqlite';
 import { notifyEntriesChanged } from '../utils/dbEvents';
-import { v4 as uuidv4 } from 'uuid';
+import { uuidv4, isUuid } from '../utils/uuid';
 
 // Matches 'transactions' table in schema.sql
 export type TransactionRow = {
@@ -290,10 +290,6 @@ export async function getUnsyncedTransactions() {
   }
   return rows;
 }
-
-const isUuid = (s: any) =>
-  typeof s === 'string' &&
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
 
 /**
  * Legacy repair: older builds created local transaction ids like "local_...".

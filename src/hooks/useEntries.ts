@@ -19,7 +19,7 @@ import { resetRoot } from '../utils/rootNavigation';
 import { ensureCategory, DEFAULT_CATEGORY } from '../constants/categories';
 import { toCanonical, isIncome } from '../utils/transactionType';
 import { scheduleSync } from '../services/syncManager';
-import { v4 as uuidv4 } from 'uuid';
+import { uuidv4 } from '../utils/uuid';
 
 /* ----------------------------------------------------------
    Types & Interfaces
