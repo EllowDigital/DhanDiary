@@ -182,7 +182,7 @@ const VerifyEmailScreen = () => {
           setOfflineVisible(true);
           return;
         }
-      } catch (e) { }
+      } catch (e) {}
       Alert.alert('Error', msg);
     } finally {
       setLoading(false);
@@ -267,7 +267,7 @@ const VerifyEmailScreen = () => {
           setOfflineVisible(true);
           return;
         }
-      } catch (e) { }
+      } catch (e) {}
 
       if (errCode === 'verification_failed') {
         Alert.alert('Incorrect Code', 'The code you entered is invalid. Please try again.');
