@@ -116,7 +116,7 @@ const LoginScreen = () => {
         const fullName = clerkUser.fullName;
 
         if (id && userEmail) {
-          await handleSyncAndNavigate(id, userEmail, fullName);
+          await handleSyncAndNavigate(id, userEmail, fullName, (clerkUser as any)?.imageUrl || null);
         } else {
           navigation.reset({ index: 0, routes: [{ name: 'Announcement' }] });
         }
@@ -134,7 +134,8 @@ const LoginScreen = () => {
   const handleSyncAndNavigate = async (
     userId: string,
     userEmail: string,
-    userName?: string | null
+    userName?: string | null,
+    userImageUrl?: string | null
   ) => {
     // IMPORTANT: our local DB + Neon sync expect the internal UUID from Neon,
     // not Clerk's user id. Bridge Clerk -> internal UUID first.
@@ -155,7 +156,13 @@ const LoginScreen = () => {
 
     try {
       if (internalUserId) {
-        await saveSession(internalUserId, effectiveName, effectiveEmail);
+        await saveSession(
+          internalUserId,
+          effectiveName,
+          effectiveEmail,
+          userImageUrl ?? undefined,
+          userImageUrl ?? undefined
+        );
       }
     } catch (e) {
       console.warn('Local session save failed', e);

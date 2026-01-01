@@ -58,6 +58,7 @@ let _syncFailureCount = 0;
 let _isOnline = false;
 let _entriesUnsubscribe: (() => void) | null = null;
 let _entriesSyncTimer: any = null;
+let _lastAlreadyRunningLogAt = 0;
 // Sync status listeners (UI can subscribe to show progress or errors)
 export type SyncStatus = 'idle' | 'syncing' | 'error';
 let _syncStatus: SyncStatus = 'idle';
@@ -243,7 +244,18 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
 
   if (_syncInProgress) {
     _pendingSyncRequested = true;
-    if (__DEV__) console.log('Sync already running, scheduling follow-up');
+    try {
+      const verbose = Boolean(
+        (globalThis as any).__NEON_VERBOSE__ || (globalThis as any).__SYNC_VERBOSE__
+      );
+      if (__DEV__ && verbose) {
+        const now = Date.now();
+        if (now - _lastAlreadyRunningLogAt > 2500) {
+          _lastAlreadyRunningLogAt = now;
+          console.log('Sync already running, scheduling follow-up');
+        }
+      }
+    } catch (e) {}
     return { ok: true, reason: 'already_running', upToDate: true } satisfies SyncResult;
   }
 
@@ -286,7 +298,13 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
 
     // If runFullSync was skipped (throttled/already running/no-session), treat as non-error no-op.
     if (runResult?.status === 'skipped') {
-      if (__DEV__) console.log('[sync] syncBothWays: runFullSync skipped', runResult.reason);
+      try {
+        const verbose = Boolean(
+          (globalThis as any).__NEON_VERBOSE__ || (globalThis as any).__SYNC_VERBOSE__
+        );
+        if (__DEV__ && verbose)
+          console.log('[sync] syncBothWays: runFullSync skipped', runResult.reason);
+      } catch (e) {}
       _lastSyncAttemptAt = Date.now();
       _syncInProgress = false;
       try {

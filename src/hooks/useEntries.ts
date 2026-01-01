@@ -104,10 +104,15 @@ const resolveUserId = async (passedId?: string | null): Promise<string> => {
 
   // We do not create guest sessions in this app. If no persisted session or
   // local user exists, return null so UI can show the Auth flow.
-  if (__DEV__)
-    console.log(
-      '[resolveUserId] No persisted session or local user — returning null (no guest mode)'
+  try {
+    const verbose = Boolean(
+      (globalThis as any).__NEON_VERBOSE__ || (globalThis as any).__SYNC_VERBOSE__
     );
+    if (__DEV__ && verbose)
+      console.log(
+        '[resolveUserId] No persisted session or local user — returning null (no guest mode)'
+      );
+  } catch (e) {}
   return null as any;
 };
 
@@ -221,7 +226,11 @@ export const useEntries = (userId?: string | null) => {
     const prev = _prevResolvedId.current;
     if (prev !== resolvedId) {
       try {
-        console.log(`[useEntries] User ID changed: ${prev} -> ${resolvedId}`);
+        const verbose = Boolean(
+          (globalThis as any).__NEON_VERBOSE__ || (globalThis as any).__SYNC_VERBOSE__
+        );
+        if (__DEV__ && verbose)
+          console.log(`[useEntries] User ID changed: ${prev} -> ${resolvedId}`);
       } catch (e) {}
       _prevResolvedId.current = resolvedId;
     }

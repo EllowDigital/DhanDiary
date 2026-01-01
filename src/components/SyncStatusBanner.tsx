@@ -65,6 +65,7 @@ const SyncStatusBanner = () => {
   // Animation: Spin Value for Loading Icon
   const spinValue = useRef(new Animated.Value(0)).current;
   const visibility = useRef(new Animated.Value(0)).current;
+  const spinAnimRef = useRef<Animated.CompositeAnimation | null>(null);
 
   // Render state: keep last non-hidden state mounted so we can animate out
   const [renderState, setRenderState] = useState<BannerState>('hidden');
@@ -264,16 +265,32 @@ const SyncStatusBanner = () => {
   useEffect(() => {
     if (isSpinning) {
       spinValue.setValue(0);
-      Animated.loop(
+      // Stop any previous loop before starting a new one
+      try {
+        spinAnimRef.current?.stop();
+      } catch (e) { }
+
+      const anim = Animated.loop(
         Animated.timing(spinValue, {
           toValue: 1,
           duration: 1000,
           easing: Easing.linear,
           useNativeDriver: true,
         })
-      ).start();
+      );
+      spinAnimRef.current = anim;
+      anim.start();
     } else {
-      spinValue.stopAnimation();
+      // Ensure we fully stop the loop and reset to avoid icons looking rotated
+      // when quickly switching states.
+      try {
+        spinAnimRef.current?.stop();
+      } catch (e) { }
+      spinAnimRef.current = null;
+      try {
+        spinValue.stopAnimation();
+      } catch (e) { }
+      spinValue.setValue(0);
     }
   }, [isSpinning]);
 
@@ -304,9 +321,15 @@ const SyncStatusBanner = () => {
       >
         <View style={styles.contentRow}>
           <View style={styles.iconWrapper}>
-            <Animated.View style={{ transform: [{ rotate: isSpinning ? spin : '0deg' }] }}>
-              <MaterialIcon name={config.icon} size={18} color={config.iconColor} />
-            </Animated.View>
+            {isSpinning ? (
+              <Animated.View style={{ transform: [{ rotate: spin }] }}>
+                <MaterialIcon name={config.icon} size={18} color={config.iconColor} />
+              </Animated.View>
+            ) : (
+              <View>
+                <MaterialIcon name={config.icon} size={18} color={config.iconColor} />
+              </View>
+            )}
           </View>
 
           <View style={styles.textContainer}>
