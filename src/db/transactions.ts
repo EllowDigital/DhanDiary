@@ -1,5 +1,6 @@
 import { executeSqlAsync } from './sqlite';
 import { notifyEntriesChanged } from '../utils/dbEvents';
+import { uuidv4, isUuid } from '../utils/uuid';
 
 // Matches 'transactions' table in schema.sql
 export type TransactionRow = {
@@ -291,6 +292,49 @@ export async function getUnsyncedTransactions() {
 }
 
 /**
+ * Legacy repair: older builds created local transaction ids like "local_...".
+ * Neon requires UUID primary keys, so those rows could never sync.
+ *
+ * This converts any non-UUID `transactions.id` into a new UUID and marks them dirty.
+ */
+export async function migrateNonUuidTransactionIds(): Promise<{ migrated: number }> {
+  let migrated = 0;
+
+  const [, res] = await executeSqlAsync('SELECT id FROM transactions;', []);
+  const ids: string[] = [];
+  try {
+    for (let i = 0; i < (res?.rows?.length || 0); i++) {
+      const row = res.rows.item(i);
+      if (row?.id) ids.push(String(row.id));
+    }
+  } catch (e) {
+    return { migrated: 0 };
+  }
+
+  for (const oldId of ids) {
+    if (isUuid(oldId)) continue;
+    const newId = uuidv4();
+    try {
+      await executeSqlAsync(
+        'UPDATE transactions SET id = ?, sync_status = 0, need_sync = 1, updated_at = ? WHERE id = ?;',
+        [newId, Date.now(), oldId]
+      );
+      migrated += 1;
+    } catch (e) {
+      // ignore per-row failures
+    }
+  }
+
+  if (migrated > 0) {
+    try {
+      notifyEntriesChanged();
+    } catch (e) {}
+  }
+
+  return { migrated };
+}
+
+/**
  * Return any user_id present in the transactions table. Useful when the app
  * has local data but no persisted session (e.g., app opened offline).
  * Returns first found user_id or null.
@@ -309,7 +353,14 @@ export async function getAnyUserWithTransactions(): Promise<string | null> {
  * Upsert from Remote (Sync Pull)
  * Aligns with Schema: respects server_version and existing tombstones
  */
-export async function upsertTransactionFromRemote(txn: TransactionRow) {
+export async function upsertTransactionFromRemote(
+  txn: TransactionRow,
+  opts?: {
+    // Avoid spamming UI refresh events during large pulls.
+    // In most cases, the sync orchestrator will notify once per sync.
+    notify?: boolean;
+  }
+) {
   try {
     // 1. Check if we have a newer local version or a deletion tombstone that hasn't synced yet?
     // Actually, usually "Server Wins" or "Last Write Wins".
@@ -425,10 +476,12 @@ export async function upsertTransactionFromRemote(txn: TransactionRow) {
     ]);
 
     if (__DEV__) console.log('[transactions] upsert remote', txn.id);
-    try {
-      const rowsAffected = Number(writeRes?.rowsAffected || 0);
-      if (rowsAffected > 0) notifyEntriesChanged();
-    } catch (e) {}
+    if (opts?.notify) {
+      try {
+        const rowsAffected = Number(writeRes?.rowsAffected || 0);
+        if (rowsAffected > 0) notifyEntriesChanged();
+      } catch (e) {}
+    }
   } catch (e) {
     if (__DEV__) console.warn('[transactions] upsertTransactionFromRemote failed', e, txn.id);
   }

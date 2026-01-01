@@ -1,20 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Animated,
-  Pressable,
-  StatusBar,
-  Platform,
-  Dimensions,
-} from 'react-native';
+import { View, Text, StyleSheet, Animated, Pressable, StatusBar, Dimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useNavigation } from '@react-navigation/native';
 import * as Updates from 'expo-updates';
 
-import { colors, shadows } from '../utils/design';
+import { colors } from '../utils/design';
 import {
   OTA_UPDATE_ANNOUNCEMENT,
   type AnnouncementConfig,
@@ -22,10 +13,8 @@ import {
 import {
   markCurrentAnnouncementSeen,
   shouldShowCurrentAnnouncement,
-  getCurrentAnnouncement,
+  getCurrentAnnouncementAsync,
 } from '../announcements/announcementState';
-
-import { getCurrentAnnouncementAsync } from '../announcements/announcementState';
 
 const ENTRY_DURATION = 500;
 const EXIT_DURATION = 300;
@@ -187,7 +176,6 @@ const AnnouncementScreen = () => {
 
   // Dynamic Styles
   const accentColor = announcement.accentColor || colors.primary || '#2563EB';
-  const cardBackgroundColor = colors.card || '#FFFFFF';
 
   return (
     <View style={styles.container}>

@@ -166,7 +166,8 @@ const LoginScreen = () => {
           effectiveName,
           effectiveEmail,
           userImageUrl ?? undefined,
-          userImageUrl ?? undefined
+          userImageUrl ?? undefined,
+          userId
         );
       }
     } catch (e) {

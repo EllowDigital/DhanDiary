@@ -1,5 +1,5 @@
 import NetInfo from '@react-native-community/netinfo';
-import { Platform } from 'react-native';
+import { Platform, InteractionManager } from 'react-native';
 import Constants from 'expo-constants';
 import AsyncStorage from '../utils/AsyncStorageWrapper';
 import { getPendingProfileUpdates, markPendingProfileProcessed } from '../db/localDb';
@@ -8,6 +8,8 @@ import { getSession, saveSession } from '../db/session';
 // `syncManager` free of direct Neon/SQLite logic. Import from legacy module
 // only when needed.
 import { query } from '../api/neonClient';
+import { requestSyncCancel, resetSyncCancel } from '../sync/syncCancel';
+import { syncClerkUserToNeon } from './clerkUserSync';
 
 // --- Types & Constants ---
 
@@ -59,10 +61,31 @@ let _isOnline = false;
 let _entriesUnsubscribe: (() => void) | null = null;
 let _entriesSyncTimer: any = null;
 let _lastAlreadyRunningLogAt = 0;
+let _scheduledSyncTimer: any = null;
+let _scheduledSyncPromise: Promise<any> | null = null;
+let _scheduledSyncResolve: ((value: any) => void) | null = null;
+let _scheduledSyncReject: ((reason?: any) => void) | null = null;
+let _followUpPullQueuedAt = 0;
 // Sync status listeners (UI can subscribe to show progress or errors)
 export type SyncStatus = 'idle' | 'syncing' | 'error';
 let _syncStatus: SyncStatus = 'idle';
 const _syncStatusListeners = new Set<(status: SyncStatus) => void>();
+
+// Sync state machine controls (offline-first)
+let _syncPaused = false;
+let _loadedSyncPrefs = false;
+const SYNC_PAUSED_KEY = 'sync_paused_v1';
+
+const loadSyncPrefsOnce = async () => {
+  if (_loadedSyncPrefs) return;
+  _loadedSyncPrefs = true;
+  try {
+    const v = await AsyncStorage.getItem(SYNC_PAUSED_KEY);
+    _syncPaused = v === '1';
+  } catch (e) {
+    _syncPaused = false;
+  }
+};
 
 export const subscribeSyncStatus = (listener: (status: SyncStatus) => void) => {
   _syncStatusListeners.add(listener);
@@ -70,6 +93,120 @@ export const subscribeSyncStatus = (listener: (status: SyncStatus) => void) => {
 };
 
 export const isSyncInProgress = () => _syncStatus === 'syncing';
+
+export const isSyncPaused = () => _syncPaused;
+
+export const getConnectivityState = () =>
+  (_isOnline ? 'online' : 'offline') as 'online' | 'offline';
+
+export const setSyncPaused = async (paused: boolean) => {
+  _syncPaused = !!paused;
+  try {
+    if (_syncPaused) await AsyncStorage.setItem(SYNC_PAUSED_KEY, '1');
+    else await AsyncStorage.removeItem(SYNC_PAUSED_KEY);
+  } catch (e) {
+    // best-effort
+  }
+
+  // If pausing, cancel any in-flight work.
+  if (_syncPaused) {
+    try {
+      requestSyncCancel();
+    } catch (e) {}
+  }
+};
+
+export const retrySync = () => scheduleSync({ force: true, source: 'manual' });
+
+// Public: request cancellation of any ongoing sync work.
+export const cancelSyncWork = () => {
+  try {
+    requestSyncCancel();
+  } catch (e) {}
+};
+
+// Public: stop all sync triggers and cancel queued work.
+// Used for logout flows to guarantee no background sync continues.
+export const stopSyncEngine = async () => {
+  try {
+    cancelSyncWork();
+  } catch (e) {}
+
+  try {
+    stopAutoSyncListener();
+  } catch (e) {}
+
+  try {
+    stopForegroundSyncScheduler();
+  } catch (e) {}
+
+  try {
+    await stopBackgroundFetch();
+  } catch (e) {}
+
+  // Cancel scheduled/debounced timers
+  try {
+    if (_scheduledSyncTimer) clearTimeout(_scheduledSyncTimer);
+  } catch (e) {}
+  _scheduledSyncTimer = null;
+
+  try {
+    if (_entriesSyncTimer) clearTimeout(_entriesSyncTimer);
+  } catch (e) {}
+  _entriesSyncTimer = null;
+
+  _pendingSyncRequested = false;
+};
+
+// Public: schedule a sync to run after interactions (UI-first) and de-dupe rapid triggers.
+export const scheduleSync = (options?: { force?: boolean; source?: 'manual' | 'auto' }) => {
+  try {
+    // Non-blocking: load persisted paused flag in background.
+    void loadSyncPrefsOnce();
+    if (_syncPaused) {
+      return Promise.resolve({ ok: true, reason: 'throttled', upToDate: true } as any);
+    }
+
+    if (_scheduledSyncPromise) return _scheduledSyncPromise;
+
+    _scheduledSyncPromise = new Promise((resolve, reject) => {
+      _scheduledSyncResolve = resolve;
+      _scheduledSyncReject = reject;
+    });
+
+    if (_scheduledSyncTimer) return _scheduledSyncPromise;
+    _scheduledSyncTimer = setTimeout(() => {
+      _scheduledSyncTimer = null;
+      InteractionManager.runAfterInteractions(() => {
+        syncBothWays(options)
+          .then((res) => {
+            try {
+              _scheduledSyncResolve?.(res);
+            } catch (e) {}
+          })
+          .catch((err) => {
+            try {
+              _scheduledSyncReject?.(err);
+            } catch (e) {}
+          })
+          .finally(() => {
+            _scheduledSyncPromise = null;
+            _scheduledSyncResolve = null;
+            _scheduledSyncReject = null;
+          });
+      });
+    }, 250);
+
+    return _scheduledSyncPromise;
+  } catch (e) {
+    // Best-effort fallback
+    try {
+      return syncBothWays(options);
+    } catch (ee) {
+      return Promise.resolve({ ok: false, reason: 'error' } as any);
+    }
+  }
+};
 
 const setSyncStatus = (s: SyncStatus) => {
   if (_syncStatus === s) return;
@@ -224,6 +361,7 @@ export type SyncResult = {
   reason?:
     | 'success'
     | 'up_to_date'
+    | 'no_session'
     | 'already_running'
     | 'throttled'
     | 'offline'
@@ -234,6 +372,21 @@ export type SyncResult = {
 };
 
 export const syncBothWays = async (options?: { force?: boolean; source?: 'manual' | 'auto' }) => {
+  // State machine: sync can be paused at any time.
+  await loadSyncPrefsOnce();
+  if (_syncPaused) {
+    return {
+      ok: true,
+      reason: 'throttled',
+      upToDate: true,
+      counts: { pushed: 0, pulled: 0 },
+    } satisfies SyncResult;
+  }
+
+  // Starting a new sync implies we want to clear any previous cancel request.
+  try {
+    resetSyncCancel();
+  } catch (e) {}
   // If cloud sync isn't configured in this build, fail fast with a clear reason.
   try {
     const h = getNeonHealth();
@@ -262,30 +415,140 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
 
   _lastSyncAttemptAt = Date.now();
 
-  // If there's no logged-in session (or it's not a UUID), don't attempt cloud sync.
-  // This prevents noisy logs on the login screen and avoids pointless Neon traffic.
+  const state = await NetInfo.fetch();
+  _isOnline = !!state.isConnected;
+  if (!state.isConnected) return { ok: false, reason: 'offline' } satisfies SyncResult;
+
+  // Identity boundary (NON-NEGOTIABLE): Clerk is the source of truth.
+  // Resolve the canonical Neon user UUID by clerk_id, and migrate any local
+  // offline-placeholder UUID to the real Neon UUID when it becomes available.
   try {
     const sess: any = await getSession();
-    const uid = sess?.id;
-    if (!isUuid(uid)) {
+    const uid = sess?.id ? String(sess.id) : null;
+    const clerkId = sess?.clerk_id ? String(sess.clerk_id) : null;
+    const email = sess?.email ? String(sess.email) : '';
+    const name = sess?.name ? String(sess.name) : '';
+
+    if (!uid || !clerkId) {
+      return { ok: false, reason: 'no_session', upToDate: true, counts: { pushed: 0, pulled: 0 } };
+    }
+
+    // Look up by clerk_id (authoritative).
+    let realId: string | null = null;
+    try {
+      const rows = await safeQ('SELECT id, name, email FROM users WHERE clerk_id = $1 LIMIT 1', [
+        clerkId,
+      ]);
+      const v = rows && rows.length ? String((rows as any)[0]?.id || '') : '';
+      if (v && isUuid(v)) realId = v;
+    } catch (e) {
+      // ignore and fall through to optional create
+    }
+
+    // If missing on server but we're online, attempt to create the user row.
+    if (!realId) {
+      try {
+        const created = await safeQ(
+          "INSERT INTO users (clerk_id, email, name, password_hash, status) VALUES ($1, $2, $3, 'clerk_managed', 'active') RETURNING id",
+          [clerkId, String(email || ''), String(name || '')]
+        );
+        const v = created && created.length ? String((created as any)[0]?.id || '') : '';
+        if (v && isUuid(v)) realId = v;
+      } catch (e) {
+        // If email uniqueness conflicts with an existing legacy row, do not guess ownership here.
+        // We'll fall back to the dedicated bridge service below.
+      }
+    }
+
+    // Final fallback: use the bridge service, which safely links legacy email-only rows
+    // ONLY when clerk_id is NULL, otherwise it fails closed.
+    if (!realId && email) {
+      try {
+        const bridged = await syncClerkUserToNeon({
+          id: clerkId,
+          emailAddresses: [{ emailAddress: email }],
+          fullName: name || null,
+        });
+        if (bridged?.uuid && isUuid(bridged.uuid) && !bridged.isOfflineFallback) {
+          realId = bridged.uuid;
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    // If still unresolved, skip sync to avoid FK violations when pushing transactions.
+    if (!realId || !isUuid(realId)) {
       return {
-        ok: true,
-        reason: 'up_to_date',
+        ok: false,
+        reason: 'no_session',
         upToDate: true,
         counts: { pushed: 0, pulled: 0 },
       } satisfies SyncResult;
     }
+
+    // If we found a real Neon UUID and it differs from the current session uuid,
+    // migrate local rows and reset pull cursors.
+    if (realId && isUuid(realId) && realId !== uid) {
+      try {
+        const { executeSqlAsync } = require('../db/sqlite');
+        await executeSqlAsync('UPDATE transactions SET user_id = ? WHERE user_id = ?;', [
+          realId,
+          uid,
+        ]);
+        try {
+          const oldKey = `last_pull_server_version:${uid}`;
+          const newKey = `last_pull_server_version:${realId}`;
+          const oldCursor = `last_pull_cursor_v2:${uid}`;
+          const newCursor = `last_pull_cursor_v2:${realId}`;
+          await executeSqlAsync('DELETE FROM meta WHERE key IN (?, ?, ?, ?);', [
+            oldKey,
+            newKey,
+            oldCursor,
+            newCursor,
+          ]);
+        } catch (e) {}
+      } catch (e) {}
+
+      try {
+        await saveSession(
+          realId,
+          name,
+          email,
+          (sess as any)?.image ?? null,
+          (sess as any)?.imageUrl ?? null,
+          clerkId
+        );
+      } catch (e) {}
+      try {
+        const { notifyEntriesChanged } = require('../utils/dbEvents');
+        notifyEntriesChanged();
+      } catch (e) {}
+    } else if (realId && isUuid(realId)) {
+      // Ensure clerk_id is persisted even when uuid already matches.
+      try {
+        await saveSession(
+          realId,
+          name,
+          email,
+          (sess as any)?.image ?? null,
+          (sess as any)?.imageUrl ?? null,
+          clerkId
+        );
+      } catch (e) {}
+    }
   } catch (e) {
-    return {
-      ok: true,
-      reason: 'up_to_date',
-      upToDate: true,
-      counts: { pushed: 0, pulled: 0 },
-    } satisfies SyncResult;
+    return { ok: false, reason: 'no_session', upToDate: true, counts: { pushed: 0, pulled: 0 } };
   }
 
-  const state = await NetInfo.fetch();
-  if (!state.isConnected) return { ok: false, reason: 'offline' } satisfies SyncResult;
+  // Legacy repair: ensure all local transaction ids are UUIDs before pushing to Neon.
+  // (Older builds created ids like "local_..." which Neon rejects.)
+  try {
+    const { migrateNonUuidTransactionIds } = require('../db/transactions');
+    if (typeof migrateNonUuidTransactionIds === 'function') {
+      await migrateNonUuidTransactionIds();
+    }
+  } catch (e) {}
 
   _syncInProgress = true;
   // notify listeners that sync started
@@ -313,11 +576,28 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
       } catch (e) {}
       return {
         ok: true,
-        reason: runResult.reason === 'no_session' ? 'up_to_date' : runResult.reason,
+        reason:
+          runResult.reason === 'no_session' || runResult.reason === 'cancelled'
+            ? 'up_to_date'
+            : (runResult.reason as any),
         upToDate: true,
         counts: { pushed: 0, pulled: 0 },
       } satisfies SyncResult;
     }
+
+    // If runFullSync reports push/pull failures, treat this as a sync error.
+    // (We still allow partial local progress, but UI should prompt the user to retry.)
+    try {
+      const errs: any = (runResult as any)?.errors || null;
+      const pushFailed = !!errs?.push;
+      const pullFailed = !!errs?.pull;
+      if (pushFailed || pullFailed) {
+        try {
+          setSyncStatus('error');
+        } catch (e) {}
+        return { ok: false, reason: 'error' } satisfies SyncResult;
+      }
+    } catch (e) {}
 
     _lastSuccessfulSyncAt = Date.now();
     try {
@@ -364,6 +644,24 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
       } catch (e) {}
     } catch (e) {}
     const upToDate = pushedCount === 0 && pulledCount === 0;
+
+    // If the pull stopped early (large account / time budget), queue a single follow-up
+    // forced sync to continue pulling more pages.
+    try {
+      const hasMore = Boolean((runResult as any)?.pulled?.hasMore);
+      if (hasMore && pulledCount > 0) {
+        const now = Date.now();
+        if (now - _followUpPullQueuedAt > 5000) {
+          _followUpPullQueuedAt = now;
+          setTimeout(() => {
+            try {
+              scheduleSync({ source: 'auto', force: true } as any);
+            } catch (e) {}
+          }, 500);
+        }
+      }
+    } catch (e) {}
+
     return {
       ok: true,
       reason: upToDate ? 'up_to_date' : 'success',
@@ -371,6 +669,15 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
       counts: { pushed: pushedCount, pulled: pulledCount },
     } satisfies SyncResult;
   } catch (err) {
+    // Cancellation is a normal outcome (e.g., logout). Do not enter error state.
+    try {
+      if ((err as any)?.message === 'sync_cancelled') {
+        try {
+          setSyncStatus('idle');
+        } catch (e) {}
+        return { ok: true, reason: 'up_to_date', upToDate: true, counts: { pushed: 0, pulled: 0 } };
+      }
+    } catch (e) {}
     try {
       const verbose = Boolean(
         (globalThis as any).__NEON_VERBOSE__ || (globalThis as any).__SYNC_VERBOSE__
@@ -392,7 +699,8 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
     if (_pendingSyncRequested) {
       _pendingSyncRequested = false;
       setTimeout(() => {
-        syncBothWays().catch(() => {
+        // Use the UI-friendly scheduler so follow-up sync doesn't block taps/gestures.
+        scheduleSync().catch(() => {
           // Swallow follow-up errors; banner/NetInfo will reflect offline state.
         });
       }, 500);
@@ -418,17 +726,29 @@ export const getLastSyncCount = async () => {
 
 export const startAutoSyncListener = () => {
   if (_unsubscribe) return;
+  void loadSyncPrefsOnce();
   let wasOnline = false;
   _unsubscribe = NetInfo.addEventListener((state) => {
     const isOnline = !!state.isConnected;
     _isOnline = isOnline;
+
+    // If we go offline mid-sync, cancel in-flight work (best-effort) so we don't hang.
+    if (!isOnline && _syncInProgress) {
+      try {
+        requestSyncCancel();
+      } catch (e) {}
+    }
+
     if (!wasOnline && isOnline) {
       // Kick off a sync when we come online, but respect recent successful syncs
       const now = Date.now();
       const MIN_ONLINE_SYNC_MS = 30 * 1000; // don't run online sync more often than this
       if (!_lastSuccessfulSyncAt || now - _lastSuccessfulSyncAt > MIN_ONLINE_SYNC_MS) {
-        syncBothWays().catch(() => {
-          // Swallow expected failures (offline/slow network) to avoid LogBox noise.
+        InteractionManager.runAfterInteractions(() => {
+          if (_syncPaused) return;
+          syncBothWays().catch(() => {
+            // Swallow expected failures (offline/slow network) to avoid LogBox noise.
+          });
         });
       }
     }
@@ -446,6 +766,7 @@ export const startAutoSyncListener = () => {
         _entriesUnsubscribe = subscribe(() => {
           try {
             if (!_isOnline) return;
+            if (_syncPaused) return;
             try {
               const h = getNeonHealth();
               if (!h.isConfigured) return;
@@ -462,6 +783,7 @@ export const startAutoSyncListener = () => {
 
             _entriesSyncTimer = setTimeout(() => {
               _entriesSyncTimer = null;
+              if (_syncPaused) return;
               syncBothWays().catch(() => {
                 // Swallow expected failures (offline/slow network) to avoid LogBox noise.
               });
@@ -496,8 +818,10 @@ export const stopAutoSyncListener = () => {
 
 export const startForegroundSyncScheduler = (intervalMs: number = 15000) => {
   if (_foregroundTimer) return;
+  void loadSyncPrefsOnce();
   _foregroundTimer = setInterval(() => {
     try {
+      if (_syncPaused) return;
       // Throttle frequent runs: if we recently synced successfully, skip until MIN_SCHEDULE_MS
       const MIN_SCHEDULE_MS = Math.max(60000, intervalMs); // at least 60s
       const now = Date.now();
@@ -534,6 +858,8 @@ export const stopForegroundSyncScheduler = () => {
 
 export const startBackgroundFetch = async () => {
   if (_backgroundFetchInstance) return;
+  await loadSyncPrefsOnce();
+  if (_syncPaused) return;
 
   // Expo Go check
   const isExpoGo = Constants.appOwnership === 'expo';

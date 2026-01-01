@@ -1,54 +1,64 @@
 import sqliteClient, { runAsync, getAllAsync } from './sqliteClient';
 
+let initPromise: Promise<void> | null = null;
+
 /**
  * Ensure the required tables exist. This function is async-safe and idempotent.
  * It should be called once on app startup before any DB reads/writes.
  */
 export async function initDB(): Promise<void> {
-  try {
-    await executeSqlAsync(`CREATE TABLE IF NOT EXISTS transactions(
-      id TEXT PRIMARY KEY NOT NULL,
-      user_id TEXT NOT NULL,
-      client_id TEXT,
-      amount REAL NOT NULL,
-      type TEXT NOT NULL CHECK(type IN ('income','expense')),
-      category TEXT,
-      note TEXT,
-      currency TEXT NOT NULL DEFAULT 'INR',
-      date TEXT NOT NULL,
-      server_version INTEGER NOT NULL DEFAULT 0,
-      sync_status INTEGER NOT NULL DEFAULT 0,
-      need_sync INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT DEFAULT NULL,
-      updated_at INTEGER,
-      deleted_at TEXT DEFAULT NULL
-    );`);
+  if (initPromise) return initPromise;
 
-    await executeSqlAsync(`CREATE TABLE IF NOT EXISTS categories(
-      id TEXT PRIMARY KEY NOT NULL,
-      user_id TEXT NOT NULL,
-      name TEXT,
-      type TEXT,
-      updated_at INTEGER,
-      sync_status INTEGER DEFAULT 0
-    );`);
-
-    await executeSqlAsync(`CREATE TABLE IF NOT EXISTS meta(
-      key TEXT PRIMARY KEY NOT NULL,
-      value TEXT
-    );`);
-
-    if (__DEV__) console.log('[sqlite] initialized');
-    // Ensure optional local schema upgrades run immediately after init
+  initPromise = (async () => {
     try {
-      await ensureLocalSchemaUpgrades();
+      await executeSqlAsync(`CREATE TABLE IF NOT EXISTS transactions(
+        id TEXT PRIMARY KEY NOT NULL,
+        user_id TEXT NOT NULL,
+        client_id TEXT,
+        amount REAL NOT NULL,
+        type TEXT NOT NULL CHECK(type IN ('income','expense')),
+        category TEXT,
+        note TEXT,
+        currency TEXT NOT NULL DEFAULT 'INR',
+        date TEXT NOT NULL,
+        server_version INTEGER NOT NULL DEFAULT 0,
+        sync_status INTEGER NOT NULL DEFAULT 0,
+        need_sync INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT DEFAULT NULL,
+        updated_at INTEGER,
+        deleted_at TEXT DEFAULT NULL
+      );`);
+
+      await executeSqlAsync(`CREATE TABLE IF NOT EXISTS categories(
+        id TEXT PRIMARY KEY NOT NULL,
+        user_id TEXT NOT NULL,
+        name TEXT,
+        type TEXT,
+        updated_at INTEGER,
+        sync_status INTEGER DEFAULT 0
+      );`);
+
+      await executeSqlAsync(`CREATE TABLE IF NOT EXISTS meta(
+        key TEXT PRIMARY KEY NOT NULL,
+        value TEXT
+      );`);
+
+      if (__DEV__) console.log('[sqlite] initialized');
+      // Ensure optional local schema upgrades run immediately after init
+      try {
+        await ensureLocalSchemaUpgrades();
+      } catch (e) {
+        if (__DEV__) console.warn('[sqlite] ensureLocalSchemaUpgrades error during init', e);
+      }
     } catch (e) {
-      if (__DEV__) console.warn('[sqlite] ensureLocalSchemaUpgrades error during init', e);
+      if (__DEV__) console.warn('[sqlite] init error', e);
+      throw e;
     }
-  } catch (e) {
-    if (__DEV__) console.warn('[sqlite] init error', e);
-    throw e;
-  }
+  })().finally(() => {
+    initPromise = null;
+  });
+
+  return initPromise;
 }
 
 // Ensure optional migration columns exist (idempotent)
@@ -226,6 +236,30 @@ export async function executeSqlAsync(sql: string, params: any[] = []) {
     insertId: runRes.lastInsertRowId ?? null,
   };
   return [null, result] as const;
+}
+
+/**
+ * Hard-wipe local SQLite content (per-user isolation).
+ * Keeps tables intact to avoid "no such table" races during navigation.
+ */
+export async function wipeLocalData(): Promise<void> {
+  // Ensure tables exist first.
+  try {
+    await initDB();
+  } catch (e) {
+    // If init fails, still attempt deletes best-effort.
+  }
+
+  // Delete rows (fast) rather than dropping tables (can be slow and racy).
+  try {
+    await executeSqlAsync('DELETE FROM transactions;', []);
+  } catch (e) {}
+  try {
+    await executeSqlAsync('DELETE FROM categories;', []);
+  } catch (e) {}
+  try {
+    await executeSqlAsync('DELETE FROM meta;', []);
+  } catch (e) {}
 }
 
 export default sqliteClient;

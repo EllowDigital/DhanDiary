@@ -348,7 +348,7 @@ const StatsScreen = () => {
   const currencySymbol = stats?.currency === 'USD' ? '$' : '₹';
   const isEmptyPeriod = Boolean(stats && Number(stats.count || 0) === 0);
 
-  if (isLoading || authLoading) {
+  if (authLoading) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color={colors.primary} />

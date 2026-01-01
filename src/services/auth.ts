@@ -2,7 +2,7 @@ import NetInfo from '@react-native-community/netinfo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import bcrypt from 'bcryptjs';
-import { v4 as uuidv4, validate as uuidValidate } from 'uuid';
+import { uuidv4, isUuid } from '../utils/uuid';
 // NOTE: Ensure 'react-native-get-random-values' is imported in your App.tsx or index.js for uuid to work.
 
 import { query } from '../api/neonClient';
@@ -219,15 +219,17 @@ export const logout = async (): Promise<boolean> => {
   await safeRun(async () => {
     const sync = require('./syncManager'); // Ensure this path matches your file structure
     if (sync) {
+      // Preferred: single helper that cancels timers + listeners + background fetch.
+      if (typeof sync.stopSyncEngine === 'function') {
+        await sync.stopSyncEngine();
+        return;
+      }
+      // Immediately cancel any in-flight sync loops so logout remains responsive.
+      if (typeof sync.cancelSyncWork === 'function') sync.cancelSyncWork();
       if (typeof sync.stopAutoSyncListener === 'function') sync.stopAutoSyncListener();
       if (typeof sync.stopForegroundSyncScheduler === 'function')
         sync.stopForegroundSyncScheduler();
       if (typeof sync.stopBackgroundFetch === 'function') await sync.stopBackgroundFetch();
-
-      // Attempt a final quick sync, don't wait too long
-      if (typeof sync.syncBothWays === 'function') {
-        await withTimeout(sync.syncBothWays(), 3000).catch(() => {});
-      }
     }
   });
 
@@ -299,8 +301,8 @@ export const deleteAccount = async (opts?: { clerkUserId?: string }) => {
     try {
       // If the session id is not a UUID (e.g. guest_xxx created for offline-only users),
       // skip remote deletion — Postgres uuid columns will reject non-UUID input.
-      const isUuid = typeof session.id === 'string' && uuidValidate(session.id);
-      if (!isUuid) {
+      const uuidOk = typeof session.id === 'string' && isUuid(session.id);
+      if (!uuidOk) {
         console.info('[Auth] Skipping remote Neon deletion for non-UUID session id', session.id);
       } else {
         try {

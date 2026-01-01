@@ -11,7 +11,6 @@ import {
   addTransaction,
   updateTransaction,
   deleteTransaction as sqliteDeleteTransaction,
-  upsertTransactionFromRemote,
 } from '../db/transactions';
 import { subscribeEntries } from '../utils/dbEvents';
 import { subscribeSession } from '../utils/sessionEvents';
@@ -19,7 +18,8 @@ import { getSession, saveSession } from '../db/session';
 import { resetRoot } from '../utils/rootNavigation';
 import { ensureCategory, DEFAULT_CATEGORY } from '../constants/categories';
 import { toCanonical, isIncome } from '../utils/transactionType';
-import { syncBothWays } from '../services/syncManager';
+import { scheduleSync } from '../services/syncManager';
+import { uuidv4 } from '../utils/uuid';
 
 /* ----------------------------------------------------------
    Types & Interfaces
@@ -49,9 +49,19 @@ interface MutationContext {
    Helpers
 ---------------------------------------------------------- */
 
+const isUuid = (s: any) =>
+  typeof s === 'string' &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+
 // Resolve an effective user ID (explicit → session → existing-local → guest)
 const resolveUserId = async (passedId?: string | null): Promise<string> => {
-  if (passedId) return passedId;
+  // IMPORTANT:
+  // Many auth providers (e.g., Clerk) provide a non-UUID user id.
+  // Our local SQLite and Neon queries are scoped by a UUID (session.id).
+  // If we blindly use a non-UUID `passedId`, the app can appear to "reset to 0"
+  // (reading a different user_id namespace) especially when toggling offline/online.
+  const passed = passedId ? String(passedId) : null;
+  if (passed && isUuid(passed)) return passed;
 
   // 1) Read persisted fallback session (if any)
   let s: any = null;
@@ -60,6 +70,12 @@ const resolveUserId = async (passedId?: string | null): Promise<string> => {
   } catch (e) {
     if (__DEV__) console.warn('[resolveUserId] getSession failed', e);
   }
+
+  // If caller provided a non-UUID auth id (provider id), prefer the persisted
+  // local session UUID so we always read/write the same local SQLite rows.
+  try {
+    if (passed && !isUuid(passed) && s?.id) return String(s.id);
+  } catch (e) {}
 
   // 2) Read any existing user_id already present in local transactions
   let existingUser: string | null = null;
@@ -255,15 +271,7 @@ export const useEntries = (userId?: string | null) => {
             if (net.isConnected) {
               // Use the central sync manager so locks/throttling apply consistently
               // and we avoid overlapping push/pull work across the app.
-              await syncBothWays({ source: 'auto' } as any);
-            } else {
-              // Offline: queue sync for later via sync manager (auto-sync listener will trigger)
-              try {
-                // This will no-op if offline and run when connection resumes logic is inside syncManager
-                void syncBothWays({ source: 'auto' } as any);
-              } catch (e) {
-                // Ignore offline errors
-              }
+              scheduleSync({ source: 'auto' } as any);
             }
           } catch (e) {
             if (__DEV__) console.warn('[useEntries] requestSync execution failed', e);
@@ -273,7 +281,7 @@ export const useEntries = (userId?: string | null) => {
     } catch (e) {
       if (__DEV__) console.warn('[useEntries] requestSync trigger failed', e);
     }
-  }, []); // syncBothWays is imported, effectively stable
+  }, []); // scheduleSync is imported, effectively stable
 
   // Clean up timeout on unmount
   React.useEffect(() => {
@@ -324,54 +332,8 @@ export const useEntries = (userId?: string | null) => {
           } catch (e) {}
         }
 
-        // SIDE EFFECT: Background Remote Pull
-        // In background: if Neon is configured, try to pull remote rows and upsert into local DB.
-        // NOTE: This runs asynchronously and does not block the return of local data.
-        (async () => {
-          try {
-            const { getNeonHealth, query } = require('../api/neonClient');
-            const health = getNeonHealth();
-
-            if (health.isConfigured) {
-              const rows = await query(
-                `SELECT id, user_id, type, amount, category, note, created_at, updated_at, date 
-                 FROM transactions 
-                 WHERE user_id = $1 AND (deleted_at IS NULL) 
-                 ORDER BY updated_at DESC LIMIT 1000`,
-                [resolvedId]
-              );
-
-              if (rows && rows.length > 0) {
-                for (const r of rows) {
-                  const upd: Partial<TransactionRow> = {
-                    id: r.id,
-                    user_id: r.user_id,
-                    type: r.type,
-                    amount: Number(r.amount),
-                    category: r.category,
-                    note: r.note,
-                    date: r.date ?? null,
-                    updated_at: r.updated_at ?? Date.now(),
-                    sync_status: 1, // Mark as synced since it came from remote
-                  };
-                  try {
-                    await upsertTransactionFromRemote(upd as any);
-                  } catch (e) {
-                    if (__DEV__)
-                      console.warn(
-                        '[useEntries] upsertTransactionFromRemote failed for row',
-                        r.id,
-                        e
-                      );
-                  }
-                }
-              }
-            }
-          } catch (e) {
-            // Silently fail remote fetch in background to avoid disrupting UI
-            if (__DEV__) console.warn('[useEntries] Background remote fetch failed', e);
-          }
-        })();
+        // Do not pull from Neon here. Central sync manager handles background sync
+        // with throttling/cancellation/yielding consistently.
 
         return mapped;
       } catch (e: any) {
@@ -448,8 +410,8 @@ export const useEntries = (userId?: string | null) => {
       const now = new Date().toISOString();
 
       const created = normalizeDate((entry as any).date || (entry as any).created_at, now);
-      // Simple client-side id for offline mode
-      const localId = entry.local_id || `local_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+      // Use UUIDs even offline so rows are always syncable to Neon.
+      const localId = uuidv4();
 
       const toInsert = {
         id: localId,

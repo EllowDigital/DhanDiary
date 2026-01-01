@@ -45,7 +45,8 @@ export const saveSession = async (
   name: string,
   email: string,
   image?: string | null,
-  imageUrl?: string | null
+  imageUrl?: string | null,
+  clerkId?: string | null
 ) => {
   try {
     // Read existing session if present so we can preserve image fields when callers
@@ -59,9 +60,15 @@ export const saveSession = async (
     let payload: any = { name: name || '', email: email || '' };
     if (uuidValidate(id)) {
       payload.id = id;
+      // Prefer explicitly provided clerkId; otherwise preserve existing stored clerk_id.
+      const nextClerk = typeof clerkId !== 'undefined' ? clerkId : existing?.clerk_id;
+      if (nextClerk) payload.clerk_id = nextClerk;
     } else {
+      // Backward compatibility:
+      // - Older call sites pass a provider id (e.g., Clerk user id) as `id`.
+      // - We generate an internal UUID for local SQLite + future Neon mapping.
       payload.id = uuidv4();
-      payload.clerk_id = id;
+      payload.clerk_id = typeof clerkId !== 'undefined' ? clerkId : id;
     }
 
     // Determine resulting image fields:

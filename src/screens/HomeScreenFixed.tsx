@@ -278,6 +278,9 @@ const HomeScreen = () => {
   const [chartType, setChartType] = useState<'wave' | 'pie' | 'list'>('wave');
   const [isSyncing, setIsSyncing] = useState(false);
 
+  const entriesCount = (entries as any[] | undefined)?.length ?? 0;
+  const showBootstrapSyncHint = entriesCount === 0 && isSyncing;
+
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -330,65 +333,75 @@ const HomeScreen = () => {
 
   // --- DATA PROCESSING (Memoized) ---
   const { stats, chartData, recentEntries } = useMemo(() => {
-    const rawEntries = entries || [];
+    const rawEntries = (entries || []) as any[];
 
-    // 1. Overall Balance (lifetime)
-    const totalInAll = rawEntries
-      .filter((e) => isIncomeType(e.type))
-      .reduce((acc, c) => acc + Number(c.amount), 0);
+    const cutOffMs =
+      period === 'week'
+        ? dayjs().subtract(6, 'day').startOf('day').valueOf()
+        : dayjs().startOf('month').startOf('day').valueOf();
 
-    const totalOutAll = rawEntries
-      .filter((e) => isExpenseType(e.type))
-      .reduce((acc, c) => acc + Number(c.amount), 0);
-
-    // 2. Period filter (used for Home analytics + period income/expense)
-    const cutOff =
-      period === 'week' ? dayjs().subtract(6, 'day').startOf('day') : dayjs().startOf('month');
-
-    const periodEntries = rawEntries.filter((e) => {
-      const d = dayjsFrom(e.date).startOf('day');
-      return d.isAfter(cutOff) || d.isSame(cutOff, 'day');
-    });
-
-    const periodIn = periodEntries
-      .filter((e) => isIncomeType(e.type))
-      .reduce((acc, c) => acc + Number(c.amount), 0);
-
-    const periodOut = periodEntries
-      .filter((e) => isExpenseType(e.type))
-      .reduce((acc, c) => acc + Number(c.amount), 0);
-
-    // Wave Data
     const wavePoints =
       period === 'week' ? new Array(7).fill(0) : new Array(dayjs().daysInMonth()).fill(0);
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const catMap: Record<string, number> = {};
 
-    periodEntries
-      .filter((e) => isExpenseType(e.type))
-      .forEach((e) => {
-        const d = dayjsFrom(e.date).startOf('day');
+    let totalInAll = 0;
+    let totalOutAll = 0;
+    let periodIn = 0;
+    let periodOut = 0;
 
+    // Keep top-N recent entries without sorting the whole dataset.
+    // This avoids O(n log n) cost when you have lots of rows.
+    const TOP_N = 7;
+    const topRecent: Array<{ ts: number; e: any }> = [];
+
+    for (const e of rawEntries) {
+      const amount = Number(e?.amount) || 0;
+      const isInc = isIncomeType(e?.type);
+      const isExp = isExpenseType(e?.type);
+      if (isInc) totalInAll += amount;
+      if (isExp) totalOutAll += amount;
+
+      // Use a single timestamp for comparisons and recent ordering.
+      const ts = dayjsFrom(e?.date ?? e?.created_at ?? e?.updated_at).valueOf();
+
+      // Insert into topRecent (descending), keep only TOP_N.
+      if (Number.isFinite(ts)) {
+        if (topRecent.length < TOP_N || ts > topRecent[topRecent.length - 1].ts) {
+          let inserted = false;
+          for (let i = 0; i < topRecent.length; i++) {
+            if (ts > topRecent[i].ts) {
+              topRecent.splice(i, 0, { ts, e });
+              inserted = true;
+              break;
+            }
+          }
+          if (!inserted) topRecent.push({ ts, e });
+          if (topRecent.length > TOP_N) topRecent.length = TOP_N;
+        }
+      }
+
+      // Period analytics: compute dayStart once.
+      const dayStartMs = dayjs(ts).startOf('day').valueOf();
+      if (dayStartMs < cutOffMs) continue;
+
+      if (isInc) periodIn += amount;
+      if (isExp) periodOut += amount;
+
+      if (isExp) {
         const targetIdx =
           period === 'week'
-            ? (() => {
-                const diffDays = dayjs().startOf('day').diff(d, 'day');
-                // diff=0 (today) -> idx 6, diff=6 -> idx 0
-                return 6 - diffDays;
-              })()
-            : d.date() - 1;
+            ? Math.round((dayStartMs - cutOffMs) / DAY_MS)
+            : dayjs(dayStartMs).date() - 1;
 
         if (targetIdx >= 0 && targetIdx < wavePoints.length) {
-          wavePoints[targetIdx] += Number(e.amount);
+          wavePoints[targetIdx] += amount;
         }
-      });
 
-    // Pie Data
-    const catMap: Record<string, number> = {};
-    periodEntries
-      .filter((e) => isExpenseType(e.type))
-      .forEach((e) => {
-        const c = e.category || 'Other';
-        catMap[c] = (catMap[c] || 0) + Number(e.amount);
-      });
+        const c = e?.category || 'Other';
+        catMap[c] = (catMap[c] || 0) + amount;
+      }
+    }
 
     const piePoints = Object.keys(catMap)
       .map((name, i) => ({
@@ -400,11 +413,6 @@ const HomeScreen = () => {
       }))
       .sort((a, b) => b.population - a.population);
 
-    // 3. Recent Transactions (SORTING FIX)
-    const sortedRecent = [...rawEntries]
-      .sort((a, b) => dayjsFrom(b.date).valueOf() - dayjsFrom(a.date).valueOf()) // Newest first
-      .slice(0, 7); // Show a few more
-
     return {
       stats: {
         in: periodIn,
@@ -412,217 +420,263 @@ const HomeScreen = () => {
         bal: totalInAll - totalOutAll,
       },
       chartData: { wave: wavePoints, pie: piePoints },
-      recentEntries: sortedRecent,
+      recentEntries: topRecent.map((x) => x.e),
     };
   }, [entries, period]);
 
-  // --- RENDER HEADER ---
-  const renderHeader = () => (
-    <View style={styles.headerContainer}>
-      {/* 1. Top Bar */}
-      <View style={styles.topBar}>
-        <View style={styles.userInfoRow}>
-          {(() => {
-            const effectiveName =
-              (user && (user.name || (user as any).fullName || (user as any).firstName)) ||
-              fallbackSession?.name ||
-              null;
-            const effectiveImage =
-              user?.imageUrl || user?.image || fallbackSession?.imageUrl || fallbackSession?.image;
+  const header = useMemo(
+    () => (
+      <View style={styles.headerContainer}>
+        {/* 1. Top Bar */}
+        <View style={styles.topBar}>
+          <View style={styles.userInfoRow}>
+            {(() => {
+              const effectiveName =
+                (user && (user.name || (user as any).fullName || (user as any).firstName)) ||
+                fallbackSession?.name ||
+                null;
+              const effectiveImage =
+                user?.imageUrl ||
+                user?.image ||
+                fallbackSession?.imageUrl ||
+                fallbackSession?.image;
 
-            return (
-              <>
-                <View style={styles.avatarWrap}>
-                  <UserAvatar
-                    size={42}
-                    name={effectiveName || undefined}
-                    imageUrl={effectiveImage}
-                    onPress={() => navigation.navigate('Account')}
-                  />
-                  {fallbackSession && !user ? (
-                    <View style={styles.localBadge}>
-                      <MaterialIcon name="cloud-off" size={12} color="#B91C1C" />
-                    </View>
-                  ) : null}
-                </View>
-                <View style={{ marginLeft: 12 }}>
-                  <Text style={styles.greetingText}>Welcome Back,</Text>
-                  <Text style={styles.userName}>{effectiveName || 'User'}</Text>
-                </View>
-              </>
-            );
-          })()}
-        </View>
-        <TouchableOpacity
-          onPress={() => navigation.openDrawer()}
-          style={styles.menuBtn}
-          accessibilityLabel="Open Menu"
-        >
-          <MaterialIcon name="menu" size={26} color={COLORS.textMain} />
-        </TouchableOpacity>
-      </View>
-
-      {/* 2. Hero Card */}
-      <Animated.View style={[styles.heroCard, { opacity: fadeAnim }]}>
-        <Svg style={StyleSheet.absoluteFill}>
-          <Defs>
-            <LinearGradient id="heroGrad" x1="0" y1="0" x2="1" y2="1">
-              <Stop offset="0" stopColor="#3B82F6" />
-              <Stop offset="1" stopColor="#1D4ED8" />
-            </LinearGradient>
-          </Defs>
-          <Rect width="100%" height="100%" fill="url(#heroGrad)" />
-          {/* Decorative Circles */}
-          <Circle cx="85%" cy="15%" r="80" fill="white" fillOpacity="0.1" />
-          <Circle cx="10%" cy="90%" r="50" fill="white" fillOpacity="0.08" />
-        </Svg>
-
-        <View style={styles.cardInner}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.balanceLabel}>Total Balance</Text>
-            <TouchableOpacity onPress={() => setShowBalance(!showBalance)} style={styles.eyeBtn}>
-              <MaterialIcon
-                name={showBalance ? 'visibility' : 'visibility-off'}
-                size={18}
-                color="rgba(255,255,255,0.7)"
-              />
-            </TouchableOpacity>
+              return (
+                <>
+                  <View style={styles.avatarWrap}>
+                    <UserAvatar
+                      size={42}
+                      name={effectiveName || undefined}
+                      imageUrl={effectiveImage}
+                      onPress={() => navigation.navigate('Account')}
+                    />
+                    {fallbackSession && !user ? (
+                      <View style={styles.localBadge}>
+                        <MaterialIcon name="cloud-off" size={12} color="#B91C1C" />
+                      </View>
+                    ) : null}
+                  </View>
+                  <View style={{ marginLeft: 12 }}>
+                    <Text style={styles.greetingText}>Welcome Back,</Text>
+                    <Text style={styles.userName}>{effectiveName || 'User'}</Text>
+                  </View>
+                </>
+              );
+            })()}
           </View>
-
-          <View style={styles.balanceRow}>
-            <Text style={styles.currencySymbol}>₹</Text>
-            <Text style={styles.balanceAmount} numberOfLines={1} adjustsFontSizeToFit>
-              {showBalance ? stats.bal.toLocaleString('en-IN') : '••••••'}
-            </Text>
-          </View>
-
-          <View style={styles.statsContainer}>
-            {/* Income */}
-            <View style={styles.statItem}>
-              <View style={[styles.statIcon, { backgroundColor: 'rgba(16, 185, 129, 0.2)' }]}>
-                <MaterialIcon name="arrow-downward" size={16} color="#4ADE80" />
-              </View>
-              <View>
-                <Text style={styles.statLabel}>
-                  Income {period === 'week' ? '(7 Days)' : '(This Month)'}
-                </Text>
-                <Text style={styles.statValue}>
-                  {showBalance ? `₹${stats.in.toLocaleString()}` : '••••'}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.statDivider} />
-
-            {/* Expense */}
-            <View style={styles.statItem}>
-              <View style={[styles.statIcon, { backgroundColor: 'rgba(239, 68, 68, 0.2)' }]}>
-                <MaterialIcon name="arrow-upward" size={16} color="#F87171" />
-              </View>
-              <View>
-                <Text style={styles.statLabel}>
-                  Expense {period === 'week' ? '(7 Days)' : '(This Month)'}
-                </Text>
-                <Text style={styles.statValue}>
-                  {showBalance ? `₹${stats.out.toLocaleString()}` : '••••'}
-                </Text>
-              </View>
-            </View>
-          </View>
-        </View>
-      </Animated.View>
-
-      {/* 3. Quick Actions */}
-      <View style={styles.actionGrid}>
-        {[
-          { label: 'Add New', icon: 'add', nav: 'AddEntry', primary: true },
-          { label: 'Analytics', icon: 'bar-chart', nav: 'Analytics', primary: false },
-          { label: 'History', icon: 'history', nav: 'History', primary: false },
-        ].map((item, idx) => (
           <TouchableOpacity
-            key={idx}
-            style={[
-              styles.actionCard,
-              item.primary ? { backgroundColor: COLORS.primary } : { backgroundColor: COLORS.card },
-            ]}
-            onPress={() => navigation.navigate(item.nav)}
-            activeOpacity={0.8}
+            onPress={() => navigation.openDrawer()}
+            style={styles.menuBtn}
+            accessibilityLabel="Open Menu"
           >
-            <MaterialIcon
-              name={item.icon as any}
-              size={24}
-              color={item.primary ? '#fff' : COLORS.primary}
-            />
-            <Text style={[styles.actionLabel, item.primary && { color: '#fff' }]}>
-              {item.label}
-            </Text>
+            <MaterialIcon name="menu" size={26} color={COLORS.textMain} />
           </TouchableOpacity>
-        ))}
-      </View>
+        </View>
 
-      {/* 4. Analytics Widget */}
-      <View style={styles.chartCard}>
-        <View style={styles.chartHeader}>
-          {/* Chart Type Toggles */}
-          <View style={styles.chartToggles}>
-            {[
-              { id: 'wave', icon: 'show-chart' },
-              { id: 'pie', icon: 'pie-chart' },
-              { id: 'list', icon: 'list' },
-            ].map((t) => (
-              <TouchableOpacity
-                key={t.id}
-                style={[styles.chartToggleBtn, chartType === t.id && styles.chartToggleBtnActive]}
-                onPress={() => handleToggleChart(t.id as any)}
-              >
+        {/* 2. Hero Card */}
+        <Animated.View style={[styles.heroCard, { opacity: fadeAnim }]}>
+          <Svg style={StyleSheet.absoluteFill}>
+            <Defs>
+              <LinearGradient id="heroGrad" x1="0" y1="0" x2="1" y2="1">
+                <Stop offset="0" stopColor="#3B82F6" />
+                <Stop offset="1" stopColor="#1D4ED8" />
+              </LinearGradient>
+            </Defs>
+            <Rect width="100%" height="100%" fill="url(#heroGrad)" />
+            {/* Decorative Circles */}
+            <Circle cx="85%" cy="15%" r="80" fill="white" fillOpacity="0.1" />
+            <Circle cx="10%" cy="90%" r="50" fill="white" fillOpacity="0.08" />
+          </Svg>
+
+          <View style={styles.cardInner}>
+            <View style={styles.cardHeader}>
+              <Text style={styles.balanceLabel}>Total Balance</Text>
+              <TouchableOpacity onPress={() => setShowBalance(!showBalance)} style={styles.eyeBtn}>
                 <MaterialIcon
-                  name={t.icon as any}
-                  size={20}
-                  color={chartType === t.id ? COLORS.primary : COLORS.textSub}
+                  name={showBalance ? 'visibility' : 'visibility-off'}
+                  size={18}
+                  color="rgba(255,255,255,0.7)"
                 />
               </TouchableOpacity>
-            ))}
+            </View>
+
+            <View style={styles.balanceRow}>
+              <Text style={styles.currencySymbol}>₹</Text>
+              <Text style={styles.balanceAmount} numberOfLines={1} adjustsFontSizeToFit>
+                {showBalance ? stats.bal.toLocaleString('en-IN') : '••••••'}
+              </Text>
+            </View>
+
+            {showBootstrapSyncHint ? (
+              <View style={styles.bootstrapSyncHint}>
+                <ActivityIndicator size="small" color="rgba(255,255,255,0.85)" />
+                <Text style={styles.bootstrapSyncHintText}>Syncing your data…</Text>
+              </View>
+            ) : null}
+
+            <View style={styles.statsContainer}>
+              {/* Income */}
+              <View style={styles.statItem}>
+                <View style={[styles.statIcon, { backgroundColor: 'rgba(16, 185, 129, 0.2)' }]}>
+                  <MaterialIcon name="arrow-downward" size={16} color="#4ADE80" />
+                </View>
+                <View>
+                  <Text style={styles.statLabel}>
+                    Income {period === 'week' ? '(7 Days)' : '(This Month)'}
+                  </Text>
+                  <Text style={styles.statValue}>
+                    {showBalance ? `₹${stats.in.toLocaleString()}` : '••••'}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.statDivider} />
+
+              {/* Expense */}
+              <View style={styles.statItem}>
+                <View style={[styles.statIcon, { backgroundColor: 'rgba(239, 68, 68, 0.2)' }]}>
+                  <MaterialIcon name="arrow-upward" size={16} color="#F87171" />
+                </View>
+                <View>
+                  <Text style={styles.statLabel}>
+                    Expense {period === 'week' ? '(7 Days)' : '(This Month)'}
+                  </Text>
+                  <Text style={styles.statValue}>
+                    {showBalance ? `₹${stats.out.toLocaleString()}` : '••••'}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          </View>
+        </Animated.View>
+
+        {/* 3. Quick Actions */}
+        <View style={styles.actionGrid}>
+          {[
+            { label: 'Add New', icon: 'add', nav: 'AddEntry', primary: true },
+            { label: 'Analytics', icon: 'bar-chart', nav: 'Analytics', primary: false },
+            { label: 'History', icon: 'history', nav: 'History', primary: false },
+          ].map((item, idx) => (
+            <TouchableOpacity
+              key={idx}
+              style={[
+                styles.actionCard,
+                item.primary
+                  ? { backgroundColor: COLORS.primary }
+                  : { backgroundColor: COLORS.card },
+              ]}
+              onPress={() => navigation.navigate(item.nav)}
+              activeOpacity={0.8}
+            >
+              <MaterialIcon
+                name={item.icon as any}
+                size={24}
+                color={item.primary ? '#fff' : COLORS.primary}
+              />
+              <Text style={[styles.actionLabel, item.primary && { color: '#fff' }]}>
+                {item.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* 4. Analytics Widget */}
+        <View style={styles.chartCard}>
+          <View style={styles.chartHeader}>
+            {/* Chart Type Toggles */}
+            <View style={styles.chartToggles}>
+              {[
+                { id: 'wave', icon: 'show-chart' },
+                { id: 'pie', icon: 'pie-chart' },
+                { id: 'list', icon: 'list' },
+              ].map((t) => (
+                <TouchableOpacity
+                  key={t.id}
+                  style={[styles.chartToggleBtn, chartType === t.id && styles.chartToggleBtnActive]}
+                  onPress={() => handleToggleChart(t.id as any)}
+                >
+                  <MaterialIcon
+                    name={t.icon as any}
+                    size={20}
+                    color={chartType === t.id ? COLORS.primary : COLORS.textSub}
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Time Period Switch */}
+            <View style={styles.periodSwitch}>
+              {['week', 'month'].map((p) => (
+                <TouchableOpacity
+                  key={p}
+                  style={[styles.periodBtn, period === p && styles.periodBtnActive]}
+                  onPress={() => handleTogglePeriod(p as any)}
+                >
+                  <Text style={[styles.periodText, period === p && styles.periodTextActive]}>
+                    {p === 'week' ? '7 Days' : 'Month'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
 
-          {/* Time Period Switch */}
-          <View style={styles.periodSwitch}>
-            {['week', 'month'].map((p) => (
-              <TouchableOpacity
-                key={p}
-                style={[styles.periodBtn, period === p && styles.periodBtnActive]}
-                onPress={() => handleTogglePeriod(p as any)}
-              >
-                <Text style={[styles.periodText, period === p && styles.periodTextActive]}>
-                  {p === 'week' ? '7 Days' : 'Month'}
-                </Text>
-              </TouchableOpacity>
-            ))}
+          <View style={styles.chartBody}>
+            {chartType === 'wave' && <CleanWaveChart data={chartData.wave} width={CHART_WIDTH} />}
+            {chartType === 'pie' && <CleanPieChart data={chartData.pie} width={CHART_WIDTH} />}
+            {chartType === 'list' && <RankList data={chartData.pie} total={stats.out} />}
           </View>
         </View>
 
-        <View style={styles.chartBody}>
-          {chartType === 'wave' && <CleanWaveChart data={chartData.wave} width={CHART_WIDTH} />}
-          {chartType === 'pie' && <CleanPieChart data={chartData.pie} width={CHART_WIDTH} />}
-          {chartType === 'list' && <RankList data={chartData.pie} total={stats.out} />}
+        {/* 5. Recent Section Header */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Recent Transactions</Text>
+          <TouchableOpacity onPress={() => navigation.navigate('History')}>
+            <Text style={styles.seeAllBtn}>View All</Text>
+          </TouchableOpacity>
         </View>
       </View>
-
-      {/* 5. Recent Section Header */}
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Recent Transactions</Text>
-        <TouchableOpacity onPress={() => navigation.navigate('History')}>
-          <Text style={styles.seeAllBtn}>View All</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+    ),
+    [
+      navigation,
+      user,
+      fallbackSession,
+      fadeAnim,
+      showBalance,
+      stats.bal,
+      stats.in,
+      stats.out,
+      period,
+      chartType,
+      chartData.wave,
+      chartData.pie,
+      CHART_WIDTH,
+      handleToggleChart,
+      handleTogglePeriod,
+    ]
   );
+
+  const renderItem = useCallback(
+    ({ item }: { item: Transaction }) => (
+      <View style={styles.itemWrapper}>
+        <TransactionItem
+          item={item}
+          onPress={() => navigation.navigate('AddEntry', { local_id: (item as any).local_id })}
+        />
+      </View>
+    ),
+    [navigation]
+  );
+
+  const keyExtractor = useCallback((item: any, index: number) => {
+    return String(item?.local_id || item?.id || item?.remote_id || index);
+  }, []);
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
         {/* Loading Overlay */}
-        {showLoading && (
+        {showLoading && entriesCount === 0 && (
           <View style={styles.loadingOverlay}>
             <ActivityIndicator size="large" color={COLORS.primary} />
           </View>
@@ -631,8 +685,8 @@ const HomeScreen = () => {
         {/* Using FlatList for the entire screen allows pull-to-refresh */}
         <FlatList
           data={recentEntries}
-          keyExtractor={(item) => item.local_id || Math.random().toString()}
-          ListHeaderComponent={renderHeader}
+          keyExtractor={keyExtractor}
+          ListHeaderComponent={header}
           refreshControl={
             <RefreshControl
               refreshing={isLoading && isSyncing}
@@ -640,20 +694,25 @@ const HomeScreen = () => {
               tintColor={COLORS.primary}
             />
           }
-          renderItem={({ item }) => (
-            <View style={styles.itemWrapper}>
-              <TransactionItem
-                item={item}
-                onPress={() => navigation.navigate('AddEntry', { local_id: item.local_id })}
-              />
-            </View>
-          )}
+          renderItem={renderItem as any}
           contentContainerStyle={{ paddingBottom: 100 }}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             !isLoading ? (
               <View style={styles.emptyList}>
-                <Text style={styles.emptyText}>No recent transactions found.</Text>
+                {showBootstrapSyncHint ? (
+                  <>
+                    <ActivityIndicator size="small" color={COLORS.primary} />
+                    <Text style={[styles.emptyText, { marginTop: 10 }]}>
+                      Syncing your data from cloud…
+                    </Text>
+                    <Text style={[styles.emptyText, { marginTop: 4, fontSize: 13 }]}>
+                      Your entries will appear here once sync completes.
+                    </Text>
+                  </>
+                ) : (
+                  <Text style={styles.emptyText}>No recent transactions found.</Text>
+                )}
                 <TouchableOpacity
                   style={styles.emptyBtn}
                   onPress={() => navigation.navigate('AddEntry')}
@@ -679,6 +738,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: 150,
     backgroundColor: 'rgba(248, 250, 252, 0.5)',
+  },
+
+  bootstrapSyncHint: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  bootstrapSyncHintText: {
+    marginLeft: 8,
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 13,
+    fontWeight: '600',
   },
 
   // Header

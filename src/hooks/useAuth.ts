@@ -3,6 +3,7 @@ import { getSession, saveSession } from '../db/session';
 import { subscribeSession } from '../utils/sessionEvents';
 import { query } from '../api/neonClient';
 import NetInfo from '@react-native-community/netinfo';
+import { isUuid, uuidv4 } from '../utils/uuid';
 // Optional Clerk integration: if Clerk is installed and user is signed in,
 // prefer Clerk's user as the authoritative session and persist it locally.
 let useClerkUser: any = null;
@@ -25,10 +26,6 @@ type UserSession = {
   image?: string | null;
   imageUrl?: string | null;
 };
-
-const isUuid = (s: any) =>
-  typeof s === 'string' &&
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
 
 export const useAuth = () => {
   const [user, setUser] = useState<UserSession | null>(null);
@@ -54,7 +51,14 @@ export const useAuth = () => {
                 if (rows && rows.length) {
                   const u = rows[0];
                   // persist fresh profile locally
-                  await saveSession(u.id, u.name || '', u.email || '');
+                  await saveSession(
+                    u.id,
+                    u.name || '',
+                    u.email || '',
+                    (session as any)?.image ?? null,
+                    (session as any)?.imageUrl ?? null,
+                    (session as any)?.clerk_id ?? null
+                  );
                   setUser({
                     id: u.id,
                     name: u.name || '',
@@ -63,7 +67,43 @@ export const useAuth = () => {
                     imageUrl: (session as any)?.imageUrl ?? (session as any)?.image ?? null,
                   });
                 } else {
-                  setUser(session || null);
+                  // If the stored UUID isn't present on the server (offline fallback or migration),
+                  // try to resolve by Clerk id (authoritative identity) when available.
+                  const clerkId = (session as any)?.clerk_id
+                    ? String((session as any).clerk_id)
+                    : null;
+                  if (clerkId) {
+                    try {
+                      const byClerk = await query(
+                        'SELECT id, name, email FROM users WHERE clerk_id = $1 LIMIT 1',
+                        [clerkId]
+                      );
+                      if (byClerk && byClerk.length) {
+                        const u2 = byClerk[0];
+                        await saveSession(
+                          u2.id,
+                          u2.name || '',
+                          u2.email || '',
+                          (session as any)?.image ?? null,
+                          (session as any)?.imageUrl ?? null,
+                          clerkId
+                        );
+                        setUser({
+                          id: u2.id,
+                          name: u2.name || '',
+                          email: u2.email || '',
+                          image: (session as any)?.image ?? null,
+                          imageUrl: (session as any)?.imageUrl ?? (session as any)?.image ?? null,
+                        });
+                      } else {
+                        setUser(session || null);
+                      }
+                    } catch (e) {
+                      setUser(session || null);
+                    }
+                  } else {
+                    setUser(session || null);
+                  }
                 }
               } catch (e) {
                 // network or query failed — fall back to local session
@@ -118,7 +158,14 @@ export const useAuth = () => {
                   emailAddresses: [{ emailAddress: email }],
                   fullName: name,
                 });
-                const uid = bridge?.uuid || id;
+
+                // Critical: never expose a non-UUID user id to the rest of the app.
+                // If the bridge cannot provide a Neon UUID, preserve an existing UUID
+                // session or generate one once and persist it.
+                const existing = await getSession();
+                const existingUuid = existing?.id && isUuid(existing.id) ? existing.id : null;
+                const bridgedUuid = bridge?.uuid && isUuid(bridge.uuid) ? bridge.uuid : null;
+                const uid = bridgedUuid || existingUuid || uuidv4();
                 setUser({
                   id: uid,
                   name: bridge?.name || name || '',
@@ -132,7 +179,8 @@ export const useAuth = () => {
                     bridge?.name || name || '',
                     bridge?.email || email || '',
                     image || null,
-                    image || null
+                    image || null,
+                    id
                   );
                 } catch (e) {}
               } catch (e) {
@@ -148,7 +196,8 @@ export const useAuth = () => {
                       (existing as any)?.name || name || '',
                       (existing as any)?.email || email || '',
                       image || (existing as any)?.image || null,
-                      image || (existing as any)?.imageUrl || null
+                      image || (existing as any)?.imageUrl || null,
+                      id
                     );
                     setUser({
                       id: stableId,
@@ -159,7 +208,14 @@ export const useAuth = () => {
                     });
                   } else {
                     // No existing UUID session to preserve; create a fallback session.
-                    await saveSession(id, name || '', email || '', image || null, image || null);
+                    await saveSession(
+                      id,
+                      name || '',
+                      email || '',
+                      image || null,
+                      image || null,
+                      id
+                    );
                     const created = await getSession();
                     setUser((created as any) || null);
                   }
@@ -224,7 +280,14 @@ export const useAuth = () => {
           emailAddresses: email ? [{ emailAddress: email }] : [],
           fullName: name,
         });
-        const uid = bridge?.uuid || id;
+
+        // Critical: never expose a non-UUID user id to the rest of the app.
+        // If the bridge cannot provide a Neon UUID, preserve an existing UUID
+        // session or generate one once and persist it.
+        const existing = await getSession();
+        const existingUuid = existing?.id && isUuid(existing.id) ? existing.id : null;
+        const bridgedUuid = bridge?.uuid && isUuid(bridge.uuid) ? bridge.uuid : null;
+        const uid = bridgedUuid || existingUuid || uuidv4();
         // persist authoritative session info
         try {
           await saveSession(
@@ -232,7 +295,8 @@ export const useAuth = () => {
             bridge?.name || name || '',
             bridge?.email || email || '',
             image || null,
-            image || null
+            image || null,
+            id
           );
         } catch (e) {}
         setUser({
@@ -254,7 +318,8 @@ export const useAuth = () => {
               (existing as any)?.name || name || '',
               (existing as any)?.email || email || '',
               image || (existing as any)?.image || null,
-              image || (existing as any)?.imageUrl || null
+              image || (existing as any)?.imageUrl || null,
+              id
             );
             setUser({
               id: stableId,
@@ -264,7 +329,9 @@ export const useAuth = () => {
               imageUrl: image || (existing as any)?.imageUrl || null,
             });
           } else {
-            await saveSession(id, name || '', email || '', image || null, image || null);
+            // No UUID session exists yet; create a stable local UUID and store Clerk id separately.
+            const localId = uuidv4();
+            await saveSession(localId, name || '', email || '', image || null, image || null, id);
             const created = await getSession();
             setUser((created as any) || null);
           }
@@ -301,10 +368,19 @@ try {
         const { getTransactionsByUser } = require('../db/transactions');
         const rows = await getTransactionsByUser(s.id);
         if (!rows || rows.length === 0) {
+          // Reset pull cursor so the first pull after login fetches everything.
+          // Only do this when local DB is empty to avoid re-pulling on every login.
+          try {
+            const { executeSqlAsync } = require('../db/sqlite');
+            const metaKey = `last_pull_server_version:${s.id}`;
+            const cursorKey = `last_pull_cursor_v2:${s.id}`;
+            await executeSqlAsync('DELETE FROM meta WHERE key IN (?, ?);', [metaKey, cursorKey]);
+          } catch (ee) {}
+
           // bootstrap from server via the central sync manager
           try {
-            const { syncBothWays } = require('../services/syncManager');
-            await syncBothWays({ source: 'auto' });
+            const { scheduleSync } = require('../services/syncManager');
+            scheduleSync({ source: 'auto', force: true } as any);
           } catch (ee) {}
         }
       } catch (e) {}

@@ -30,6 +30,7 @@ export type ScreenHeaderProps = {
   onDismissScrollHint?: () => void;
   style?: StyleProp<ViewStyle>;
   useSafeAreaPadding?: boolean;
+  density?: 'default' | 'compact';
   showAppIcon?: boolean;
   hideLeftAction?: boolean;
   backAction?: () => void; // Optional override
@@ -46,6 +47,7 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
   onDismissScrollHint,
   style,
   useSafeAreaPadding = true,
+  density = 'default',
   showAppIcon = false,
   hideLeftAction = false,
   backAction,
@@ -103,11 +105,18 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
     };
   });
 
-  const topPadding = (useSafeAreaPadding ? insets.top : 0) + 12; // Base padding
+  const baseTopPad = density === 'compact' ? 6 : 12;
+  const baseBottomPad = density === 'compact' ? 8 : 12;
+  const topPadding = (useSafeAreaPadding ? insets.top : 0) + baseTopPad;
 
   return (
     <Animated.View
-      style={[styles.wrapper, { paddingTop: topPadding }, headerAnimatedStyle, style]}
+      style={[
+        styles.wrapper,
+        { paddingTop: topPadding, paddingBottom: baseBottomPad },
+        headerAnimatedStyle,
+        style,
+      ]}
       accessibilityRole="header"
     >
       <View style={styles.contentRow}>

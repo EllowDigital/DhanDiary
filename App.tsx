@@ -19,6 +19,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ClerkProvider, useUser } from '@clerk/clerk-expo';
 import Constants from 'expo-constants';
+import NetInfo from '@react-native-community/netinfo';
 
 // --- Local Imports ---
 import SplashScreen from './src/screens/SplashScreen';
@@ -45,6 +46,7 @@ import { syncClerkUserToNeon } from './src/services/clerkUserSync';
 import { saveSession as saveLocalSession } from './src/db/session';
 import { BiometricAuth } from './src/components/BiometricAuth';
 import tokenCache from './src/utils/tokenCache';
+import * as SecureStore from 'expo-secure-store';
 
 import {
   startForegroundSyncScheduler,
@@ -104,8 +106,18 @@ const AppContent = () => {
   const { user } = useAuth();
   const { user: clerkUser, isLoaded: clerkLoaded } = useUser();
   const [localSessionId, setLocalSessionId] = React.useState<string | null>(null);
+  const [localSessionClerkId, setLocalSessionClerkId] = React.useState<string | null>(null);
   const [accountDeletedAt, setAccountDeletedAt] = React.useState<string | null>(null);
   const { showActionToast } = useToast();
+
+  // --- Biometric session gate state ---
+  const BIOMETRIC_KEY = 'BIOMETRIC_ENABLED';
+  const BIOMETRIC_TIMEOUT_MS = 60 * 1000; // 30–60s per spec (keep 60s)
+  const [biometricEnabled, setBiometricEnabled] = React.useState(false);
+  const [biometricUnlocked, setBiometricUnlocked] = React.useState(false);
+  const lastUnlockTsRef = React.useRef<number>(0);
+  const backgroundAtRef = React.useRef<number>(0);
+  const appStateRef = React.useRef<AppStateStatus>(AppState.currentState);
 
   // Load persisted fallback session early so offline sync features work even when Clerk user
   // isn't immediately available (e.g., cold start without internet).
@@ -117,6 +129,7 @@ const AppContent = () => {
         const sess = await s.getSession();
         if (mounted) {
           setLocalSessionId(sess?.id ?? null);
+          setLocalSessionClerkId((sess as any)?.clerk_id ? String((sess as any).clerk_id) : null);
           try {
             const del = await s.getAccountDeletedAt();
             setAccountDeletedAt(del);
@@ -134,6 +147,7 @@ const AppContent = () => {
       unsub = se.subscribeSession((s: any) => {
         try {
           setLocalSessionId(s?.id ?? null);
+          setLocalSessionClerkId(s?.clerk_id ? String(s.clerk_id) : null);
           try {
             const mod = require('./src/db/session');
             if (mod && typeof mod.getAccountDeletedAt === 'function') {
@@ -151,6 +165,75 @@ const AppContent = () => {
       } catch (e) {}
     };
   }, []);
+
+  // Load biometric enabled setting once, and refresh on foreground.
+  const refreshBiometricEnabled = React.useCallback(async () => {
+    try {
+      const enabledSetting = await SecureStore.getItemAsync(BIOMETRIC_KEY);
+      setBiometricEnabled(enabledSetting === 'true');
+    } catch (e) {
+      setBiometricEnabled(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshBiometricEnabled();
+  }, [refreshBiometricEnabled]);
+
+  const isAuthenticated = !!(user?.id || localSessionId);
+  // Account switch boundary: Clerk id is authoritative when present.
+  const accountKey = clerkUser?.id ? String(clerkUser.id) : localSessionClerkId || null;
+  const lastAccountKeyRef = React.useRef<string | null>(null);
+
+  // Reset biometric session on logout or account switch.
+  useEffect(() => {
+    const prev = lastAccountKeyRef.current;
+    const next = accountKey;
+    lastAccountKeyRef.current = next;
+
+    if (!isAuthenticated) {
+      setBiometricUnlocked(false);
+      lastUnlockTsRef.current = 0;
+      return;
+    }
+
+    if (prev && next && prev !== next) {
+      setBiometricUnlocked(false);
+      lastUnlockTsRef.current = 0;
+    }
+  }, [accountKey, isAuthenticated]);
+
+  // App lifecycle: lock only after timeout in background.
+  useEffect(() => {
+    const onChange = (nextState: AppStateStatus) => {
+      const prevState = appStateRef.current;
+      appStateRef.current = nextState;
+
+      if (!biometricEnabled || !isAuthenticated) return;
+
+      if (prevState === 'active' && nextState.match(/inactive|background/)) {
+        backgroundAtRef.current = Date.now();
+      }
+
+      if (prevState.match(/inactive|background/) && nextState === 'active') {
+        void refreshBiometricEnabled();
+        const bgAt = backgroundAtRef.current;
+        backgroundAtRef.current = 0;
+
+        if (!biometricUnlocked) return;
+
+        if (bgAt && Date.now() - bgAt > BIOMETRIC_TIMEOUT_MS) {
+          setBiometricUnlocked(false);
+          lastUnlockTsRef.current = 0;
+        }
+      }
+    };
+
+    const sub = AppState.addEventListener('change', onChange);
+    return () => sub.remove();
+  }, [biometricEnabled, isAuthenticated, biometricUnlocked, refreshBiometricEnabled]);
+
+  const biometricLocked = biometricEnabled && isAuthenticated && !biometricUnlocked;
 
   // Background OTA updates: fetch quietly, then show a toast to install.
   // - No banners
@@ -212,6 +295,44 @@ const AppContent = () => {
 
         if (!id) return;
 
+        // IMPORTANT (offline-first):
+        // When offline, do NOT attempt to sync Clerk->Neon mapping, because the
+        // bridge may fall back and overwrite the local session UUID, causing the
+        // app to appear to reset to 0. We keep the existing local session and
+        // let sync reconcile once back online.
+        try {
+          const state = await NetInfo.fetch();
+          if (!state.isConnected) {
+            return;
+          }
+        } catch (e) {
+          // If NetInfo fails, proceed (best-effort).
+        }
+
+        // SECURITY: never reuse local SQLite across different Clerk users.
+        // If another user was previously active on this device, wipe local DB before proceeding.
+        try {
+          const ownerMod = await import('./src/db/offlineOwner');
+          const currentOwner = await ownerMod.getOfflineDbOwner();
+          if (currentOwner && String(currentOwner) !== String(id)) {
+            const db = await import('./src/db/sqlite');
+            if (typeof db.wipeLocalData === 'function') await db.wipeLocalData();
+            try {
+              const { notifyEntriesChanged } = require('./src/utils/dbEvents');
+              notifyEntriesChanged();
+            } catch (e) {}
+            try {
+              const holder = require('./src/utils/queryClientHolder');
+              if (holder && typeof holder.clearQueryCache === 'function') {
+                await holder.clearQueryCache();
+              }
+            } catch (e) {}
+          }
+          await ownerMod.setOfflineDbOwner(String(id));
+        } catch (e) {
+          // Best-effort; do not block login flow.
+        }
+
         const bridgeUser = await syncClerkUserToNeon({
           id,
           emailAddresses: emails,
@@ -224,7 +345,8 @@ const AppContent = () => {
             bridgeUser.name || 'User',
             bridgeUser.email,
             (clerkUser as any)?.imageUrl || null,
-            (clerkUser as any)?.imageUrl || null
+            (clerkUser as any)?.imageUrl || null,
+            bridgeUser.clerk_id || id
           );
         }
       } catch (e) {
@@ -246,8 +368,17 @@ const AppContent = () => {
         <RootStack.Screen name="Main" component={MainNavigator} />
       </RootStack.Navigator>
 
-      {/* Biometric overlay (keeps being an overlay) */}
-      <BiometricAuth />
+      {/* Biometric overlay: session gate (never per-screen) */}
+      <BiometricAuth
+        enabled={biometricEnabled && isAuthenticated}
+        locked={biometricLocked}
+        promptMessage="Unlock DhanDiary"
+        onUnlocked={() => {
+          const now = Date.now();
+          setBiometricUnlocked(true);
+          lastUnlockTsRef.current = now;
+        }}
+      />
 
       {/* no modal here: navigation handles account-deleted flow */}
     </View>

@@ -204,6 +204,10 @@ const SettingsScreen = () => {
           showToast('Cloud sync is disabled in this build.', 'error');
           return;
         }
+        if (res && res.reason === 'no_session') {
+          showToast('Sign in to enable cloud sync.', 'error');
+          return;
+        }
         // Treat throttled/already-running as a non-error for manual sync: user is effectively up to date.
         if (res && (res.reason === 'throttled' || res.reason === 'already_running')) {
           showToast("You're up to date.");

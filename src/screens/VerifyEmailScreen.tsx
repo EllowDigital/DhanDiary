@@ -211,7 +211,14 @@ const VerifyEmailScreen = () => {
               fullName,
             });
             // Save local session for offline access
-            await saveSession(bridgeUser.uuid, bridgeUser.name || 'User', bridgeUser.email);
+            await saveSession(
+              bridgeUser.uuid,
+              bridgeUser.name || 'User',
+              bridgeUser.email,
+              undefined,
+              undefined,
+              bridgeUser.clerk_id || result.createdUserId!
+            );
           } catch (syncErr) {
             console.warn('Sync failed (non-fatal):', syncErr);
           }
