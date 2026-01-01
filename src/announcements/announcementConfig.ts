@@ -49,7 +49,7 @@ const DEFAULT_ANNOUNCEMENTS: AnnouncementConfig[] = [
     accentColor: CURRENT_ANNOUNCEMENT.accentColor,
     // Example: New Year window. Adjust per Expo Update.
     startDate: '2025-12-30',
-    endDate: '2026-01-07',
+    endDate: '2026-01-14',
     isActive: true,
   },
 ];
