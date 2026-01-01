@@ -9,13 +9,19 @@ export async function initDB(): Promise<void> {
     await executeSqlAsync(`CREATE TABLE IF NOT EXISTS transactions(
       id TEXT PRIMARY KEY NOT NULL,
       user_id TEXT NOT NULL,
+      client_id TEXT,
       amount REAL NOT NULL,
-      type TEXT CHECK(type IN ('income','expense')),
+      type TEXT NOT NULL CHECK(type IN ('income','expense')),
       category TEXT,
       note TEXT,
-      date TEXT,
+      currency TEXT NOT NULL DEFAULT 'INR',
+      date TEXT NOT NULL,
+      server_version INTEGER NOT NULL DEFAULT 0,
+      sync_status INTEGER NOT NULL DEFAULT 0,
+      need_sync INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT DEFAULT NULL,
       updated_at INTEGER,
-      sync_status INTEGER DEFAULT 0
+      deleted_at TEXT DEFAULT NULL
     );`);
 
     await executeSqlAsync(`CREATE TABLE IF NOT EXISTS categories(

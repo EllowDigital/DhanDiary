@@ -156,7 +156,8 @@ export async function updateTransaction(
  * Schema uses 'deleted_at IS NOT NULL' to identify deleted rows.
  */
 export async function deleteTransaction(id: string, userId: string) {
-  const now = new Date().toISOString();
+  const deletedAtIso = new Date().toISOString();
+  const updatedAtMs = Date.now();
 
   // We keep sync_status = 0 (pending) so the deletion gets pushed to server
   const sql = `
@@ -165,7 +166,7 @@ export async function deleteTransaction(id: string, userId: string) {
     WHERE id = ? AND user_id = ?;
   `;
 
-  await executeSqlAsync(sql, [now, now, id, userId]);
+  await executeSqlAsync(sql, [deletedAtIso, updatedAtMs, id, userId]);
 
   if (__DEV__) console.log('[transactions] soft delete', id);
   try {

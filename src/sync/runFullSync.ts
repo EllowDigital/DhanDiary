@@ -9,7 +9,8 @@ export let isSyncRunning = false;
 
 // Throttle foreground syncs to avoid repeated runs when app quickly toggles
 let lastSyncAt = 0;
-const MIN_SYNC_INTERVAL_MS = 30_000; // 30 seconds
+// In production, sync less frequently to reduce Neon compute wakeups.
+const MIN_SYNC_INTERVAL_MS = __DEV__ ? 30_000 : 120_000; // dev: 30s, prod: 2m
 
 // Robust check for Jest environment that works in RN and Node
 const isJest = typeof process !== 'undefined' && !!process.env?.JEST_WORKER_ID;
