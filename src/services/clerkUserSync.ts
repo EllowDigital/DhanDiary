@@ -76,7 +76,8 @@ export const syncClerkUserToNeon = async (clerkUser: {
         await query(insertSql, [clerkUser.id, email, name]);
       } catch (e: any) {
         const msg = String(e?.message || e || '').toLowerCase();
-        const isEmailConflict = msg.includes('email') && (msg.includes('unique') || msg.includes('duplicate'));
+        const isEmailConflict =
+          msg.includes('email') && (msg.includes('unique') || msg.includes('duplicate'));
         if (!isEmailConflict) throw e;
 
         // Legacy safe-link: email exists, but only allow taking it if clerk_id is NULL.
