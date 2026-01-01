@@ -37,6 +37,7 @@ import { RootStackParamList, AuthStackParamList } from './src/types/navigation';
 import { ToastProvider } from './src/context/ToastContext';
 import { enableLegacyLayoutAnimations } from './src/utils/layoutAnimation';
 import DrawerNavigator from './src/navigation/DrawerNavigator';
+import { useToast } from './src/context/ToastContext';
 import { useOfflineSync } from './src/hooks/useOfflineSync';
 import { useAuth } from './src/hooks/useAuth';
 import { checkNeonConnection } from './src/api/neonClient';
@@ -52,7 +53,11 @@ import {
   stopBackgroundFetch,
 } from './src/services/syncManager';
 import runFullSync, { isSyncRunning } from './src/sync/runFullSync';
-import { runBackgroundUpdateCheck } from './src/services/backgroundUpdates';
+import {
+  runBackgroundUpdateCheck,
+  runBackgroundUpdateCheckWithResult,
+} from './src/services/backgroundUpdates';
+import * as Updates from 'expo-updates';
 
 // --- Configuration ---
 LogBox.ignoreLogs([
@@ -100,6 +105,7 @@ const AppContent = () => {
   const { user: clerkUser, isLoaded: clerkLoaded } = useUser();
   const [localSessionId, setLocalSessionId] = React.useState<string | null>(null);
   const [accountDeletedAt, setAccountDeletedAt] = React.useState<string | null>(null);
+  const { showActionToast } = useToast();
 
   // Load persisted fallback session early so offline sync features work even when Clerk user
   // isn't immediately available (e.g., cold start without internet).
@@ -145,6 +151,41 @@ const AppContent = () => {
       } catch (e) { }
     };
   }, []);
+
+  // Background OTA updates: fetch quietly, then show a toast to install.
+  // - No banners
+  // - Never blocks core flows
+  useEffect(() => {
+    let cancelled = false;
+
+    InteractionManager.runAfterInteractions(() => {
+      (async () => {
+        try {
+          const res = await runBackgroundUpdateCheckWithResult();
+          if (cancelled) return;
+
+          if (res.fetched && Updates.isEnabled) {
+            showActionToast(
+              'Update ready to install.',
+              'Install',
+              () => {
+                Updates.reloadAsync().catch(() => { });
+              },
+              'info',
+              8000,
+            );
+          }
+        } catch (e) {
+          // Fallback to silent behavior
+          runBackgroundUpdateCheck().catch(() => { });
+        }
+      })();
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [showActionToast]);
 
   // 1. Setup Offline Sync Hook
   // Prefer Clerk user id when available; otherwise use persisted local session id.

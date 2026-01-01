@@ -68,3 +68,37 @@ export const runBackgroundUpdateCheck = async (): Promise<void> => {
     // Fail silently: no UI, no throws.
   }
 };
+
+export const runBackgroundUpdateCheckWithResult = async (): Promise<{
+  fetched: boolean;
+}> => {
+  try {
+    if (!Updates.isEnabled) return { fetched: false };
+
+    // Same throttle behavior as the background check.
+    try {
+      const last = await AsyncStorage.getItem(STORAGE_KEY);
+      const lastMs = last ? Number(last) : 0;
+      if (Number.isFinite(lastMs) && lastMs > 0) {
+        const age = Date.now() - lastMs;
+        if (age >= 0 && age < SIX_HOURS_MS) return { fetched: false };
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    try {
+      await AsyncStorage.setItem(STORAGE_KEY, String(Date.now()));
+    } catch (e) {
+      // ignore
+    }
+
+    const result = await Updates.checkForUpdateAsync();
+    if (!result.isAvailable) return { fetched: false };
+
+    await Updates.fetchUpdateAsync();
+    return { fetched: true };
+  } catch (e) {
+    return { fetched: false };
+  }
+};
