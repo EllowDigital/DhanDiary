@@ -71,12 +71,52 @@ export type SyncStatus = 'idle' | 'syncing' | 'error';
 let _syncStatus: SyncStatus = 'idle';
 const _syncStatusListeners = new Set<(status: SyncStatus) => void>();
 
+// Sync state machine controls (offline-first)
+let _syncPaused = false;
+let _loadedSyncPrefs = false;
+const SYNC_PAUSED_KEY = 'sync_paused_v1';
+
+const loadSyncPrefsOnce = async () => {
+  if (_loadedSyncPrefs) return;
+  _loadedSyncPrefs = true;
+  try {
+    const v = await AsyncStorage.getItem(SYNC_PAUSED_KEY);
+    _syncPaused = v === '1';
+  } catch (e) {
+    _syncPaused = false;
+  }
+};
+
 export const subscribeSyncStatus = (listener: (status: SyncStatus) => void) => {
   _syncStatusListeners.add(listener);
   return () => _syncStatusListeners.delete(listener);
 };
 
 export const isSyncInProgress = () => _syncStatus === 'syncing';
+
+export const isSyncPaused = () => _syncPaused;
+
+export const getConnectivityState = () =>
+  (_isOnline ? 'online' : 'offline') as 'online' | 'offline';
+
+export const setSyncPaused = async (paused: boolean) => {
+  _syncPaused = !!paused;
+  try {
+    if (_syncPaused) await AsyncStorage.setItem(SYNC_PAUSED_KEY, '1');
+    else await AsyncStorage.removeItem(SYNC_PAUSED_KEY);
+  } catch (e) {
+    // best-effort
+  }
+
+  // If pausing, cancel any in-flight work.
+  if (_syncPaused) {
+    try {
+      requestSyncCancel();
+    } catch (e) {}
+  }
+};
+
+export const retrySync = () => scheduleSync({ force: true, source: 'manual' });
 
 // Public: request cancellation of any ongoing sync work.
 export const cancelSyncWork = () => {
@@ -88,6 +128,12 @@ export const cancelSyncWork = () => {
 // Public: schedule a sync to run after interactions (UI-first) and de-dupe rapid triggers.
 export const scheduleSync = (options?: { force?: boolean; source?: 'manual' | 'auto' }) => {
   try {
+    // Non-blocking: load persisted paused flag in background.
+    void loadSyncPrefsOnce();
+    if (_syncPaused) {
+      return Promise.resolve({ ok: true, reason: 'throttled', upToDate: true } as any);
+    }
+
     if (_scheduledSyncPromise) return _scheduledSyncPromise;
 
     _scheduledSyncPromise = new Promise((resolve, reject) => {
@@ -293,6 +339,17 @@ export type SyncResult = {
 };
 
 export const syncBothWays = async (options?: { force?: boolean; source?: 'manual' | 'auto' }) => {
+  // State machine: sync can be paused at any time.
+  await loadSyncPrefsOnce();
+  if (_syncPaused) {
+    return {
+      ok: true,
+      reason: 'throttled',
+      upToDate: true,
+      counts: { pushed: 0, pulled: 0 },
+    } satisfies SyncResult;
+  }
+
   // Starting a new sync implies we want to clear any previous cancel request.
   try {
     resetSyncCancel();
@@ -326,6 +383,7 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
   _lastSyncAttemptAt = Date.now();
 
   const state = await NetInfo.fetch();
+  _isOnline = !!state.isConnected;
   if (!state.isConnected) return { ok: false, reason: 'offline' } satisfies SyncResult;
 
   // Identity boundary (NON-NEGOTIABLE): Clerk is the source of truth.
@@ -635,16 +693,26 @@ export const getLastSyncCount = async () => {
 
 export const startAutoSyncListener = () => {
   if (_unsubscribe) return;
+  void loadSyncPrefsOnce();
   let wasOnline = false;
   _unsubscribe = NetInfo.addEventListener((state) => {
     const isOnline = !!state.isConnected;
     _isOnline = isOnline;
+
+    // If we go offline mid-sync, cancel in-flight work (best-effort) so we don't hang.
+    if (!isOnline && _syncInProgress) {
+      try {
+        requestSyncCancel();
+      } catch (e) {}
+    }
+
     if (!wasOnline && isOnline) {
       // Kick off a sync when we come online, but respect recent successful syncs
       const now = Date.now();
       const MIN_ONLINE_SYNC_MS = 30 * 1000; // don't run online sync more often than this
       if (!_lastSuccessfulSyncAt || now - _lastSuccessfulSyncAt > MIN_ONLINE_SYNC_MS) {
         InteractionManager.runAfterInteractions(() => {
+          if (_syncPaused) return;
           syncBothWays().catch(() => {
             // Swallow expected failures (offline/slow network) to avoid LogBox noise.
           });
@@ -665,6 +733,7 @@ export const startAutoSyncListener = () => {
         _entriesUnsubscribe = subscribe(() => {
           try {
             if (!_isOnline) return;
+            if (_syncPaused) return;
             try {
               const h = getNeonHealth();
               if (!h.isConfigured) return;
@@ -681,6 +750,7 @@ export const startAutoSyncListener = () => {
 
             _entriesSyncTimer = setTimeout(() => {
               _entriesSyncTimer = null;
+              if (_syncPaused) return;
               syncBothWays().catch(() => {
                 // Swallow expected failures (offline/slow network) to avoid LogBox noise.
               });
@@ -715,8 +785,10 @@ export const stopAutoSyncListener = () => {
 
 export const startForegroundSyncScheduler = (intervalMs: number = 15000) => {
   if (_foregroundTimer) return;
+  void loadSyncPrefsOnce();
   _foregroundTimer = setInterval(() => {
     try {
+      if (_syncPaused) return;
       // Throttle frequent runs: if we recently synced successfully, skip until MIN_SCHEDULE_MS
       const MIN_SCHEDULE_MS = Math.max(60000, intervalMs); // at least 60s
       const now = Date.now();
@@ -753,6 +825,8 @@ export const stopForegroundSyncScheduler = () => {
 
 export const startBackgroundFetch = async () => {
   if (_backgroundFetchInstance) return;
+  await loadSyncPrefsOnce();
+  if (_syncPaused) return;
 
   // Expo Go check
   const isExpoGo = Constants.appOwnership === 'expo';
