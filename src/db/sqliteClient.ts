@@ -25,6 +25,16 @@ const DB_NAME = 'dhandiary.db';
 // Check if we are running in a Jest test environment
 const isJest = typeof process !== 'undefined' && process.env.JEST_WORKER_ID !== undefined;
 
+function isReleasedDbError(err: unknown): boolean {
+  const message = (err as any)?.message ? String((err as any).message) : String(err);
+  const lower = message.toLowerCase();
+  return (
+    lower.includes('already released') ||
+    lower.includes('cannot use shared object') ||
+    lower.includes('cannot be cast to type expo.modules.sqlite.nativedatabase')
+  );
+}
+
 // --- Implementations ---
 
 /**
@@ -45,31 +55,29 @@ const mockClient: DatabaseClient = {
   getFirstAsync: async () => null,
 };
 
+let cachedDb: any | null = null;
+let cachedClient: DatabaseClient | null = null;
+
+function openDb(): any {
+  if (cachedDb) return cachedDb;
+
+  // Initialize DB. Try modern synchronous open, fall back to legacy.
+  if (typeof (SQLite as any).openDatabaseSync === 'function') {
+    cachedDb = (SQLite as any).openDatabaseSync(DB_NAME);
+    return cachedDb;
+  }
+  if (typeof (SQLite as any).openDatabase === 'function') {
+    cachedDb = (SQLite as any).openDatabase(DB_NAME);
+    return cachedDb;
+  }
+  throw new Error('No compatible openDatabase found on expo-sqlite');
+}
+
 /**
  * 2. REAL DATABASE IMPLEMENTATION
  * Factory function to create the correct client based on available Expo methods.
  */
-const createDbClient = (): DatabaseClient => {
-  if (isJest) return mockClient;
-
-  // Initialize DB. Try modern synchronous open, fall back to legacy.
-  let db: any;
-  try {
-    // Check for modern openDatabaseSync (SDK 50+)
-    if (typeof (SQLite as any).openDatabaseSync === 'function') {
-      // runtime method may not exist in older Expo SDK typings
-      db = (SQLite as any).openDatabaseSync(DB_NAME);
-    } else if (typeof (SQLite as any).openDatabase === 'function') {
-      // Legacy (SDK 49-)
-      db = (SQLite as any).openDatabase(DB_NAME);
-    } else {
-      throw new Error('No compatible openDatabase found on expo-sqlite');
-    }
-  } catch (e) {
-    console.warn('Error opening DB, falling back to mock:', e);
-    return mockClient;
-  }
-
+const createDbClientFromDb = (db: any): DatabaseClient => {
   // --- A: Modern API (SDK 50+) ---
   // If the database object has the new methods natively, pass them through.
   if (db && typeof db.getAllAsync === 'function') {
@@ -77,9 +85,24 @@ const createDbClient = (): DatabaseClient => {
       console.log('[sqliteClient] using modern native async API');
     // Heuristic for DDL statements where an empty/undefined result is normal
     const ddlRegex = /^\s*(?:DROP|VACUUM|CREATE|ALTER|PRAGMA)\b/i;
+
+    const withRetry = async <T>(fn: () => Promise<T>): Promise<T> => {
+      try {
+        return await fn();
+      } catch (e) {
+        if (!isReleasedDbError(e)) throw e;
+        // Re-open and retry once
+        cachedDb = null;
+        cachedClient = null;
+        const reopened = openDb();
+        cachedClient = createDbClientFromDb(reopened);
+        return await fn();
+      }
+    };
+
     return {
       execAsync: (sql: string, params: any[] = []) => {
-        return (db.execAsync(sql, params) as Promise<any>).then((res: any) => {
+        return withRetry(() => db.execAsync(sql, params) as Promise<any>).then((res: any) => {
           if (!res) {
             // For DDL-like statements, a falsy result is expected — don't spam warnings.
             if (!ddlRegex.test(sql)) {
@@ -96,9 +119,11 @@ const createDbClient = (): DatabaseClient => {
           return [null, res];
         });
       },
-      runAsync: (sql: string, params: any[] = []) => db.runAsync(sql, params),
-      getAllAsync: (sql: string, params: any[] = []) => db.getAllAsync(sql, params),
-      getFirstAsync: (sql: string, params: any[] = []) => db.getFirstAsync(sql, params),
+      runAsync: (sql: string, params: any[] = []) => withRetry(() => db.runAsync(sql, params)),
+      getAllAsync: (sql: string, params: any[] = []) =>
+        withRetry(() => db.getAllAsync(sql, params)),
+      getFirstAsync: (sql: string, params: any[] = []) =>
+        withRetry(() => db.getFirstAsync(sql, params)),
     };
   }
 
@@ -122,16 +147,28 @@ const createDbClient = (): DatabaseClient => {
     });
   };
 
+  const withRetryLegacy = async <T>(fn: () => Promise<T>): Promise<T> => {
+    try {
+      return await fn();
+    } catch (e) {
+      if (!isReleasedDbError(e)) throw e;
+      cachedDb = null;
+      cachedClient = null;
+      openDb();
+      return await fn();
+    }
+  };
+
   return {
     // execAsync is for batch execution strings in modern API
     execAsync: async (sql: string, params: any[] = []) => {
       // In legacy, run and return tuple similar to modern API
-      const res = await executeSql(sql, params);
+      const res = await withRetryLegacy(() => executeSql(sql, params));
       return [null, res];
     },
 
     runAsync: async (sql: string, params: any[] = []) => {
-      const res = await executeSql(sql, params);
+      const res = await withRetryLegacy(() => executeSql(sql, params));
       // Map legacy 'rowsAffected' -> modern 'changes'
       return {
         lastInsertRowId: res.insertId || 0,
@@ -140,7 +177,7 @@ const createDbClient = (): DatabaseClient => {
     },
 
     getAllAsync: async <T = Row>(sql: string, params: any[] = []) => {
-      const res = await executeSql(sql, params);
+      const res = await withRetryLegacy(() => executeSql(sql, params));
       // In legacy, rows is an array-like object with an 'item' function
       if (!res || !res.rows) return [];
       const items: T[] = [];
@@ -151,16 +188,37 @@ const createDbClient = (): DatabaseClient => {
     },
 
     getFirstAsync: async <T = Row>(sql: string, params: any[] = []) => {
-      const res = await executeSql(sql, params);
+      const res = await withRetryLegacy(() => executeSql(sql, params));
       if (!res || !res.rows || res.rows.length === 0) return null;
       return res.rows.item(0) as T;
     },
   };
 };
 
-// Initialize the client singleton
-const client = createDbClient();
+function getClient(): DatabaseClient {
+  if (isJest) return mockClient;
+  if (cachedClient) return cachedClient;
+  try {
+    const db = openDb();
+    cachedClient = createDbClientFromDb(db);
+    return cachedClient;
+  } catch (e) {
+    console.warn('Error opening DB, falling back to mock:', e);
+    return mockClient;
+  }
+}
 
-// Export the singleton as default and named methods
-export default client;
-export const { execAsync, runAsync, getAllAsync, getFirstAsync } = client;
+const clientProxy: DatabaseClient = {
+  execAsync: (sql: string, params?: any[]) => getClient().execAsync(sql, params),
+  runAsync: (sql: string, params?: any[]) => getClient().runAsync(sql, params),
+  getAllAsync: (sql: string, params?: any[]) => getClient().getAllAsync(sql, params),
+  getFirstAsync: (sql: string, params?: any[]) => getClient().getFirstAsync(sql, params),
+};
+
+export default clientProxy;
+export const execAsync = (sql: string, params?: any[]) => clientProxy.execAsync(sql, params);
+export const runAsync = (sql: string, params?: any[]) => clientProxy.runAsync(sql, params);
+export const getAllAsync = <T = Row>(sql: string, params?: any[]) =>
+  clientProxy.getAllAsync<T>(sql, params);
+export const getFirstAsync = <T = Row>(sql: string, params?: any[]) =>
+  clientProxy.getFirstAsync<T>(sql, params);
