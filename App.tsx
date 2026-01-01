@@ -115,7 +115,7 @@ const AppContent = () => {
   const BIOMETRIC_TIMEOUT_MS = 60 * 1000; // 30–60s per spec (keep 60s)
   const [biometricEnabled, setBiometricEnabled] = React.useState(false);
   const [biometricUnlocked, setBiometricUnlocked] = React.useState(false);
-  const [lastUnlockTs, setLastUnlockTs] = React.useState<number>(0);
+  const lastUnlockTsRef = React.useRef<number>(0);
   const backgroundAtRef = React.useRef<number>(0);
   const appStateRef = React.useRef<AppStateStatus>(AppState.currentState);
 
@@ -133,7 +133,7 @@ const AppContent = () => {
           try {
             const del = await s.getAccountDeletedAt();
             setAccountDeletedAt(del);
-          } catch (e) {}
+          } catch (e) { }
         }
       } catch (e) {
         if (__DEV__) console.warn('[AppContent] failed to load local session', e);
@@ -153,16 +153,16 @@ const AppContent = () => {
             if (mod && typeof mod.getAccountDeletedAt === 'function') {
               mod.getAccountDeletedAt().then((v: any) => setAccountDeletedAt(v));
             }
-          } catch (e) {}
-        } catch (e) {}
+          } catch (e) { }
+        } catch (e) { }
       });
-    } catch (e) {}
+    } catch (e) { }
 
     return () => {
       mounted = false;
       try {
         if (unsub) unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -193,22 +193,15 @@ const AppContent = () => {
 
     if (!isAuthenticated) {
       setBiometricUnlocked(false);
-      setLastUnlockTs(0);
+      lastUnlockTsRef.current = 0;
       return;
     }
 
     if (prev && next && prev !== next) {
       setBiometricUnlocked(false);
-      setLastUnlockTs(0);
+      lastUnlockTsRef.current = 0;
     }
   }, [accountKey, isAuthenticated]);
-
-  // Cold start behavior: if enabled and authenticated, require unlock once per session.
-  useEffect(() => {
-    if (!biometricEnabled || !isAuthenticated) return;
-    // Do not re-lock repeatedly; only lock if not yet unlocked in this session.
-    if (!biometricUnlocked) return;
-  }, [biometricEnabled, isAuthenticated, biometricUnlocked]);
 
   // App lifecycle: lock only after timeout in background.
   useEffect(() => {
@@ -231,7 +224,7 @@ const AppContent = () => {
 
         if (bgAt && Date.now() - bgAt > BIOMETRIC_TIMEOUT_MS) {
           setBiometricUnlocked(false);
-          setLastUnlockTs(0);
+          lastUnlockTsRef.current = 0;
         }
       }
     };
@@ -259,7 +252,7 @@ const AppContent = () => {
               'Update ready to install.',
               'Install',
               () => {
-                Updates.reloadAsync().catch(() => {});
+                Updates.reloadAsync().catch(() => { });
               },
               'info',
               8000
@@ -267,7 +260,7 @@ const AppContent = () => {
           }
         } catch (e) {
           // Fallback to silent behavior
-          runBackgroundUpdateCheck().catch(() => {});
+          runBackgroundUpdateCheck().catch(() => { });
         }
       })();
     });
@@ -283,7 +276,7 @@ const AppContent = () => {
 
   // 2. Health Check (Neon)
   useEffect(() => {
-    checkNeonConnection().catch(() => {});
+    checkNeonConnection().catch(() => { });
   }, []);
 
   // 3. User Synchronization
@@ -327,13 +320,13 @@ const AppContent = () => {
             try {
               const { notifyEntriesChanged } = require('./src/utils/dbEvents');
               notifyEntriesChanged();
-            } catch (e) {}
+            } catch (e) { }
             try {
               const holder = require('./src/utils/queryClientHolder');
               if (holder && typeof holder.clearQueryCache === 'function') {
                 await holder.clearQueryCache();
               }
-            } catch (e) {}
+            } catch (e) { }
           }
           await ownerMod.setOfflineDbOwner(String(id));
         } catch (e) {
@@ -383,7 +376,7 @@ const AppContent = () => {
         onUnlocked={() => {
           const now = Date.now();
           setBiometricUnlocked(true);
-          setLastUnlockTs(now);
+          lastUnlockTsRef.current = now;
         }}
       />
 
@@ -428,7 +421,7 @@ function AppWithDb() {
     try {
       const holder = require('./src/utils/queryClientHolder');
       if (holder?.setQueryClient) holder.setQueryClient(queryClient);
-    } catch (e) {}
+    } catch (e) { }
   }, [queryClient]);
 
   const initializeDatabase = useCallback(async () => {
@@ -454,16 +447,16 @@ function AppWithDb() {
     if (!dbReady) return;
 
     if (AppState.currentState === 'active') {
-      runFullSync().catch(() => {});
+      runFullSync().catch(() => { });
     }
 
     startForegroundSyncScheduler(15000);
-    startBackgroundFetch().catch(() => {});
+    startBackgroundFetch().catch(() => { });
 
     // Background Expo Updates: fetch quietly, apply on next restart.
     // Never block app launch.
     InteractionManager.runAfterInteractions(() => {
-      runBackgroundUpdateCheck().catch(() => {});
+      runBackgroundUpdateCheck().catch(() => { });
     });
 
     return () => {
@@ -478,7 +471,7 @@ function AppWithDb() {
     const handleAppStateChange = (nextState: AppStateStatus) => {
       if (nextState === 'active' && !isSyncRunning) {
         setTimeout(() => {
-          runFullSync().catch(() => {});
+          runFullSync().catch(() => { });
         }, 500);
       }
     };
@@ -554,11 +547,11 @@ export default function App() {
                 '[App] JS Error suppressed in production:',
                 error && error.message ? error.message : error
               );
-            } catch (e) {}
+            } catch (e) { }
             // Optionally send to analytics here
           });
         }
-      } catch (e) {}
+      } catch (e) { }
 
       // Catch unhandled promise rejections
       try {
@@ -569,9 +562,9 @@ export default function App() {
               '[App] Unhandled Promise Rejection suppressed in production:',
               reason && reason.message ? reason.message : reason
             );
-          } catch (e) {}
+          } catch (e) { }
         };
-      } catch (e) {}
+      } catch (e) { }
     }
     // Warn if CLERK_SECRET exists in runtime config — this is insecure for clients
     try {
@@ -582,8 +575,8 @@ export default function App() {
           '[App] SECURITY WARNING: CLERK_SECRET is present in client runtime. Do NOT ship admin secrets to mobile clients. Prefer a server-side deletion endpoint.'
         );
       }
-    } catch (e) {}
-  } catch (e) {}
+    } catch (e) { }
+  } catch (e) { }
   if (!CLERK_PUBLISHABLE_KEY) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
