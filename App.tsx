@@ -19,6 +19,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ClerkProvider, useUser } from '@clerk/clerk-expo';
 import Constants from 'expo-constants';
+import NetInfo from '@react-native-community/netinfo';
 
 // --- Local Imports ---
 import SplashScreen from './src/screens/SplashScreen';
@@ -211,6 +212,20 @@ const AppContent = () => {
         }
 
         if (!id) return;
+
+        // IMPORTANT (offline-first):
+        // When offline, do NOT attempt to sync Clerk->Neon mapping, because the
+        // bridge may fall back and overwrite the local session UUID, causing the
+        // app to appear to reset to 0. We keep the existing local session and
+        // let sync reconcile once back online.
+        try {
+          const state = await NetInfo.fetch();
+          if (!state.isConnected) {
+            return;
+          }
+        } catch (e) {
+          // If NetInfo fails, proceed (best-effort).
+        }
 
         // SECURITY: never reuse local SQLite across different Clerk users.
         // If another user was previously active on this device, wipe local DB before proceeding.

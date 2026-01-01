@@ -1,6 +1,6 @@
 import { uuidv4 } from '../utils/uuid';
 import { query } from '../api/neonClient';
-import { saveSession } from '../db/session';
+import { getSession, saveSession } from '../db/session';
 
 /*
   The Bridge Service:
@@ -152,6 +152,28 @@ const createOfflineFallback = async (
   email: string,
   name: string
 ): Promise<BridgeUser> => {
+  // CRITICAL:
+  // Do not create a new local UUID if we already have a persisted session for
+  // this same Clerk user. Creating a new UUID would switch the SQLite namespace
+  // and make the app appear to "reset to 0" when offline.
+  try {
+    const existing = await getSession();
+    const existingClerk = (existing as any)?.clerk_id ? String((existing as any).clerk_id) : null;
+    const existingId = (existing as any)?.id ? String((existing as any).id) : null;
+    if (existingId && existingClerk && existingClerk === String(clerkId)) {
+      return {
+        uuid: existingId,
+        clerk_id: String(clerkId),
+        email: (existing as any)?.email ? String((existing as any).email) : email,
+        name: (existing as any)?.name ? String((existing as any).name) : name,
+        server_version: 0,
+        isOfflineFallback: true,
+      };
+    }
+  } catch (e) {
+    // ignore and fall back to generating a new local id
+  }
+
   const localId = uuidv4();
   try {
     // Save fallback session locally (session persisted via AsyncStorage wrapper)
