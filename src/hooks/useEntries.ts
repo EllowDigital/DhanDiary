@@ -172,6 +172,7 @@ const makeOptimisticEntry = (entry: Partial<LocalEntry>, sid: string): LocalEntr
 export const useEntries = (userId?: string | null) => {
   const queryClient = useQueryClient();
   const [resolvedId, setResolvedId] = React.useState<string | null>(null);
+  const warnedMissingTableRef = React.useRef(false);
 
   // Resolve effective user id (may create guest) and keep stable for the hook
   React.useEffect(() => {
@@ -356,7 +357,26 @@ export const useEntries = (userId?: string | null) => {
         })();
 
         return mapped;
-      } catch (e) {
+      } catch (e: any) {
+        const msg = String(e?.message || e);
+
+        // Expected during logout/reset: local DB tables can be temporarily dropped.
+        if (msg.includes('no such table: transactions')) {
+          if (__DEV__ && !warnedMissingTableRef.current) {
+            warnedMissingTableRef.current = true;
+            console.warn(
+              '[useEntries] transactions table missing (logout/reset). Re-initializing DB'
+            );
+          }
+          try {
+            const { initDB } = await import('../db/sqlite');
+            if (typeof initDB === 'function') await initDB();
+          } catch (initErr) {
+            // ignore
+          }
+          return [] as LocalEntry[];
+        }
+
         if (__DEV__) console.error('[useEntries] queryFn fatal error', e);
         return [] as LocalEntry[];
       }
@@ -372,7 +392,8 @@ export const useEntries = (userId?: string | null) => {
   React.useEffect(() => {
     const unsub = subscribeEntries(() => {
       try {
-        refetch();
+        // During logout/reset, resolvedId may be null; avoid refetching.
+        if (resolvedId) refetch();
       } catch (e) {
         if (__DEV__) console.warn('[useEntries] refetch failed inside subscription', e);
       }
@@ -380,7 +401,7 @@ export const useEntries = (userId?: string | null) => {
     return () => {
       if (unsub) unsub();
     };
-  }, [refetch]);
+  }, [refetch, resolvedId]);
 
   /* ----------------------------------------------------------
       ADD ENTRY

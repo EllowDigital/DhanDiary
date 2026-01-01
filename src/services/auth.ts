@@ -235,6 +235,13 @@ export const logout = async (): Promise<boolean> => {
   await safeRun(wipeLocalDatabase);
   await safeRun(clearAllData);
 
+  // Re-create local tables after wipe so any in-flight queries (e.g., useEntries)
+  // don't hit "no such table: transactions" during logout/navigation transitions.
+  await safeRun(async () => {
+    const { initDB } = await import('../db/sqlite');
+    if (typeof initDB === 'function') await initDB();
+  });
+
   // 3. Clear Storage
   try {
     await AsyncStorage.clear();
