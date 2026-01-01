@@ -34,7 +34,7 @@ export const CURRENT_ANNOUNCEMENT: AnnouncementContent = {
   title: 'Happy New Year 2026',
   message: 'Wishing you a fresh start and a financially strong year ahead.',
   emoji: '🎉',
-  autoHideMs: 4000,
+  autoHideMs: 10000,
   accentColor: colors.primary,
 };
 
