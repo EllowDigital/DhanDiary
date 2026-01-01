@@ -1,5 +1,4 @@
 import { neon } from '@neondatabase/serverless';
-import { validate as uuidValidate } from 'uuid';
 import Constants from 'expo-constants';
 import NetInfo from '@react-native-community/netinfo';
 

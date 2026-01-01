@@ -1,8 +1,11 @@
 import { executeSqlAsync } from '../db/sqlite';
 import { upsertTransactionFromRemote } from '../db/transactions';
 import { query as neonQuery, getNeonHealth } from '../api/neonClient';
-import { validate as uuidValidate } from 'uuid';
 import { getSession } from '../db/session';
+
+const isUuid = (s: any) =>
+  typeof s === 'string' &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
 
 // If the remote Neon DB doesn't have the `transactions` table, avoid
 // repeatedly attempting the same query during this app session which
@@ -24,7 +27,7 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
   // Never pull without a known user_id — pulling globally would risk mixing users.
   const sess = await getSession();
   const userId = sess?.id ? String(sess.id) : null;
-  const isUserUuid = !!userId && uuidValidate(userId);
+  const isUserUuid = !!userId && isUuid(userId);
   if (!isUserUuid) {
     if (__DEV__)
       console.warn('[sync] pullFromNeon: missing/invalid session user id; skipping pull');
