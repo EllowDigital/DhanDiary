@@ -105,6 +105,11 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
   const processedIds = new Set<string>();
   let cursor = lastPulledServerVersion;
 
+  const yieldToUi = async () => {
+    // Yield to the JS event loop so UI stays responsive during large syncs
+    await new Promise((r) => setTimeout(r, 0));
+  };
+
   for (let page = 0; page < MAX_PAGES; page++) {
     // DEV DEBUG: log the cursor param we'll send to Neon
     try {
@@ -138,44 +143,56 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
 
     if (!remoteRows || remoteRows.length === 0) break;
 
-    for (const remote of remoteRows) {
-      if (!remote || !remote.id) continue;
-      if (processedIds.has(remote.id)) {
-        if ((globalThis as any).__SYNC_VERBOSE__)
-          console.log('[sync] pullFromNeon: skipping duplicate remote row', remote.id);
-        continue;
-      }
-      processedIds.add(remote.id);
-      try {
-        const remoteUpdatedAt = Number(remote.updated_at || 0);
-        const remoteServerVersion = Number(remote.server_version || 0);
+    // Process remote rows in small chunks to avoid blocking the JS thread.
+    const UPSERT_CHUNK = 25;
+    for (let i = 0; i < remoteRows.length; i += UPSERT_CHUNK) {
+      const batch = remoteRows.slice(i, i + UPSERT_CHUNK);
 
-        await upsertTransactionFromRemote({
-          id: remote.id,
-          user_id: remote.user_id,
-          amount: remote.amount,
-          type: remote.type,
-          category: remote.category ?? null,
-          note: remote.note ?? null,
-          date: remote.date ?? null,
-          currency: remote.currency ?? 'INR',
-          created_at: remote.created_at
-            ? new Date(Number(remote.created_at)).toISOString()
-            : new Date(remoteUpdatedAt || Date.now()).toISOString(),
-          updated_at: remoteUpdatedAt,
-          deleted_at: remote.deleted_at ? new Date(Number(remote.deleted_at)).toISOString() : null,
-          server_version: Number.isFinite(remoteServerVersion) ? remoteServerVersion : 0,
-          sync_status: 1, // 1 = Synced
-        });
+      for (const remote of batch) {
+        if (!remote || !remote.id) continue;
+        if (processedIds.has(remote.id)) {
+          if ((globalThis as any).__SYNC_VERBOSE__)
+            console.log('[sync] pullFromNeon: skipping duplicate remote row', remote.id);
+          continue;
+        }
+        processedIds.add(remote.id);
+        try {
+          const remoteUpdatedAt = Number(remote.updated_at || 0);
+          const remoteServerVersion = Number(remote.server_version || 0);
 
-        pulled += 1;
-        if (remoteUpdatedAt > maxRemoteTs) maxRemoteTs = remoteUpdatedAt;
-        if (remoteServerVersion > maxRemoteServerVersion)
-          maxRemoteServerVersion = remoteServerVersion;
-      } catch (e) {
-        if (__DEV__) console.warn('[sync] pullFromNeon: row upsert failed', e, remote && remote.id);
-        // Continue processing other rows even if one fails
+          await upsertTransactionFromRemote({
+            id: remote.id,
+            user_id: remote.user_id,
+            amount: remote.amount,
+            type: remote.type,
+            category: remote.category ?? null,
+            note: remote.note ?? null,
+            date: remote.date ?? null,
+            currency: remote.currency ?? 'INR',
+            created_at: remote.created_at
+              ? new Date(Number(remote.created_at)).toISOString()
+              : new Date(remoteUpdatedAt || Date.now()).toISOString(),
+            updated_at: remoteUpdatedAt,
+            deleted_at: remote.deleted_at
+              ? new Date(Number(remote.deleted_at)).toISOString()
+              : null,
+            server_version: Number.isFinite(remoteServerVersion) ? remoteServerVersion : 0,
+            sync_status: 1, // 1 = Synced
+          });
+
+          pulled += 1;
+          if (remoteUpdatedAt > maxRemoteTs) maxRemoteTs = remoteUpdatedAt;
+          if (remoteServerVersion > maxRemoteServerVersion)
+            maxRemoteServerVersion = remoteServerVersion;
+        } catch (e) {
+          if (__DEV__)
+            console.warn('[sync] pullFromNeon: row upsert failed', e, remote && remote.id);
+          // Continue processing other rows even if one fails
+        }
       }
+
+      // Yield between batches
+      await yieldToUi();
     }
 
     // Advance cursor and decide whether we need another page.

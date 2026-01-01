@@ -256,14 +256,6 @@ export const useEntries = (userId?: string | null) => {
               // Use the central sync manager so locks/throttling apply consistently
               // and we avoid overlapping push/pull work across the app.
               await syncBothWays({ source: 'auto' } as any);
-            } else {
-              // Offline: queue sync for later via sync manager (auto-sync listener will trigger)
-              try {
-                // This will no-op if offline and run when connection resumes logic is inside syncManager
-                void syncBothWays({ source: 'auto' } as any);
-              } catch (e) {
-                // Ignore offline errors
-              }
             }
           } catch (e) {
             if (__DEV__) console.warn('[useEntries] requestSync execution failed', e);
@@ -325,53 +317,70 @@ export const useEntries = (userId?: string | null) => {
         }
 
         // SIDE EFFECT: Background Remote Pull
-        // In background: if Neon is configured, try to pull remote rows and upsert into local DB.
-        // NOTE: This runs asynchronously and does not block the return of local data.
-        (async () => {
-          try {
-            const { getNeonHealth, query } = require('../api/neonClient');
-            const health = getNeonHealth();
+        // Defer heavy work off the interaction thread and process remote rows in small chunks
+        // to avoid blocking the JS/UI thread when upserting many rows.
+        try {
+          const { InteractionManager } = require('react-native');
+          InteractionManager.runAfterInteractions(() => {
+            (async () => {
+              try {
+                const { getNeonHealth, query } = require('../api/neonClient');
+                const health = getNeonHealth();
 
-            if (health.isConfigured) {
-              const rows = await query(
-                `SELECT id, user_id, type, amount, category, note, created_at, updated_at, date 
-                 FROM transactions 
-                 WHERE user_id = $1 AND (deleted_at IS NULL) 
-                 ORDER BY updated_at DESC LIMIT 1000`,
-                [resolvedId]
-              );
+                if (!health.isConfigured) return;
 
-              if (rows && rows.length > 0) {
-                for (const r of rows) {
-                  const upd: Partial<TransactionRow> = {
-                    id: r.id,
-                    user_id: r.user_id,
-                    type: r.type,
-                    amount: Number(r.amount),
-                    category: r.category,
-                    note: r.note,
-                    date: r.date ?? null,
-                    updated_at: r.updated_at ?? Date.now(),
-                    sync_status: 1, // Mark as synced since it came from remote
-                  };
-                  try {
-                    await upsertTransactionFromRemote(upd as any);
-                  } catch (e) {
-                    if (__DEV__)
-                      console.warn(
-                        '[useEntries] upsertTransactionFromRemote failed for row',
-                        r.id,
-                        e
-                      );
-                  }
+                // Bound the remote pull and process in chunks with yields between batches.
+                const rows = await query(
+                  `SELECT id, user_id, type, amount, category, note, created_at, updated_at, date 
+                   FROM transactions 
+                   WHERE user_id = $1 AND (deleted_at IS NULL) 
+                   ORDER BY updated_at DESC LIMIT 1000`,
+                  [resolvedId]
+                );
+
+                if (!rows || rows.length === 0) return;
+
+                const CHUNK = 30;
+                for (let i = 0; i < rows.length; i += CHUNK) {
+                  const chunk = rows.slice(i, i + CHUNK);
+                  // Process chunk in parallel but keep batches small
+                  await Promise.all(
+                    chunk.map(async (r: any) => {
+                      const upd: Partial<TransactionRow> = {
+                        id: r.id,
+                        user_id: r.user_id,
+                        type: r.type,
+                        amount: Number(r.amount),
+                        category: r.category,
+                        note: r.note,
+                        date: r.date ?? null,
+                        updated_at: r.updated_at ?? Date.now(),
+                        sync_status: 1,
+                      };
+                      try {
+                        await upsertTransactionFromRemote(upd as any);
+                      } catch (e) {
+                        if (__DEV__)
+                          console.warn(
+                            '[useEntries] upsertTransactionFromRemote failed for row',
+                            r.id,
+                            e
+                          );
+                      }
+                    })
+                  );
+
+                  // Yield to the event loop so UI remains responsive
+                  await new Promise((res) => setTimeout(res, 0));
                 }
+              } catch (e) {
+                if (__DEV__) console.warn('[useEntries] Background remote fetch failed', e);
               }
-            }
-          } catch (e) {
-            // Silently fail remote fetch in background to avoid disrupting UI
-            if (__DEV__) console.warn('[useEntries] Background remote fetch failed', e);
-          }
-        })();
+            })();
+          });
+        } catch (e) {
+          if (__DEV__) console.warn('[useEntries] Background remote fetch scheduling failed', e);
+        }
 
         return mapped;
       } catch (e: any) {

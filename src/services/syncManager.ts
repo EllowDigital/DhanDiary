@@ -1,5 +1,5 @@
 import NetInfo from '@react-native-community/netinfo';
-import { Platform } from 'react-native';
+import { Platform, InteractionManager } from 'react-native';
 import Constants from 'expo-constants';
 import AsyncStorage from '../utils/AsyncStorageWrapper';
 import { getPendingProfileUpdates, markPendingProfileProcessed } from '../db/localDb';
@@ -427,8 +427,10 @@ export const startAutoSyncListener = () => {
       const now = Date.now();
       const MIN_ONLINE_SYNC_MS = 30 * 1000; // don't run online sync more often than this
       if (!_lastSuccessfulSyncAt || now - _lastSuccessfulSyncAt > MIN_ONLINE_SYNC_MS) {
-        syncBothWays().catch(() => {
-          // Swallow expected failures (offline/slow network) to avoid LogBox noise.
+        InteractionManager.runAfterInteractions(() => {
+          syncBothWays().catch(() => {
+            // Swallow expected failures (offline/slow network) to avoid LogBox noise.
+          });
         });
       }
     }

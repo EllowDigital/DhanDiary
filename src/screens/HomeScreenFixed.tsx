@@ -287,7 +287,7 @@ const HomeScreen = () => {
     return () => {
       try {
         if (unsub) unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, [fadeAnim]);
 
@@ -298,7 +298,7 @@ const HomeScreen = () => {
       try {
         const s = await getSession();
         if (mounted) setFallbackSession(s);
-      } catch (e) {}
+      } catch (e) { }
     };
     load();
     const unsub = subscribeSession((s) => {
@@ -308,7 +308,7 @@ const HomeScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -331,6 +331,11 @@ const HomeScreen = () => {
   // --- DATA PROCESSING (Memoized) ---
   const { stats, chartData, recentEntries } = useMemo(() => {
     const rawEntries = entries || [];
+    // Precompute day-start timestamps to avoid timezone/parse inconsistencies
+    const entriesWithDayStart = (rawEntries || []).map((e: any) => {
+      const dayStartMs = dayjsFrom(e.date ?? e.created_at ?? e.updated_at).startOf('day').valueOf();
+      return { ...e, __dayStartMs: dayStartMs };
+    });
 
     // 1. Overall Balance (lifetime)
     const totalInAll = rawEntries
@@ -342,12 +347,13 @@ const HomeScreen = () => {
       .reduce((acc, c) => acc + Number(c.amount), 0);
 
     // 2. Period filter (used for Home analytics + period income/expense)
-    const cutOff =
-      period === 'week' ? dayjs().subtract(6, 'day').startOf('day') : dayjs().startOf('month');
+    const cutOffMs =
+      period === 'week'
+        ? dayjs().subtract(6, 'day').startOf('day').valueOf()
+        : dayjs().startOf('month').startOf('day').valueOf();
 
-    const periodEntries = rawEntries.filter((e) => {
-      const d = dayjsFrom(e.date).startOf('day');
-      return d.isAfter(cutOff) || d.isSame(cutOff, 'day');
+    const periodEntries = entriesWithDayStart.filter((e: any) => {
+      return Number(e.__dayStartMs || 0) >= Number(cutOffMs);
     });
 
     const periodIn = periodEntries
@@ -362,22 +368,19 @@ const HomeScreen = () => {
     const wavePoints =
       period === 'week' ? new Array(7).fill(0) : new Array(dayjs().daysInMonth()).fill(0);
 
+    const DAY_MS = 24 * 60 * 60 * 1000;
+
     periodEntries
       .filter((e) => isExpenseType(e.type))
       .forEach((e) => {
-        const d = dayjsFrom(e.date).startOf('day');
-
+        const dayStartMs = Number((e as any).__dayStartMs || 0);
         const targetIdx =
           period === 'week'
-            ? (() => {
-                const diffDays = dayjs().startOf('day').diff(d, 'day');
-                // diff=0 (today) -> idx 6, diff=6 -> idx 0
-                return 6 - diffDays;
-              })()
-            : d.date() - 1;
+            ? Math.round((dayStartMs - cutOffMs) / DAY_MS) // 0..6
+            : dayjs(dayStartMs).date() - 1;
 
         if (targetIdx >= 0 && targetIdx < wavePoints.length) {
-          wavePoints[targetIdx] += Number(e.amount);
+          wavePoints[targetIdx] += Number(e.amount) || 0;
         }
       });
 

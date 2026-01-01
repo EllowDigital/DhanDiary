@@ -122,6 +122,11 @@ export async function pushToNeon(): Promise<{ pushed: string[]; deleted: string[
     return (await neonQuery(sql, params)) || [];
   };
 
+  const yieldToUi = async () => {
+    // Yield to the JS event loop so UI stays responsive during large syncs
+    await new Promise((r) => setTimeout(r, 0));
+  };
+
   try {
     // Push changes in chunks to reduce query count (compute wakeups)
     const chunks: any[][] = [];
@@ -155,6 +160,8 @@ export async function pushToNeon(): Promise<{ pushed: string[]; deleted: string[
             deletedIds.push(String(row.id));
           else pushedIds.push(String(row.id));
         }
+
+        await yieldToUi();
       } catch (err) {
         // Fallback: if a chunk fails (e.g., one bad row), try per-row so others still sync.
         if (__DEV__) console.warn('[sync] pushToNeon: batch failed, falling back to per-row', err);
@@ -176,6 +183,9 @@ export async function pushToNeon(): Promise<{ pushed: string[]; deleted: string[
           } catch (rowErr) {
             if (__DEV__) console.warn('[sync] pushToNeon: failed to push row', row.id, rowErr);
           }
+
+          // Yield periodically in fallback mode too
+          await yieldToUi();
         }
       }
     }
