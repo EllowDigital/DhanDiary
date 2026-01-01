@@ -29,7 +29,7 @@ import { subscribeSession } from '../utils/sessionEvents';
 import { useEntries } from '../hooks/useEntries';
 import useDelayedLoading from '../hooks/useDelayedLoading';
 import UserAvatar from '../components/UserAvatar';
-import { subscribeBanner } from '../utils/bannerState';
+// Sync banner is a floating overlay now; no per-screen layout adjustments needed.
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { dayjsFrom, formatDate } from '../utils/date';
 import { subscribeSyncStatus } from '../services/syncManager';
@@ -75,6 +75,17 @@ interface Transaction {
 
 // 1. WAVE CHART (Optimized)
 const CleanWaveChart = React.memo(({ data, width }: { data: number[]; width: number }) => {
+  const hasAny = Array.isArray(data) && data.some((v) => Number(v || 0) !== 0);
+
+  if (!hasAny) {
+    return (
+      <View style={styles.emptyChartBox}>
+        <MaterialIcon name="show-chart" size={48} color={COLORS.border} />
+        <Text style={styles.emptyText}>No spending trend yet</Text>
+      </View>
+    );
+  }
+
   // Ensure we always have data to prevent rendering errors
   const chartData = data.length > 1 ? data : [0, 0, 0, 0, 0, 0];
 
@@ -160,7 +171,7 @@ const RankList = React.memo(({ data, total }: { data: any[]; total: number }) =>
   <View style={styles.rankContainer}>
     {data.length === 0 ? (
       <Text style={[styles.emptyText, { textAlign: 'center', marginVertical: 20 }]}>
-        No data available
+        No expenses to analyze
       </Text>
     ) : (
       data.slice(0, 5).map((item, index) => {
@@ -255,7 +266,6 @@ const HomeScreen = () => {
   const showLoading = useDelayedLoading(Boolean(isLoading), 300);
   const { width: screenWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const [bannerVisible, setBannerVisible] = useState(false);
 
   // Constants for Chart
   const CHART_PADDING = 40; // Inner card padding
@@ -280,15 +290,6 @@ const HomeScreen = () => {
       } catch (e) {}
     };
   }, [fadeAnim]);
-
-  useEffect(() => {
-    const unsub = subscribeBanner((v) => setBannerVisible(v));
-    return () => {
-      try {
-        unsub();
-      } catch (e) {}
-    };
-  }, []);
 
   // Load local fallback session and subscribe to changes so avatar/name are available
   useEffect(() => {
@@ -331,36 +332,49 @@ const HomeScreen = () => {
   const { stats, chartData, recentEntries } = useMemo(() => {
     const rawEntries = entries || [];
 
-    // 1. Stats Calculation
-    const inVal = rawEntries
+    // 1. Overall Balance (lifetime)
+    const totalInAll = rawEntries
       .filter((e) => isIncomeType(e.type))
       .reduce((acc, c) => acc + Number(c.amount), 0);
 
-    const outVal = rawEntries
+    const totalOutAll = rawEntries
       .filter((e) => isExpenseType(e.type))
       .reduce((acc, c) => acc + Number(c.amount), 0);
 
-    // 2. Filter for Chart
-    const cutOff = period === 'week' ? dayjs().subtract(6, 'day') : dayjs().startOf('month');
-    const chartEntries = rawEntries.filter((e) => dayjsFrom(e.date).isAfter(cutOff));
+    // 2. Period filter (used for Home analytics + period income/expense)
+    const cutOff =
+      period === 'week' ? dayjs().subtract(6, 'day').startOf('day') : dayjs().startOf('month');
+
+    const periodEntries = rawEntries.filter((e) => {
+      const d = dayjsFrom(e.date).startOf('day');
+      return d.isAfter(cutOff) || d.isSame(cutOff, 'day');
+    });
+
+    const periodIn = periodEntries
+      .filter((e) => isIncomeType(e.type))
+      .reduce((acc, c) => acc + Number(c.amount), 0);
+
+    const periodOut = periodEntries
+      .filter((e) => isExpenseType(e.type))
+      .reduce((acc, c) => acc + Number(c.amount), 0);
 
     // Wave Data
     const wavePoints =
       period === 'week' ? new Array(7).fill(0) : new Array(dayjs().daysInMonth()).fill(0);
 
-    chartEntries
+    periodEntries
       .filter((e) => isExpenseType(e.type))
       .forEach((e) => {
-        const d = dayjsFrom(e.date);
-        const idx =
-          period === 'week'
-            ? 6 - dayjs().diff(d, 'day') // 0 = today, 6 = 7 days ago reversed? No, standard array: 0..6
-            : d.date() - 1;
+        const d = dayjsFrom(e.date).startOf('day');
 
-        // Reverse index for week to make left=oldest, right=newest
-        const weekIdx = 6 - dayjs().diff(d, 'day');
-        // Logic: if diff is 0 (today), index 6. If diff is 6, index 0.
-        const targetIdx = period === 'week' ? weekIdx : d.date() - 1;
+        const targetIdx =
+          period === 'week'
+            ? (() => {
+                const diffDays = dayjs().startOf('day').diff(d, 'day');
+                // diff=0 (today) -> idx 6, diff=6 -> idx 0
+                return 6 - diffDays;
+              })()
+            : d.date() - 1;
 
         if (targetIdx >= 0 && targetIdx < wavePoints.length) {
           wavePoints[targetIdx] += Number(e.amount);
@@ -369,7 +383,7 @@ const HomeScreen = () => {
 
     // Pie Data
     const catMap: Record<string, number> = {};
-    chartEntries
+    periodEntries
       .filter((e) => isExpenseType(e.type))
       .forEach((e) => {
         const c = e.category || 'Other';
@@ -392,7 +406,11 @@ const HomeScreen = () => {
       .slice(0, 7); // Show a few more
 
     return {
-      stats: { in: inVal, out: outVal, bal: inVal - outVal },
+      stats: {
+        in: periodIn,
+        out: periodOut,
+        bal: totalInAll - totalOutAll,
+      },
       chartData: { wave: wavePoints, pie: piePoints },
       recentEntries: sortedRecent,
     };
@@ -485,7 +503,9 @@ const HomeScreen = () => {
                 <MaterialIcon name="arrow-downward" size={16} color="#4ADE80" />
               </View>
               <View>
-                <Text style={styles.statLabel}>Income</Text>
+                <Text style={styles.statLabel}>
+                  Income {period === 'week' ? '(7 Days)' : '(This Month)'}
+                </Text>
                 <Text style={styles.statValue}>
                   {showBalance ? `₹${stats.in.toLocaleString()}` : '••••'}
                 </Text>
@@ -500,7 +520,9 @@ const HomeScreen = () => {
                 <MaterialIcon name="arrow-upward" size={16} color="#F87171" />
               </View>
               <View>
-                <Text style={styles.statLabel}>Expense</Text>
+                <Text style={styles.statLabel}>
+                  Expense {period === 'week' ? '(7 Days)' : '(This Month)'}
+                </Text>
                 <Text style={styles.statValue}>
                   {showBalance ? `₹${stats.out.toLocaleString()}` : '••••'}
                 </Text>
@@ -598,10 +620,7 @@ const HomeScreen = () => {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
-      <SafeAreaView
-        style={styles.safeArea}
-        edges={bannerVisible ? ['left', 'right'] : ['top', 'left', 'right']}
-      >
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
         {/* Loading Overlay */}
         {showLoading && (
           <View style={styles.loadingOverlay}>

@@ -18,7 +18,6 @@ import {
   LayoutAnimation,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { subscribeBanner, isBannerVisible } from '../utils/bannerState';
 import { Text, Button, Input } from '@rneui/themed';
 import { Swipeable } from 'react-native-gesture-handler';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
@@ -31,6 +30,7 @@ import CategoryPickerModal from '../components/CategoryPickerModal';
 import { useEntries } from '../hooks/useEntries';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../context/ToastContext';
+import { getTransactionByLocalId } from '../db/transactions';
 import runInBackground from '../utils/background';
 import useDelayedLoading from '../hooks/useDelayedLoading';
 import FullScreenSpinner from '../components/FullScreenSpinner';
@@ -50,11 +50,21 @@ interface TransactionEntry {
   date?: string | number | Date;
   created_at?: string | number | Date;
   sync_status?: number; // 0=pending, 1=synced, 2=deleted
+  need_sync?: number; // 0/1
+  deleted_at?: string | null;
 }
+
+type PreparedEntry = TransactionEntry & {
+  __ts: number;
+  __amountNum: number;
+  __dateStr: string;
+  __amountStr: string;
+  __isIncome: boolean;
+};
 
 interface EditModalProps {
   visible: boolean;
-  entry: TransactionEntry | null;
+  entryId: string | null;
   onClose: () => void;
   onSave: (id: string, updates: Partial<TransactionEntry>) => Promise<void>;
 }
@@ -78,6 +88,8 @@ const resolveEntryMoment = (entry: TransactionEntry) => {
   return dayjs(v);
 };
 
+const inrFormatter = new Intl.NumberFormat('en-IN');
+
 // --- 1. SWIPEABLE LIST ITEM ---
 const SwipeableHistoryItem = React.memo(
   ({
@@ -85,15 +97,15 @@ const SwipeableHistoryItem = React.memo(
     onEdit,
     onDelete,
   }: {
-    item: TransactionEntry;
-    onEdit: () => void;
-    onDelete: () => void;
+    item: PreparedEntry;
+    onEdit: (entry: PreparedEntry) => void;
+    onDelete: (id: string) => void;
   }) => {
-    const isInc = isIncome(item.type);
+    const isInc = item.__isIncome;
     const color = isInc ? colors.accentGreen || '#10B981' : colors.accentRed || '#EF4444';
     const catIcon = getIconForCategory(item.category);
     const iconName = catIcon || (isInc ? 'arrow-downward' : 'arrow-upward');
-    const dateStr = formatDate(item.date || item.created_at);
+    const dateStr = item.__dateStr;
     const swipeableRef = useRef<Swipeable>(null);
 
     const renderRightActions = (
@@ -110,7 +122,7 @@ const SwipeableHistoryItem = React.memo(
           style={styles.rightAction}
           onPress={() => {
             swipeableRef.current?.close();
-            onDelete();
+            onDelete(item.local_id);
           }}
         >
           <Animated.View style={{ transform: [{ scale }], alignItems: 'center' }}>
@@ -135,7 +147,7 @@ const SwipeableHistoryItem = React.memo(
           style={styles.leftAction}
           onPress={() => {
             swipeableRef.current?.close();
-            onEdit();
+            onEdit(item);
           }}
         >
           <Animated.View style={{ transform: [{ scale }], alignItems: 'center' }}>
@@ -166,7 +178,7 @@ const SwipeableHistoryItem = React.memo(
                 {item.category}
               </Text>
               {/* Sync Status Badge */}
-              <View style={{ marginLeft: 8, justifyContent: 'center' }}>
+              <View style={styles.syncIconWrapper}>
                 {item.sync_status === 1 ? (
                   <MaterialIcon name="check-circle" size={14} color="#10B981" />
                 ) : item.sync_status === 0 ? (
@@ -176,7 +188,7 @@ const SwipeableHistoryItem = React.memo(
                 ) : null}
               </View>
               <Text style={[styles.compactAmount, { color }]}>
-                {isInc ? '+' : '-'}₹{Number(item.amount).toLocaleString()}
+                {isInc ? '+' : '-'}₹{item.__amountStr}
               </Text>
             </View>
             <View style={styles.compactSubRow}>
@@ -193,7 +205,7 @@ const SwipeableHistoryItem = React.memo(
 );
 
 // --- 2. EDIT MODAL ---
-const EditTransactionModal = React.memo(({ visible, entry, onClose, onSave }: EditModalProps) => {
+const EditTransactionModal = React.memo(({ visible, entryId, onClose, onSave }: EditModalProps) => {
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState(DEFAULT_CATEGORY);
   const [note, setNote] = useState('');
@@ -202,32 +214,72 @@ const EditTransactionModal = React.memo(({ visible, entry, onClose, onSave }: Ed
 
   const [showCatPicker, setShowCatPicker] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const isSubmittingRef = useRef(false);
 
   useEffect(() => {
-    if (entry && visible) {
-      setAmount(String(entry.amount));
-      setCategory(ensureCategory(entry.category));
-      setNote(entry.note || '');
-      setTypeIndex(isIncome(entry.type) ? 1 : 0);
+    let cancelled = false;
+    if (!visible || !entryId) return;
 
-      const v = entry.date || entry.created_at;
-      if (v === null || v === undefined) {
-        setDate(new Date());
-      } else {
-        const n = Number(v);
-        if (!Number.isNaN(n)) {
-          setDate(new Date(n < 1e12 ? n * 1000 : n));
-        } else {
-          const parsed = Date.parse(v as string);
-          setDate(!Number.isNaN(parsed) ? new Date(parsed) : new Date());
+    (async () => {
+      try {
+        const row = await getTransactionByLocalId(String(entryId));
+        if (cancelled) return;
+        if (!row) {
+          onClose();
+          return;
         }
+
+        // Tombstone guard
+        if ((row as any).deleted_at || Number((row as any).sync_status) === 2) {
+          Alert.alert('Cannot edit', 'This transaction is deleted.');
+          onClose();
+          return;
+        }
+
+        const applyRowToState = () => {
+          if (cancelled) return;
+          setAmount(String((row as any).amount ?? ''));
+          setCategory(ensureCategory((row as any).category));
+          setNote((row as any).note || '');
+          setTypeIndex(isIncome((row as any).type) ? 1 : 0);
+
+          const v = (row as any).date || (row as any).created_at;
+          if (v === null || v === undefined) {
+            setDate(new Date());
+          } else {
+            const n = Number(v);
+            if (!Number.isNaN(n)) {
+              setDate(new Date(n < 1e12 ? n * 1000 : n));
+            } else {
+              const parsed = Date.parse(String(v));
+              setDate(!Number.isNaN(parsed) ? new Date(parsed) : new Date());
+            }
+          }
+        };
+
+        // Optional: warn if pending sync
+        if (Number((row as any).need_sync) === 1) {
+          Alert.alert('Pending changes', 'This entry is waiting to sync. Edit anyway?', [
+            { text: 'Cancel', style: 'cancel', onPress: onClose },
+            { text: 'Edit', onPress: applyRowToState },
+          ]);
+          return;
+        }
+
+        applyRowToState();
+      } catch (e) {
+        onClose();
       }
-    }
-  }, [entry, visible]);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [entryId, onClose, visible]);
 
   const handleSave = async () => {
-    if (saving || !entry) return;
+    if (!entryId) return;
+    if (isSubmittingRef.current) return;
 
     const clean = amount.replace(/,/g, '').trim();
     const amt = parseFloat(clean);
@@ -237,9 +289,9 @@ const EditTransactionModal = React.memo(({ visible, entry, onClose, onSave }: Ed
       return;
     }
 
-    setSaving(true);
     try {
-      await onSave(entry.local_id, {
+      isSubmittingRef.current = true;
+      await onSave(String(entryId), {
         amount: amt,
         category,
         note,
@@ -250,7 +302,7 @@ const EditTransactionModal = React.memo(({ visible, entry, onClose, onSave }: Ed
     } catch (e) {
       Alert.alert('Error', 'Failed to save changes.');
     } finally {
-      setSaving(false);
+      isSubmittingRef.current = false;
     }
   };
 
@@ -352,8 +404,6 @@ const EditTransactionModal = React.memo(({ visible, entry, onClose, onSave }: Ed
                 <Button
                   title="Save Changes"
                   onPress={handleSave}
-                  loading={saving}
-                  disabled={saving}
                   buttonStyle={styles.saveBtn}
                   containerStyle={{ marginTop: 20 }}
                 />
@@ -388,7 +438,6 @@ const EditTransactionModal = React.memo(({ visible, entry, onClose, onSave }: Ed
 // --- 3. MAIN SCREEN ---
 const HistoryScreen = () => {
   const insets = useSafeAreaInsets();
-  const [bannerVisible, setBannerVisible] = useState<boolean>(isBannerVisible());
   const { user } = useAuth();
   const { entries = [], isLoading, updateEntry, deleteEntry } = useEntries(user?.id);
   const { showToast } = useToast();
@@ -396,36 +445,50 @@ const HistoryScreen = () => {
 
   const showLoading = useDelayedLoading(Boolean(isLoading));
   const [quickFilter, setQuickFilter] = useState<'ALL' | 'WEEK' | 'MONTH'>('ALL');
-  const [editingEntry, setEditingEntry] = useState<TransactionEntry | null>(null);
+  const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+
+  const toggleFilter = useCallback((f: 'ALL' | 'WEEK' | 'MONTH') => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setQuickFilter(f);
+  }, []);
 
   // --- FILTER LOGIC ---
-  const filtered = useMemo(() => {
-    let list = entries || [];
-    const now = dayjs();
+  const preparedEntries = useMemo<PreparedEntry[]>(() => {
+    const list = entries || [];
+    return list.map((e) => {
+      const ts = resolveEntryMoment(e).valueOf();
+      const amountNum = Number(e.amount) || 0;
+      return {
+        ...e,
+        __ts: ts,
+        __amountNum: amountNum,
+        __dateStr: formatDate(e.date || e.created_at),
+        __amountStr: inrFormatter.format(amountNum),
+        __isIncome: isIncome(e.type),
+      };
+    });
+  }, [entries]);
 
+  const filtered = useMemo<PreparedEntry[]>(() => {
+    const now = dayjs();
+    const startWeekTs = now.subtract(6, 'day').startOf('day').valueOf();
+    const startMonthTs = now.startOf('month').valueOf();
+
+    let list = preparedEntries;
     if (quickFilter === 'WEEK') {
-      const start = now.subtract(6, 'day').startOf('day');
-      list = list.filter((e) => !resolveEntryMoment(e).isBefore(start));
+      list = preparedEntries.filter((e) => e.__ts >= startWeekTs);
     } else if (quickFilter === 'MONTH') {
-      const start = now.startOf('month');
-      list = list.filter((e) => resolveEntryMoment(e).isSame(start, 'month'));
+      list = preparedEntries.filter((e) => e.__ts >= startMonthTs);
     }
 
-    return list.sort((a, b) => resolveEntryMoment(b).valueOf() - resolveEntryMoment(a).valueOf());
-  }, [entries, quickFilter]);
-
-  useEffect(() => {
-    const unsub = subscribeBanner((v) => setBannerVisible(!!v));
-    return () => {
-      if (unsub) unsub();
-    };
-  }, []);
+    // Avoid mutating the source array
+    return [...list].sort((a, b) => b.__ts - a.__ts);
+  }, [preparedEntries, quickFilter]);
 
   const summary = useMemo(() => {
     let net = 0;
     filtered.forEach((e) => {
-      const val = Number(e.amount) || 0;
-      net += isIncome(e.type) ? val : -val;
+      net += e.__isIncome ? e.__amountNum : -e.__amountNum;
     });
     return { net, count: filtered.length };
   }, [filtered]);
@@ -436,7 +499,7 @@ const HistoryScreen = () => {
       try {
         await updateEntry({ local_id: id, updates });
         showToast('Updated successfully');
-        setEditingEntry(null);
+        setEditingEntryId(null);
       } catch (err) {
         showToast('Update failed', 'error');
         // Rethrow to let the modal stay open if needed, or handle here
@@ -448,53 +511,42 @@ const HistoryScreen = () => {
 
   const handleDelete = useCallback(
     (id: string) => {
-      Alert.alert('Delete Transaction', 'This cannot be undone.', [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            runInBackground(async () => {
-              try {
-                await deleteEntry(id);
-                showToast('Deleted');
-              } catch (e) {
-                showToast('Delete failed', 'error');
-              }
-            });
+      Alert.alert(
+        'Delete Transaction',
+        'This will delete it locally now and remove it from all devices after the next sync.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: () => {
+              runInBackground(async () => {
+                try {
+                  await deleteEntry(id);
+                  showToast('Deleted');
+                } catch (e) {
+                  showToast('Delete failed', 'error');
+                }
+              });
+            },
           },
-        },
-      ]);
+        ]
+      );
     },
     [deleteEntry, showToast]
   );
 
-  const attemptEdit = useCallback(
-    (item: TransactionEntry) => {
-      // Tombstone check
-      if (item.sync_status === 2) {
-        showToast('Cannot edit item pending deletion.', 'error');
-        return;
-      }
+  const attemptEdit = useCallback((item: TransactionEntry) => {
+    // Authoritative checks are done inside the modal via fresh SQLite read.
+    setEditingEntryId(item.local_id);
+  }, []);
 
-      // Pending sync check
-      if (item.sync_status === 0) {
-        Alert.alert('Pending changes', 'This entry is waiting to sync. Edit anyway?', [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Edit', onPress: () => setEditingEntry(item) },
-        ]);
-        return;
-      }
-
-      setEditingEntry(item);
-    },
-    [showToast]
+  const renderItem = useCallback(
+    ({ item }: { item: PreparedEntry }) => (
+      <SwipeableHistoryItem item={item} onEdit={attemptEdit} onDelete={handleDelete} />
+    ),
+    [attemptEdit, handleDelete]
   );
-
-  const toggleFilter = (f: 'ALL' | 'WEEK' | 'MONTH') => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setQuickFilter(f);
-  };
 
   const renderHeader = useMemo(
     () => (
@@ -544,10 +596,7 @@ const HistoryScreen = () => {
   );
 
   return (
-    <SafeAreaView
-      style={styles.container}
-      edges={bannerVisible ? ['left', 'right'] : ['top', 'left', 'right']}
-    >
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
 
       <View style={{ paddingHorizontal: width >= 768 ? spacing(4) : 0 }}>
@@ -562,18 +611,15 @@ const HistoryScreen = () => {
       <FlatList
         data={filtered}
         keyExtractor={(item) => item.local_id}
-        renderItem={({ item }) => (
-          <SwipeableHistoryItem
-            item={item}
-            onEdit={() => attemptEdit(item)}
-            onDelete={() => handleDelete(item.local_id)}
-          />
-        )}
+        renderItem={renderItem}
         ListHeaderComponent={renderHeader}
         contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 80 }]}
         initialNumToRender={10}
         windowSize={5}
         removeClippedSubviews={Platform.OS === 'android'}
+        maxToRenderPerBatch={10}
+        updateCellsBatchingPeriod={50}
+        showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           !showLoading ? (
             <View style={styles.emptyState}>
@@ -587,9 +633,9 @@ const HistoryScreen = () => {
       <FullScreenSpinner visible={showLoading} />
 
       <EditTransactionModal
-        visible={!!editingEntry}
-        entry={editingEntry}
-        onClose={() => setEditingEntry(null)}
+        visible={!!editingEntryId}
+        entryId={editingEntryId}
+        onClose={() => setEditingEntryId(null)}
         onSave={handleSaveEdit}
       />
     </SafeAreaView>
@@ -676,15 +722,17 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   compactContent: { flex: 1 },
-  compactHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 },
+  compactHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 2 },
   compactCategory: {
     fontSize: 15,
     fontWeight: '600',
     color: colors.text || '#1E293B',
     flex: 1,
     marginRight: 8,
+    flexShrink: 1,
   },
-  compactAmount: { fontSize: 15, fontWeight: '700' },
+  syncIconWrapper: { marginLeft: 8, justifyContent: 'center' },
+  compactAmount: { fontSize: 15, fontWeight: '700', marginLeft: 'auto' },
   compactSubRow: { flexDirection: 'row', justifyContent: 'space-between' },
   compactNote: { fontSize: 12, color: colors.muted || '#94A3B8', flex: 1, marginRight: 8 },
   compactDate: { fontSize: 11, color: colors.subtleText || '#CBD5E1' },

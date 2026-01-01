@@ -161,48 +161,6 @@ const createDbClient = (): DatabaseClient => {
 // Initialize the client singleton
 const client = createDbClient();
 
-// Run minimal early schema upgrades to ensure commonly-accessed columns exist
-// This is best-effort and intentionally silent on failure; it's safe to run
-// before the higher-level `initDB` migration logic in `src/db/sqlite.ts`.
-(async () => {
-  try {
-    // Check if the client supports getAllAsync/runAsync
-    if (
-      client &&
-      typeof client.getAllAsync === 'function' &&
-      typeof client.runAsync === 'function'
-    ) {
-      // Ensure transactions table has expected optional columns
-      try {
-        const cols = (await client.getAllAsync("PRAGMA table_info('transactions');")) || [];
-        const names = cols.map((c: any) => c.name);
-        const toAdd: string[] = [];
-        if (!names.includes('server_version'))
-          toAdd.push('ALTER TABLE transactions ADD COLUMN server_version INTEGER DEFAULT 0;');
-        if (!names.includes('currency'))
-          toAdd.push("ALTER TABLE transactions ADD COLUMN currency TEXT DEFAULT 'INR';");
-        if (!names.includes('created_at'))
-          toAdd.push('ALTER TABLE transactions ADD COLUMN created_at TEXT DEFAULT NULL;');
-        if (!names.includes('deleted_at'))
-          toAdd.push('ALTER TABLE transactions ADD COLUMN deleted_at TEXT DEFAULT NULL;');
-        for (const sql of toAdd) {
-          try {
-            await client.runAsync(sql);
-            if (typeof __DEV__ !== 'undefined' && __DEV__)
-              console.log('[sqliteClient] early migration ran:', sql);
-          } catch (e) {
-            // ignore individual failures
-          }
-        }
-      } catch (e) {
-        /* ignore early migration errors */
-      }
-    }
-  } catch (e) {
-    /* swallow */
-  }
-})();
-
 // Export the singleton as default and named methods
 export default client;
 export const { execAsync, runAsync, getAllAsync, getFirstAsync } = client;

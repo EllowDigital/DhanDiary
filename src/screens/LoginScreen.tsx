@@ -19,7 +19,6 @@ import {
   Easing,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { subscribeBanner, isBannerVisible } from '../utils/bannerState';
 import { useSignIn, useOAuth, useUser, useAuth } from '@clerk/clerk-expo';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
@@ -105,15 +104,6 @@ const LoginScreen = () => {
     warmNeonConnection().catch(() => {});
   }, []);
 
-  const [bannerVisible, setBannerVisible] = React.useState<boolean>(false);
-  React.useEffect(() => {
-    setBannerVisible(isBannerVisible());
-    const unsub = subscribeBanner((v: boolean) => setBannerVisible(v));
-    return () => {
-      if (unsub) unsub();
-    };
-  }, []);
-
   // --- AUTO-SYNC LOGIC ---
   useEffect(() => {
     if (!isSignedIn || !clerkLoaded || !clerkUser) return;
@@ -126,9 +116,14 @@ const LoginScreen = () => {
         const fullName = clerkUser.fullName;
 
         if (id && userEmail) {
-          await handleSyncAndNavigate(id, userEmail, fullName);
+          await handleSyncAndNavigate(
+            id,
+            userEmail,
+            fullName,
+            (clerkUser as any)?.imageUrl || null
+          );
         } else {
-          navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+          navigation.reset({ index: 0, routes: [{ name: 'Announcement' }] });
         }
       } catch (e) {
         console.error('Session restore failed', e);
@@ -144,24 +139,43 @@ const LoginScreen = () => {
   const handleSyncAndNavigate = async (
     userId: string,
     userEmail: string,
-    userName?: string | null
+    userName?: string | null,
+    userImageUrl?: string | null
   ) => {
+    // IMPORTANT: our local DB + Neon sync expect the internal UUID from Neon,
+    // not Clerk's user id. Bridge Clerk -> internal UUID first.
+    let bridged = null as any;
     try {
-      await saveSession(userId, userName || 'User', userEmail);
+      bridged = await syncClerkUserToNeon({
+        id: userId,
+        emailAddresses: [{ emailAddress: userEmail }],
+        fullName: userName,
+      });
+    } catch (e) {
+      bridged = null;
+    }
+
+    const internalUserId = bridged?.uuid || null;
+    const effectiveEmail = bridged?.email || userEmail;
+    const effectiveName = bridged?.name || userName || 'User';
+
+    try {
+      if (internalUserId) {
+        await saveSession(
+          internalUserId,
+          effectiveName,
+          effectiveEmail,
+          userImageUrl ?? undefined,
+          userImageUrl ?? undefined
+        );
+      }
     } catch (e) {
       console.warn('Local session save failed', e);
     }
 
-    const syncPromise = syncClerkUserToNeon({
-      id: userId,
-      emailAddresses: [{ emailAddress: userEmail }],
-      fullName: userName,
-    }).catch((err) => console.warn('Background sync failed', err));
-
     setSyncing(false);
     setLoading(false);
-    navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
-    await syncPromise;
+    navigation.reset({ index: 0, routes: [{ name: 'Announcement' }] });
   };
 
   const offlineManualRetry = async () => {
@@ -322,7 +336,9 @@ const LoginScreen = () => {
     try {
       const startFlow = strategy === 'google' ? startGoogleFlow : startGithubFlow;
       const { createdSessionId, setActive: setSession } = await startFlow({
-        redirectUrl: AuthSession.makeRedirectUri({ path: 'oauth-callback' }),
+        // Use the app scheme so Android can route back into the app.
+        // If running inside Expo Go, custom schemes won't work reliably.
+        redirectUrl: AuthSession.makeRedirectUri({ scheme: 'dhandiary', path: 'oauth-callback' }),
       });
 
       if (createdSessionId && setSession) {
@@ -350,10 +366,7 @@ const LoginScreen = () => {
         end={{ x: 1, y: 1 }}
       />
 
-      <SafeAreaView
-        style={{ flex: 1 }}
-        edges={bannerVisible ? (['left', 'right'] as any) : (['top', 'left', 'right'] as any)}
-      >
+      <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right'] as any}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
@@ -477,6 +490,7 @@ const LoginScreen = () => {
                   <Image
                     source={{ uri: 'https://cdn-icons-png.flaticon.com/512/25/25231.png' }}
                     style={styles.socialIcon}
+                    resizeMode="contain"
                   />
                   <Text style={styles.socialBtnText}>GitHub</Text>
                 </TouchableOpacity>

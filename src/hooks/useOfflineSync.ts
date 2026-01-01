@@ -1,4 +1,5 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useInternetStatus } from './useInternetStatus';
 import {
   syncBothWays,
@@ -16,6 +17,8 @@ import { useToast } from '../context/ToastContext';
 export const useOfflineSync = (userId?: string | null) => {
   const isOnline = useInternetStatus();
   const { showToast } = useToast();
+  const queryClient = useQueryClient();
+  const prevOnlineRef = useRef<boolean>(false);
 
   useEffect(() => {
     if (!userId) return;
@@ -39,11 +42,28 @@ export const useOfflineSync = (userId?: string | null) => {
   useEffect(() => {
     if (!userId) return;
     if (isOnline) {
+      // Fast UI refresh on reconnect: force entries queries stale so screens
+      // re-read SQLite immediately, then sync and refresh again.
+      try {
+        const wasOnline = prevOnlineRef.current;
+        if (!wasOnline) {
+          queryClient.invalidateQueries({ queryKey: ['entries'], exact: false } as any);
+          void queryClient.refetchQueries({ queryKey: ['entries'], exact: false } as any);
+        }
+      } catch (e) {}
+
       (async () => {
         try {
           const res: any = await syncBothWays();
-          // Only show success toast when an actual sync run occurred
-          if (res && res.ok) {
+
+          // After sync completes, refresh any active entry lists again.
+          try {
+            queryClient.invalidateQueries({ queryKey: ['entries'], exact: false } as any);
+            void queryClient.refetchQueries({ queryKey: ['entries'], exact: false } as any);
+          } catch (e) {}
+
+          // Only show toast when a real sync ran and moved data.
+          if (res && res.ok && res.reason === 'success') {
             const pushed = res.counts?.pushed || 0;
             const pulled = res.counts?.pulled || 0;
             if (pulled > 0 || pushed > 0) {
@@ -51,11 +71,12 @@ export const useOfflineSync = (userId?: string | null) => {
               if (pulled > 0) parts.push(`${pulled} pulled`);
               if (pushed > 0) parts.push(`${pushed} pushed`);
               showToast(`Auto-sync complete — ${parts.join(', ')}`);
-            } else {
-              showToast('Auto-sync complete');
             }
           } else {
-            if (__DEV__) console.log('[useOfflineSync] sync skipped or throttled', res);
+            // Up-to-date / throttled / already-running are normal states; keep logs quiet.
+            if (__DEV__ && res && res.ok === false && res.reason === 'error') {
+              console.log('[useOfflineSync] sync error', res);
+            }
           }
         } catch (err) {
           console.error('Sync failed', err);
@@ -63,5 +84,7 @@ export const useOfflineSync = (userId?: string | null) => {
         }
       })();
     }
+
+    prevOnlineRef.current = !!isOnline;
   }, [isOnline, userId, showToast]);
 };

@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import NetInfo from '@react-native-community/netinfo';
 
 export const useInternetStatus = () => {
   const [isOnline, setIsOnline] = useState(false);
+  const lastOnlineRef = useRef<boolean>(false);
 
   useEffect(() => {
     // initialize once with current state so hooks depending on this
@@ -11,13 +12,21 @@ export const useInternetStatus = () => {
     let mounted = true;
     NetInfo.fetch()
       .then((s) => {
-        if (mounted) setIsOnline(!!s.isConnected);
+        const next = !!s.isConnected;
+        if (!mounted) return;
+        if (lastOnlineRef.current !== next) {
+          lastOnlineRef.current = next;
+          setIsOnline(next);
+        }
       })
       .catch(() => {});
 
     const unsubscribe = NetInfo.addEventListener((state) => {
       // isInternetReachable can be null initially
-      setIsOnline(!!state.isConnected);
+      const next = !!state.isConnected;
+      if (lastOnlineRef.current === next) return;
+      lastOnlineRef.current = next;
+      setIsOnline(next);
     });
 
     return () => {

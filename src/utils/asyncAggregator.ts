@@ -17,6 +17,8 @@ export interface StatResult {
   totalIn: number;
   totalOut: number;
   net: number;
+  avgPerDay?: number;
+  savingsRate?: number;
   count: number;
   skipped: number;
   mean: number;

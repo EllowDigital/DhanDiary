@@ -15,7 +15,6 @@ import {
   UIManager,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { subscribeBanner, isBannerVisible } from '../utils/bannerState';
 import { Text } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { PieChart } from 'react-native-chart-kit';
@@ -24,6 +23,7 @@ import dayjs from 'dayjs';
 // --- CUSTOM IMPORTS (Assumed based on your context) ---
 import { useEntries } from '../hooks/useEntries';
 import { useAuth } from '../hooks/useAuth';
+import { useInternetStatus } from '../hooks/useInternetStatus';
 import { colors } from '../utils/design';
 import ScreenHeader from '../components/ScreenHeader';
 import DailyTrendChart from '../components/charts/DailyTrendChart';
@@ -122,8 +122,24 @@ const CategoryRow = memo(({ item, currency }: { item: any; currency: string }) =
 const StatsScreen = () => {
   const { width } = useWindowDimensions();
   const { user, loading: authLoading } = useAuth();
+  const isOnline = useInternetStatus();
   const { entries: entriesRaw = [], isLoading } = useEntries(user?.id);
   const entries = entriesRaw as LocalEntry[];
+
+  // Bust aggregator cache when local entries change (sync/pull writes to SQLite).
+  // This prevents Analytics from staying stale for up to the cache TTL.
+  const entriesCacheBuster = useMemo(() => {
+    try {
+      let maxTs = 0;
+      for (const e of entries) {
+        const t = Number((e as any)?.updated_at || 0);
+        if (Number.isFinite(t) && t > maxTs) maxTs = t;
+      }
+      return String(maxTs);
+    } catch (e) {
+      return '';
+    }
+  }, [entries]);
 
   // --- REFS & ANIMATION ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -238,6 +254,8 @@ const StatsScreen = () => {
       if (user?.id) {
         result = await aggregateWithPreferSummary(user.id, rangeStart, rangeEnd, {
           signal: controller.signal,
+          cacheBuster: entriesCacheBuster,
+          allowRemote: Boolean(isOnline),
         });
       } else if (filter === 'All' || entries.length > 5000) {
         // Stream entries in pages for heavy loads (Offline mode)
@@ -291,7 +309,7 @@ const StatsScreen = () => {
           totalOut,
           net: totalIn - totalOut,
           avgPerDay: totalOut / daysDiff,
-          savingsRate: Math.max(0, savingsRate),
+          savingsRate,
           pieData: pieDataColored,
           currency: result.currency || 'INR',
         };
@@ -316,19 +334,19 @@ const StatsScreen = () => {
     return () => {
       if (abortControllerRef.current) abortControllerRef.current.abort();
     };
-  }, [filter, rangeStart?.valueOf(), rangeEnd?.valueOf(), entries?.length, user?.id]);
-
-  const [bannerVisible, setBannerVisible] = React.useState<boolean>(false);
-  React.useEffect(() => {
-    setBannerVisible(isBannerVisible());
-    const unsub = subscribeBanner((v: boolean) => setBannerVisible(v));
-    return () => {
-      if (unsub) unsub();
-    };
-  }, []);
+  }, [
+    filter,
+    rangeStart?.valueOf(),
+    rangeEnd?.valueOf(),
+    entries?.length,
+    entriesCacheBuster,
+    user?.id,
+    isOnline,
+  ]);
 
   // --- RENDER HELPERS ---
   const currencySymbol = stats?.currency === 'USD' ? '$' : '₹';
+  const isEmptyPeriod = Boolean(stats && Number(stats.count || 0) === 0);
 
   if (isLoading || authLoading) {
     return (
@@ -340,11 +358,8 @@ const StatsScreen = () => {
   }
 
   return (
-    <SafeAreaView
-      style={styles.safeArea}
-      edges={bannerVisible ? (['left', 'right'] as any) : (['top', 'left', 'right'] as any)}
-    >
-      <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right'] as any}>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
 
       <View style={[styles.headerWrapper, containerStyle]}>
         <ScreenHeader
@@ -424,6 +439,16 @@ const StatsScreen = () => {
             <View style={[styles.card, { height: 200, justifyContent: 'center' }]}>
               <ActivityIndicator color={colors.primary} />
             </View>
+          ) : isEmptyPeriod ? (
+            <View style={styles.card}>
+              <View style={styles.rowBetween}>
+                <Text style={styles.cardLabel}>ANALYTICS</Text>
+              </View>
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyText}>No transactions for this period yet.</Text>
+                <Text style={styles.emptySubText}>Add income/expense to see insights here.</Text>
+              </View>
+            </View>
           ) : (
             <View style={styles.card}>
               <View style={styles.rowBetween}>
@@ -470,26 +495,29 @@ const StatsScreen = () => {
             <View style={styles.gridContainer}>
               <MetricCard
                 title="MAX IN"
-                value={formatCompact(stats.maxIncome || 0, stats.currency)}
+                value={isEmptyPeriod ? '—' : formatCompact(stats.maxIncome || 0, stats.currency)}
                 icon="trending-up"
                 colorBg="#DBEAFE"
                 colorIcon="#1E40AF"
+                subTitle={isEmptyPeriod ? 'No data yet' : undefined}
                 style={{ flex: 1 }}
               />
               <MetricCard
                 title="MAX OUT"
-                value={formatCompact(stats.maxExpense || 0, stats.currency)}
+                value={isEmptyPeriod ? '—' : formatCompact(stats.maxExpense || 0, stats.currency)}
                 icon="trending-down"
                 colorBg="#FEE2E2"
                 colorIcon="#991B1B"
+                subTitle={isEmptyPeriod ? 'No data yet' : undefined}
                 style={{ flex: 1 }}
               />
               <MetricCard
                 title="SAVINGS"
-                value={`${Math.round(stats.savingsRate)}%`}
+                value={isEmptyPeriod ? '—' : `${Math.round(stats.savingsRate)}%`}
                 icon="savings"
                 colorBg="#F0FDF4"
                 colorIcon="#166534"
+                subTitle={isEmptyPeriod ? 'Add transactions' : undefined}
                 style={{ flex: 1 }}
               />
             </View>
@@ -500,10 +528,11 @@ const StatsScreen = () => {
             <View style={styles.gridContainer}>
               <MetricCard
                 title="AVG / DAY"
-                value={formatCompact(stats.avgPerDay || 0, stats.currency)}
+                value={isEmptyPeriod ? '—' : formatCompact(stats.avgPerDay || 0, stats.currency)}
                 icon="speed"
                 colorBg="#FFF7ED"
                 colorIcon="#EA580C"
+                subTitle={isEmptyPeriod ? 'No spending yet' : undefined}
                 style={{ flex: 1 }}
               />
               <MetricCard
@@ -512,6 +541,7 @@ const StatsScreen = () => {
                 icon="receipt"
                 colorBg="#F3F4F6"
                 colorIcon="#4B5563"
+                subTitle={isEmptyPeriod ? 'No transactions' : undefined}
                 style={{ flex: 1 }}
               />
             </View>
@@ -536,7 +566,8 @@ const StatsScreen = () => {
                     />
                   ) : (
                     <View style={styles.emptyState}>
-                      <Text style={styles.emptyText}>No transactions in this period</Text>
+                      <Text style={styles.emptyText}>No spending trend yet</Text>
+                      <Text style={styles.emptySubText}>Add expenses to see a chart here.</Text>
                     </View>
                   )}
                 </ScrollView>
@@ -582,7 +613,8 @@ const StatsScreen = () => {
                     </View>
                   ) : (
                     <View style={styles.emptyState}>
-                      <Text style={styles.emptyText}>No data</Text>
+                      <Text style={styles.emptyText}>No expenses to analyze</Text>
+                      <Text style={styles.emptySubText}>Add expenses to see distribution.</Text>
                     </View>
                   )}
                 </View>
@@ -597,7 +629,8 @@ const StatsScreen = () => {
                       ))
                     ) : (
                       <View style={styles.emptyState}>
-                        <Text style={styles.emptyText}>No categories found</Text>
+                        <Text style={styles.emptyText}>No categories yet</Text>
+                        <Text style={styles.emptySubText}>Add expenses to see top categories.</Text>
                       </View>
                     )}
                   </View>
@@ -614,7 +647,7 @@ const StatsScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#F8FAFC' },
+  safeArea: { flex: 1, backgroundColor: colors.background },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { marginTop: 10, color: '#94A3B8', fontWeight: '600' },
 
@@ -755,6 +788,13 @@ const styles = StyleSheet.create({
 
   emptyState: { padding: 30, alignItems: 'center', justifyContent: 'center' },
   emptyText: { color: '#CBD5E1', fontStyle: 'italic', fontSize: fontScale(13) },
+  emptySubText: {
+    marginTop: 6,
+    color: '#94A3B8',
+    fontSize: fontScale(12),
+    fontWeight: '600',
+    textAlign: 'center',
+  },
 });
 
 export default StatsScreen;

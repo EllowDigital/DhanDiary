@@ -17,7 +17,6 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { subscribeBanner, isBannerVisible } from '../utils/bannerState';
 import { Input, Button } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useUser } from '@clerk/clerk-expo';
@@ -133,7 +132,6 @@ const AccountManagementScreen = () => {
   const [fallbackSession, setFallbackSession] = useState<any>(null);
   const navigation = useNavigation<any>();
   const { showToast } = useToast();
-  const [bannerVisible, setBannerVisible] = useState<boolean>(isBannerVisible());
 
   // State
   const [activeCard, setActiveCard] = useState<string | null>(null);
@@ -171,14 +169,6 @@ const AccountManagementScreen = () => {
     }).start();
 
     checkBiometrics();
-  }, []);
-
-  // subscribe to banner visibility so this screen doesn't add top safe-area twice
-  useEffect(() => {
-    const unsub = subscribeBanner((v) => setBannerVisible(!!v));
-    return () => {
-      if (unsub) unsub();
-    };
   }, []);
 
   useEffect(() => {
@@ -393,10 +383,7 @@ const AccountManagementScreen = () => {
   return (
     <View style={styles.mainContainer}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-      <SafeAreaView
-        style={styles.safeArea}
-        edges={bannerVisible ? ['left', 'right'] : ['top', 'left', 'right']}
-      >
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
         <ScreenHeader
           title="Account"
           subtitle="Profile & Security"

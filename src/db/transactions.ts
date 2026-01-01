@@ -26,6 +26,23 @@ export type TransactionRow = {
   deleted_at?: string | null; // timestamptz
 };
 
+export async function getTransactionById(
+  id: string,
+  userId: string
+): Promise<TransactionRow | null> {
+  const sql = `SELECT * FROM transactions WHERE id = ? AND user_id = ? LIMIT 1;`;
+  const [, res] = await executeSqlAsync(sql, [id, userId]);
+  if (!res || !res.rows || res.rows.length === 0) return null;
+  return res.rows.item(0) as TransactionRow;
+}
+
+export async function getTransactionByLocalId(id: string): Promise<TransactionRow | null> {
+  const sql = `SELECT * FROM transactions WHERE id = ? LIMIT 1;`;
+  const [, res] = await executeSqlAsync(sql, [id]);
+  if (!res || !res.rows || res.rows.length === 0) return null;
+  return res.rows.item(0) as TransactionRow;
+}
+
 /** * Insert a new transaction.
  * Matches Postgres defaults: currency='INR', server_version=0
  */
@@ -40,6 +57,7 @@ export async function addTransaction(
   const row: TransactionRow = {
     id: txn.id,
     user_id: txn.user_id,
+    client_id: txn.client_id ?? null,
     amount: txn.amount ?? 0,
     type: txn.type ?? 'expense',
     category: txn.category ?? null,
@@ -51,18 +69,20 @@ export async function addTransaction(
     deleted_at: null,
     server_version: 0,
     sync_status: typeof txn.sync_status === 'number' ? txn.sync_status : 0, // Default 0 (pending push)
+    need_sync: 1,
   };
 
   const sql = `
     INSERT OR REPLACE INTO transactions(
-      id, user_id, amount, type, category, note, currency, date, 
-      created_at, updated_at, deleted_at, server_version, sync_status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+      id, user_id, client_id, amount, type, category, note, currency, date, 
+      created_at, updated_at, deleted_at, server_version, sync_status, need_sync
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
   `;
 
   await executeSqlAsync(sql, [
     row.id,
     row.user_id,
+    row.client_id ?? null,
     row.amount,
     row.type,
     row.category,
@@ -74,6 +94,7 @@ export async function addTransaction(
     row.deleted_at,
     row.server_version,
     row.sync_status,
+    row.need_sync ?? 1,
   ]);
 
   if (__DEV__) console.log('[transactions] add', row.id);
@@ -93,79 +114,137 @@ export async function updateTransaction(
 ) {
   const now = Date.now();
 
-  // SQL to update specific fields and reset sync status
+  // Always merge with the current row to avoid accidental data loss from partial updates
+  const existingByUser = await getTransactionById(txn.id, txn.user_id);
+  const existingById = existingByUser ? null : await getTransactionByLocalId(txn.id);
+  const existing = existingByUser || existingById;
+  const effectiveUserId = existing ? String((existing as any).user_id) : txn.user_id;
   const sql = `
     UPDATE transactions 
     SET amount = ?, type = ?, category = ?, note = ?, date = ?, currency = ?,
-        updated_at = ?, sync_status = 0 
+        updated_at = ?, sync_status = 0, need_sync = 1
     WHERE id = ? AND user_id = ?;
   `;
 
-  // We use coalescing to ensure we don't accidentally wipe data if partial txn is passed
-  // Note: For a true partial update in SQLite without selecting first, you usually
-  // need the full object or dynamic SQL. Assuming 'txn' contains the edit form values.
+  if (!existing) {
+    // Backward-compatible: try UPDATE first (no-op if missing), then insert fallback.
+    const fallbackDate = (txn as any).date ?? new Date().toISOString();
+    const fallbackCurrency = (txn as any).currency ?? 'INR';
+    const [, res] = await executeSqlAsync(sql, [
+      (txn as any).amount ?? 0,
+      (txn as any).type ?? 'expense',
+      (txn as any).category ?? null,
+      (txn as any).note ?? null,
+      fallbackDate,
+      fallbackCurrency,
+      now,
+      txn.id,
+      txn.user_id,
+    ]);
 
-  // WARNING: If txn.amount is undefined, this puts NULL or 0?
-  // Ideally, updateTransaction should receive the full updated object or we fetch-then-update.
-  // Below assumes the UI passes the complete specific fields being edited.
+    const affected = Number(res?.rowsAffected || 0);
+    if (affected === 0) {
+      return await addTransaction({
+        ...txn,
+        date: fallbackDate,
+        currency: fallbackCurrency,
+        sync_status: 0,
+      } as any);
+    }
 
-  const [, res] = await executeSqlAsync(sql, [
-    txn.amount ?? 0,
-    txn.type ?? 'expense',
-    txn.category ?? null,
-    txn.note ?? null,
-    txn.date ?? new Date().toISOString(),
-    txn.currency ?? 'INR',
-    now, // updated_at (ms)
-    txn.id,
-    txn.user_id,
-  ]);
-
-  // Fallback: If row doesn't exist locally (offline edit of remote item not yet pulled?), insert it.
-  const affected = Number(res?.rowsAffected || 0);
-  if (affected === 0) {
-    if (__DEV__)
-      console.warn('[transactions] update affected 0 rows, falling back to insert', txn.id);
-    return await addTransaction({ ...txn, created_at: new Date().toISOString() } as TransactionRow);
-  } else {
-    if (__DEV__) console.log('[transactions] update', txn.id);
     try {
       notifyEntriesChanged();
     } catch (e) {}
+
+    // If it unexpectedly updated, return a best-effort shape
+    return {
+      id: txn.id,
+      user_id: txn.user_id,
+      amount: (txn as any).amount ?? 0,
+      type: ((txn as any).type ?? 'expense') as any,
+      category: (txn as any).category ?? null,
+      note: (txn as any).note ?? null,
+      currency: fallbackCurrency,
+      date: fallbackDate,
+      created_at: (txn as any).created_at ?? new Date().toISOString(),
+      updated_at: now,
+      deleted_at: null,
+      server_version: (txn as any).server_version ?? 0,
+      sync_status: 0,
+      need_sync: 1,
+    } as TransactionRow;
   }
 
-  // Return a structure reflecting the update (avoid spreading untyped fields)
-  return {
-    id: txn.id,
-    user_id: txn.user_id,
-    amount: txn.amount ?? 0,
-    type: txn.type ?? 'expense',
-    category: txn.category ?? null,
-    note: txn.note ?? null,
-    currency: txn.currency ?? 'INR',
-    date: txn.date ?? new Date().toISOString(),
-    created_at: (txn as any).created_at ?? new Date().toISOString(),
+  const existingDeletedAt = (existing as any).deleted_at ?? null;
+  const existingSyncStatus = Number((existing as any).sync_status ?? 0);
+  if (existingDeletedAt || existingSyncStatus === 2) {
+    throw new Error('Cannot edit a deleted transaction');
+  }
+
+  const merged: TransactionRow = {
+    ...existing,
+    ...txn,
+    amount: txn.amount !== undefined ? (txn.amount ?? 0) : (existing.amount ?? 0),
+    type: (txn.type !== undefined ? txn.type : existing.type) as any,
+    category: txn.category !== undefined ? (txn.category ?? null) : (existing.category ?? null),
+    note: txn.note !== undefined ? (txn.note ?? null) : (existing.note ?? null),
+    currency: txn.currency !== undefined ? (txn.currency ?? 'INR') : (existing.currency ?? 'INR'),
+    date: txn.date !== undefined ? (txn.date as any) : (existing.date as any),
     updated_at: now,
-    deleted_at: (txn as any).deleted_at ?? null,
-    server_version: (txn as any).server_version ?? 0,
     sync_status: 0,
+    need_sync: 1,
   } as TransactionRow;
+
+  const [, res] = await executeSqlAsync(sql, [
+    merged.amount,
+    merged.type,
+    merged.category ?? null,
+    merged.note ?? null,
+    merged.date ?? new Date().toISOString(),
+    merged.currency ?? 'INR',
+    now,
+    txn.id,
+    effectiveUserId,
+  ]);
+
+  const affected = Number(res?.rowsAffected || 0);
+  if (affected === 0) throw new Error('Transaction not found');
+
+  if (__DEV__) console.log('[transactions] update', txn.id);
+  try {
+    notifyEntriesChanged();
+  } catch (e) {}
+
+  return merged;
 }
 
 /** * Soft-delete: Set deleted_at timestamp and mark for sync
  * Schema uses 'deleted_at IS NOT NULL' to identify deleted rows.
  */
 export async function deleteTransaction(id: string, userId: string) {
-  const now = new Date().toISOString();
+  const deletedAtIso = new Date().toISOString();
+  const updatedAtMs = Date.now();
 
-  // We keep sync_status = 0 (pending) so the deletion gets pushed to server
+  // Idempotent tombstone:
+  // - set deleted_at once
+  // - mark as tombstoned for sync
   const sql = `
     UPDATE transactions 
-    SET deleted_at = ?, updated_at = ?, sync_status = 0 
+    SET deleted_at = COALESCE(deleted_at, ?), updated_at = ?, sync_status = 2, need_sync = 1
     WHERE id = ? AND user_id = ?;
   `;
 
-  await executeSqlAsync(sql, [now, now, id, userId]);
+  const [, res] = await executeSqlAsync(sql, [deletedAtIso, updatedAtMs, id, userId]);
+
+  // If user_id mismatched (e.g. session migration edge case), fall back to id-only tombstone.
+  if (Number(res?.rowsAffected || 0) === 0) {
+    await executeSqlAsync(
+      `UPDATE transactions
+       SET deleted_at = COALESCE(deleted_at, ?), updated_at = ?, sync_status = 2, need_sync = 1
+       WHERE id = ?;`,
+      [deletedAtIso, updatedAtMs, id]
+    );
+  }
 
   if (__DEV__) console.log('[transactions] soft delete', id);
   try {
@@ -198,7 +277,11 @@ export async function getTransactionsByUser(userId: string) {
  * Includes creates/updates (sync_status=0) AND deletes (sync_status=0 + deleted_at not null)
  */
 export async function getUnsyncedTransactions() {
-  const sql = `SELECT * FROM transactions WHERE sync_status = 0;`;
+  // Backwards-compatible selector:
+  // - new writes use need_sync=1
+  // - older dirty rows may only have sync_status=0
+  // NOTE: do NOT include sync_status=2 when need_sync=0, or we'll re-push already-synced tombstones.
+  const sql = `SELECT * FROM transactions WHERE need_sync = 1 OR sync_status = 0;`;
   const [, res] = await executeSqlAsync(sql, []);
   const rows: TransactionRow[] = [];
   for (let i = 0; i < res.rows.length; i++) {
@@ -232,7 +315,7 @@ export async function upsertTransactionFromRemote(txn: TransactionRow) {
     // Actually, usually "Server Wins" or "Last Write Wins".
     // If local has deleted_at set and sync_status=0, we might want to keep our local delete.
 
-    const checkSql = `SELECT sync_status, deleted_at, server_version, updated_at FROM transactions WHERE id = ? LIMIT 1;`;
+    const checkSql = `SELECT sync_status, need_sync, deleted_at, server_version, updated_at FROM transactions WHERE id = ? LIMIT 1;`;
     const [, res] = await executeSqlAsync(checkSql, [txn.id]);
 
     if (res && res.rows && res.rows.length > 0) {
@@ -243,7 +326,19 @@ export async function upsertTransactionFromRemote(txn: TransactionRow) {
 
       // OPTIONAL: If local has a pending deletion (deleted_at set and sync_status === 0), keep local tombstone.
       // Also treat sync_status === 2 as an explicit local tombstone marker (skip remote upsert).
-      const isLocalPendingDelete = existing && existing.deleted_at && existing.sync_status === 0;
+      // If local is deleted, never let a remote non-deleted row resurrect it.
+      const localHasDeletedAt = !!(existing && existing.deleted_at);
+      const remoteHasDeletedAt = !!(txn && txn.deleted_at);
+      if (localHasDeletedAt && !remoteHasDeletedAt) {
+        if ((globalThis as any).__SYNC_VERBOSE__)
+          console.debug('[transactions] skipping remote upsert, local deleted_at exists', txn.id);
+        return;
+      }
+
+      const isLocalPendingDelete =
+        existing &&
+        existing.deleted_at &&
+        (Number(existing.need_sync) === 1 || Number(existing.sync_status) === 0);
       const isLocalTombstoneFlag = existing && Number(existing.sync_status) === 2;
       if (isLocalPendingDelete || isLocalTombstoneFlag) {
         if ((globalThis as any).__SYNC_VERBOSE__)
@@ -308,8 +403,8 @@ export async function upsertTransactionFromRemote(txn: TransactionRow) {
       INSERT OR REPLACE INTO transactions(
         id, user_id, amount, type, category, note, currency, date,
         created_at, updated_at, deleted_at, 
-        server_version, sync_status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        server_version, sync_status, need_sync
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
     `;
 
     const [, writeRes] = await executeSqlAsync(sql, [
@@ -326,6 +421,7 @@ export async function upsertTransactionFromRemote(txn: TransactionRow) {
       txn.deleted_at ?? null,
       txn.server_version ?? 0,
       1, // sync_status = 1 (Synced because it came from server)
+      0, // need_sync = 0 because it came from server
     ]);
 
     if (__DEV__) console.log('[transactions] upsert remote', txn.id);

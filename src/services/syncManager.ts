@@ -55,6 +55,10 @@ let _syncInProgress: boolean = false;
 let _lastSuccessfulSyncAt: number | null = null;
 let _lastSyncAttemptAt: number | null = null;
 let _syncFailureCount = 0;
+let _isOnline = false;
+let _entriesUnsubscribe: (() => void) | null = null;
+let _entriesSyncTimer: any = null;
+let _lastAlreadyRunningLogAt = 0;
 // Sync status listeners (UI can subscribe to show progress or errors)
 export type SyncStatus = 'idle' | 'syncing' | 'error';
 let _syncStatus: SyncStatus = 'idle';
@@ -68,6 +72,7 @@ export const subscribeSyncStatus = (listener: (status: SyncStatus) => void) => {
 export const isSyncInProgress = () => _syncStatus === 'syncing';
 
 const setSyncStatus = (s: SyncStatus) => {
+  if (_syncStatus === s) return;
   _syncStatus = s;
   try {
     _syncStatusListeners.forEach((l) => {
@@ -91,11 +96,13 @@ const safeQ = async (sql: string, params: any[] = []) => {
     return await Q(sql, params);
   } catch (err) {
     try {
-      if (__DEV__) {
-        console.error('Neon query failed', { sql: sql.substring(0, 50) + '...', err });
-      } else {
-        // In production avoid noisy, raw internal errors; keep a compact warning for diagnostics
-        console.warn('Neon query failed (suppressed details in production)');
+      // Avoid console.error here — it triggers LogBox "Console Error" overlays and is too noisy
+      // for offline/slow networks. Keep detailed logs behind a verbose flag.
+      const verbose = Boolean(
+        (globalThis as any).__NEON_VERBOSE__ || (globalThis as any).__SYNC_VERBOSE__
+      );
+      if (__DEV__ && verbose) {
+        console.warn('Neon query failed', { sql: sql.substring(0, 50) + '...', err });
       }
     } catch (e) {}
     throw err;
@@ -210,18 +217,75 @@ const flushPendingProfileUpdates = async () => {
 // --- Main Sync Entry Point ---
 
 import runFullSync from '../sync/runFullSync';
+import { getNeonHealth } from '../api/neonClient';
 
-export const syncBothWays = async () => {
+export type SyncResult = {
+  ok: boolean;
+  reason?:
+    | 'success'
+    | 'up_to_date'
+    | 'already_running'
+    | 'throttled'
+    | 'offline'
+    | 'not_configured'
+    | 'error';
+  upToDate?: boolean;
+  counts?: { pushed: number; pulled: number };
+};
+
+export const syncBothWays = async (options?: { force?: boolean; source?: 'manual' | 'auto' }) => {
+  // If cloud sync isn't configured in this build, fail fast with a clear reason.
+  try {
+    const h = getNeonHealth();
+    if (!h.isConfigured) {
+      if (__DEV__) console.warn('[sync] cloud sync not configured (missing NEON_URL)');
+      return { ok: false, reason: 'not_configured' } satisfies SyncResult;
+    }
+  } catch (e) {}
+
   if (_syncInProgress) {
     _pendingSyncRequested = true;
-    if (__DEV__) console.log('Sync already running, scheduling follow-up');
-    return { ok: false } as any;
+    try {
+      const verbose = Boolean(
+        (globalThis as any).__NEON_VERBOSE__ || (globalThis as any).__SYNC_VERBOSE__
+      );
+      if (__DEV__ && verbose) {
+        const now = Date.now();
+        if (now - _lastAlreadyRunningLogAt > 2500) {
+          _lastAlreadyRunningLogAt = now;
+          console.log('Sync already running, scheduling follow-up');
+        }
+      }
+    } catch (e) {}
+    return { ok: true, reason: 'already_running', upToDate: true } satisfies SyncResult;
   }
 
   _lastSyncAttemptAt = Date.now();
 
+  // If there's no logged-in session (or it's not a UUID), don't attempt cloud sync.
+  // This prevents noisy logs on the login screen and avoids pointless Neon traffic.
+  try {
+    const sess: any = await getSession();
+    const uid = sess?.id;
+    if (!isUuid(uid)) {
+      return {
+        ok: true,
+        reason: 'up_to_date',
+        upToDate: true,
+        counts: { pushed: 0, pulled: 0 },
+      } satisfies SyncResult;
+    }
+  } catch (e) {
+    return {
+      ok: true,
+      reason: 'up_to_date',
+      upToDate: true,
+      counts: { pushed: 0, pulled: 0 },
+    } satisfies SyncResult;
+  }
+
   const state = await NetInfo.fetch();
-  if (!state.isConnected) return { ok: false } as any;
+  if (!state.isConnected) return { ok: false, reason: 'offline' } satisfies SyncResult;
 
   _syncInProgress = true;
   // notify listeners that sync started
@@ -231,19 +295,28 @@ export const syncBothWays = async () => {
 
   try {
     // Delegate actual sync work to runFullSync (single source of truth)
-    const runResult = await runFullSync();
+    const runResult = await runFullSync({ force: !!options?.force });
 
-    // If runFullSync returned null, it was throttled or skipped — treat as no-op
-    if (!runResult) {
-      if (__DEV__)
-        console.log('[sync] syncBothWays: runFullSync returned null (throttled/skipped)');
-      // clear in-progress and mark idle, return not-ok so callers can decide whether to show UI
+    // If runFullSync was skipped (throttled/already running/no-session), treat as non-error no-op.
+    if (runResult?.status === 'skipped') {
+      try {
+        const verbose = Boolean(
+          (globalThis as any).__NEON_VERBOSE__ || (globalThis as any).__SYNC_VERBOSE__
+        );
+        if (__DEV__ && verbose)
+          console.log('[sync] syncBothWays: runFullSync skipped', runResult.reason);
+      } catch (e) {}
       _lastSyncAttemptAt = Date.now();
       _syncInProgress = false;
       try {
         setSyncStatus('idle');
       } catch (e) {}
-      return { ok: false, reason: 'throttled' } as any;
+      return {
+        ok: true,
+        reason: runResult.reason === 'no_session' ? 'up_to_date' : runResult.reason,
+        upToDate: true,
+        counts: { pushed: 0, pulled: 0 },
+      } satisfies SyncResult;
     }
 
     _lastSuccessfulSyncAt = Date.now();
@@ -257,7 +330,7 @@ export const syncBothWays = async () => {
     let pushedCount = 0;
     let pulledCount = 0;
     try {
-      if (runResult) {
+      if (runResult && runResult.status === 'ran') {
         // push result may be an object { pushed: string[] } or an array
         const pr: any = runResult.pushed;
         if (pr) {
@@ -290,18 +363,26 @@ export const syncBothWays = async () => {
         await AsyncStorage.setItem('last_sync_count', String(pulledCount));
       } catch (e) {}
     } catch (e) {}
-    return { ok: true, counts: { pushed: pushedCount, pulled: pulledCount } } as any;
+    const upToDate = pushedCount === 0 && pulledCount === 0;
+    return {
+      ok: true,
+      reason: upToDate ? 'up_to_date' : 'success',
+      upToDate,
+      counts: { pushed: pushedCount, pulled: pulledCount },
+    } satisfies SyncResult;
   } catch (err) {
     try {
-      if (__DEV__) console.error('Sync failed', err);
-      else console.warn('Sync failed (suppressed details in production)');
+      const verbose = Boolean(
+        (globalThis as any).__NEON_VERBOSE__ || (globalThis as any).__SYNC_VERBOSE__
+      );
+      if (__DEV__ && verbose) console.warn('Sync failed', err);
     } catch (e) {}
     _syncFailureCount = Math.min(5, _syncFailureCount + 1);
     // Enter error state — callers should only set this if runFullSync truly failed
     try {
       setSyncStatus('error');
     } catch (e) {}
-    return { ok: false } as any;
+    return { ok: false, reason: 'error' } satisfies SyncResult;
   } finally {
     _syncInProgress = false;
     // notify listeners that sync finished (if not errored, set to idle above)
@@ -311,7 +392,9 @@ export const syncBothWays = async () => {
     if (_pendingSyncRequested) {
       _pendingSyncRequested = false;
       setTimeout(() => {
-        syncBothWays().catch((e) => console.error('Follow-up sync failed', e));
+        syncBothWays().catch(() => {
+          // Swallow follow-up errors; banner/NetInfo will reflect offline state.
+        });
       }, 500);
     }
   }
@@ -338,22 +421,76 @@ export const startAutoSyncListener = () => {
   let wasOnline = false;
   _unsubscribe = NetInfo.addEventListener((state) => {
     const isOnline = !!state.isConnected;
+    _isOnline = isOnline;
     if (!wasOnline && isOnline) {
       // Kick off a sync when we come online, but respect recent successful syncs
       const now = Date.now();
       const MIN_ONLINE_SYNC_MS = 30 * 1000; // don't run online sync more often than this
       if (!_lastSuccessfulSyncAt || now - _lastSuccessfulSyncAt > MIN_ONLINE_SYNC_MS) {
-        syncBothWays().catch((err) => console.error('Auto sync failed', err));
+        syncBothWays().catch(() => {
+          // Swallow expected failures (offline/slow network) to avoid LogBox noise.
+        });
       }
     }
     wasOnline = isOnline;
   });
+
+  // Also coalesce local DB changes into a debounced sync while online.
+  // This avoids "sync only on reconnect" behavior and reduces compute by batching.
+  try {
+    if (!_entriesUnsubscribe) {
+      const events = require('../utils/dbEvents');
+      const subscribe =
+        events && typeof events.subscribeEntries === 'function' ? events.subscribeEntries : null;
+      if (subscribe) {
+        _entriesUnsubscribe = subscribe(() => {
+          try {
+            if (!_isOnline) return;
+            try {
+              const h = getNeonHealth();
+              if (!h.isConfigured) return;
+            } catch (e) {
+              return;
+            }
+
+            // Debounce rapid edits (adds/updates/deletes) into a single sync.
+            if (_entriesSyncTimer) return;
+
+            const MIN_CHANGE_SYNC_MS = __DEV__ ? 15000 : 120000;
+            const now = Date.now();
+            if (_lastSyncAttemptAt && now - _lastSyncAttemptAt < MIN_CHANGE_SYNC_MS) return;
+
+            _entriesSyncTimer = setTimeout(() => {
+              _entriesSyncTimer = null;
+              syncBothWays().catch(() => {
+                // Swallow expected failures (offline/slow network) to avoid LogBox noise.
+              });
+            }, 5000);
+          } catch (e) {}
+        });
+      }
+    }
+  } catch (e) {}
 };
 
 export const stopAutoSyncListener = () => {
   if (_unsubscribe) {
     _unsubscribe();
     _unsubscribe = null;
+  }
+
+  if (_entriesSyncTimer) {
+    try {
+      clearTimeout(_entriesSyncTimer);
+    } catch (e) {}
+    _entriesSyncTimer = null;
+  }
+
+  if (_entriesUnsubscribe) {
+    try {
+      _entriesUnsubscribe();
+    } catch (e) {}
+    _entriesUnsubscribe = null;
   }
 };
 
@@ -375,10 +512,15 @@ export const startForegroundSyncScheduler = (intervalMs: number = 15000) => {
       if (!_syncInProgress) {
         const mod: any = require('./syncManager');
         const fn = mod && typeof mod.syncBothWays === 'function' ? mod.syncBothWays : syncBothWays;
-        Promise.resolve(fn()).catch((err) => console.error('Scheduled sync failed', err));
+        Promise.resolve(fn()).catch(() => {
+          // Swallow expected failures (offline/slow network) to avoid LogBox noise.
+        });
       }
     } catch (err) {
-      if (!_syncInProgress) syncBothWays().catch((e) => console.error('Scheduled sync failed', e));
+      if (!_syncInProgress)
+        syncBothWays().catch(() => {
+          // Swallow expected failures (offline/slow network) to avoid LogBox noise.
+        });
     }
   }, intervalMs);
 };

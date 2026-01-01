@@ -18,13 +18,14 @@ import {
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { subscribeBanner, isBannerVisible } from '../utils/bannerState';
 import { Button, Text } from '@rneui/themed';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Updates from 'expo-updates';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useInternetStatus } from '../hooks/useInternetStatus';
 import { useNeonStatus, describeNeonHealth } from '../hooks/useNeonStatus';
+import { colors } from '../utils/design';
+import { useToast } from '../context/ToastContext';
 
 // --- PLACEHOLDERS ---
 import ScreenHeader from '../components/ScreenHeader';
@@ -42,16 +43,16 @@ try {
 
 // --- THEME ---
 const theme = {
-  background: '#F8F9FA',
-  surface: '#FFFFFF',
-  primary: '#2563EB',
-  primarySoft: '#EFF6FF',
-  text: '#1E293B',
-  textSecondary: '#64748B',
-  accentGreen: '#10B981',
-  accentRed: '#EF4444',
+  background: colors.background,
+  surface: colors.card,
+  primary: colors.primary,
+  primarySoft: colors.primarySoft,
+  text: colors.text,
+  textSecondary: colors.muted,
+  accentGreen: colors.accentGreen,
+  accentRed: colors.accentRed,
   heroBg: '#0F172A',
-  border: '#E2E8F0',
+  border: colors.border,
 };
 
 // --- CONSTANTS ---
@@ -64,15 +65,7 @@ const AboutScreen: React.FC = () => {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const isExpoGo = Constants.appOwnership === 'expo';
-
-  const [bannerVisible, setBannerVisible] = useState<boolean>(false);
-  useEffect(() => {
-    setBannerVisible(isBannerVisible());
-    const unsub = subscribeBanner((v: boolean) => setBannerVisible(v));
-    return () => {
-      if (unsub) unsub();
-    };
-  }, []);
+  const { showToast, showActionToast } = useToast();
 
   // --- ANIMATIONS ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -98,7 +91,6 @@ const AboutScreen: React.FC = () => {
   // --- STATE ---
   const [checking, setChecking] = useState(false);
   const [updateAvailable, setUpdateAvailable] = useState(false);
-  const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [failureCount, setFailureCount] = useState(0);
 
   useEffect(() => {
@@ -108,9 +100,25 @@ const AboutScreen: React.FC = () => {
   }, []);
 
   // --- UPDATE LOGIC ---
+  const applyUpdate = useCallback(async () => {
+    if (isExpoGo) return;
+    setChecking(true);
+    try {
+      await Updates.fetchUpdateAsync();
+      await Updates.reloadAsync();
+    } catch (err: any) {
+      showToast(err?.message || 'Update failed. Please try again.', 'error');
+      const newCount = failureCount + 1;
+      setFailureCount(newCount);
+      AsyncStorage.setItem('UPDATE_FAIL_COUNT', String(newCount));
+    } finally {
+      setChecking(false);
+    }
+  }, [failureCount, isExpoGo, showToast]);
+
   const checkForUpdates = useCallback(async () => {
     if (isExpoGo) {
-      Alert.alert('Development Mode', 'Over-the-air updates are disabled in Expo Go.');
+      showToast('Over-the-air updates are disabled in Expo Go.', 'error');
       return;
     }
 
@@ -119,39 +127,24 @@ const AboutScreen: React.FC = () => {
       const result = await Updates.checkForUpdateAsync();
       if (result.isAvailable) {
         setUpdateAvailable(true);
-        setShowUpdateModal(true);
+        showActionToast('Update available.', 'Install', () => {
+          applyUpdate();
+        });
       } else {
         setUpdateAvailable(false);
-        Alert.alert('Up to Date', 'You are running the latest version of DhanDiary.');
+        showToast("You're up to date.", 'success');
       }
     } catch (err: any) {
-      Alert.alert('Check Failed', err?.message || 'Unable to check for updates.');
+      showToast(err?.message || 'Unable to check for updates.', 'error');
     } finally {
       setChecking(false);
     }
-  }, [isExpoGo]);
-
-  const applyUpdate = useCallback(async () => {
-    if (isExpoGo) return;
-    setChecking(true);
-    try {
-      await Updates.fetchUpdateAsync();
-      await Updates.reloadAsync();
-    } catch (err: any) {
-      Alert.alert('Update Failed', err?.message);
-      const newCount = failureCount + 1;
-      setFailureCount(newCount);
-      AsyncStorage.setItem('UPDATE_FAIL_COUNT', String(newCount));
-    } finally {
-      setChecking(false);
-      setShowUpdateModal(false);
-    }
-  }, [failureCount, isExpoGo]);
+  }, [applyUpdate, isExpoGo, showActionToast, showToast]);
 
   const clearRetryState = async () => {
     await AsyncStorage.removeItem('UPDATE_FAIL_COUNT');
     setFailureCount(0);
-    Alert.alert('Reset Complete', 'Update retry count cleared.');
+    showToast('Update retry count cleared.', 'success');
   };
 
   // --- ACTIONS ---
@@ -203,7 +196,7 @@ const AboutScreen: React.FC = () => {
 
       <View
         style={{
-          paddingTop: bannerVisible ? 0 : insets.top,
+          paddingTop: insets.top,
           paddingHorizontal: 20,
           backgroundColor: theme.background,
         }}
@@ -345,42 +338,6 @@ const AboutScreen: React.FC = () => {
           </Text>
         </Animated.View>
       </ScrollView>
-
-      {/* UPDATE MODAL */}
-      <Modal
-        visible={showUpdateModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowUpdateModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={[styles.modalIcon, { backgroundColor: 'rgba(16, 185, 129, 0.15)' }]}>
-              <MaterialIcon name="arrow-downward" size={32} color={theme.accentGreen} />
-            </View>
-            <Text style={styles.modalTitle}>Update Available</Text>
-            <Text style={styles.modalText}>
-              A new version is ready to install. It will only take a moment.
-            </Text>
-            <Button
-              title="Install Update"
-              onPress={applyUpdate}
-              buttonStyle={{
-                backgroundColor: theme.accentGreen,
-                borderRadius: 12,
-                paddingVertical: 12,
-              }}
-              containerStyle={{ width: '100%', marginBottom: 10 }}
-            />
-            <Button
-              title="Not Now"
-              type="clear"
-              onPress={() => setShowUpdateModal(false)}
-              titleStyle={{ color: theme.textSecondary }}
-            />
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 };

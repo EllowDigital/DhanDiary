@@ -19,7 +19,7 @@ import { useSignIn, useSignUp } from '@clerk/clerk-expo';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { subscribeBanner, isBannerVisible } from '../utils/bannerState';
+// Sync banner is a floating overlay now; no per-screen layout adjustments needed.
 import NetInfo from '@react-native-community/netinfo';
 import OfflineNotice from '../components/OfflineNotice';
 
@@ -216,7 +216,7 @@ const VerifyEmailScreen = () => {
             console.warn('Sync failed (non-fatal):', syncErr);
           }
 
-          navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+          navigation.reset({ index: 0, routes: [{ name: 'Announcement' }] });
         } else {
           throw new Error('Verification status incomplete.');
         }
@@ -234,7 +234,7 @@ const VerifyEmailScreen = () => {
         if (result?.status === 'complete') {
           await setActiveSignIn?.({ session: result.createdSessionId });
           // LoginScreen logic will handle the sync on mount, but we reset here to be safe
-          navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+          navigation.reset({ index: 0, routes: [{ name: 'Announcement' }] });
         } else {
           // Edge case: If 1FA succeeds but 2FA is suddenly required
           if (result?.status === 'needs_second_factor') {
@@ -292,15 +292,6 @@ const VerifyEmailScreen = () => {
   };
 
   // --- RENDER ---
-  const [bannerVisible, setBannerVisible] = React.useState<boolean>(false);
-  React.useEffect(() => {
-    setBannerVisible(isBannerVisible());
-    const unsub = subscribeBanner((v: boolean) => setBannerVisible(v));
-    return () => {
-      if (unsub) unsub();
-    };
-  }, []);
-
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
@@ -313,10 +304,7 @@ const VerifyEmailScreen = () => {
         end={{ x: 1, y: 1 }}
       />
 
-      <SafeAreaView
-        style={{ flex: 1 }}
-        edges={bannerVisible ? (['left', 'right'] as any) : (['top', 'left', 'right'] as any)}
-      >
+      <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right'] as any}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}

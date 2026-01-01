@@ -1,9 +1,11 @@
 import { executeSqlAsync } from '../db/sqlite';
 import { upsertTransactionFromRemote } from '../db/transactions';
 import { query as neonQuery, getNeonHealth } from '../api/neonClient';
-import { validate as uuidValidate } from 'uuid';
-import { getSession, saveSession } from '../db/session';
-import { notifySessionChanged } from '../utils/sessionEvents';
+import { getSession } from '../db/session';
+
+const isUuid = (s: any) =>
+  typeof s === 'string' &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
 
 // If the remote Neon DB doesn't have the `transactions` table, avoid
 // repeatedly attempting the same query during this app session which
@@ -12,277 +14,193 @@ let neonMissingTransactionsTable = false;
 
 /**
  * pullFromNeon
- * - Reads `last_sync_timestamp` from `meta` table
- * - Fetches remote rows changed since lastSync from Neon
+ * - Reads last pulled server_version from `meta` table (scoped per user)
+ * - Fetches remote rows with server_version > lastPulledVersion from Neon
  * - For each remote row, applies conflict resolution (latest updated_at wins)
  * - Upserts into local SQLite via `upsertTransactionFromRemote`
- * - Updates meta.last_sync_timestamp to new value
+ * - Updates meta.last_pull_server_version:<userId> to new value
  */
 export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number | null }> {
   if (__DEV__) console.log('[sync] pullFromNeon: starting');
 
-  // 1. Get the last sync timestamp from local SQLite
-  const lastSyncRow = await executeSqlAsync('SELECT value FROM meta WHERE key = ? LIMIT 1;', [
-    'last_sync_timestamp',
-  ]);
+  // 0. Determine the user scope for this pull.
+  // Never pull without a known user_id — pulling globally would risk mixing users.
+  const sess = await getSession();
+  const userId = sess?.id ? String(sess.id) : null;
+  const isUserUuid = !!userId && isUuid(userId);
+  if (!isUserUuid) {
+    if (__DEV__)
+      console.warn('[sync] pullFromNeon: missing/invalid session user id; skipping pull');
+    return { pulled: 0, lastSync: null };
+  }
 
-  let lastSyncVal: string | null = null;
-  if (lastSyncRow && lastSyncRow[1]) {
-    const res = lastSyncRow[1];
+  // 1. Get the last pulled server_version for this user
+  const metaKey = `last_pull_server_version:${userId}`;
+  const lastRow = await executeSqlAsync('SELECT value FROM meta WHERE key = ? LIMIT 1;', [metaKey]);
+
+  let lastVal: string | null = null;
+  if (lastRow && lastRow[1]) {
+    const res = lastRow[1];
     if (res.rows && res.rows.length && res.rows.length > 0) {
       const v = res.rows.item(0);
-      lastSyncVal = v ? v.value : null;
+      lastVal = v ? v.value : null;
     }
   }
-  const lastSync = lastSyncVal ? parseInt(lastSyncVal, 10) : 0;
+  const lastPulledServerVersion = lastVal ? parseInt(lastVal, 10) : 0;
 
-  if (__DEV__) console.log('[sync] pullFromNeon: lastSync', lastSync);
+  if (__DEV__) console.log('[sync] pullFromNeon: lastPulledServerVersion', lastPulledServerVersion);
 
   // 2. Check Neon Health
   try {
     const health = getNeonHealth();
     if (!health.isConfigured) {
       if (__DEV__) console.warn('[sync] pullFromNeon: Neon not configured, skipping pull');
-      return { pulled: 0, lastSync: lastSync || 0 };
+      return { pulled: 0, lastSync: 0 };
     }
   } catch (e) {
     if (__DEV__) console.warn('[sync] pullFromNeon: failed to get neon health', e);
   }
 
-  // 3. Fetch remote rows
-  let remoteRows: Array<any> = [];
-
+  // 3. Fetch + apply remote rows (paged)
   if (neonMissingTransactionsTable) {
     if (__DEV__) console.log('[sync] pullFromNeon: skipping pull — remote table missing (cached)');
-    return { pulled: 0, lastSync: lastSync || 0 };
+    return { pulled: 0, lastSync: 0 };
   }
 
-  try {
-    // DEV DEBUG: log the lastSync param we'll send to Neon
-    try {
-      if (__DEV__) console.log('[sync] pullFromNeon: querying remote with lastSync=', lastSync);
-    } catch (e) {}
+  const PAGE_SIZE = 500;
+  const MAX_PAGES = 5;
 
-    // CORRECT SQL:
-    // Uses EXTRACT(EPOCH FROM ...) to get seconds, multiplies by 1000 for ms,
-    // and explicitly casts to BIGINT for JavaScript compatibility.
-    const sql = `
-      SELECT 
-        id, 
-        user_id, 
-        amount, 
-        type, 
-        category, 
-        note, 
-        date, 
-        currency,
-        sync_status,
-        (EXTRACT(EPOCH FROM updated_at) * 1000)::bigint as updated_at,
-        (EXTRACT(EPOCH FROM created_at) * 1000)::bigint as created_at,
-        server_version,
-        CASE 
-          WHEN deleted_at IS NULL THEN NULL 
-          ELSE (EXTRACT(EPOCH FROM deleted_at) * 1000)::bigint 
-        END as deleted_at
-      FROM transactions
-      WHERE updated_at > TO_TIMESTAMP($1 / 1000.0)
-      ORDER BY updated_at ASC;
-    `;
+  // CORRECT SQL:
+  // Uses EXTRACT(EPOCH FROM ...) to get seconds, multiplies by 1000 for ms,
+  // and explicitly casts to BIGINT for JavaScript compatibility.
+  const sql = `
+    SELECT 
+      id, 
+      user_id, 
+      amount, 
+      type, 
+      category, 
+      note, 
+      date, 
+      currency,
+      sync_status,
+      (EXTRACT(EPOCH FROM updated_at) * 1000)::bigint as updated_at,
+      (EXTRACT(EPOCH FROM created_at) * 1000)::bigint as created_at,
+      server_version,
+      CASE 
+        WHEN deleted_at IS NULL THEN NULL 
+        ELSE (EXTRACT(EPOCH FROM deleted_at) * 1000)::bigint 
+      END as deleted_at
+    FROM transactions
+    WHERE user_id = $1::uuid
+      AND server_version > $2::bigint
+    ORDER BY server_version ASC
+    LIMIT ${PAGE_SIZE};
+  `;
 
-    // Pass lastSync as is (milliseconds). The SQL handles conversion.
-    const params = [lastSync || 0];
-    remoteRows = (await neonQuery(sql, params)) || [];
-    try {
-      if (__DEV__)
-        console.log(
-          '[sync] pullFromNeon: remoteRows.length=',
-          (remoteRows && remoteRows.length) || 0
-        );
-    } catch (e) {}
-  } catch (e: any) {
-    const msg = (e && (e.message || String(e))).toLowerCase();
-
-    // Handle specific case where table doesn't exist yet
-    if (
-      msg.includes('relation') &&
-      msg.includes('transactions') &&
-      msg.includes('does not exist')
-    ) {
-      neonMissingTransactionsTable = true;
-      if (__DEV__)
-        console.warn(
-          '[sync] pullFromNeon: remote "transactions" table missing, skipping pulls until restart'
-        );
-      return { pulled: 0, lastSync: lastSync || 0 };
-    }
-
-    if (__DEV__) console.warn('[sync] pullFromNeon: neon query failed', e);
-    // Return gracefully so sync manager can try again later
-    return { pulled: 0, lastSync: lastSync || 0 };
-  }
-
-  let maxRemoteTs = lastSync;
+  let maxRemoteTs = 0;
+  let maxRemoteServerVersion = lastPulledServerVersion;
   let pulled = 0;
 
-  // 4. Process fetched rows
   const processedIds = new Set<string>();
-  const seenUserIds = new Set<string>();
-  for (const remote of remoteRows) {
-    if (!remote || !remote.id) continue;
-    if (processedIds.has(remote.id)) {
-      if ((globalThis as any).__SYNC_VERBOSE__)
-        console.log('[sync] pullFromNeon: skipping duplicate remote row', remote.id);
-      continue;
-    }
-    processedIds.add(remote.id);
+  let cursor = lastPulledServerVersion;
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    // DEV DEBUG: log the cursor param we'll send to Neon
     try {
-      const remoteUpdatedAt = Number(remote.updated_at || 0);
-      if (remote && remote.user_id) seenUserIds.add(String(remote.user_id));
+      if (__DEV__) console.log('[sync] pullFromNeon: page', page + 1, 'cursor=', cursor);
+    } catch (e) {}
 
-      // Get local version to compare timestamps and sync status
-      const localRow = await executeSqlAsync(
-        'SELECT updated_at, sync_status FROM transactions WHERE id = ? LIMIT 1;',
-        [remote.id]
-      );
+    let remoteRows: Array<any> = [];
+    try {
+      const params = [userId, cursor || 0];
+      remoteRows = (await neonQuery(sql, params)) || [];
+    } catch (e: any) {
+      const msg = (e && (e.message || String(e))).toLowerCase();
 
-      let localUpdatedAt = 0;
-      let localSyncStatus = null as number | null;
-      if (localRow && localRow[1]) {
-        const r = localRow[1];
-        if (r.rows && r.rows.length && r.rows.length > 0) {
-          const it = r.rows.item(0);
-          localUpdatedAt = it ? Number(it.updated_at || 0) : 0;
-          localSyncStatus = it && typeof it.sync_status === 'number' ? it.sync_status : null;
-        }
-      }
-
-      const remoteDeletedAt = remote.deleted_at ? Number(remote.deleted_at || 0) : 0;
-
-      // CASE A: Handle Remote Deletion
-      // If remote has a deleted_at, and it is newer than our local data
       if (
-        remoteDeletedAt &&
-        remoteUpdatedAt >= remoteDeletedAt &&
-        remoteUpdatedAt > localUpdatedAt
+        msg.includes('relation') &&
+        msg.includes('transactions') &&
+        msg.includes('does not exist')
       ) {
-        try {
-          // Soft-delete locally (sync_status = 2)
-          await executeSqlAsync(
-            'UPDATE transactions SET sync_status = 2, updated_at = ? WHERE id = ?;',
-            [remoteUpdatedAt, remote.id]
+        neonMissingTransactionsTable = true;
+        if (__DEV__)
+          console.warn(
+            '[sync] pullFromNeon: remote "transactions" table missing, skipping pulls until restart'
           );
-          pulled += 1;
-          if (remoteUpdatedAt > maxRemoteTs) maxRemoteTs = remoteUpdatedAt;
-        } catch (e) {
-          if (__DEV__)
-            console.warn('[sync] pullFromNeon: failed to apply remote delete', e, remote.id);
-        }
-        continue; // Done with this row
+        return { pulled: 0, lastSync: 0 };
       }
 
-      // CASE B: Handle Remote Update/Insert
-      // Respect local pending changes/deletes: local tombstones always win; local pending
-      // edits (sync_status = 0) win when newer or equal to remote.
-      if (localSyncStatus === 2) {
-        // local tombstone present -> skip remote upsert
-      } else {
-        const localHasPending = localSyncStatus === 0;
-        if (localHasPending && localUpdatedAt >= remoteUpdatedAt) {
-          // prefer local pending change; skip
-        } else if (remoteUpdatedAt > localUpdatedAt) {
-          // apply remote row
-          await upsertTransactionFromRemote({
-            id: remote.id,
-            user_id: remote.user_id,
-            amount: remote.amount,
-            type: remote.type,
-            category: remote.category ?? null,
-            note: remote.note ?? null,
-            date: remote.date ?? null,
-            currency: remote.currency ?? 'INR',
-            created_at: remote.created_at
-              ? new Date(Number(remote.created_at)).toISOString()
-              : new Date(remoteUpdatedAt).toISOString(),
-            updated_at: remoteUpdatedAt,
-            server_version: typeof remote.server_version === 'number' ? remote.server_version : 0,
-            sync_status: 1, // 1 = Synced
-          });
-          pulled += 1;
-          if (remoteUpdatedAt > maxRemoteTs) maxRemoteTs = remoteUpdatedAt;
-        }
-      }
-    } catch (e) {
-      if (__DEV__) console.warn('[sync] pullFromNeon: row upsert failed', e, remote && remote.id);
-      // Continue processing other rows even if one fails
+      if (__DEV__) console.warn('[sync] pullFromNeon: neon query failed', e);
+      // Return gracefully so sync manager can try again later
+      return { pulled, lastSync: maxRemoteTs || 0 };
     }
-  }
 
-  // 4b. If we pulled rows and there is no meaningful persisted session, persist
-  // the remote user_id so subsequent UI queries use the correct user key.
-  try {
-    if (seenUserIds.size > 0) {
+    if (!remoteRows || remoteRows.length === 0) break;
+
+    for (const remote of remoteRows) {
+      if (!remote || !remote.id) continue;
+      if (processedIds.has(remote.id)) {
+        if ((globalThis as any).__SYNC_VERBOSE__)
+          console.log('[sync] pullFromNeon: skipping duplicate remote row', remote.id);
+        continue;
+      }
+      processedIds.add(remote.id);
       try {
-        if (__DEV__) console.log('[sync] pullFromNeon: seenUserIds=', Array.from(seenUserIds));
-      } catch (e) {}
+        const remoteUpdatedAt = Number(remote.updated_at || 0);
+        const remoteServerVersion = Number(remote.server_version || 0);
 
-      const sess = await getSession();
-      // If there's no session or we previously used a guest id, prefer the remote user id
-      const needPersist =
-        !sess ||
-        String(sess.id).startsWith('guest_') ||
-        (sess?.clerk_id && String(sess.clerk_id).startsWith('guest_'));
-      if (needPersist) {
-        // If multiple user_ids exist, pick the first — apps typically use a single account per install.
-        const firstUser = Array.from(seenUserIds.values())[0];
-        if (firstUser) {
-          // Only persist remote user ids that are valid UUIDs. Skip guest/non-UUID ids.
-          const isUuid = typeof firstUser === 'string' && uuidValidate(firstUser);
-          if (!isUuid) {
-            if (__DEV__)
-              console.warn(
-                '[sync] pullFromNeon: remote user_id is not a UUID, skipping persist',
-                firstUser
-              );
-          } else {
-            try {
-              if (__DEV__)
-                console.log('[sync] pullFromNeon: persisting remote user_id=', firstUser);
-              await saveSession(firstUser, '', '');
-              // notify subscribers (saveSession calls notifySessionChanged internally, but call again defensively)
-              try {
-                await notifySessionChanged();
-              } catch (e) {}
-            } catch (e) {
-              if (__DEV__)
-                console.warn('[sync] pullFromNeon: failed to save remote user session', e);
-            }
-          }
-        }
-      } else {
-        try {
-          if (__DEV__)
-            console.log('[sync] pullFromNeon: session already exists, not persisting remote user');
-        } catch (e) {}
+        await upsertTransactionFromRemote({
+          id: remote.id,
+          user_id: remote.user_id,
+          amount: remote.amount,
+          type: remote.type,
+          category: remote.category ?? null,
+          note: remote.note ?? null,
+          date: remote.date ?? null,
+          currency: remote.currency ?? 'INR',
+          created_at: remote.created_at
+            ? new Date(Number(remote.created_at)).toISOString()
+            : new Date(remoteUpdatedAt || Date.now()).toISOString(),
+          updated_at: remoteUpdatedAt,
+          deleted_at: remote.deleted_at ? new Date(Number(remote.deleted_at)).toISOString() : null,
+          server_version: Number.isFinite(remoteServerVersion) ? remoteServerVersion : 0,
+          sync_status: 1, // 1 = Synced
+        });
+
+        pulled += 1;
+        if (remoteUpdatedAt > maxRemoteTs) maxRemoteTs = remoteUpdatedAt;
+        if (remoteServerVersion > maxRemoteServerVersion)
+          maxRemoteServerVersion = remoteServerVersion;
+      } catch (e) {
+        if (__DEV__) console.warn('[sync] pullFromNeon: row upsert failed', e, remote && remote.id);
+        // Continue processing other rows even if one fails
       }
     }
-  } catch (e) {
-    if (__DEV__) console.warn('[sync] pullFromNeon: session persist check failed', e);
+
+    // Advance cursor and decide whether we need another page.
+    if (maxRemoteServerVersion <= cursor) break;
+    cursor = maxRemoteServerVersion;
+    if (remoteRows.length < PAGE_SIZE) break;
   }
 
   // 5. Update local checkpoint
-  if (maxRemoteTs && maxRemoteTs > lastSync) {
+  if (maxRemoteServerVersion > lastPulledServerVersion) {
     try {
       await executeSqlAsync('INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?);', [
-        'last_sync_timestamp',
-        String(maxRemoteTs),
+        metaKey,
+        String(maxRemoteServerVersion),
       ]);
-      if (__DEV__) console.log('[sync] pullFromNeon: updated lastSync', maxRemoteTs);
+      if (__DEV__)
+        console.log('[sync] pullFromNeon: updated lastPulledServerVersion', maxRemoteServerVersion);
     } catch (e) {
       if (__DEV__) console.warn('[sync] pullFromNeon: failed to update lastSync', e);
     }
   }
 
   if (__DEV__) console.log('[sync] pullFromNeon: finished, pulled', pulled);
+  // Keep returning a timestamp-like number for backward compatibility.
+  // (Some UI may display this as a "last sync" value.)
   return { pulled, lastSync: maxRemoteTs || 0 };
 }
 

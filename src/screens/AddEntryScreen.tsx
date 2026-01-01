@@ -15,7 +15,6 @@ import {
   UIManager,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { subscribeBanner, isBannerVisible } from '../utils/bannerState';
 import { Button, Text } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useNavigation, useRoute, useFocusEffect, RouteProp } from '@react-navigation/native';
@@ -33,6 +32,7 @@ import { colors } from '../utils/design';
 import { ALLOWED_CATEGORIES, DEFAULT_CATEGORY, ensureCategory } from '../constants/categories';
 import ScreenHeader from '../components/ScreenHeader';
 import { isIncome, toCanonical } from '../utils/transactionType';
+import { getTransactionByLocalId } from '../db/transactions';
 
 // Enable LayoutAnimation for Android
 if (Platform.OS === 'android') {
@@ -71,11 +71,10 @@ const AddEntryScreen: React.FC = () => {
   const navigation = useNavigation();
   const route = useRoute<AddEntryRouteProp>();
   const insets = useSafeAreaInsets();
-  const [bannerVisible, setBannerVisible] = useState<boolean>(isBannerVisible());
   const scrollRef = useRef<ScrollView>(null);
 
   const { user } = useAuth();
-  const { addEntry, entries, updateEntry } = useEntries(user?.id);
+  const { addEntry, updateEntry } = useEntries(user?.id);
   const { showToast } = useToast();
 
   // Params
@@ -132,13 +131,6 @@ const AddEntryScreen: React.FC = () => {
     ]).start();
   }, [fadeAnim, slideAnim]);
 
-  useEffect(() => {
-    const unsub = subscribeBanner((v) => setBannerVisible(!!v));
-    return () => {
-      if (unsub) unsub();
-    };
-  }, []);
-
   // Trigger Color Animation on Type Change
   useEffect(() => {
     Animated.timing(colorAnim, {
@@ -175,22 +167,70 @@ const AddEntryScreen: React.FC = () => {
     return new Date();
   };
 
-  // Load Data for Editing
+  // Load Data for Editing (fresh read from SQLite)
   useEffect(() => {
-    if (editingParamId && entries) {
-      const found = entries.find((e: any) => e.local_id === editingParamId);
-      if (found) {
-        setAmount(String(found.amount));
-        setNote(found.note ?? '');
-        setTypeIndex(isIncome(found.type) ? 1 : 0);
-        setCategory(ensureCategory(found.category));
+    let cancelled = false;
 
-        const d = found.date || found.created_at;
+    if (!editingParamId) return;
+
+    (async () => {
+      try {
+        const row = await getTransactionByLocalId(String(editingParamId));
+        if (cancelled) return;
+
+        if (!row) {
+          showToast('Transaction not found.', 'error');
+          navigation.goBack();
+          return;
+        }
+
+        // Tombstone guard
+        if ((row as any).deleted_at || Number((row as any).sync_status) === 2) {
+          showToast('This transaction is deleted and cannot be edited.', 'error');
+          navigation.goBack();
+          return;
+        }
+
+        // Optional: warn if the row has pending local changes
+        if (Number((row as any).need_sync) === 1) {
+          Alert.alert('Pending changes', 'This transaction has unsynced changes. Edit anyway?', [
+            { text: 'Cancel', style: 'cancel', onPress: () => navigation.goBack() },
+            {
+              text: 'Edit',
+              onPress: () => {
+                if (cancelled) return;
+                setAmount(String((row as any).amount ?? ''));
+                setNote((row as any).note ?? '');
+                setTypeIndex(isIncome((row as any).type) ? 1 : 0);
+                setCategory(ensureCategory((row as any).category));
+                const d = (row as any).date || (row as any).created_at;
+                setDate(parseToDate(d));
+                setEditingLocalId(String((row as any).id));
+              },
+            },
+          ]);
+          return;
+        }
+
+        setAmount(String((row as any).amount ?? ''));
+        setNote((row as any).note ?? '');
+        setTypeIndex(isIncome((row as any).type) ? 1 : 0);
+        setCategory(ensureCategory((row as any).category));
+
+        const d = (row as any).date || (row as any).created_at;
         setDate(parseToDate(d));
-        setEditingLocalId(found.local_id);
+        setEditingLocalId(String((row as any).id));
+      } catch (e) {
+        if (cancelled) return;
+        showToast('Failed to load transaction.', 'error');
+        navigation.goBack();
       }
-    }
-  }, [editingParamId, entries]);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [editingParamId, navigation, showToast]);
 
   // Reset form when opened in Add mode (no editing param)
   useEffect(() => {
@@ -281,10 +321,7 @@ const AddEntryScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView
-      style={styles.safeArea}
-      edges={bannerVisible ? ['left', 'right'] : ['top', 'left', 'right']}
-    >
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background || '#F8FAFC'} />
 
       <ScreenHeader

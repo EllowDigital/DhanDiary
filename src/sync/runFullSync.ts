@@ -1,6 +1,7 @@
 import pushToNeon from './pushToNeon';
 import pullFromNeon from './pullFromNeon';
 import retryWithBackoff from './retry';
+import { getSession } from '../db/session';
 
 /**
  * Simple lock to prevent overlapping syncs. Exported so callers can query state.
@@ -9,7 +10,8 @@ export let isSyncRunning = false;
 
 // Throttle foreground syncs to avoid repeated runs when app quickly toggles
 let lastSyncAt = 0;
-const MIN_SYNC_INTERVAL_MS = 30_000; // 30 seconds
+// In production, sync less frequently to reduce Neon compute wakeups.
+const MIN_SYNC_INTERVAL_MS = __DEV__ ? 30_000 : 120_000; // dev: 30s, prod: 2m
 
 // Robust check for Jest environment that works in RN and Node
 const isJest = typeof process !== 'undefined' && !!process.env?.JEST_WORKER_ID;
@@ -20,25 +22,46 @@ const isJest = typeof process !== 'undefined' && !!process.env?.JEST_WORKER_ID;
  * - Errors in push do not abort pull; both are attempted in order.
  * - This function is safe to call manually and from background schedulers.
  */
-export async function runFullSync(): Promise<{ pushed?: any; pulled?: any } | null> {
+export type RunFullSyncResult =
+  | { status: 'skipped'; reason: 'already_running' | 'throttled' | 'no_session' }
+  | { status: 'ran'; pushed?: any; pulled?: any };
+
+const isUuid = (s: any) =>
+  typeof s === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(s);
+
+export async function runFullSync(options?: { force?: boolean }): Promise<RunFullSyncResult> {
   const now = Date.now();
+  const force = !!options?.force;
+
+  // Guard: don’t hit Neon if there is no valid logged-in session.
+  // This avoids noisy warnings while user is on the login screen.
+  if (!isJest) {
+    try {
+      const sess: any = await getSession();
+      if (!isUuid(sess?.id)) {
+        return { status: 'skipped', reason: 'no_session' };
+      }
+    } catch (e) {
+      return { status: 'skipped', reason: 'no_session' };
+    }
+  }
 
   // 1. Concurrency Check
   if (isSyncRunning) {
     if (__DEV__) console.log('[sync] runFullSync: already running, skipping');
-    return null;
+    return { status: 'skipped', reason: 'already_running' };
   }
 
   // 2. Throttling Check
   // Skip throttling during Jest tests to keep unit tests deterministic
-  if (!isJest && now - lastSyncAt < MIN_SYNC_INTERVAL_MS) {
+  if (!force && !isJest && now - lastSyncAt < MIN_SYNC_INTERVAL_MS) {
     if (__DEV__) {
       console.log(
         '[sync] runFullSync: throttled',
         `${Math.round((now - lastSyncAt) / 1000)}s since last sync`
       );
     }
-    return null;
+    return { status: 'skipped', reason: 'throttled' };
   }
 
   // 3. execution
@@ -84,7 +107,7 @@ export async function runFullSync(): Promise<{ pushed?: any; pulled?: any } | nu
     if (__DEV__) console.log('[sync] runFullSync: finished');
   }
 
-  return { pushed: pushResult, pulled: pullResult };
+  return { status: 'ran', pushed: pushResult, pulled: pullResult };
 }
 
 export default runFullSync;

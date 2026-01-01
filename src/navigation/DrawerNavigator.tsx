@@ -8,7 +8,6 @@ import BottomTabNavigator from './BottomTabNavigator';
 import AddEntryScreen from '../screens/AddEntryScreen';
 import CashInList from '../screens/CashInList';
 import CashOutList from '../screens/CashOutList';
-import HistoryScreen from '../screens/HistoryScreen';
 import StatsScreen from '../screens/StatsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import AccountManagementScreen from '../screens/AccountManagementScreen';
@@ -27,7 +26,6 @@ import SyncStatusBanner from '../components/SyncStatusBanner';
 export type DrawerParamList = {
   Dashboard: undefined;
   AddEntry: { local_id?: string } | undefined;
-  History: undefined;
   Income: undefined;
   Expenses: undefined;
   Analytics: undefined;
@@ -44,6 +42,8 @@ const Drawer = createDrawerNavigator<DrawerParamList>();
 
 const DrawerNavigator = () => {
   const { width } = useWindowDimensions();
+
+  const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
 
   // --- RESPONSIVE CONFIG ---
   // Tablet breakpoint usually around 768px
@@ -93,12 +93,18 @@ const DrawerNavigator = () => {
 
   return (
     <View style={{ flex: 1 }}>
-      {/* Place banner inside drawer layout so it pushes screen content down */}
-      <SyncStatusBanner />
+      {/* Floating banner overlay (does not shift layout) */}
+      {!isDrawerOpen ? <SyncStatusBanner /> : null}
 
       <Drawer.Navigator
         drawerContent={(props) => <CustomDrawerContent {...props} />}
         screenOptions={screenOptions}
+        screenListeners={
+          {
+            drawerOpen: () => setIsDrawerOpen(true),
+            drawerClose: () => setIsDrawerOpen(false),
+          } as any
+        }
         initialRouteName="Dashboard"
       >
         {/* --- 1. MAIN DASHBOARD --- */}
@@ -121,17 +127,6 @@ const DrawerNavigator = () => {
             title: 'New Transaction',
             drawerIcon: ({ color, size }) => (
               <MaterialCommunityIcons name="plus-circle-outline" color={color} size={22} />
-            ),
-          }}
-        />
-
-        <Drawer.Screen
-          name="History"
-          component={HistoryScreen}
-          options={{
-            title: 'History Log',
-            drawerIcon: ({ color, size }) => (
-              <MaterialCommunityIcons name="history" color={color} size={22} />
             ),
           }}
         />

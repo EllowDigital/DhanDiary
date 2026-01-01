@@ -41,7 +41,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '../context/ToastContext';
 import { colors, spacing } from '../utils/design';
 import ScreenHeader from '../components/ScreenHeader';
-import { subscribeBanner, isBannerVisible } from '../utils/bannerState';
+import { getNeonHealth } from '../api/neonClient';
 import appConfig from '../../app.json';
 
 // Safe Package Import for Version
@@ -100,14 +100,7 @@ const SettingsScreen = () => {
   const isTablet = width >= 768;
   const contentWidth = Math.min(width - (isTablet ? spacing(8) : spacing(4)), 600);
 
-  const [bannerVisible, setBannerVisible] = useState<boolean>(false);
-  useEffect(() => {
-    setBannerVisible(isBannerVisible());
-    const unsub = subscribeBanner((v: boolean) => setBannerVisible(v));
-    return () => {
-      if (unsub) unsub();
-    };
-  }, []);
+  // Sync banner is a floating overlay now; no per-screen layout adjustments needed.
 
   // Animations
   const animValues = useRef([...Array(6)].map(() => new Animated.Value(0))).current;
@@ -177,6 +170,16 @@ const SettingsScreen = () => {
       return;
     }
 
+    // In release APK builds, NEON_URL may be omitted (EXPO_ENABLE_NEON_CLIENT=0).
+    // Fail fast with a clear message instead of a generic sync failure.
+    try {
+      const h = getNeonHealth();
+      if (!h.isConfigured) {
+        showToast('Cloud sync is disabled in this build.', 'error');
+        return;
+      }
+    } catch (e) {}
+
     // Haptic feedback
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -184,12 +187,28 @@ const SettingsScreen = () => {
 
     setIsSyncing(true);
     try {
-      const res: any = await syncBothWays();
+      const res: any = await syncBothWays({ force: true, source: 'manual' });
       if (res && res.ok) {
         const now = new Date();
         setLastSyncTime(`${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`);
-        showToast('Sync completed successfully');
+        const pushed = res.counts?.pushed || 0;
+        const pulled = res.counts?.pulled || 0;
+        const upToDate = Boolean(res.upToDate) || (pushed === 0 && pulled === 0);
+        if (upToDate) {
+          showToast("You're up to date.");
+        } else {
+          showToast('Sync complete.');
+        }
       } else {
+        if (res && res.reason === 'not_configured') {
+          showToast('Cloud sync is disabled in this build.', 'error');
+          return;
+        }
+        // Treat throttled/already-running as a non-error for manual sync: user is effectively up to date.
+        if (res && (res.reason === 'throttled' || res.reason === 'already_running')) {
+          showToast("You're up to date.");
+          return;
+        }
         // Could be offline or an internal failure
         const state = await NetInfo.fetch();
         if (!state.isConnected) {
@@ -282,10 +301,7 @@ const SettingsScreen = () => {
   return (
     <View style={styles.mainContainer}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background || '#F8FAFC'} />
-      <SafeAreaView
-        style={styles.safeArea}
-        edges={bannerVisible ? (['left', 'right'] as any) : (['top', 'left', 'right'] as any)}
-      >
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right'] as any}>
         <View style={{ width: contentWidth, alignSelf: 'center' }}>
           <ScreenHeader
             title="Settings"

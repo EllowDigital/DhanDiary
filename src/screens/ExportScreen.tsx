@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -19,7 +19,6 @@ import dayjs from 'dayjs';
 
 // --- CUSTOM IMPORTS ---
 import ScreenHeader from '../components/ScreenHeader';
-import { subscribeBanner, isBannerVisible } from '../utils/bannerState';
 import { useEntries } from '../hooks/useEntries';
 import { useAuth } from '../hooks/useAuth';
 import { colors } from '../utils/design';
@@ -110,17 +109,42 @@ const FormatOption = React.memo(
 );
 
 const ExportScreen = () => {
-  const [bannerVisible, setBannerVisible] = React.useState<boolean>(false);
-
-  React.useEffect(() => {
-    setBannerVisible(isBannerVisible());
-    const unsub = subscribeBanner((v: boolean) => setBannerVisible(v));
-    return () => {
-      if (unsub) unsub();
-    };
-  }, []);
   const { user } = useAuth();
-  const { entries = [], refetch } = useEntries(user?.id);
+
+  // Export must work offline even when Clerk user isn't available yet.
+  const [resolvedUserId, setResolvedUserId] = useState<string | undefined>(user?.id);
+
+  useEffect(() => {
+    let mounted = true;
+    if (user?.id) {
+      setResolvedUserId(user.id);
+      return;
+    }
+
+    (async () => {
+      try {
+        const s = await import('../db/session');
+        const sess = await s.getSession?.();
+        const id = sess?.id;
+        if (mounted && id) {
+          setResolvedUserId(id);
+          return;
+        }
+      } catch (e) {}
+
+      try {
+        const t = await import('../db/transactions');
+        const anyId = await t.getAnyUserWithTransactions?.();
+        if (mounted && anyId) setResolvedUserId(anyId);
+      } catch (e) {}
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [user?.id]);
+
+  const { entries = [], refetch } = useEntries(resolvedUserId);
 
   // --- STATE ---
   const [exporting, setExporting] = useState(false);
@@ -138,14 +162,25 @@ const ExportScreen = () => {
   const [groupBy, setGroupBy] = useState<'none' | 'category'>('category');
 
   // --- FILTERING ENGINE (Optimized) ---
+  const entriesWithUnix = useMemo(() => {
+    if (!entries.length) return [] as Array<{ e: any; t: number }>;
+    const out: Array<{ e: any; t: number }> = new Array(entries.length);
+    for (let i = 0; i < entries.length; i++) {
+      const e = entries[i] as any;
+      const t = getUnix(e?.date || e?.created_at || e?.updated_at);
+      out[i] = { e, t };
+    }
+    return out;
+  }, [entries]);
+
   const { targetEntries, count } = useMemo(() => {
-    if (!entries.length) return { targetEntries: [], count: 0 };
+    if (!entriesWithUnix.length) return { targetEntries: [], count: 0 };
 
     if (__DEV__) {
       try {
         console.log(
           '[ExportScreen] entries.len=',
-          entries.length,
+          entriesWithUnix.length,
           'mode=',
           mode,
           'pivot=',
@@ -189,11 +224,10 @@ const ExportScreen = () => {
     }
 
     // Single pass filter
-    const filtered = [];
-    for (let i = 0; i < entries.length; i++) {
-      const e = entries[i];
+    const filtered: any[] = [];
+    for (let i = 0; i < entriesWithUnix.length; i++) {
+      const { e, t } = entriesWithUnix[i];
       // Check date field first, fallbacks if missing
-      const t = getUnix((e as any).date || (e as any).created_at || (e as any).updated_at);
       if (!Number.isFinite(t)) {
         if (__DEV__)
           console.warn(
@@ -214,7 +248,7 @@ const ExportScreen = () => {
     }
 
     return { targetEntries: filtered, count: filtered.length };
-  }, [entries, mode, pivotDate, customStart, customEnd]);
+  }, [entriesWithUnix, mode, pivotDate, customStart, customEnd]);
 
   // --- HANDLERS ---
 
@@ -269,22 +303,26 @@ const ExportScreen = () => {
         const NetInfo = require('@react-native-community/netinfo');
         const net = await NetInfo.fetch();
         if (net.isConnected) {
-          // Try pulling latest data
+          // Try pulling latest data from Neon (best-effort, time-bounded)
           const pullMod = await import('../sync/pullFromNeon');
-          await pullMod.default();
-          await refetch?.(); // Refresh React Query cache
+          const didPull = await Promise.race<boolean>([
+            Promise.resolve()
+              .then(() => pullMod.default())
+              .then(() => true)
+              .catch(() => false),
+            new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 3500)),
+          ]);
+          // Only refetch if we actually pulled (avoid extra work on timeout).
+          if (didPull) await refetch?.();
         }
       } catch (e) {
         console.warn('[Export] Sync check failed, proceeding with local data', e);
       }
 
-      // 2. Prepare Data
-      let finalData = [...targetEntries];
-
-      // Filter out notes if unchecked
-      if (!includeNotes) {
-        finalData = finalData.map(({ note, ...rest }: any) => rest);
-      }
+      // 2. Prepare Data (avoid unnecessary copies)
+      const finalData = includeNotes
+        ? (targetEntries as any[])
+        : (targetEntries as any[]).map(({ note, ...rest }: any) => rest);
 
       // 3. Generate Report
       const periodLabel =
@@ -294,10 +332,13 @@ const ExportScreen = () => {
             ? `${dayjs(customStart).format('D MMM')} - ${dayjs(customEnd).format('D MMM')}`
             : getDateLabel();
 
+      // Yield once so spinner/layout can update before heavy generation.
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
       const filePath = await exportToFile(format, finalData, {
         title: `Report_${dayjs().format('YYYY-MM-DD')}`,
         periodLabel,
-        groupBy: format === 'pdf' ? groupBy : 'none',
+        groupBy: format === 'pdf' || format === 'excel' ? groupBy : 'none',
       });
 
       if (filePath) {
@@ -335,10 +376,7 @@ const ExportScreen = () => {
   };
 
   return (
-    <SafeAreaView
-      style={styles.safeArea}
-      edges={bannerVisible ? (['left', 'right'] as any) : (['top', 'left', 'right'] as any)}
-    >
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right'] as any}>
       {/* HEADER */}
       <View style={styles.headerContainer}>
         <ScreenHeader
@@ -480,7 +518,7 @@ const ExportScreen = () => {
               <Text style={styles.checkText}>Include descriptions/notes</Text>
             </TouchableOpacity>
 
-            {format === 'pdf' && (
+            {(format === 'pdf' || format === 'excel') && (
               <TouchableOpacity
                 style={styles.checkRow}
                 onPress={() => setGroupBy(groupBy === 'category' ? 'none' : 'category')}
@@ -493,6 +531,12 @@ const ExportScreen = () => {
                 />
                 <Text style={styles.checkText}>Group items by category</Text>
               </TouchableOpacity>
+            )}
+
+            {format === 'excel' && groupBy === 'category' && (
+              <Text style={styles.helperNote}>
+                Excel will include an extra “Summary” sheet with Category / Income / Expense / Net.
+              </Text>
             )}
           </View>
         </View>
@@ -545,7 +589,7 @@ const ExportScreen = () => {
 
 // --- STYLES ---
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#F8FAFC' },
+  safeArea: { flex: 1, backgroundColor: colors.background },
   headerContainer: { paddingHorizontal: 16, paddingBottom: 8 },
   scrollContent: { padding: 16 },
 
@@ -666,6 +710,7 @@ const styles = StyleSheet.create({
   optionsContainer: { borderTopWidth: 1, borderTopColor: '#F1F5F9', paddingTop: 16, gap: 14 },
   checkRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   checkText: { fontSize: fontScale(13), fontWeight: '600', color: '#475569' },
+  helperNote: { fontSize: fontScale(12), fontWeight: '600', color: '#64748B', marginTop: 2 },
 
   // Main Button
   exportBtn: {

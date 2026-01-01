@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getNeonHealth, warmNeonConnection, type NeonHealthSnapshot } from '../api/neonClient';
+import { getNeonHealth, type NeonHealthSnapshot } from '../api/neonClient';
 
 export type NeonStatusDescriptor = {
   label: string;
@@ -23,9 +23,6 @@ export const useNeonStatus = (refreshMs = 6000) => {
     };
 
     refresh();
-    warmNeonConnection()
-      .catch(() => {})
-      .finally(refresh);
     const interval = setInterval(refresh, refreshMs);
 
     return () => {

@@ -19,16 +19,26 @@ interface ToastOptions {
   message: string;
   type?: ToastType;
   duration?: number;
+  actionLabel?: string;
+  onAction?: (() => void) | null;
 }
 
 interface ToastContextType {
   showToast: (message: string, type?: ToastType, duration?: number) => void;
+  showActionToast: (
+    message: string,
+    actionLabel: string,
+    onAction: () => void,
+    type?: ToastType,
+    duration?: number
+  ) => void;
   hideToast: () => void;
 }
 
 // --- Context ---
 const ToastContext = createContext<ToastContextType>({
   showToast: () => {},
+  showActionToast: () => {},
   hideToast: () => {},
 });
 
@@ -83,7 +93,7 @@ export const ToastProvider = ({ children }: { children: React.ReactNode }) => {
       }
     } catch (e) {}
 
-    setToast({ message, type, duration });
+    setToast({ message, type, duration, actionLabel: undefined, onAction: null });
 
     timerRef.current = setTimeout(() => {
       setToast(null);
@@ -91,7 +101,30 @@ export const ToastProvider = ({ children }: { children: React.ReactNode }) => {
     }, duration);
   }, []);
 
-  const contextValue = useMemo(() => ({ showToast, hideToast }), [showToast, hideToast]);
+  const showActionToast = useCallback(
+    (
+      message: string,
+      actionLabel: string,
+      onAction: () => void,
+      type: ToastType = 'info',
+      duration = 6000
+    ) => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+
+      setToast({ message, type, duration, actionLabel, onAction });
+
+      timerRef.current = setTimeout(() => {
+        setToast(null);
+        timerRef.current = null;
+      }, duration);
+    },
+    []
+  );
+
+  const contextValue = useMemo(
+    () => ({ showToast, showActionToast, hideToast }),
+    [showToast, showActionToast, hideToast]
+  );
 
   const config = toast ? TOAST_THEME[toast.type || 'info'] : TOAST_THEME.info;
 
@@ -119,6 +152,22 @@ export const ToastProvider = ({ children }: { children: React.ReactNode }) => {
             />
 
             <Text style={[styles.text, { color: config.text }]}>{toast.message}</Text>
+
+            {toast.actionLabel && toast.onAction && (
+              <Pressable
+                onPress={() => {
+                  try {
+                    toast.onAction?.();
+                  } finally {
+                    hideToast();
+                  }
+                }}
+                hitSlop={10}
+                style={({ pressed }) => [styles.actionBtn, { opacity: pressed ? 0.8 : 1 }]}
+              >
+                <Text style={[styles.actionText, { color: config.text }]}>{toast.actionLabel}</Text>
+              </Pressable>
+            )}
 
             <Pressable
               onPress={hideToast}
@@ -180,5 +229,18 @@ const styles = StyleSheet.create({
   closeBtn: {
     padding: 2,
     marginLeft: 4,
+  },
+  actionBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+    marginRight: 6,
+  },
+  actionText: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.4,
   },
 });

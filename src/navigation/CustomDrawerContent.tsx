@@ -13,7 +13,6 @@ import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-nav
 import { Text } from '@rneui/themed';
 import { useAuth, useUser } from '@clerk/clerk-expo';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { subscribeBanner, isBannerVisible } from '../utils/bannerState';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import Constants from 'expo-constants'; // Standard way to access version
 
@@ -39,7 +38,6 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   const { signOut } = useAuth();
   const { user } = useUser();
   const [fallbackSession, setFallbackSession] = useState<any>(null);
-  const [bannerVisible, setBannerVisible] = useState<boolean>(isBannerVisible());
 
   // Animation Refs
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -86,16 +84,48 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
     };
   }, []);
 
-  // subscribe to banner visibility so drawer top padding doesn't double-up
-  useEffect(() => {
-    const unsub = subscribeBanner((v) => setBannerVisible(!!v));
-    return () => {
-      if (unsub) unsub();
-    };
-  }, []);
+  // Sync banner is a floating overlay now; drawer layout never needs adjusting.
+
+  const getDeepestActiveRouteName = (route: any): string => {
+    try {
+      let current = route;
+      while (current?.state && typeof current.state.index === 'number') {
+        const next = current.state.routes?.[current.state.index];
+        if (!next) break;
+        current = next;
+      }
+      return current?.name || route?.name || '';
+    } catch (e) {
+      return route?.name || '';
+    }
+  };
+
+  const drawerFocusedRoute = props.state.routes[props.state.index];
+  const nestedFocusedRouteName = getDeepestActiveRouteName(drawerFocusedRoute);
+
+  const closeDrawerSafely = () => {
+    try {
+      (props.navigation as any).closeDrawer?.();
+    } catch (e) {
+      // ignore
+    }
+  };
+
+  const goToDashboardTab = (screen: 'Home' | 'History') => {
+    closeDrawerSafely();
+    // DrawerContentComponentProps is typed with ParamListBase here, which makes
+    // `navigate` route params resolve to `never`. Use a narrow runtime-safe cast.
+    (props.navigation as any).navigate('Dashboard', { screen });
+  };
 
   const handleNavigate = (routeName: string) => {
-    props.navigation.navigate(routeName);
+    if (routeName === 'Dashboard') {
+      goToDashboardTab('Home');
+      return;
+    }
+
+    closeDrawerSafely();
+    (props.navigation as any).navigate(routeName);
   };
 
   const handleLogout = () => {
@@ -182,7 +212,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
           style={{
             opacity: fadeAnim,
             transform: [{ translateX: slideAnim }],
-            paddingTop: bannerVisible ? 0 : Platform.OS === 'ios' ? 0 : insets.top, // Handle Android StatusBar and banner
+            paddingTop: Platform.OS === 'ios' ? 0 : insets.top, // Handle Android StatusBar
           }}
         >
           {/* USER PROFILE SECTION */}
@@ -230,8 +260,87 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
           {/* NAVIGATION MENU */}
           <View style={styles.menuSection}>
             <Text style={styles.sectionTitle}>MENU</Text>
+            {/* Home tab */}
+            {(() => {
+              const focused =
+                drawerFocusedRoute.name === 'Dashboard' &&
+                (nestedFocusedRouteName === 'Home' || !nestedFocusedRouteName);
+              const iconName = getIconName('Home', 'Home');
+              return (
+                <TouchableOpacity
+                  key="__drawer_home"
+                  onPress={() => goToDashboardTab('Home')}
+                  style={[styles.menuItem, focused && styles.menuItemActive]}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: focused }}
+                >
+                  <View style={styles.iconWrapper}>
+                    <View
+                      style={[
+                        styles.iconCircle,
+                        focused
+                          ? { backgroundColor: ACTIVE_COLOR }
+                          : { backgroundColor: '#E6EEF8' },
+                      ]}
+                    >
+                      <MaterialIcon
+                        name={iconName as any}
+                        size={18}
+                        color={focused ? '#fff' : INACTIVE_COLOR}
+                      />
+                    </View>
+                  </View>
+                  <Text style={[styles.menuText, focused && styles.menuTextActive]}>Home</Text>
+                  {focused && <View style={styles.activeIndicator} />}
+                </TouchableOpacity>
+              );
+            })()}
+
+            {/* History tab */}
+            {(() => {
+              const focused =
+                drawerFocusedRoute.name === 'Dashboard' && nestedFocusedRouteName === 'History';
+              const iconName = getIconName('History', 'History');
+              return (
+                <TouchableOpacity
+                  key="__drawer_history"
+                  onPress={() => goToDashboardTab('History')}
+                  style={[styles.menuItem, focused && styles.menuItemActive]}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: focused }}
+                >
+                  <View style={styles.iconWrapper}>
+                    <View
+                      style={[
+                        styles.iconCircle,
+                        focused
+                          ? { backgroundColor: ACTIVE_COLOR }
+                          : { backgroundColor: '#E6EEF8' },
+                      ]}
+                    >
+                      <MaterialIcon
+                        name={iconName as any}
+                        size={18}
+                        color={focused ? '#fff' : INACTIVE_COLOR}
+                      />
+                    </View>
+                  </View>
+                  <Text style={[styles.menuText, focused && styles.menuTextActive]}>
+                    History Log
+                  </Text>
+                  {focused && <View style={styles.activeIndicator} />}
+                </TouchableOpacity>
+              );
+            })()}
+
+            {/* All other drawer routes */}
             {props.state.routes.map((route, index) => {
-              const focused = props.state.index === index;
+              if (route.name === 'Dashboard' || route.name === 'History') return null;
+
+              const isDrawerFocused = props.state.index === index;
+              const focused = isDrawerFocused;
               const { options } = props.descriptors[route.key];
 
               // Filter hidden routes
@@ -267,8 +376,6 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
                     </View>
                   </View>
                   <Text style={[styles.menuText, focused && styles.menuTextActive]}>{label}</Text>
-
-                  {/* Active Pill Indicator */}
                   {focused && <View style={styles.activeIndicator} />}
                 </TouchableOpacity>
               );
@@ -279,19 +386,6 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
 
       {/* 2. STICKY FOOTER */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
-        <View style={styles.divider} />
-
-        <TouchableOpacity
-          style={styles.footerItem}
-          onPress={() => handleNavigate('Export')}
-          activeOpacity={0.7}
-        >
-          <View style={styles.iconWrapper}>
-            <MaterialIcon name="cloud-download" size={22} color={colors.text || '#334155'} />
-          </View>
-          <Text style={styles.footerText}>Backup & Export</Text>
-        </TouchableOpacity>
-
         <TouchableOpacity style={styles.footerItem} onPress={handleLogout} activeOpacity={0.7}>
           <View style={styles.iconWrapper}>
             <MaterialIcon name="logout" size={22} color={DANGER_COLOR} />
@@ -339,10 +433,10 @@ const styles = StyleSheet.create({
   },
 
   divider: {
-    height: 1,
+    height: StyleSheet.hairlineWidth,
     backgroundColor: colors.border || '#E2E8F0',
-    width: '90%',
-    alignSelf: 'center',
+    width: '100%',
+    alignSelf: 'stretch',
     marginVertical: 10,
     opacity: 0.6,
   },
@@ -369,7 +463,7 @@ const styles = StyleSheet.create({
   /* MENU */
   menuSection: {
     paddingHorizontal: 12,
-    marginTop: 10,
+    marginTop: 6,
   },
   sectionTitle: {
     fontSize: 11,
@@ -391,7 +485,7 @@ const styles = StyleSheet.create({
   menuItemActive: {
     backgroundColor: colors.primarySoft || 'rgba(37, 99, 235, 0.08)',
   },
-  iconWrapper: { width: 44, alignItems: 'center', marginRight: 12 },
+  iconWrapper: { width: 40, alignItems: 'center', marginRight: 12 },
   iconCircle: {
     width: 36,
     height: 36,
@@ -422,8 +516,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     backgroundColor: BACKGROUND_COLOR,
     // Ensure footer sits above content if minimal scrolling
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.03)',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border || 'rgba(0,0,0,0.08)',
+    paddingTop: 8,
   },
   footerItem: {
     flexDirection: 'row',

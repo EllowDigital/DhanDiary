@@ -1,27 +1,12 @@
 import React, { useEffect } from 'react';
-import { StyleSheet, Text, View, Pressable, Platform } from 'react-native';
+import { StyleSheet, Text, View, Pressable } from 'react-native';
 import Animated, { FadeInUp, FadeOutUp, Layout } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
-// --- Theme Configuration (Replace with your actual design system import) ---
-const theme = {
-  colors: {
-    bg: '#1F2937', // Dark Grey/Slate
-    surface: '#374151', // Lighter Grey for icon bg
-    textPrimary: '#F9FAFB',
-    textSecondary: '#D1D5DB',
-    accent: '#10B981', // Emerald Green
-    white: '#FFFFFF',
-    shadow: '#000000',
-  },
-  spacing: {
-    s: 8,
-    m: 12,
-    l: 16,
-  },
-  borderRadius: 16,
-};
+import { colors, shadows, spacing } from '../utils/design';
+
+const BORDER_RADIUS = 16;
 
 type Props = {
   visible: boolean;
@@ -81,7 +66,7 @@ const UpdateBanner: React.FC<Props> = ({
           <MaterialCommunityIcons
             name="arrow-up-bold-circle-outline"
             size={24}
-            color={theme.colors.accent}
+            color={colors.primary}
           />
         </View>
 
@@ -111,7 +96,7 @@ const UpdateBanner: React.FC<Props> = ({
             accessibilityRole="button"
             accessibilityLabel="Dismiss update notification"
           >
-            <MaterialCommunityIcons name="close" size={20} color={theme.colors.textSecondary} />
+            <MaterialCommunityIcons name="close" size={20} color={colors.muted} />
           </Pressable>
         )}
       </Pressable>
@@ -122,26 +107,19 @@ const UpdateBanner: React.FC<Props> = ({
 const styles = StyleSheet.create({
   absoluteContainer: {
     position: 'absolute',
-    left: theme.spacing.l,
-    right: theme.spacing.l,
+    left: spacing(2),
+    right: spacing(2),
     zIndex: 9999, // Ensure it floats above everything
   },
   banner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.colors.bg,
-    borderRadius: theme.borderRadius,
-    padding: theme.spacing.m,
-
-    // Modern Shadow
-    shadowColor: theme.colors.shadow,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 8,
-
+    backgroundColor: colors.card,
+    borderRadius: BORDER_RADIUS,
+    padding: spacing(1.5),
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)', // Subtle border for definition
+    borderColor: colors.border,
+    ...shadows.medium,
   },
   bannerPressed: {
     transform: [{ scale: 0.98 }], // Micro-interaction squeeze
@@ -151,37 +129,37 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(16, 185, 129, 0.15)', // Transparent Accent
+    backgroundColor: colors.primarySoft,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: theme.spacing.m,
+    marginRight: spacing(1.5),
   },
   textContainer: {
     flex: 1, // Takes up remaining space
     justifyContent: 'center',
-    marginRight: theme.spacing.s,
+    marginRight: spacing(1),
   },
   title: {
-    color: theme.colors.textPrimary,
+    color: colors.text,
     fontWeight: '700',
     fontSize: 14,
     marginBottom: 2,
     letterSpacing: 0.3,
   },
   message: {
-    color: theme.colors.textSecondary,
+    color: colors.muted,
     fontSize: 12,
     fontWeight: '500',
   },
   ctaBadge: {
-    backgroundColor: theme.colors.accent,
+    backgroundColor: colors.primary,
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderRadius: 8,
-    marginRight: theme.spacing.s,
+    marginRight: spacing(1),
   },
   ctaText: {
-    color: theme.colors.white,
+    color: colors.white,
     fontSize: 10,
     fontWeight: '800',
     textTransform: 'uppercase',

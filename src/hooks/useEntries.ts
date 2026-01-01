@@ -36,6 +36,7 @@ interface TransactionRow {
   created_at?: string | number | null;
   updated_at?: string | number | null;
   sync_status?: number;
+  need_sync?: number;
   deleted_at?: string | number | null;
 }
 
@@ -103,10 +104,15 @@ const resolveUserId = async (passedId?: string | null): Promise<string> => {
 
   // We do not create guest sessions in this app. If no persisted session or
   // local user exists, return null so UI can show the Auth flow.
-  if (__DEV__)
-    console.log(
-      '[resolveUserId] No persisted session or local user — returning null (no guest mode)'
+  try {
+    const verbose = Boolean(
+      (globalThis as any).__NEON_VERBOSE__ || (globalThis as any).__SYNC_VERBOSE__
     );
+    if (__DEV__ && verbose)
+      console.log(
+        '[resolveUserId] No persisted session or local user — returning null (no guest mode)'
+      );
+  } catch (e) {}
   return null as any;
 };
 
@@ -162,6 +168,9 @@ const makeOptimisticEntry = (entry: Partial<LocalEntry>, sid: string): LocalEntr
     currency: entry.currency || 'INR',
     created_at: effectiveDate,
     updated_at: Date.now(), // LocalEntry usually expects number for updated_at based on usage
+    sync_status: 0,
+    need_sync: 1,
+    deleted_at: null,
     is_synced: false, // Optimistic entries are not synced yet
   };
 };
@@ -172,6 +181,8 @@ const makeOptimisticEntry = (entry: Partial<LocalEntry>, sid: string): LocalEntr
 export const useEntries = (userId?: string | null) => {
   const queryClient = useQueryClient();
   const [resolvedId, setResolvedId] = React.useState<string | null>(null);
+  const warnedMissingTableRef = React.useRef(false);
+  const refetchDebounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Resolve effective user id (may create guest) and keep stable for the hook
   React.useEffect(() => {
@@ -216,7 +227,11 @@ export const useEntries = (userId?: string | null) => {
     const prev = _prevResolvedId.current;
     if (prev !== resolvedId) {
       try {
-        console.log(`[useEntries] User ID changed: ${prev} -> ${resolvedId}`);
+        const verbose = Boolean(
+          (globalThis as any).__NEON_VERBOSE__ || (globalThis as any).__SYNC_VERBOSE__
+        );
+        if (__DEV__ && verbose)
+          console.log(`[useEntries] User ID changed: ${prev} -> ${resolvedId}`);
       } catch (e) {}
       _prevResolvedId.current = resolvedId;
     }
@@ -238,35 +253,14 @@ export const useEntries = (userId?: string | null) => {
             const net = await NetInfo.fetch();
 
             if (net.isConnected) {
-              // If online, push local changes immediately and then pull remote updates.
-              try {
-                const pushMod = await import('../sync/pushToNeon');
-                const pullMod = await import('../sync/pullFromNeon');
-
-                try {
-                  await pushMod.default();
-                } catch (e) {
-                  if (__DEV__) console.warn('[useEntries] Immediate push failed', e);
-                }
-
-                try {
-                  await pullMod.default();
-                } catch (e) {
-                  if (__DEV__) console.warn('[useEntries] Immediate pull failed', e);
-                }
-              } catch (e) {
-                // Fallback to the full sync manager if dynamic import fails
-                try {
-                  await syncBothWays();
-                } catch (ee) {
-                  if (__DEV__) console.warn('[useEntries] Fallback sync failed', ee);
-                }
-              }
+              // Use the central sync manager so locks/throttling apply consistently
+              // and we avoid overlapping push/pull work across the app.
+              await syncBothWays({ source: 'auto' } as any);
             } else {
               // Offline: queue sync for later via sync manager (auto-sync listener will trigger)
               try {
                 // This will no-op if offline and run when connection resumes logic is inside syncManager
-                void syncBothWays();
+                void syncBothWays({ source: 'auto' } as any);
               } catch (e) {
                 // Ignore offline errors
               }
@@ -316,7 +310,10 @@ export const useEntries = (userId?: string | null) => {
           ),
           updated_at: normalizeUpdatedAt(r.updated_at),
           currency: 'INR',
-          is_synced: r.sync_status === 1,
+          sync_status: Number(r.sync_status ?? 0),
+          need_sync: Number(r.need_sync ?? 0),
+          deleted_at: r.deleted_at ?? null,
+          is_synced: Number(r.sync_status ?? 0) === 1 && Number(r.need_sync ?? 0) === 0,
         }));
 
         // DEV SAFETY: warn if tombstoned rows appear in the source (they should be filtered)
@@ -377,7 +374,26 @@ export const useEntries = (userId?: string | null) => {
         })();
 
         return mapped;
-      } catch (e) {
+      } catch (e: any) {
+        const msg = String(e?.message || e);
+
+        // Expected during logout/reset: local DB tables can be temporarily dropped.
+        if (msg.includes('no such table: transactions')) {
+          if (__DEV__ && !warnedMissingTableRef.current) {
+            warnedMissingTableRef.current = true;
+            console.warn(
+              '[useEntries] transactions table missing (logout/reset). Re-initializing DB'
+            );
+          }
+          try {
+            const { initDB } = await import('../db/sqlite');
+            if (typeof initDB === 'function') await initDB();
+          } catch (initErr) {
+            // ignore
+          }
+          return [] as LocalEntry[];
+        }
+
         if (__DEV__) console.error('[useEntries] queryFn fatal error', e);
         return [] as LocalEntry[];
       }
@@ -393,15 +409,30 @@ export const useEntries = (userId?: string | null) => {
   React.useEffect(() => {
     const unsub = subscribeEntries(() => {
       try {
-        refetch();
+        // During logout/reset, resolvedId may be null; avoid refetching.
+        if (!resolvedId) return;
+
+        // Coalesce rapid DB change bursts (e.g., pullFromNeon upserting many rows)
+        // into a single refetch to keep the UI responsive (drawer button, gestures).
+        if (refetchDebounceRef.current) clearTimeout(refetchDebounceRef.current);
+        refetchDebounceRef.current = setTimeout(() => {
+          refetchDebounceRef.current = null;
+          try {
+            refetch();
+          } catch (e) {}
+        }, 250);
       } catch (e) {
         if (__DEV__) console.warn('[useEntries] refetch failed inside subscription', e);
       }
     });
     return () => {
+      if (refetchDebounceRef.current) {
+        clearTimeout(refetchDebounceRef.current);
+        refetchDebounceRef.current = null;
+      }
       if (unsub) unsub();
     };
-  }, [refetch]);
+  }, [refetch, resolvedId]);
 
   /* ----------------------------------------------------------
       ADD ENTRY
@@ -524,6 +555,8 @@ export const useEntries = (userId?: string | null) => {
                 updates.category !== undefined ? ensureCategory(updates.category) : item.category,
               updated_at: now,
               date: updates.date !== undefined ? normalizeDate(updates.date, item.date) : item.date,
+              sync_status: 0,
+              need_sync: 1,
             }
           : item
       );
