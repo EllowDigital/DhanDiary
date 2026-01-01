@@ -130,13 +130,13 @@ const ExportScreen = () => {
           setResolvedUserId(id);
           return;
         }
-      } catch (e) { }
+      } catch (e) {}
 
       try {
         const t = await import('../db/transactions');
         const anyId = await t.getAnyUserWithTransactions?.();
         if (mounted && anyId) setResolvedUserId(anyId);
-      } catch (e) { }
+      } catch (e) {}
     })();
 
     return () => {
@@ -186,7 +186,7 @@ const ExportScreen = () => {
           'pivot=',
           pivotDate.format()
         );
-      } catch (e) { }
+      } catch (e) {}
     }
 
     let startUnix = -Infinity;
