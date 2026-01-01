@@ -182,7 +182,7 @@ const VerifyEmailScreen = () => {
           setOfflineVisible(true);
           return;
         }
-      } catch (e) {}
+      } catch (e) { }
       Alert.alert('Error', msg);
     } finally {
       setLoading(false);
@@ -211,7 +211,14 @@ const VerifyEmailScreen = () => {
               fullName,
             });
             // Save local session for offline access
-            await saveSession(bridgeUser.uuid, bridgeUser.name || 'User', bridgeUser.email);
+            await saveSession(
+              bridgeUser.uuid,
+              bridgeUser.name || 'User',
+              bridgeUser.email,
+              undefined,
+              undefined,
+              bridgeUser.clerk_id || result.createdUserId!
+            );
           } catch (syncErr) {
             console.warn('Sync failed (non-fatal):', syncErr);
           }
@@ -260,7 +267,7 @@ const VerifyEmailScreen = () => {
           setOfflineVisible(true);
           return;
         }
-      } catch (e) {}
+      } catch (e) { }
 
       if (errCode === 'verification_failed') {
         Alert.alert('Incorrect Code', 'The code you entered is invalid. Please try again.');
