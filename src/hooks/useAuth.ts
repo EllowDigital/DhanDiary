@@ -306,7 +306,8 @@ try {
           try {
             const { executeSqlAsync } = require('../db/sqlite');
             const metaKey = `last_pull_server_version:${s.id}`;
-            await executeSqlAsync('DELETE FROM meta WHERE key = ?;', [metaKey]);
+            const cursorKey = `last_pull_cursor_v2:${s.id}`;
+            await executeSqlAsync('DELETE FROM meta WHERE key IN (?, ?);', [metaKey, cursorKey]);
           } catch (ee) {}
 
           // bootstrap from server via the central sync manager

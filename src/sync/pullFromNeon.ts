@@ -35,21 +35,38 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
     return { pulled: 0, lastSync: null };
   }
 
-  // 1. Get the last pulled server_version for this user
-  const metaKey = `last_pull_server_version:${userId}`;
-  const lastRow = await executeSqlAsync('SELECT value FROM meta WHERE key = ? LIMIT 1;', [metaKey]);
+  // 1. Get the last pull cursor for this user.
+  // We use a stable cursor based on (updated_at_ms, id) because server_version
+  // may be duplicated or non-monotonic depending on server triggers/backfills.
+  const cursorKey = `last_pull_cursor_v2:${userId}`;
+  const lastRow = await executeSqlAsync('SELECT value FROM meta WHERE key = ? LIMIT 1;', [
+    cursorKey,
+  ]);
 
-  let lastVal: string | null = null;
-  if (lastRow && lastRow[1]) {
-    const res = lastRow[1];
-    if (res.rows && res.rows.length && res.rows.length > 0) {
-      const v = res.rows.item(0);
-      lastVal = v ? v.value : null;
+  let cursorUpdatedAtMs = 0;
+  let cursorId = '';
+
+  try {
+    if (lastRow && lastRow[1]) {
+      const res = lastRow[1];
+      if (res.rows && res.rows.length && res.rows.length > 0) {
+        const v = res.rows.item(0);
+        const raw = v ? v.value : null;
+        if (raw) {
+          const parsed = JSON.parse(String(raw));
+          const u = Number(parsed?.updatedAtMs || 0);
+          const id = parsed?.id ? String(parsed.id) : '';
+          if (Number.isFinite(u) && u >= 0) cursorUpdatedAtMs = u;
+          if (id) cursorId = id;
+        }
+      }
     }
+  } catch (e) {
+    // ignore malformed cursor
   }
-  const lastPulledServerVersion = lastVal ? parseInt(lastVal, 10) : 0;
 
-  if (__DEV__) console.log('[sync] pullFromNeon: lastPulledServerVersion', lastPulledServerVersion);
+  if (__DEV__)
+    console.log('[sync] pullFromNeon: cursor', { cursorUpdatedAtMs, cursorId: cursorId || null });
 
   // 2. Check Neon Health
   try {
@@ -94,17 +111,24 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
       END as deleted_at
     FROM transactions
     WHERE user_id = $1::uuid
-      AND server_version > $2::bigint
-    ORDER BY server_version ASC
+      AND (
+        (EXTRACT(EPOCH FROM updated_at) * 1000)::bigint > $2::bigint
+        OR (
+          (EXTRACT(EPOCH FROM updated_at) * 1000)::bigint = $2::bigint
+          AND id::text > $3::text
+        )
+      )
+    ORDER BY updated_at ASC, id ASC
     LIMIT ${PAGE_SIZE};
   `;
 
   let maxRemoteTs = 0;
-  let maxRemoteServerVersion = lastPulledServerVersion;
+  let maxRemoteServerVersion = 0;
   let pulled = 0;
 
   const processedIds = new Set<string>();
-  let cursor = lastPulledServerVersion;
+  let pageCursorUpdatedAtMs = cursorUpdatedAtMs;
+  let pageCursorId = cursorId;
 
   const yieldToUi = async () => {
     // Yield to the JS event loop so UI stays responsive during large syncs
@@ -115,12 +139,16 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
     throwIfSyncCancelled();
     // DEV DEBUG: log the cursor param we'll send to Neon
     try {
-      if (__DEV__) console.log('[sync] pullFromNeon: page', page + 1, 'cursor=', cursor);
+      if (__DEV__)
+        console.log('[sync] pullFromNeon: page', page + 1, 'cursor=', {
+          updatedAtMs: pageCursorUpdatedAtMs,
+          id: pageCursorId || null,
+        });
     } catch (e) {}
 
     let remoteRows: Array<any> = [];
     try {
-      const params = [userId, cursor || 0];
+      const params = [userId, pageCursorUpdatedAtMs || 0, pageCursorId || ''];
       remoteRows = (await neonQuery(sql, params)) || [];
     } catch (e: any) {
       const msg = (e && (e.message || String(e))).toLowerCase();
@@ -144,6 +172,15 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
     }
 
     if (!remoteRows || remoteRows.length === 0) break;
+
+    // Advance the cursor to the last row of this page (stable pagination).
+    try {
+      const last = remoteRows[remoteRows.length - 1];
+      const lu = Number(last?.updated_at || 0);
+      const lid = last?.id ? String(last.id) : '';
+      if (Number.isFinite(lu) && lu >= 0) pageCursorUpdatedAtMs = lu;
+      if (lid) pageCursorId = lid;
+    } catch (e) {}
 
     // Process remote rows in small chunks to avoid blocking the JS thread.
     const UPSERT_CHUNK = 25;
@@ -199,25 +236,35 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
       await yieldToUi();
     }
 
-    // Advance cursor and decide whether we need another page.
-    if (maxRemoteServerVersion <= cursor) break;
-    cursor = maxRemoteServerVersion;
+    // Decide whether we need another page.
+    // We advance cursor based on (updated_at_ms, id). If the page is shorter than PAGE_SIZE
+    // we are done.
     if (remoteRows.length < PAGE_SIZE) break;
   }
 
-  // 5. Update local checkpoint
-  if (maxRemoteServerVersion > lastPulledServerVersion) {
-    try {
-      await executeSqlAsync('INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?);', [
-        metaKey,
-        String(maxRemoteServerVersion),
-      ]);
-      if (__DEV__)
-        console.log('[sync] pullFromNeon: updated lastPulledServerVersion', maxRemoteServerVersion);
-    } catch (e) {
-      if (__DEV__) console.warn('[sync] pullFromNeon: failed to update lastSync', e);
-    }
+  // 5. Update local checkpoint (cursor v2)
+  try {
+    const nextCursor = JSON.stringify({
+      updatedAtMs: pageCursorUpdatedAtMs || 0,
+      id: pageCursorId || '',
+    });
+    await executeSqlAsync('INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?);', [
+      cursorKey,
+      nextCursor,
+    ]);
+  } catch (e) {
+    if (__DEV__) console.warn('[sync] pullFromNeon: failed to update cursor', e);
   }
+
+  // Best-effort: keep writing the legacy server_version key for older diagnostics/tools.
+  // Note: server_version may not be suitable as a stable cursor depending on server schema.
+  try {
+    const metaKeyLegacy = `last_pull_server_version:${userId}`;
+    await executeSqlAsync('INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?);', [
+      metaKeyLegacy,
+      String(maxRemoteServerVersion || 0),
+    ]);
+  } catch (e) {}
 
   if (__DEV__) console.log('[sync] pullFromNeon: finished, pulled', pulled);
   // Keep returning a timestamp-like number for backward compatibility.

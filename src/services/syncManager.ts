@@ -323,20 +323,52 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
 
   _lastSyncAttemptAt = Date.now();
 
-  // If there's no logged-in session (or it's not a UUID), don't attempt cloud sync.
-  // This prevents noisy logs on the login screen and avoids pointless Neon traffic.
-  try {
-    const sess: any = await getSession();
-    const uid = sess?.id;
-    if (!isUuid(uid)) {
-      return { ok: false, reason: 'no_session', upToDate: true, counts: { pushed: 0, pulled: 0 } };
-    }
-  } catch (e) {
-    return { ok: false, reason: 'no_session', upToDate: true, counts: { pushed: 0, pulled: 0 } };
-  }
-
   const state = await NetInfo.fetch();
   if (!state.isConnected) return { ok: false, reason: 'offline' } satisfies SyncResult;
+
+  // If the saved session id isn't a UUID (common when auth stores provider IDs like Clerk),
+  // attempt to resolve the real Neon user UUID by email so we can still pull/push.
+  // Without this, pullFromNeon always returns 0 and local SQLite stays empty.
+  let sessionUserId: string | null = null;
+  try {
+    const sess: any = await getSession();
+    const uidRaw = sess?.id ? String(sess.id) : null;
+    const email = sess?.email ? String(sess.email).trim().toLowerCase() : null;
+
+    if (!uidRaw && !email) {
+      return { ok: false, reason: 'no_session', upToDate: true, counts: { pushed: 0, pulled: 0 } };
+    }
+
+    if (uidRaw && isUuid(uidRaw)) {
+      sessionUserId = uidRaw;
+    } else if (email) {
+      try {
+        const rows = await safeQ(
+          'SELECT id, name, email FROM users WHERE lower(email) = $1 LIMIT 1',
+          [email]
+        );
+        const realId = rows && rows.length ? String((rows as any)[0]?.id || '') : '';
+        if (realId && isUuid(realId)) {
+          sessionUserId = realId;
+          try {
+            await saveSession(
+              realId,
+              String((rows as any)[0]?.name || sess?.name || ''),
+              String((rows as any)[0]?.email || email),
+              (sess as any)?.image ?? null,
+              (sess as any)?.imageUrl ?? null
+            );
+          } catch (e) {}
+        }
+      } catch (e) {
+        // If lookup fails, fall through to no_session.
+      }
+    }
+  } catch (e) {}
+
+  if (!sessionUserId || !isUuid(sessionUserId)) {
+    return { ok: false, reason: 'no_session', upToDate: true, counts: { pushed: 0, pulled: 0 } };
+  }
 
   // If the saved session UUID doesn't exist in Neon (common after an offline fallback),
   // try to recover by matching the user's email and migrating local rows to the real
@@ -374,7 +406,14 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
               try {
                 const oldKey = `last_pull_server_version:${uid}`;
                 const newKey = `last_pull_server_version:${realId}`;
-                await executeSqlAsync('DELETE FROM meta WHERE key IN (?, ?);', [oldKey, newKey]);
+                const oldCursor = `last_pull_cursor_v2:${uid}`;
+                const newCursor = `last_pull_cursor_v2:${realId}`;
+                await executeSqlAsync('DELETE FROM meta WHERE key IN (?, ?, ?, ?);', [
+                  oldKey,
+                  newKey,
+                  oldCursor,
+                  newCursor,
+                ]);
               } catch (e) {}
             } catch (e) {}
 
