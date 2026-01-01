@@ -58,127 +58,127 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
     if (__DEV__) console.warn('[sync] pullFromNeon: failed to get neon health', e);
   }
 
-  // 3. Fetch remote rows
-  let remoteRows: Array<any> = [];
-
+  // 3. Fetch + apply remote rows (paged)
   if (neonMissingTransactionsTable) {
     if (__DEV__) console.log('[sync] pullFromNeon: skipping pull — remote table missing (cached)');
     return { pulled: 0, lastSync: 0 };
   }
 
-  try {
-    // DEV DEBUG: log the cursor param we'll send to Neon
-    try {
-      if (__DEV__)
-        console.log(
-          '[sync] pullFromNeon: querying remote with lastPulledServerVersion=',
-          lastPulledServerVersion
-        );
-    } catch (e) {}
+  const PAGE_SIZE = 500;
+  const MAX_PAGES = 5;
 
-    // CORRECT SQL:
-    // Uses EXTRACT(EPOCH FROM ...) to get seconds, multiplies by 1000 for ms,
-    // and explicitly casts to BIGINT for JavaScript compatibility.
-    const sql = `
-      SELECT 
-        id, 
-        user_id, 
-        amount, 
-        type, 
-        category, 
-        note, 
-        date, 
-        currency,
-        sync_status,
-        (EXTRACT(EPOCH FROM updated_at) * 1000)::bigint as updated_at,
-        (EXTRACT(EPOCH FROM created_at) * 1000)::bigint as created_at,
-        server_version,
-        CASE 
-          WHEN deleted_at IS NULL THEN NULL 
-          ELSE (EXTRACT(EPOCH FROM deleted_at) * 1000)::bigint 
-        END as deleted_at
-      FROM transactions
-      WHERE user_id = $1::uuid
-        AND server_version > $2::bigint
-      ORDER BY server_version ASC
-      LIMIT 500;
-    `;
-
-    const params = [userId, lastPulledServerVersion || 0];
-    remoteRows = (await neonQuery(sql, params)) || [];
-    try {
-      if (__DEV__)
-        console.log(
-          '[sync] pullFromNeon: remoteRows.length=',
-          (remoteRows && remoteRows.length) || 0
-        );
-    } catch (e) {}
-  } catch (e: any) {
-    const msg = (e && (e.message || String(e))).toLowerCase();
-
-    // Handle specific case where table doesn't exist yet
-    if (
-      msg.includes('relation') &&
-      msg.includes('transactions') &&
-      msg.includes('does not exist')
-    ) {
-      neonMissingTransactionsTable = true;
-      if (__DEV__)
-        console.warn(
-          '[sync] pullFromNeon: remote "transactions" table missing, skipping pulls until restart'
-        );
-      return { pulled: 0, lastSync: 0 };
-    }
-
-    if (__DEV__) console.warn('[sync] pullFromNeon: neon query failed', e);
-    // Return gracefully so sync manager can try again later
-    return { pulled: 0, lastSync: 0 };
-  }
+  // CORRECT SQL:
+  // Uses EXTRACT(EPOCH FROM ...) to get seconds, multiplies by 1000 for ms,
+  // and explicitly casts to BIGINT for JavaScript compatibility.
+  const sql = `
+    SELECT 
+      id, 
+      user_id, 
+      amount, 
+      type, 
+      category, 
+      note, 
+      date, 
+      currency,
+      sync_status,
+      (EXTRACT(EPOCH FROM updated_at) * 1000)::bigint as updated_at,
+      (EXTRACT(EPOCH FROM created_at) * 1000)::bigint as created_at,
+      server_version,
+      CASE 
+        WHEN deleted_at IS NULL THEN NULL 
+        ELSE (EXTRACT(EPOCH FROM deleted_at) * 1000)::bigint 
+      END as deleted_at
+    FROM transactions
+    WHERE user_id = $1::uuid
+      AND server_version > $2::bigint
+    ORDER BY server_version ASC
+    LIMIT ${PAGE_SIZE};
+  `;
 
   let maxRemoteTs = 0;
   let maxRemoteServerVersion = lastPulledServerVersion;
   let pulled = 0;
 
-  // 4. Process fetched rows
   const processedIds = new Set<string>();
-  for (const remote of remoteRows) {
-    if (!remote || !remote.id) continue;
-    if (processedIds.has(remote.id)) {
-      if ((globalThis as any).__SYNC_VERBOSE__)
-        console.log('[sync] pullFromNeon: skipping duplicate remote row', remote.id);
-      continue;
-    }
-    processedIds.add(remote.id);
+  let cursor = lastPulledServerVersion;
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    // DEV DEBUG: log the cursor param we'll send to Neon
     try {
-      const remoteUpdatedAt = Number(remote.updated_at || 0);
-      const remoteServerVersion = Number(remote.server_version || 0);
+      if (__DEV__) console.log('[sync] pullFromNeon: page', page + 1, 'cursor=', cursor);
+    } catch (e) {}
 
-      await upsertTransactionFromRemote({
-        id: remote.id,
-        user_id: remote.user_id,
-        amount: remote.amount,
-        type: remote.type,
-        category: remote.category ?? null,
-        note: remote.note ?? null,
-        date: remote.date ?? null,
-        currency: remote.currency ?? 'INR',
-        created_at: remote.created_at
-          ? new Date(Number(remote.created_at)).toISOString()
-          : new Date(remoteUpdatedAt || Date.now()).toISOString(),
-        updated_at: remoteUpdatedAt,
-        deleted_at: remote.deleted_at ? new Date(Number(remote.deleted_at)).toISOString() : null,
-        server_version: Number.isFinite(remoteServerVersion) ? remoteServerVersion : 0,
-        sync_status: 1, // 1 = Synced
-      });
+    let remoteRows: Array<any> = [];
+    try {
+      const params = [userId, cursor || 0];
+      remoteRows = (await neonQuery(sql, params)) || [];
+    } catch (e: any) {
+      const msg = (e && (e.message || String(e))).toLowerCase();
 
-      pulled += 1;
-      if (remoteUpdatedAt > maxRemoteTs) maxRemoteTs = remoteUpdatedAt;
-      if (remoteServerVersion > maxRemoteServerVersion)
-        maxRemoteServerVersion = remoteServerVersion;
-    } catch (e) {
-      if (__DEV__) console.warn('[sync] pullFromNeon: row upsert failed', e, remote && remote.id);
-      // Continue processing other rows even if one fails
+      if (
+        msg.includes('relation') &&
+        msg.includes('transactions') &&
+        msg.includes('does not exist')
+      ) {
+        neonMissingTransactionsTable = true;
+        if (__DEV__)
+          console.warn(
+            '[sync] pullFromNeon: remote "transactions" table missing, skipping pulls until restart'
+          );
+        return { pulled: 0, lastSync: 0 };
+      }
+
+      if (__DEV__) console.warn('[sync] pullFromNeon: neon query failed', e);
+      // Return gracefully so sync manager can try again later
+      return { pulled, lastSync: maxRemoteTs || 0 };
     }
+
+    if (!remoteRows || remoteRows.length === 0) break;
+
+    for (const remote of remoteRows) {
+      if (!remote || !remote.id) continue;
+      if (processedIds.has(remote.id)) {
+        if ((globalThis as any).__SYNC_VERBOSE__)
+          console.log('[sync] pullFromNeon: skipping duplicate remote row', remote.id);
+        continue;
+      }
+      processedIds.add(remote.id);
+      try {
+        const remoteUpdatedAt = Number(remote.updated_at || 0);
+        const remoteServerVersion = Number(remote.server_version || 0);
+
+        await upsertTransactionFromRemote({
+          id: remote.id,
+          user_id: remote.user_id,
+          amount: remote.amount,
+          type: remote.type,
+          category: remote.category ?? null,
+          note: remote.note ?? null,
+          date: remote.date ?? null,
+          currency: remote.currency ?? 'INR',
+          created_at: remote.created_at
+            ? new Date(Number(remote.created_at)).toISOString()
+            : new Date(remoteUpdatedAt || Date.now()).toISOString(),
+          updated_at: remoteUpdatedAt,
+          deleted_at: remote.deleted_at ? new Date(Number(remote.deleted_at)).toISOString() : null,
+          server_version: Number.isFinite(remoteServerVersion) ? remoteServerVersion : 0,
+          sync_status: 1, // 1 = Synced
+        });
+
+        pulled += 1;
+        if (remoteUpdatedAt > maxRemoteTs) maxRemoteTs = remoteUpdatedAt;
+        if (remoteServerVersion > maxRemoteServerVersion)
+          maxRemoteServerVersion = remoteServerVersion;
+      } catch (e) {
+        if (__DEV__) console.warn('[sync] pullFromNeon: row upsert failed', e, remote && remote.id);
+        // Continue processing other rows even if one fails
+      }
+    }
+
+    // Advance cursor and decide whether we need another page.
+    if (maxRemoteServerVersion <= cursor) break;
+    cursor = maxRemoteServerVersion;
+    if (remoteRows.length < PAGE_SIZE) break;
   }
 
   // 5. Update local checkpoint
