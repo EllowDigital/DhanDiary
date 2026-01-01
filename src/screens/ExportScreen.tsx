@@ -331,7 +331,7 @@ const ExportScreen = () => {
       const filePath = await exportToFile(format, finalData, {
         title: `Report_${dayjs().format('YYYY-MM-DD')}`,
         periodLabel,
-        groupBy: format === 'pdf' ? groupBy : 'none',
+        groupBy: format === 'pdf' || format === 'excel' ? groupBy : 'none',
       });
 
       if (filePath) {
