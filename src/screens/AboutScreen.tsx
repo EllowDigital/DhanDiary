@@ -338,7 +338,6 @@ const AboutScreen: React.FC = () => {
           </Text>
         </Animated.View>
       </ScrollView>
-
     </View>
   );
 };

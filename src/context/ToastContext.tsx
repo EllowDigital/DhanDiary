@@ -30,16 +30,16 @@ interface ToastContextType {
     actionLabel: string,
     onAction: () => void,
     type?: ToastType,
-    duration?: number,
+    duration?: number
   ) => void;
   hideToast: () => void;
 }
 
 // --- Context ---
 const ToastContext = createContext<ToastContextType>({
-  showToast: () => { },
-  showActionToast: () => { },
-  hideToast: () => { },
+  showToast: () => {},
+  showActionToast: () => {},
+  hideToast: () => {},
 });
 
 export const useToast = () => useContext(ToastContext);
@@ -91,7 +91,7 @@ export const ToastProvider = ({ children }: { children: React.ReactNode }) => {
           return; // don't surface implementation details to users
         }
       }
-    } catch (e) { }
+    } catch (e) {}
 
     setToast({ message, type, duration, actionLabel: undefined, onAction: null });
 
@@ -107,7 +107,7 @@ export const ToastProvider = ({ children }: { children: React.ReactNode }) => {
       actionLabel: string,
       onAction: () => void,
       type: ToastType = 'info',
-      duration = 6000,
+      duration = 6000
     ) => {
       if (timerRef.current) clearTimeout(timerRef.current);
 
@@ -118,12 +118,12 @@ export const ToastProvider = ({ children }: { children: React.ReactNode }) => {
         timerRef.current = null;
       }, duration);
     },
-    [],
+    []
   );
 
   const contextValue = useMemo(
     () => ({ showToast, showActionToast, hideToast }),
-    [showToast, showActionToast, hideToast],
+    [showToast, showActionToast, hideToast]
   );
 
   const config = toast ? TOAST_THEME[toast.type || 'info'] : TOAST_THEME.info;
