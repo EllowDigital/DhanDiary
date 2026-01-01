@@ -113,16 +113,10 @@ export async function runFullSync(options?: { force?: boolean }): Promise<RunFul
     try {
       throwIfSyncCancelled();
       // Retry transient pull failures with exponential backoff
-      const prev = (globalThis as any).__FORCE_FULL_PULL__;
-      try {
-        if (force) (globalThis as any).__FORCE_FULL_PULL__ = true;
-        pullResult = await retryWithBackoff(() => pullFromNeon(), {
-          maxRetries: 3,
-          baseDelayMs: 500,
-        });
-      } finally {
-        (globalThis as any).__FORCE_FULL_PULL__ = prev;
-      }
+      pullResult = await retryWithBackoff(() => pullFromNeon({ force }), {
+        maxRetries: 3,
+        baseDelayMs: 500,
+      });
       if (__DEV__) console.log('[sync] runFullSync: pull result', pullResult);
     } catch (pullErr) {
       if ((pullErr as any)?.message === 'sync_cancelled') {

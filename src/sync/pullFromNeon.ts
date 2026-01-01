@@ -21,7 +21,17 @@ let neonMissingTransactionsTable = false;
  * - Upserts into local SQLite via `upsertTransactionFromRemote`
  * - Updates meta.last_pull_server_version:<userId> to new value
  */
-export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number | null }> {
+export type PullFromNeonResult = {
+  pulled: number;
+  lastSync: number | null;
+  hasMore?: boolean;
+};
+
+export async function pullFromNeon(options?: {
+  force?: boolean;
+  maxMs?: number;
+  maxPages?: number;
+}): Promise<PullFromNeonResult> {
   if (__DEV__) console.log('[sync] pullFromNeon: starting');
 
   // 0. Determine the user scope for this pull.
@@ -88,15 +98,24 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
   const PAGE_SIZE = 500;
   // Large accounts can have thousands of rows. Keep pulls time-bounded to avoid
   // blocking the JS thread too long, but allow more pages for forced/bootstrap sync.
-  const MAX_PAGES = 5;
-  const FORCE_MAX_PAGES = 200;
-  const MAX_MS = 8_000;
-  const FORCE_MAX_MS = 20_000;
+  const DEFAULT_MAX_PAGES = 5;
+  const DEFAULT_FORCE_MAX_PAGES = 200;
+  const DEFAULT_MAX_MS = 8_000;
+  const DEFAULT_FORCE_MAX_MS = 20_000;
 
-  // Backward-compatible option: allow callers to set a global flag for verbose/forced pulls.
-  const force = Boolean((globalThis as any).__FORCE_FULL_PULL__);
-  const maxPages = force ? FORCE_MAX_PAGES : MAX_PAGES;
-  const maxMs = force ? FORCE_MAX_MS : MAX_MS;
+  const force = !!options?.force;
+  const maxPages =
+    typeof options?.maxPages === 'number'
+      ? Math.max(1, options.maxPages)
+      : force
+        ? DEFAULT_FORCE_MAX_PAGES
+        : DEFAULT_MAX_PAGES;
+  const maxMs =
+    typeof options?.maxMs === 'number'
+      ? Math.max(250, options.maxMs)
+      : force
+        ? DEFAULT_FORCE_MAX_MS
+        : DEFAULT_MAX_MS;
   const startMs = Date.now();
 
   // CORRECT SQL:
@@ -301,7 +320,7 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
   // Keep returning a timestamp-like number for backward compatibility.
   // (Some UI may display this as a "last sync" value.)
   const hasMore = (stoppedBecauseOfBudget || lastPageSize >= PAGE_SIZE) && pulled > 0;
-  return { pulled, lastSync: maxRemoteTs || 0, ...(hasMore ? { hasMore: true } : {}) } as any;
+  return { pulled, lastSync: maxRemoteTs || 0, ...(hasMore ? { hasMore: true } : {}) };
 }
 
 export default pullFromNeon;
