@@ -80,7 +80,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -113,7 +113,9 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
 
   const goToDashboardTab = (screen: 'Home' | 'History') => {
     closeDrawerSafely();
-    props.navigation.navigate('Dashboard' as never, { screen } as never);
+    // DrawerContentComponentProps is typed with ParamListBase here, which makes
+    // `navigate` route params resolve to `never`. Use a narrow runtime-safe cast.
+    (props.navigation as any).navigate('Dashboard', { screen });
   };
 
   const handleNavigate = (routeName: string) => {
@@ -123,7 +125,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
     }
 
     closeDrawerSafely();
-    props.navigation.navigate(routeName as never);
+    (props.navigation as any).navigate(routeName);
   };
 
   const handleLogout = () => {
