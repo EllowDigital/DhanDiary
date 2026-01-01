@@ -12,6 +12,8 @@ import {
 import { getNeonHealth } from '../api/neonClient';
 import { colors, shadows } from '../utils/design';
 import { setBannerVisible } from '../utils/bannerState';
+import { subscribeSession } from '../utils/sessionEvents';
+import { getSession } from '../db/session';
 
 /* -------------------------------------------------------------------------- */
 /* Types                                                                      */
@@ -26,6 +28,10 @@ interface BannerConfig {
   iconColor: string;
   dotColor?: string;
   showIndicator?: boolean;
+  bgColor?: string;
+  borderColor?: string;
+  titleColor?: string;
+  subtitleColor?: string;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -75,6 +81,49 @@ const SyncStatusBanner = () => {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Hide banner if user signs out (no valid local session)
+  const hasSessionRef = useRef<boolean>(true);
+
+  useEffect(() => {
+    let mounted = true;
+    const refresh = async () => {
+      try {
+        const s: any = await getSession();
+        const ok = !!(s && s.id);
+        if (mounted) hasSessionRef.current = ok;
+        if (!ok) {
+          // Immediately hide any banner on sign out
+          setBannerState('hidden');
+          setRenderState('hidden');
+          try {
+            spinAnimRef.current?.stop();
+          } catch (e) { }
+          spinAnimRef.current = null;
+          try {
+            spinValue.stopAnimation();
+          } catch (e) { }
+          spinValue.setValue(0);
+          try {
+            visibility.setValue(0);
+          } catch (e) { }
+        }
+      } catch (e) {
+        // ignore
+      }
+    };
+
+    void refresh();
+    const unsub = subscribeSession(() => {
+      void refresh();
+    });
+    return () => {
+      mounted = false;
+      try {
+        unsub();
+      } catch (e) { }
+    };
+  }, [spinValue, visibility]);
+
   // Offline should not be a persistent banner that blocks headers.
   // Show it once per offline period, then keep hidden until back online.
   const offlineDismissedRef = useRef(false);
@@ -104,7 +153,7 @@ const SyncStatusBanner = () => {
     return () => {
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -114,6 +163,12 @@ const SyncStatusBanner = () => {
 
     debounceRef.current = setTimeout(() => {
       let nextState: BannerState = 'hidden';
+
+      // If signed out, never show banner.
+      if (!hasSessionRef.current) {
+        if (nextState !== bannerState) setBannerState('hidden');
+        return;
+      }
 
       const isNeonLikelyUnreachable = (() => {
         try {
@@ -231,7 +286,7 @@ const SyncStatusBanner = () => {
           .then((v) => {
             if (v && !isNaN(Number(v))) setLastSyncAt(Number(v));
           })
-          .catch(() => {});
+          .catch(() => { });
       }
     }
   }, [bannerState]);
@@ -243,31 +298,47 @@ const SyncStatusBanner = () => {
         return {
           icon: 'wifi-off',
           iconColor: colors.accentRed,
-          text: 'Offline',
-          subtext: 'Will sync when online',
+          text: "You're offline",
+          subtext: 'Changes stay on your device',
           showIndicator: true,
           dotColor: colors.accentRed,
+          bgColor: colors.accentRedSoft,
+          borderColor: colors.accentRed,
+          titleColor: colors.text,
+          subtitleColor: colors.strongMuted,
         };
       case 'syncing':
         return {
           icon: 'autorenew',
-          text: 'Syncing...',
-          subtext: 'Working in background',
+          text: 'Syncing',
+          subtext: 'Saving your updates',
           iconColor: colors.primary,
+          bgColor: colors.primarySoft,
+          borderColor: colors.primary,
+          titleColor: colors.text,
+          subtitleColor: colors.strongMuted,
         };
       case 'error':
         return {
           icon: 'error-outline',
-          text: 'Sync Failed',
+          text: 'Sync paused',
           subtext: 'Will retry automatically',
           iconColor: colors.accentRed,
+          bgColor: colors.accentRedSoft,
+          borderColor: colors.accentRed,
+          titleColor: colors.text,
+          subtitleColor: colors.strongMuted,
         };
       case 'synced':
         return {
           icon: 'check',
-          text: 'Up to date',
-          subtext: lastSyncAt ? `Synced ${formatRelativeTime(lastSyncAt)}` : undefined,
+          text: 'All set',
+          subtext: lastSyncAt ? `Last sync: ${formatRelativeTime(lastSyncAt)}` : 'Up to date',
           iconColor: colors.accentGreen,
+          bgColor: colors.accentGreenSoft,
+          borderColor: colors.accentGreen,
+          titleColor: colors.text,
+          subtitleColor: colors.strongMuted,
         };
       default:
         return { icon: 'check', text: '', iconColor: colors.muted };
@@ -284,7 +355,7 @@ const SyncStatusBanner = () => {
       // Stop any previous loop before starting a new one
       try {
         spinAnimRef.current?.stop();
-      } catch (e) {}
+      } catch (e) { }
 
       const anim = Animated.loop(
         Animated.timing(spinValue, {
@@ -301,11 +372,11 @@ const SyncStatusBanner = () => {
       // when quickly switching states.
       try {
         spinAnimRef.current?.stop();
-      } catch (e) {}
+      } catch (e) { }
       spinAnimRef.current = null;
       try {
         spinValue.stopAnimation();
-      } catch (e) {}
+      } catch (e) { }
       spinValue.setValue(0);
     }
   }, [isSpinning]);
@@ -332,6 +403,8 @@ const SyncStatusBanner = () => {
             marginTop: insets.top + 10,
             opacity: visibility,
             transform: [{ translateY }],
+            backgroundColor: config.bgColor || colors.card,
+            borderColor: config.borderColor || colors.border,
           },
         ]}
       >
@@ -349,8 +422,14 @@ const SyncStatusBanner = () => {
           </View>
 
           <View style={styles.textContainer}>
-            <Text style={styles.title}>{config.text}</Text>
-            {config.subtext ? <Text style={styles.subtitle}>{config.subtext}</Text> : null}
+            <Text style={[styles.title, { color: config.titleColor || colors.text }]}>
+              {config.text}
+            </Text>
+            {config.subtext ? (
+              <Text style={[styles.subtitle, { color: config.subtitleColor || colors.muted }]}>
+                {config.subtext}
+              </Text>
+            ) : null}
           </View>
 
           {config.showIndicator ? (

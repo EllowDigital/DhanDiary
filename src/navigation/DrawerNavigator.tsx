@@ -45,6 +45,8 @@ const Drawer = createDrawerNavigator<DrawerParamList>();
 const DrawerNavigator = () => {
   const { width } = useWindowDimensions();
 
+  const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
+
   // --- RESPONSIVE CONFIG ---
   // Tablet breakpoint usually around 768px
   const isLargeScreen = width >= 768;
@@ -94,11 +96,15 @@ const DrawerNavigator = () => {
   return (
     <View style={{ flex: 1 }}>
       {/* Floating banner overlay (does not shift layout) */}
-      <SyncStatusBanner />
+      {!isDrawerOpen ? <SyncStatusBanner /> : null}
 
       <Drawer.Navigator
         drawerContent={(props) => <CustomDrawerContent {...props} />}
         screenOptions={screenOptions}
+        screenListeners={{
+          drawerOpen: () => setIsDrawerOpen(true),
+          drawerClose: () => setIsDrawerOpen(false),
+        }}
         initialRouteName="Dashboard"
       >
         {/* --- 1. MAIN DASHBOARD --- */}
