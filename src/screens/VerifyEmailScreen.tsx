@@ -216,7 +216,7 @@ const VerifyEmailScreen = () => {
             console.warn('Sync failed (non-fatal):', syncErr);
           }
 
-          navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+          navigation.reset({ index: 0, routes: [{ name: 'Announcement' }] });
         } else {
           throw new Error('Verification status incomplete.');
         }
@@ -234,7 +234,7 @@ const VerifyEmailScreen = () => {
         if (result?.status === 'complete') {
           await setActiveSignIn?.({ session: result.createdSessionId });
           // LoginScreen logic will handle the sync on mount, but we reset here to be safe
-          navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+          navigation.reset({ index: 0, routes: [{ name: 'Announcement' }] });
         } else {
           // Edge case: If 1FA succeeds but 2FA is suddenly required
           if (result?.status === 'needs_second_factor') {

@@ -118,7 +118,7 @@ const LoginScreen = () => {
         if (id && userEmail) {
           await handleSyncAndNavigate(id, userEmail, fullName);
         } else {
-          navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+          navigation.reset({ index: 0, routes: [{ name: 'Announcement' }] });
         }
       } catch (e) {
         console.error('Session restore failed', e);
@@ -150,7 +150,7 @@ const LoginScreen = () => {
 
     setSyncing(false);
     setLoading(false);
-    navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+    navigation.reset({ index: 0, routes: [{ name: 'Announcement' }] });
     await syncPromise;
   };
 

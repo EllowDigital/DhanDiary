@@ -194,7 +194,7 @@ const SplashScreen = () => {
         import('../utils/rootNavigation')
           .then(({ resetRoot }) => {
             if (user) {
-              resetRoot({ index: 0, routes: [{ name: 'Main' as any }] });
+              resetRoot({ index: 0, routes: [{ name: 'Announcement' as any }] });
             } else if (onboardingCompleted) {
               resetRoot({ index: 0, routes: [{ name: 'Auth' as any }] });
             } else {
@@ -203,7 +203,7 @@ const SplashScreen = () => {
           })
           .catch(() => {
             if (user) {
-              navigation.reset({ index: 0, routes: [{ name: 'Main' as any }] }); // Adjust 'Main' to your stack name
+              navigation.reset({ index: 0, routes: [{ name: 'Announcement' as any }] });
             } else if (onboardingCompleted) {
               navigation.reset({ index: 0, routes: [{ name: 'Auth' as any }] });
             } else {

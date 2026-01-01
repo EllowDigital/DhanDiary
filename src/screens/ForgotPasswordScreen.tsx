@@ -168,7 +168,7 @@ const ForgotPasswordScreen = () => {
       if (result.status === 'complete') {
         await setActive({ session: result.createdSessionId });
         Alert.alert('Success', 'Password reset successfully!');
-        navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+        navigation.reset({ index: 0, routes: [{ name: 'Announcement' }] });
       } else {
         Alert.alert('Success', 'Password updated. Please sign in with your new password.');
         navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
