@@ -55,6 +55,9 @@ let _syncInProgress: boolean = false;
 let _lastSuccessfulSyncAt: number | null = null;
 let _lastSyncAttemptAt: number | null = null;
 let _syncFailureCount = 0;
+let _isOnline = false;
+let _entriesUnsubscribe: (() => void) | null = null;
+let _entriesSyncTimer: any = null;
 // Sync status listeners (UI can subscribe to show progress or errors)
 export type SyncStatus = 'idle' | 'syncing' | 'error';
 let _syncStatus: SyncStatus = 'idle';
@@ -348,6 +351,7 @@ export const startAutoSyncListener = () => {
   let wasOnline = false;
   _unsubscribe = NetInfo.addEventListener((state) => {
     const isOnline = !!state.isConnected;
+    _isOnline = isOnline;
     if (!wasOnline && isOnline) {
       // Kick off a sync when we come online, but respect recent successful syncs
       const now = Date.now();
@@ -358,12 +362,61 @@ export const startAutoSyncListener = () => {
     }
     wasOnline = isOnline;
   });
+
+  // Also coalesce local DB changes into a debounced sync while online.
+  // This avoids "sync only on reconnect" behavior and reduces compute by batching.
+  try {
+    if (!_entriesUnsubscribe) {
+      const events = require('../utils/dbEvents');
+      const subscribe =
+        events && typeof events.subscribeEntries === 'function' ? events.subscribeEntries : null;
+      if (subscribe) {
+        _entriesUnsubscribe = subscribe(() => {
+          try {
+            if (!_isOnline) return;
+            try {
+              const h = getNeonHealth();
+              if (!h.isConfigured) return;
+            } catch (e) {
+              return;
+            }
+
+            // Debounce rapid edits (adds/updates/deletes) into a single sync.
+            if (_entriesSyncTimer) return;
+
+            const MIN_CHANGE_SYNC_MS = __DEV__ ? 15000 : 120000;
+            const now = Date.now();
+            if (_lastSyncAttemptAt && now - _lastSyncAttemptAt < MIN_CHANGE_SYNC_MS) return;
+
+            _entriesSyncTimer = setTimeout(() => {
+              _entriesSyncTimer = null;
+              syncBothWays().catch((err) => console.error('Debounced sync failed', err));
+            }, 5000);
+          } catch (e) {}
+        });
+      }
+    }
+  } catch (e) {}
 };
 
 export const stopAutoSyncListener = () => {
   if (_unsubscribe) {
     _unsubscribe();
     _unsubscribe = null;
+  }
+
+  if (_entriesSyncTimer) {
+    try {
+      clearTimeout(_entriesSyncTimer);
+    } catch (e) {}
+    _entriesSyncTimer = null;
+  }
+
+  if (_entriesUnsubscribe) {
+    try {
+      _entriesUnsubscribe();
+    } catch (e) {}
+    _entriesUnsubscribe = null;
   }
 };
 
