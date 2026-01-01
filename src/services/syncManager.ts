@@ -64,6 +64,7 @@ let _scheduledSyncTimer: any = null;
 let _scheduledSyncPromise: Promise<any> | null = null;
 let _scheduledSyncResolve: ((value: any) => void) | null = null;
 let _scheduledSyncReject: ((reason?: any) => void) | null = null;
+let _followUpPullQueuedAt = 0;
 // Sync status listeners (UI can subscribe to show progress or errors)
 export type SyncStatus = 'idle' | 'syncing' | 'error';
 let _syncStatus: SyncStatus = 'idle';
@@ -542,6 +543,24 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
       } catch (e) {}
     } catch (e) {}
     const upToDate = pushedCount === 0 && pulledCount === 0;
+
+    // If the pull stopped early (large account / time budget), queue a single follow-up
+    // forced sync to continue pulling more pages.
+    try {
+      const hasMore = Boolean((runResult as any)?.pulled?.hasMore);
+      if (hasMore && pulledCount > 0) {
+        const now = Date.now();
+        if (now - _followUpPullQueuedAt > 5000) {
+          _followUpPullQueuedAt = now;
+          setTimeout(() => {
+            try {
+              scheduleSync({ source: 'auto', force: true } as any);
+            } catch (e) {}
+          }, 500);
+        }
+      }
+    } catch (e) {}
+
     return {
       ok: true,
       reason: upToDate ? 'up_to_date' : 'success',

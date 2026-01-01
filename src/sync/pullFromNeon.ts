@@ -86,7 +86,18 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
   }
 
   const PAGE_SIZE = 500;
+  // Large accounts can have thousands of rows. Keep pulls time-bounded to avoid
+  // blocking the JS thread too long, but allow more pages for forced/bootstrap sync.
   const MAX_PAGES = 5;
+  const FORCE_MAX_PAGES = 200;
+  const MAX_MS = 8_000;
+  const FORCE_MAX_MS = 20_000;
+
+  // Backward-compatible option: allow callers to set a global flag for verbose/forced pulls.
+  const force = Boolean((globalThis as any).__FORCE_FULL_PULL__);
+  const maxPages = force ? FORCE_MAX_PAGES : MAX_PAGES;
+  const maxMs = force ? FORCE_MAX_MS : MAX_MS;
+  const startMs = Date.now();
 
   // CORRECT SQL:
   // Uses EXTRACT(EPOCH FROM ...) to get seconds, multiplies by 1000 for ms,
@@ -135,7 +146,14 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
     await new Promise((r) => setTimeout(r, 0));
   };
 
-  for (let page = 0; page < MAX_PAGES; page++) {
+  let lastPageSize = 0;
+  let stoppedBecauseOfBudget = false;
+
+  for (let page = 0; page < maxPages; page++) {
+    if (Date.now() - startMs > maxMs) {
+      stoppedBecauseOfBudget = true;
+      break;
+    }
     throwIfSyncCancelled();
     // DEV DEBUG: log the cursor param we'll send to Neon
     try {
@@ -171,7 +189,11 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
       throw e;
     }
 
-    if (!remoteRows || remoteRows.length === 0) break;
+    if (!remoteRows || remoteRows.length === 0) {
+      lastPageSize = 0;
+      break;
+    }
+    lastPageSize = remoteRows.length;
 
     // Advance the cursor to the last row of this page (stable pagination).
     try {
@@ -242,6 +264,15 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
     if (remoteRows.length < PAGE_SIZE) break;
   }
 
+  if (__DEV__ && stoppedBecauseOfBudget) {
+    console.log('[sync] pullFromNeon: stopped due to time budget', {
+      ms: Date.now() - startMs,
+      maxMs,
+      pulled,
+      lastPageSize,
+    });
+  }
+
   // 5. Update local checkpoint (cursor v2)
   try {
     const nextCursor = JSON.stringify({
@@ -269,7 +300,8 @@ export async function pullFromNeon(): Promise<{ pulled: number; lastSync: number
   if (__DEV__) console.log('[sync] pullFromNeon: finished, pulled', pulled);
   // Keep returning a timestamp-like number for backward compatibility.
   // (Some UI may display this as a "last sync" value.)
-  return { pulled, lastSync: maxRemoteTs || 0 };
+  const hasMore = (stoppedBecauseOfBudget || lastPageSize >= PAGE_SIZE) && pulled > 0;
+  return { pulled, lastSync: maxRemoteTs || 0, ...(hasMore ? { hasMore: true } : {}) } as any;
 }
 
 export default pullFromNeon;
