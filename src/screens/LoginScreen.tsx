@@ -101,7 +101,7 @@ const LoginScreen = () => {
     ]).start();
 
     // Pre-warm DB connection
-    warmNeonConnection().catch(() => { });
+    warmNeonConnection().catch(() => {});
   }, []);
 
   // --- AUTO-SYNC LOGIC ---
@@ -116,7 +116,12 @@ const LoginScreen = () => {
         const fullName = clerkUser.fullName;
 
         if (id && userEmail) {
-          await handleSyncAndNavigate(id, userEmail, fullName, (clerkUser as any)?.imageUrl || null);
+          await handleSyncAndNavigate(
+            id,
+            userEmail,
+            fullName,
+            (clerkUser as any)?.imageUrl || null
+          );
         } else {
           navigation.reset({ index: 0, routes: [{ name: 'Announcement' }] });
         }
@@ -212,7 +217,7 @@ const LoginScreen = () => {
               setLoading(false);
               return false;
             }
-          } catch (e) { }
+          } catch (e) {}
           Alert.alert('Login Failed', msg);
           setLoading(false);
         }
@@ -264,7 +269,7 @@ const LoginScreen = () => {
             setLoading(false);
             return false;
           }
-        } catch (e) { }
+        } catch (e) {}
 
         if (code === 'strategy_for_user_invalid') {
           Alert.alert(
@@ -481,11 +486,7 @@ const LoginScreen = () => {
                   <Text style={styles.socialBtnText}>Google</Text>
                 </TouchableOpacity>
 
-
-                <TouchableOpacity
-                  style={styles.socialBtn}
-                  onPress={() => onSocialLogin('github')}
-                >
+                <TouchableOpacity style={styles.socialBtn} onPress={() => onSocialLogin('github')}>
                   <Image
                     source={{ uri: 'https://cdn-icons-png.flaticon.com/512/25/25231.png' }}
                     style={styles.socialIcon}
@@ -493,7 +494,6 @@ const LoginScreen = () => {
                   />
                   <Text style={styles.socialBtnText}>GitHub</Text>
                 </TouchableOpacity>
-
               </View>
 
               {/* Footer */}

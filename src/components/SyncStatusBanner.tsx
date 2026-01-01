@@ -35,6 +35,7 @@ interface BannerConfig {
 const DEBOUNCE_MS = 500;
 const SHOW_SYNCED_MS = 2500;
 const SHOW_OFFLINE_MS = 5000;
+const SHOW_SYNCING_MS = 5000;
 
 /* -------------------------------------------------------------------------- */
 /* Helpers                                                                    */
@@ -78,6 +79,10 @@ const SyncStatusBanner = () => {
   // Show it once per offline period, then keep hidden until back online.
   const offlineDismissedRef = useRef(false);
 
+  // Syncing should also be a short notification (avoid covering headers).
+  // Show it once per sync cycle, then keep hidden until sync status changes.
+  const syncingDismissedRef = useRef(false);
+
   useEffect(() => {
     if (isOnline) {
       offlineDismissedRef.current = false;
@@ -88,13 +93,18 @@ const SyncStatusBanner = () => {
     }
   }, [isOnline]);
 
+  useEffect(() => {
+    // When we leave the syncing state, allow showing syncing again next time.
+    if (syncStatus !== 'syncing') syncingDismissedRef.current = false;
+  }, [syncStatus]);
+
   /* ------------------------- 1. Listen to Sync Manager ------------------------ */
   useEffect(() => {
     const unsub = subscribeSyncStatus((s) => setSyncStatus(s));
     return () => {
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, []);
 
@@ -132,7 +142,7 @@ const SyncStatusBanner = () => {
         // show a calm offline-style status rather than an alarming failure.
         nextState = isNeonLikelyUnreachable ? 'offline' : 'error';
       } else if (syncStatus === 'syncing') {
-        nextState = 'syncing';
+        nextState = syncingDismissedRef.current ? 'hidden' : 'syncing';
       } else {
         // If transitioning from work state to idle, show "Synced"
         if (['syncing', 'error', 'offline'].includes(bannerState)) {
@@ -161,6 +171,12 @@ const SyncStatusBanner = () => {
           offlineDismissedRef.current = true;
           setBannerState('hidden');
         }, SHOW_OFFLINE_MS);
+      } else if (nextState === 'syncing') {
+        if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+        hideTimerRef.current = setTimeout(() => {
+          syncingDismissedRef.current = true;
+          setBannerState('hidden');
+        }, SHOW_SYNCING_MS);
       } else {
         // For Syncing/Error -> Cancel hide timer, persist banner
         if (hideTimerRef.current) {
@@ -215,7 +231,7 @@ const SyncStatusBanner = () => {
           .then((v) => {
             if (v && !isNaN(Number(v))) setLastSyncAt(Number(v));
           })
-          .catch(() => { });
+          .catch(() => {});
       }
     }
   }, [bannerState]);
@@ -268,7 +284,7 @@ const SyncStatusBanner = () => {
       // Stop any previous loop before starting a new one
       try {
         spinAnimRef.current?.stop();
-      } catch (e) { }
+      } catch (e) {}
 
       const anim = Animated.loop(
         Animated.timing(spinValue, {
@@ -285,11 +301,11 @@ const SyncStatusBanner = () => {
       // when quickly switching states.
       try {
         spinAnimRef.current?.stop();
-      } catch (e) { }
+      } catch (e) {}
       spinAnimRef.current = null;
       try {
         spinValue.stopAnimation();
-      } catch (e) { }
+      } catch (e) {}
       spinValue.setValue(0);
     }
   }, [isSpinning]);

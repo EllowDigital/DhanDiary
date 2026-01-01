@@ -136,7 +136,7 @@ const AnnouncementScreen = () => {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="rgba(0,0,0,0.3)" translucent />
-      
+
       {/* Backdrop */}
       <View style={styles.backdrop} />
 
@@ -168,16 +168,18 @@ const AnnouncementScreen = () => {
             </View>
           </View>
 
-          <Text style={styles.messageText}>
-            {CURRENT_ANNOUNCEMENT.message}
-          </Text>
+          <Text style={styles.messageText}>{CURRENT_ANNOUNCEMENT.message}</Text>
 
           {/* Action Button */}
           <Pressable
             onPress={dismiss}
             style={({ pressed }) => [
               styles.button,
-              { backgroundColor: accentColor, opacity: pressed ? 0.9 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] },
+              {
+                backgroundColor: accentColor,
+                opacity: pressed ? 0.9 : 1,
+                transform: [{ scale: pressed ? 0.98 : 1 }],
+              },
             ]}
           >
             <Text style={styles.buttonText}>Got it!</Text>

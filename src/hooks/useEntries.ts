@@ -182,6 +182,7 @@ export const useEntries = (userId?: string | null) => {
   const queryClient = useQueryClient();
   const [resolvedId, setResolvedId] = React.useState<string | null>(null);
   const warnedMissingTableRef = React.useRef(false);
+  const refetchDebounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Resolve effective user id (may create guest) and keep stable for the hook
   React.useEffect(() => {
@@ -409,12 +410,26 @@ export const useEntries = (userId?: string | null) => {
     const unsub = subscribeEntries(() => {
       try {
         // During logout/reset, resolvedId may be null; avoid refetching.
-        if (resolvedId) refetch();
+        if (!resolvedId) return;
+
+        // Coalesce rapid DB change bursts (e.g., pullFromNeon upserting many rows)
+        // into a single refetch to keep the UI responsive (drawer button, gestures).
+        if (refetchDebounceRef.current) clearTimeout(refetchDebounceRef.current);
+        refetchDebounceRef.current = setTimeout(() => {
+          refetchDebounceRef.current = null;
+          try {
+            refetch();
+          } catch (e) {}
+        }, 250);
       } catch (e) {
         if (__DEV__) console.warn('[useEntries] refetch failed inside subscription', e);
       }
     });
     return () => {
+      if (refetchDebounceRef.current) {
+        clearTimeout(refetchDebounceRef.current);
+        refetchDebounceRef.current = null;
+      }
       if (unsub) unsub();
     };
   }, [refetch, resolvedId]);
