@@ -63,34 +63,47 @@ export const syncClerkUserToNeon = async (clerkUser: {
         };
       }
 
-      // 2. ATOMIC UPSERT: Handle New User OR Legacy Account Merge
-      // If email exists: Update it with the new clerk_id (Merge).
-      // If email does not exist: Insert a new row (Create).
-      // We use ON CONFLICT to make this race-condition proof.
-      const upsertSql = `
-      INSERT INTO users (email, clerk_id, name, password_hash, status)
-      VALUES ($1, $2, $3, 'clerk_managed', 'active')
-      ON CONFLICT (email) 
-      DO UPDATE SET 
-        clerk_id = EXCLUDED.clerk_id, 
-        updated_at = NOW()
-      RETURNING id, email, name, clerk_id
-    `;
-      // perform upsert with normalized email
-      await query(upsertSql, [email, clerkUser.id, name]);
+      // 2. CREATE USER (Clerk-id authoritative)
+      // We do NOT use email as an identity key. The user boundary is clerk_id.
+      // However, for legacy accounts that may exist by email-only, we allow
+      // attaching clerk_id ONLY when the existing row has clerk_id NULL.
+      try {
+        const insertSql = `
+          INSERT INTO users (clerk_id, email, name, password_hash, status)
+          VALUES ($1, $2, $3, 'clerk_managed', 'active')
+          RETURNING id, clerk_id, email, name
+        `;
+        await query(insertSql, [clerkUser.id, email, name]);
+      } catch (e: any) {
+        const msg = String(e?.message || e || '').toLowerCase();
+        const isEmailConflict = msg.includes('email') && (msg.includes('unique') || msg.includes('duplicate'));
+        if (!isEmailConflict) throw e;
 
-      // Read authoritative record back from DB to ensure we don't overwrite
-      // any existing name that may have been edited directly in Neon.
+        // Legacy safe-link: email exists, but only allow taking it if clerk_id is NULL.
+        const legacy = await query<DbUser>(
+          'SELECT id, clerk_id, email, name FROM users WHERE lower(email) = $1 LIMIT 1',
+          [email]
+        );
+        const row = legacy && legacy.length ? legacy[0] : null;
+        if (!row) throw e;
+
+        if (row.clerk_id && String(row.clerk_id) !== String(clerkUser.id)) {
+          throw new Error('Email is already linked to another account');
+        }
+
+        await query(
+          'UPDATE users SET clerk_id = $1, updated_at = NOW() WHERE id = $2 AND (clerk_id IS NULL OR clerk_id = $1)',
+          [clerkUser.id, row.id]
+        );
+      }
+
+      // Read authoritative record back by clerk_id.
       const finalRows = await query<DbUser>(
-        'SELECT id, clerk_id, email, name FROM users WHERE lower(email) = $1 LIMIT 1',
-        [email]
+        'SELECT id, clerk_id, email, name FROM users WHERE clerk_id = $1 LIMIT 1',
+        [clerkUser.id]
       );
       const user = finalRows && finalRows.length ? finalRows[0] : null;
-
-      if (!user) {
-        // Fallback to generated offline record if select failed
-        return await createOfflineFallback(clerkUser.id, email, name);
-      }
+      if (!user) return await createOfflineFallback(clerkUser.id, email, name);
 
       return {
         uuid: user.id,
@@ -141,7 +154,7 @@ const createOfflineFallback = async (
   const localId = uuidv4();
   try {
     // Save fallback session locally (session persisted via AsyncStorage wrapper)
-    await saveSession(localId, name, email);
+    await saveSession(localId, name, email, undefined, undefined, clerkId);
   } catch (e) {
     console.warn('[Bridge] Failed to save local session fallback', e);
   }
