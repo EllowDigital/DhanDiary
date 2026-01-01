@@ -210,8 +210,18 @@ const flushPendingProfileUpdates = async () => {
 // --- Main Sync Entry Point ---
 
 import runFullSync from '../sync/runFullSync';
+import { getNeonHealth } from '../api/neonClient';
 
 export const syncBothWays = async () => {
+  // If cloud sync isn't configured in this build, fail fast with a clear reason.
+  try {
+    const h = getNeonHealth();
+    if (!h.isConfigured) {
+      if (__DEV__) console.warn('[sync] cloud sync not configured (missing NEON_URL)');
+      return { ok: false, reason: 'not_configured' } as any;
+    }
+  } catch (e) {}
+
   if (_syncInProgress) {
     _pendingSyncRequested = true;
     if (__DEV__) console.log('Sync already running, scheduling follow-up');

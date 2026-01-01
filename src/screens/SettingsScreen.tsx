@@ -19,8 +19,8 @@ import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 
 // Optional Haptics: prefer runtime require so builds without expo-haptics still work.
 let Haptics: any = {
-  impactAsync: async () => {},
-  notificationAsync: async () => {},
+  impactAsync: async () => { },
+  notificationAsync: async () => { },
   ImpactFeedbackStyle: { Medium: 'medium' },
   NotificationFeedbackType: { Warning: 'warning' },
 };
@@ -42,6 +42,7 @@ import { useToast } from '../context/ToastContext';
 import { colors, spacing } from '../utils/design';
 import ScreenHeader from '../components/ScreenHeader';
 import { subscribeBanner, isBannerVisible } from '../utils/bannerState';
+import { getNeonHealth } from '../api/neonClient';
 import appConfig from '../../app.json';
 
 // Safe Package Import for Version
@@ -147,13 +148,13 @@ const SettingsScreen = () => {
         const d = new Date(last);
         setLastSyncTime(`${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`);
       }
-    } catch (e) {}
+    } catch (e) { }
 
     return () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -177,6 +178,16 @@ const SettingsScreen = () => {
       return;
     }
 
+    // In release APK builds, NEON_URL may be omitted (EXPO_ENABLE_NEON_CLIENT=0).
+    // Fail fast with a clear message instead of a generic sync failure.
+    try {
+      const h = getNeonHealth();
+      if (!h.isConfigured) {
+        showToast('Cloud sync is disabled in this build.', 'error');
+        return;
+      }
+    } catch (e) { }
+
     // Haptic feedback
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -190,6 +201,10 @@ const SettingsScreen = () => {
         setLastSyncTime(`${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`);
         showToast('Sync completed successfully');
       } else {
+        if (res && res.reason === 'not_configured') {
+          showToast('Cloud sync is disabled in this build.', 'error');
+          return;
+        }
         // Could be offline or an internal failure
         const state = await NetInfo.fetch();
         if (!state.isConnected) {
