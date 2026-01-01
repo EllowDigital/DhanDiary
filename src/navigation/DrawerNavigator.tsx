@@ -99,10 +99,12 @@ const DrawerNavigator = () => {
       <Drawer.Navigator
         drawerContent={(props) => <CustomDrawerContent {...props} />}
         screenOptions={screenOptions}
-        screenListeners={{
-          drawerOpen: () => setIsDrawerOpen(true),
-          drawerClose: () => setIsDrawerOpen(false),
-        }}
+        screenListeners={
+          {
+            drawerOpen: () => setIsDrawerOpen(true),
+            drawerClose: () => setIsDrawerOpen(false),
+          } as any
+        }
         initialRouteName="Dashboard"
       >
         {/* --- 1. MAIN DASHBOARD --- */}
