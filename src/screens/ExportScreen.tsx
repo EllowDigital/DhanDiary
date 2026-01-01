@@ -305,11 +305,15 @@ const ExportScreen = () => {
         if (net.isConnected) {
           // Try pulling latest data from Neon (best-effort, time-bounded)
           const pullMod = await import('../sync/pullFromNeon');
-          await Promise.race([
-            pullMod.default(),
-            new Promise<void>((resolve) => setTimeout(() => resolve(), 3500)),
+          const didPull = await Promise.race<boolean>([
+            Promise.resolve()
+              .then(() => pullMod.default())
+              .then(() => true)
+              .catch(() => false),
+            new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 3500)),
           ]);
-          await refetch?.(); // Refresh React Query cache (local-first)
+          // Only refetch if we actually pulled (avoid extra work on timeout).
+          if (didPull) await refetch?.();
         }
       } catch (e) {
         console.warn('[Export] Sync check failed, proceeding with local data', e);
@@ -327,6 +331,9 @@ const ExportScreen = () => {
           : mode === 'Custom'
             ? `${dayjs(customStart).format('D MMM')} - ${dayjs(customEnd).format('D MMM')}`
             : getDateLabel();
+
+      // Yield once so spinner/layout can update before heavy generation.
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
       const filePath = await exportToFile(format, finalData, {
         title: `Report_${dayjs().format('YYYY-MM-DD')}`,
@@ -511,7 +518,7 @@ const ExportScreen = () => {
               <Text style={styles.checkText}>Include descriptions/notes</Text>
             </TouchableOpacity>
 
-            {format === 'pdf' && (
+            {(format === 'pdf' || format === 'excel') && (
               <TouchableOpacity
                 style={styles.checkRow}
                 onPress={() => setGroupBy(groupBy === 'category' ? 'none' : 'category')}
@@ -524,6 +531,12 @@ const ExportScreen = () => {
                 />
                 <Text style={styles.checkText}>Group items by category</Text>
               </TouchableOpacity>
+            )}
+
+            {format === 'excel' && groupBy === 'category' && (
+              <Text style={styles.helperNote}>
+                Excel will include an extra “Summary” sheet with Category / Income / Expense / Net.
+              </Text>
             )}
           </View>
         </View>
@@ -697,6 +710,7 @@ const styles = StyleSheet.create({
   optionsContainer: { borderTopWidth: 1, borderTopColor: '#F1F5F9', paddingTop: 16, gap: 14 },
   checkRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   checkText: { fontSize: fontScale(13), fontWeight: '600', color: '#475569' },
+  helperNote: { fontSize: fontScale(12), fontWeight: '600', color: '#64748B', marginTop: 2 },
 
   // Main Button
   exportBtn: {
