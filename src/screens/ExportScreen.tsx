@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -110,7 +110,41 @@ const FormatOption = React.memo(
 
 const ExportScreen = () => {
   const { user } = useAuth();
-  const { entries = [], refetch } = useEntries(user?.id);
+
+  // Export must work offline even when Clerk user isn't available yet.
+  const [resolvedUserId, setResolvedUserId] = useState<string | undefined>(user?.id);
+
+  useEffect(() => {
+    let mounted = true;
+    if (user?.id) {
+      setResolvedUserId(user.id);
+      return;
+    }
+
+    (async () => {
+      try {
+        const s = await import('../db/session');
+        const sess = await s.getSession?.();
+        const id = sess?.id;
+        if (mounted && id) {
+          setResolvedUserId(id);
+          return;
+        }
+      } catch (e) { }
+
+      try {
+        const t = await import('../db/transactions');
+        const anyId = await t.getAnyUserWithTransactions?.();
+        if (mounted && anyId) setResolvedUserId(anyId);
+      } catch (e) { }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [user?.id]);
+
+  const { entries = [], refetch } = useEntries(resolvedUserId);
 
   // --- STATE ---
   const [exporting, setExporting] = useState(false);
@@ -128,20 +162,31 @@ const ExportScreen = () => {
   const [groupBy, setGroupBy] = useState<'none' | 'category'>('category');
 
   // --- FILTERING ENGINE (Optimized) ---
+  const entriesWithUnix = useMemo(() => {
+    if (!entries.length) return [] as Array<{ e: any; t: number }>;
+    const out: Array<{ e: any; t: number }> = new Array(entries.length);
+    for (let i = 0; i < entries.length; i++) {
+      const e = entries[i] as any;
+      const t = getUnix(e?.date || e?.created_at || e?.updated_at);
+      out[i] = { e, t };
+    }
+    return out;
+  }, [entries]);
+
   const { targetEntries, count } = useMemo(() => {
-    if (!entries.length) return { targetEntries: [], count: 0 };
+    if (!entriesWithUnix.length) return { targetEntries: [], count: 0 };
 
     if (__DEV__) {
       try {
         console.log(
           '[ExportScreen] entries.len=',
-          entries.length,
+          entriesWithUnix.length,
           'mode=',
           mode,
           'pivot=',
           pivotDate.format()
         );
-      } catch (e) {}
+      } catch (e) { }
     }
 
     let startUnix = -Infinity;
@@ -179,11 +224,10 @@ const ExportScreen = () => {
     }
 
     // Single pass filter
-    const filtered = [];
-    for (let i = 0; i < entries.length; i++) {
-      const e = entries[i];
+    const filtered: any[] = [];
+    for (let i = 0; i < entriesWithUnix.length; i++) {
+      const { e, t } = entriesWithUnix[i];
       // Check date field first, fallbacks if missing
-      const t = getUnix((e as any).date || (e as any).created_at || (e as any).updated_at);
       if (!Number.isFinite(t)) {
         if (__DEV__)
           console.warn(
@@ -204,7 +248,7 @@ const ExportScreen = () => {
     }
 
     return { targetEntries: filtered, count: filtered.length };
-  }, [entries, mode, pivotDate, customStart, customEnd]);
+  }, [entriesWithUnix, mode, pivotDate, customStart, customEnd]);
 
   // --- HANDLERS ---
 
@@ -259,22 +303,22 @@ const ExportScreen = () => {
         const NetInfo = require('@react-native-community/netinfo');
         const net = await NetInfo.fetch();
         if (net.isConnected) {
-          // Try pulling latest data
+          // Try pulling latest data from Neon (best-effort, time-bounded)
           const pullMod = await import('../sync/pullFromNeon');
-          await pullMod.default();
-          await refetch?.(); // Refresh React Query cache
+          await Promise.race([
+            pullMod.default(),
+            new Promise<void>((resolve) => setTimeout(() => resolve(), 3500)),
+          ]);
+          await refetch?.(); // Refresh React Query cache (local-first)
         }
       } catch (e) {
         console.warn('[Export] Sync check failed, proceeding with local data', e);
       }
 
-      // 2. Prepare Data
-      let finalData = [...targetEntries];
-
-      // Filter out notes if unchecked
-      if (!includeNotes) {
-        finalData = finalData.map(({ note, ...rest }: any) => rest);
-      }
+      // 2. Prepare Data (avoid unnecessary copies)
+      const finalData = includeNotes
+        ? (targetEntries as any[])
+        : (targetEntries as any[]).map(({ note, ...rest }: any) => rest);
 
       // 3. Generate Report
       const periodLabel =
