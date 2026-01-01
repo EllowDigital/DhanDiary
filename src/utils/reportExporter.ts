@@ -1,9 +1,20 @@
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
-import XLSX from 'xlsx'; // Ensure this is installed: npm install xlsx
+import * as XLSXBase from 'xlsx';
 import { formatDate } from './date';
 import { isIncome } from './transactionType';
+
+// Prefer a style-capable SheetJS build when available.
+// If not installed, we fall back to the existing `xlsx` dependency.
+const XLSX: any = (() => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    return require('xlsx-js-style');
+  } catch (e) {
+    return XLSXBase as any;
+  }
+})();
 
 // --- Types ---
 type Format = 'pdf' | 'excel' | 'json' | 'csv';
@@ -184,6 +195,39 @@ const safeDateYMD = (input: any): string => {
   }
 };
 
+const safeDateTimeLocal = (input: any): string => {
+  if (!input) return '';
+  if (typeof input === 'string') {
+    // Fast-path ISO-like timestamps: 2026-01-01T13:45:00Z
+    if (input.length >= 16 && /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(input.slice(0, 16))) {
+      return input.slice(0, 16).replace('T', ' ');
+    }
+  }
+  const dt =
+    input instanceof Date
+      ? input
+      : new Date(typeof input === 'number' ? (input > 32503680000 ? input : input * 1000) : input);
+  if (!Number.isFinite(dt.getTime())) return '';
+  const ymd = safeDateYMD(dt);
+  const hh = String(dt.getHours()).padStart(2, '0');
+  const mm = String(dt.getMinutes()).padStart(2, '0');
+  return `${ymd} ${hh}:${mm}`;
+};
+
+const getCreatedAtText = (item: any): string => {
+  const raw =
+    item?.created_at ??
+    item?.createdAt ??
+    item?.created_at_ms ??
+    item?.created_at_unix ??
+    item?.created ??
+    item?.updated_at ??
+    item?.updatedAt ??
+    null;
+  if (!raw) return '';
+  return safeDateTimeLocal(raw);
+};
+
 const sanitizeFilename = (name: string) => name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
 
 // --- GENERATORS ---
@@ -329,7 +373,7 @@ const generateCsv = async (data: TransactionItem[], options: ExportOptions): Pro
       amt,
       item.currency || 'INR',
       `"${safeNote}"`, // escape quotes
-      item.created_at || '',
+      getCreatedAtText(item as any),
     ];
     csvRows.push(row.join(','));
   }
@@ -381,7 +425,7 @@ const generateExcel = async (data: TransactionItem[], options: ExportOptions): P
       income ? 'Credit' : 'Debit',
       signed,
       item.currency || currency || 'INR',
-      item.created_at || '',
+      getCreatedAtText(item as any),
     ];
   }
 
@@ -411,6 +455,52 @@ const generateExcel = async (data: TransactionItem[], options: ExportOptions): P
   for (let i = 0; i < tableRows.length; i++) statementAoa.push(tableRows[i]);
 
   const wsStatement = XLSX.utils.aoa_to_sheet(statementAoa);
+
+  // Light styling (avoid per-row styles for performance)
+  try {
+    const titleStyle = {
+      font: { bold: true, sz: 20, color: { rgb: '0F172A' } },
+      alignment: { horizontal: 'center', vertical: 'center' },
+    };
+    const subTitleStyle = {
+      font: { bold: true, sz: 16, color: { rgb: '1E293B' } },
+      alignment: { horizontal: 'center', vertical: 'center' },
+    };
+    const metaStyle = {
+      font: { bold: false, sz: 11, color: { rgb: '475569' } },
+      alignment: { horizontal: 'center', vertical: 'center' },
+    };
+    const headerStyle = {
+      font: { bold: true, sz: 12, color: { rgb: 'FFFFFF' } },
+      fill: { patternType: 'solid', fgColor: { rgb: '2563EB' } },
+      alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+    };
+    const summaryTitleStyle = {
+      font: { bold: true, sz: 12, color: { rgb: '0F172A' } },
+      fill: { patternType: 'solid', fgColor: { rgb: 'F1F5F9' } },
+    };
+
+    const setStyle = (addr: string, s: any) => {
+      const cell = wsStatement[addr];
+      if (cell) cell.s = s;
+    };
+
+    setStyle('A1', titleStyle);
+    setStyle('A2', subTitleStyle);
+    setStyle('A3', metaStyle);
+    setStyle('A4', metaStyle);
+    setStyle('A6', summaryTitleStyle);
+
+    // Header row styles
+    const headerRow0 = headerRowIndex1Based - 1;
+    for (let c = 0; c <= lastCol; c++) {
+      const addr = XLSX.utils.encode_cell({ r: headerRow0, c });
+      setStyle(addr, headerStyle);
+    }
+  } catch (e) {
+    // If the installed SheetJS build doesn't support styles, silently ignore.
+  }
+
   // Merge title rows across all columns for a cleaner, professional look
   wsStatement['!merges'] = [
     { s: { r: 0, c: 0 }, e: { r: 0, c: lastCol } },
