@@ -141,7 +141,7 @@ const ExportScreen = () => {
           'pivot=',
           pivotDate.format()
         );
-      } catch (e) { }
+      } catch (e) {}
     }
 
     let startUnix = -Infinity;

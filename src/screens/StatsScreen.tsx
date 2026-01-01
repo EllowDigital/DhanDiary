@@ -344,7 +344,6 @@ const StatsScreen = () => {
     isOnline,
   ]);
 
-
   // --- RENDER HELPERS ---
   const currencySymbol = stats?.currency === 'USD' ? '$' : '₹';
   const isEmptyPeriod = Boolean(stats && Number(stats.count || 0) === 0);

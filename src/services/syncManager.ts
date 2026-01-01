@@ -72,6 +72,7 @@ export const subscribeSyncStatus = (listener: (status: SyncStatus) => void) => {
 export const isSyncInProgress = () => _syncStatus === 'syncing';
 
 const setSyncStatus = (s: SyncStatus) => {
+  if (_syncStatus === s) return;
   _syncStatus = s;
   try {
     _syncStatusListeners.forEach((l) => {

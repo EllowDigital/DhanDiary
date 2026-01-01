@@ -287,7 +287,7 @@ const HomeScreen = () => {
     return () => {
       try {
         if (unsub) unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, [fadeAnim]);
 
@@ -298,7 +298,7 @@ const HomeScreen = () => {
       try {
         const s = await getSession();
         if (mounted) setFallbackSession(s);
-      } catch (e) { }
+      } catch (e) {}
     };
     load();
     const unsub = subscribeSession((s) => {
@@ -308,7 +308,7 @@ const HomeScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, []);
 
@@ -370,10 +370,10 @@ const HomeScreen = () => {
         const targetIdx =
           period === 'week'
             ? (() => {
-              const diffDays = dayjs().startOf('day').diff(d, 'day');
-              // diff=0 (today) -> idx 6, diff=6 -> idx 0
-              return 6 - diffDays;
-            })()
+                const diffDays = dayjs().startOf('day').diff(d, 'day');
+                // diff=0 (today) -> idx 6, diff=6 -> idx 0
+                return 6 - diffDays;
+              })()
             : d.date() - 1;
 
         if (targetIdx >= 0 && targetIdx < wavePoints.length) {

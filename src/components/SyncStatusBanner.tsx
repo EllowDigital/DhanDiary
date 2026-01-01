@@ -106,15 +106,15 @@ const SyncStatusBanner = () => {
           setRenderState('hidden');
           try {
             spinAnimRef.current?.stop();
-          } catch (e) { }
+          } catch (e) {}
           spinAnimRef.current = null;
           try {
             spinValue.stopAnimation();
-          } catch (e) { }
+          } catch (e) {}
           spinValue.setValue(0);
           try {
             visibility.setValue(0);
-          } catch (e) { }
+          } catch (e) {}
         }
       } catch (e) {
         // ignore
@@ -129,7 +129,7 @@ const SyncStatusBanner = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, [spinValue, visibility]);
 
@@ -145,15 +145,15 @@ const SyncStatusBanner = () => {
       }
       try {
         spinAnimRef.current?.stop();
-      } catch (e) { }
+      } catch (e) {}
       spinAnimRef.current = null;
       try {
         spinValue.stopAnimation();
-      } catch (e) { }
+      } catch (e) {}
       spinValue.setValue(0);
       try {
         visibility.stopAnimation();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, [spinValue, visibility]);
 
@@ -186,7 +186,7 @@ const SyncStatusBanner = () => {
     return () => {
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, []);
 
@@ -319,7 +319,7 @@ const SyncStatusBanner = () => {
           .then((v) => {
             if (v && !isNaN(Number(v))) setLastSyncAt(Number(v));
           })
-          .catch(() => { });
+          .catch(() => {});
       }
     }
   }, [bannerState]);
@@ -388,7 +388,7 @@ const SyncStatusBanner = () => {
       // Stop any previous loop before starting a new one
       try {
         spinAnimRef.current?.stop();
-      } catch (e) { }
+      } catch (e) {}
 
       const anim = Animated.loop(
         Animated.timing(spinValue, {
@@ -405,11 +405,11 @@ const SyncStatusBanner = () => {
       // when quickly switching states.
       try {
         spinAnimRef.current?.stop();
-      } catch (e) { }
+      } catch (e) {}
       spinAnimRef.current = null;
       try {
         spinValue.stopAnimation();
-      } catch (e) { }
+      } catch (e) {}
       spinValue.setValue(0);
     }
   }, [isSpinning]);
