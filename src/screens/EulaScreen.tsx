@@ -119,10 +119,7 @@ const EulaScreen = () => {
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background || '#F8FAFC'} />
 
-      <SafeAreaView
-        style={styles.safeArea}
-        edges={['top', 'left', 'right'] as any}
-      >
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right'] as any}>
         {/* Header container constrained to max width */}
         <View
           style={{

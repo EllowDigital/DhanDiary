@@ -143,7 +143,7 @@ const ForgotPasswordScreen = () => {
           setOfflineVisible(true);
           return;
         }
-      } catch (e) { }
+      } catch (e) {}
       Alert.alert('Error', msg);
     } finally {
       setLoading(false);
@@ -184,7 +184,7 @@ const ForgotPasswordScreen = () => {
           setOfflineVisible(true);
           return;
         }
-      } catch (e) { }
+      } catch (e) {}
       Alert.alert('Error', msg);
     } finally {
       setLoading(false);
@@ -222,10 +222,7 @@ const ForgotPasswordScreen = () => {
         end={{ x: 1, y: 1 }}
       />
 
-      <SafeAreaView
-        style={{ flex: 1 }}
-        edges={['top', 'left', 'right'] as any}
-      >
+      <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right'] as any}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}

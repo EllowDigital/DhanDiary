@@ -120,7 +120,7 @@ const RegisterScreen = () => {
               setOfflineVisible(true);
               return false;
             }
-          } catch (e) { }
+          } catch (e) {}
           Alert.alert('Registration Failed', errorMsg);
         }
         return false;
@@ -209,10 +209,7 @@ const RegisterScreen = () => {
         end={{ x: 1, y: 1 }}
       />
 
-      <SafeAreaView
-        style={{ flex: 1 }}
-        edges={['top', 'left', 'right'] as any}
-      >
+      <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right'] as any}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}

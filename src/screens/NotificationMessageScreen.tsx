@@ -18,7 +18,7 @@ const NotificationMessageScreen: React.FC = () => {
       try {
         const v = await AsyncStorage.getItem(STORAGE_KEY);
         if (v) setMessage(v);
-      } catch (e) { }
+      } catch (e) {}
       setLoading(false);
     })();
   }, []);
@@ -52,10 +52,7 @@ const NotificationMessageScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView
-      style={styles.container}
-      edges={['top', 'left', 'right'] as any}
-    >
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right'] as any}>
       <ScreenHeader
         title="Notifications"
         subtitle="Developer messages"

@@ -195,236 +195,235 @@ const SwipeableHistoryItem = React.memo(
 );
 
 // --- 2. EDIT MODAL ---
-const EditTransactionModal = React.memo(
-  ({ visible, entryId, onClose, onSave }: EditModalProps) => {
-    const [amount, setAmount] = useState('');
-    const [category, setCategory] = useState(DEFAULT_CATEGORY);
-    const [note, setNote] = useState('');
-    const [typeIndex, setTypeIndex] = useState(0);
-    const [date, setDate] = useState<Date>(new Date());
+const EditTransactionModal = React.memo(({ visible, entryId, onClose, onSave }: EditModalProps) => {
+  const [amount, setAmount] = useState('');
+  const [category, setCategory] = useState(DEFAULT_CATEGORY);
+  const [note, setNote] = useState('');
+  const [typeIndex, setTypeIndex] = useState(0);
+  const [date, setDate] = useState<Date>(new Date());
 
-    const [showCatPicker, setShowCatPicker] = useState(false);
-    const [showDatePicker, setShowDatePicker] = useState(false);
-    const isSubmittingRef = useRef(false);
+  const [showCatPicker, setShowCatPicker] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const isSubmittingRef = useRef(false);
 
-    useEffect(() => {
-      let cancelled = false;
-      if (!visible || !entryId) return;
+  useEffect(() => {
+    let cancelled = false;
+    if (!visible || !entryId) return;
 
-      (async () => {
-        try {
-          const row = await getTransactionByLocalId(String(entryId));
-          if (cancelled) return;
-          if (!row) {
-            onClose();
-            return;
-          }
-
-          // Tombstone guard
-          if ((row as any).deleted_at || Number((row as any).sync_status) === 2) {
-            Alert.alert('Cannot edit', 'This transaction is deleted.');
-            onClose();
-            return;
-          }
-
-          const applyRowToState = () => {
-            if (cancelled) return;
-            setAmount(String((row as any).amount ?? ''));
-            setCategory(ensureCategory((row as any).category));
-            setNote((row as any).note || '');
-            setTypeIndex(isIncome((row as any).type) ? 1 : 0);
-
-            const v = (row as any).date || (row as any).created_at;
-            if (v === null || v === undefined) {
-              setDate(new Date());
-            } else {
-              const n = Number(v);
-              if (!Number.isNaN(n)) {
-                setDate(new Date(n < 1e12 ? n * 1000 : n));
-              } else {
-                const parsed = Date.parse(String(v));
-                setDate(!Number.isNaN(parsed) ? new Date(parsed) : new Date());
-              }
-            }
-          };
-
-          // Optional: warn if pending sync
-          if (Number((row as any).need_sync) === 1) {
-            Alert.alert('Pending changes', 'This entry is waiting to sync. Edit anyway?', [
-              { text: 'Cancel', style: 'cancel', onPress: onClose },
-              { text: 'Edit', onPress: applyRowToState },
-            ]);
-            return;
-          }
-
-          applyRowToState();
-        } catch (e) {
-          onClose();
-        }
-      })();
-
-      return () => {
-        cancelled = true;
-      };
-    }, [entryId, onClose, visible]);
-
-    const handleSave = async () => {
-      if (!entryId) return;
-      if (isSubmittingRef.current) return;
-
-      const clean = amount.replace(/,/g, '').trim();
-      const amt = parseFloat(clean);
-
-      if (!clean || isNaN(amt) || amt <= 0) {
-        Alert.alert('Invalid Amount', 'Please enter a valid number.');
-        return;
-      }
-
+    (async () => {
       try {
-        isSubmittingRef.current = true;
-        await onSave(String(entryId), {
-          amount: amt,
-          category,
-          note,
-          type: typeIndex === 1 ? 'in' : 'out',
-          date: date.toISOString(),
-        });
-        onClose();
+        const row = await getTransactionByLocalId(String(entryId));
+        if (cancelled) return;
+        if (!row) {
+          onClose();
+          return;
+        }
+
+        // Tombstone guard
+        if ((row as any).deleted_at || Number((row as any).sync_status) === 2) {
+          Alert.alert('Cannot edit', 'This transaction is deleted.');
+          onClose();
+          return;
+        }
+
+        const applyRowToState = () => {
+          if (cancelled) return;
+          setAmount(String((row as any).amount ?? ''));
+          setCategory(ensureCategory((row as any).category));
+          setNote((row as any).note || '');
+          setTypeIndex(isIncome((row as any).type) ? 1 : 0);
+
+          const v = (row as any).date || (row as any).created_at;
+          if (v === null || v === undefined) {
+            setDate(new Date());
+          } else {
+            const n = Number(v);
+            if (!Number.isNaN(n)) {
+              setDate(new Date(n < 1e12 ? n * 1000 : n));
+            } else {
+              const parsed = Date.parse(String(v));
+              setDate(!Number.isNaN(parsed) ? new Date(parsed) : new Date());
+            }
+          }
+        };
+
+        // Optional: warn if pending sync
+        if (Number((row as any).need_sync) === 1) {
+          Alert.alert('Pending changes', 'This entry is waiting to sync. Edit anyway?', [
+            { text: 'Cancel', style: 'cancel', onPress: onClose },
+            { text: 'Edit', onPress: applyRowToState },
+          ]);
+          return;
+        }
+
+        applyRowToState();
       } catch (e) {
-        Alert.alert('Error', 'Failed to save changes.');
-      } finally {
-        isSubmittingRef.current = false;
+        onClose();
       }
+    })();
+
+    return () => {
+      cancelled = true;
     };
+  }, [entryId, onClose, visible]);
 
-    const onDateChange = (_event: DateTimePickerEvent, selectedDate?: Date) => {
-      if (Platform.OS === 'android') {
-        setShowDatePicker(false);
-      }
-      if (selectedDate) {
-        setDate(selectedDate);
-      }
-    };
+  const handleSave = async () => {
+    if (!entryId) return;
+    if (isSubmittingRef.current) return;
 
-    const quickAmounts = ['100', '500', '1000', '2000'];
+    const clean = amount.replace(/,/g, '').trim();
+    const amt = parseFloat(clean);
 
-    return (
-      <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={{ flex: 1 }}
-        >
-          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-            <View style={styles.modalOverlay}>
-              <View style={styles.modalContent}>
-                <View style={styles.sheetHandle} />
+    if (!clean || isNaN(amt) || amt <= 0) {
+      Alert.alert('Invalid Amount', 'Please enter a valid number.');
+      return;
+    }
 
-                <View style={styles.modalHeaderRow}>
-                  <Text style={styles.modalTitle}>Edit Entry</Text>
-                  <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-                    <MaterialIcon name="close" size={22} color={colors.text} />
+    try {
+      isSubmittingRef.current = true;
+      await onSave(String(entryId), {
+        amount: amt,
+        category,
+        note,
+        type: typeIndex === 1 ? 'in' : 'out',
+        date: date.toISOString(),
+      });
+      onClose();
+    } catch (e) {
+      Alert.alert('Error', 'Failed to save changes.');
+    } finally {
+      isSubmittingRef.current = false;
+    }
+  };
+
+  const onDateChange = (_event: DateTimePickerEvent, selectedDate?: Date) => {
+    if (Platform.OS === 'android') {
+      setShowDatePicker(false);
+    }
+    if (selectedDate) {
+      setDate(selectedDate);
+    }
+  };
+
+  const quickAmounts = ['100', '500', '1000', '2000'];
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1 }}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.sheetHandle} />
+
+              <View style={styles.modalHeaderRow}>
+                <Text style={styles.modalTitle}>Edit Entry</Text>
+                <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+                  <MaterialIcon name="close" size={22} color={colors.text} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={{ paddingBottom: 20 }}
+              >
+                <SimpleButtonGroup
+                  buttons={['Expense', 'Income']}
+                  selectedIndex={typeIndex}
+                  onPress={setTypeIndex}
+                  containerStyle={{ marginBottom: 16 }}
+                />
+
+                <Input
+                  label="Amount"
+                  value={amount}
+                  onChangeText={setAmount}
+                  keyboardType="numeric"
+                  inputContainerStyle={styles.modalInput}
+                  inputStyle={{ color: colors.text }}
+                  placeholderTextColor={colors.muted}
+                  selectionColor={colors.primary}
+                  leftIcon={<MaterialIcon name="currency-rupee" size={16} color={colors.muted} />}
+                  renderErrorMessage={false}
+                />
+
+                <View style={styles.quickRow}>
+                  {quickAmounts.map((val) => (
+                    <TouchableOpacity
+                      key={val}
+                      onPress={() => setAmount(val)}
+                      style={styles.quickChip}
+                    >
+                      <Text style={styles.quickChipText}>₹{val}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <View style={styles.rowInputs}>
+                  <TouchableOpacity
+                    style={[styles.pickerBtn, { marginRight: 8 }]}
+                    onPress={() => setShowCatPicker(true)}
+                  >
+                    <Text style={styles.pickerLabel}>Category</Text>
+                    <Text style={styles.pickerValue}>{category}</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.pickerBtn}
+                    onPress={() => setShowDatePicker(true)}
+                  >
+                    <Text style={styles.pickerLabel}>Date</Text>
+                    <Text style={styles.pickerValue}>{formatDate(date, 'DD MMM YYYY')}</Text>
                   </TouchableOpacity>
                 </View>
 
-                <ScrollView
-                  showsVerticalScrollIndicator={false}
-                  keyboardShouldPersistTaps="handled"
-                  contentContainerStyle={{ paddingBottom: 20 }}
-                >
-                  <SimpleButtonGroup
-                    buttons={['Expense', 'Income']}
-                    selectedIndex={typeIndex}
-                    onPress={setTypeIndex}
-                    containerStyle={{ marginBottom: 16 }}
-                  />
+                <Input
+                  label="Note"
+                  value={note}
+                  onChangeText={setNote}
+                  inputContainerStyle={styles.modalInput}
+                  inputStyle={{ color: colors.text }}
+                  placeholder="Optional description"
+                  placeholderTextColor={colors.muted}
+                  renderErrorMessage={false}
+                />
 
-                  <Input
-                    label="Amount"
-                    value={amount}
-                    onChangeText={setAmount}
-                    keyboardType="numeric"
-                    inputContainerStyle={styles.modalInput}
-                    inputStyle={{ color: colors.text }}
-                    placeholderTextColor={colors.muted}
-                    selectionColor={colors.primary}
-                    leftIcon={<MaterialIcon name="currency-rupee" size={16} color={colors.muted} />}
-                    renderErrorMessage={false}
-                  />
-
-                  <View style={styles.quickRow}>
-                    {quickAmounts.map((val) => (
-                      <TouchableOpacity
-                        key={val}
-                        onPress={() => setAmount(val)}
-                        style={styles.quickChip}
-                      >
-                        <Text style={styles.quickChipText}>₹{val}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-
-                  <View style={styles.rowInputs}>
-                    <TouchableOpacity
-                      style={[styles.pickerBtn, { marginRight: 8 }]}
-                      onPress={() => setShowCatPicker(true)}
-                    >
-                      <Text style={styles.pickerLabel}>Category</Text>
-                      <Text style={styles.pickerValue}>{category}</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={styles.pickerBtn}
-                      onPress={() => setShowDatePicker(true)}
-                    >
-                      <Text style={styles.pickerLabel}>Date</Text>
-                      <Text style={styles.pickerValue}>{formatDate(date, 'DD MMM YYYY')}</Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  <Input
-                    label="Note"
-                    value={note}
-                    onChangeText={setNote}
-                    inputContainerStyle={styles.modalInput}
-                    inputStyle={{ color: colors.text }}
-                    placeholder="Optional description"
-                    placeholderTextColor={colors.muted}
-                    renderErrorMessage={false}
-                  />
-
-                  <Button
-                    title="Save Changes"
-                    onPress={handleSave}
-                    buttonStyle={styles.saveBtn}
-                    containerStyle={{ marginTop: 20 }}
-                  />
-                </ScrollView>
-              </View>
+                <Button
+                  title="Save Changes"
+                  onPress={handleSave}
+                  buttonStyle={styles.saveBtn}
+                  containerStyle={{ marginTop: 20 }}
+                />
+              </ScrollView>
             </View>
-          </TouchableWithoutFeedback>
-        </KeyboardAvoidingView>
+          </View>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
 
-        <CategoryPickerModal
-          visible={showCatPicker}
-          onClose={() => setShowCatPicker(false)}
-          onSelect={(c) => {
-            setCategory(c);
-            setShowCatPicker(false);
-          }}
+      <CategoryPickerModal
+        visible={showCatPicker}
+        onClose={() => setShowCatPicker(false)}
+        onSelect={(c) => {
+          setCategory(c);
+          setShowCatPicker(false);
+        }}
+      />
+
+      {showDatePicker && (
+        <DateTimePicker
+          value={date}
+          mode="date"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          onChange={onDateChange}
+          maximumDate={new Date()}
         />
-
-        {showDatePicker && (
-          <DateTimePicker
-            value={date}
-            mode="date"
-            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-            onChange={onDateChange}
-            maximumDate={new Date()}
-          />
-        )}
-      </Modal>
-    );
-  });
+      )}
+    </Modal>
+  );
+});
 
 // --- 3. MAIN SCREEN ---
 const HistoryScreen = () => {
@@ -506,13 +505,10 @@ const HistoryScreen = () => {
     [deleteEntry, showToast]
   );
 
-  const attemptEdit = useCallback(
-    (item: TransactionEntry) => {
-      // Authoritative checks are done inside the modal via fresh SQLite read.
-      setEditingEntryId(item.local_id);
-    },
-    []
-  );
+  const attemptEdit = useCallback((item: TransactionEntry) => {
+    // Authoritative checks are done inside the modal via fresh SQLite read.
+    setEditingEntryId(item.local_id);
+  }, []);
 
   const toggleFilter = (f: 'ALL' | 'WEEK' | 'MONTH') => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -567,10 +563,7 @@ const HistoryScreen = () => {
   );
 
   return (
-    <SafeAreaView
-      style={styles.container}
-      edges={['top', 'left', 'right']}
-    >
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
 
       <View style={{ paddingHorizontal: width >= 768 ? spacing(4) : 0 }}>

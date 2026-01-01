@@ -330,10 +330,7 @@ const StatsScreen = () => {
   }
 
   return (
-    <SafeAreaView
-      style={styles.safeArea}
-      edges={['top', 'left', 'right'] as any}
-    >
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right'] as any}>
       <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
 
       <View style={[styles.headerWrapper, containerStyle]}>

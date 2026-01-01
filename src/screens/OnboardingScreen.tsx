@@ -237,10 +237,7 @@ const OnboardingScreen = () => {
   };
 
   return (
-    <SafeAreaView
-      style={styles.container}
-      edges={['top', 'left', 'right'] as any}
-    >
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right'] as any}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background || '#F9FAFB'} />
 
       {/* Header: Skip Button */}

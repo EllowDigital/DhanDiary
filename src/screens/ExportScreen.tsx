@@ -141,7 +141,7 @@ const ExportScreen = () => {
           'pivot=',
           pivotDate.format()
         );
-      } catch (e) { }
+      } catch (e) {}
     }
 
     let startUnix = -Infinity;
@@ -325,10 +325,7 @@ const ExportScreen = () => {
   };
 
   return (
-    <SafeAreaView
-      style={styles.safeArea}
-      edges={['top', 'left', 'right'] as any}
-    >
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right'] as any}>
       {/* HEADER */}
       <View style={styles.headerContainer}>
         <ScreenHeader

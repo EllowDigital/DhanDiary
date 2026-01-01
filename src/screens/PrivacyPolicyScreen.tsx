@@ -96,10 +96,7 @@ const PrivacyPolicyScreen = () => {
   return (
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background || '#F8FAFC'} />
-      <SafeAreaView
-        style={styles.safeArea}
-        edges={['top', 'left', 'right'] as any}
-      >
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right'] as any}>
         {/* Header constrained to content width */}
         <View
           style={{

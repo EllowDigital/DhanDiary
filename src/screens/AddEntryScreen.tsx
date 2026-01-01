@@ -193,26 +193,22 @@ const AddEntryScreen: React.FC = () => {
 
         // Optional: warn if the row has pending local changes
         if (Number((row as any).need_sync) === 1) {
-          Alert.alert(
-            'Pending changes',
-            'This transaction has unsynced changes. Edit anyway?',
-            [
-              { text: 'Cancel', style: 'cancel', onPress: () => navigation.goBack() },
-              {
-                text: 'Edit',
-                onPress: () => {
-                  if (cancelled) return;
-                  setAmount(String((row as any).amount ?? ''));
-                  setNote((row as any).note ?? '');
-                  setTypeIndex(isIncome((row as any).type) ? 1 : 0);
-                  setCategory(ensureCategory((row as any).category));
-                  const d = (row as any).date || (row as any).created_at;
-                  setDate(parseToDate(d));
-                  setEditingLocalId(String((row as any).id));
-                },
+          Alert.alert('Pending changes', 'This transaction has unsynced changes. Edit anyway?', [
+            { text: 'Cancel', style: 'cancel', onPress: () => navigation.goBack() },
+            {
+              text: 'Edit',
+              onPress: () => {
+                if (cancelled) return;
+                setAmount(String((row as any).amount ?? ''));
+                setNote((row as any).note ?? '');
+                setTypeIndex(isIncome((row as any).type) ? 1 : 0);
+                setCategory(ensureCategory((row as any).category));
+                const d = (row as any).date || (row as any).created_at;
+                setDate(parseToDate(d));
+                setEditingLocalId(String((row as any).id));
               },
-            ]
-          );
+            },
+          ]);
           return;
         }
 
@@ -325,10 +321,7 @@ const AddEntryScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView
-      style={styles.safeArea}
-      edges={['top', 'left', 'right']}
-    >
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background || '#F8FAFC'} />
 
       <ScreenHeader

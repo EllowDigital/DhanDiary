@@ -78,7 +78,7 @@ const SyncStatusBanner = () => {
     return () => {
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, []);
 
@@ -191,7 +191,7 @@ const SyncStatusBanner = () => {
           .then((v) => {
             if (v && !isNaN(Number(v))) setLastSyncAt(Number(v));
           })
-          .catch(() => { });
+          .catch(() => {});
       }
     }
   }, [bannerState]);
@@ -293,7 +293,9 @@ const SyncStatusBanner = () => {
 
           {config.showIndicator ? (
             <View style={styles.rightElement}>
-              <View style={[styles.liveDot, { backgroundColor: config.dotColor || colors.accentRed }]} />
+              <View
+                style={[styles.liveDot, { backgroundColor: config.dotColor || colors.accentRed }]}
+              />
             </View>
           ) : null}
         </View>

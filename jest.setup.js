@@ -35,16 +35,44 @@ global.__TEST__ = true;
 //   if (String(args[0] || '').includes('The global process.env.EXPO_OS is not defined')) return;
 //   originalError.apply(console, args);
 // };
-jest.mock('@react-native-async-storage/async-storage', () => ({
-  setItem: jest.fn(),
-  getItem: jest.fn(),
-  removeItem: jest.fn(),
-  clear: jest.fn(),
-  getAllKeys: jest.fn(),
-  multiGet: jest.fn(),
-  multiSet: jest.fn(),
-  multiRemove: jest.fn(),
-}));
+jest.mock('@react-native-async-storage/async-storage', () => {
+  const store = new Map();
+  return {
+    setItem: jest.fn(async (k, v) => {
+      store.set(String(k), String(v));
+      return null;
+    }),
+    getItem: jest.fn(async (k) => {
+      const key = String(k);
+      return store.has(key) ? store.get(key) : null;
+    }),
+    removeItem: jest.fn(async (k) => {
+      store.delete(String(k));
+      return null;
+    }),
+    clear: jest.fn(async () => {
+      store.clear();
+      return null;
+    }),
+    getAllKeys: jest.fn(async () => Array.from(store.keys())),
+    multiGet: jest.fn(async (keys) =>
+      (keys || []).map((k) => {
+        const key = String(k);
+        return [key, store.has(key) ? store.get(key) : null];
+      })
+    ),
+    multiSet: jest.fn(async (kvPairs) => {
+      (kvPairs || []).forEach(([k, v]) => {
+        store.set(String(k), String(v));
+      });
+      return null;
+    }),
+    multiRemove: jest.fn(async (keys) => {
+      (keys || []).forEach((k) => store.delete(String(k)));
+      return null;
+    }),
+  };
+});
 
 // No runtime local DB module to mock here.
 
