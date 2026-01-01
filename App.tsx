@@ -46,6 +46,7 @@ import { syncClerkUserToNeon } from './src/services/clerkUserSync';
 import { saveSession as saveLocalSession } from './src/db/session';
 import { BiometricAuth } from './src/components/BiometricAuth';
 import tokenCache from './src/utils/tokenCache';
+import * as SecureStore from 'expo-secure-store';
 
 import {
   startForegroundSyncScheduler,
@@ -105,8 +106,18 @@ const AppContent = () => {
   const { user } = useAuth();
   const { user: clerkUser, isLoaded: clerkLoaded } = useUser();
   const [localSessionId, setLocalSessionId] = React.useState<string | null>(null);
+  const [localSessionClerkId, setLocalSessionClerkId] = React.useState<string | null>(null);
   const [accountDeletedAt, setAccountDeletedAt] = React.useState<string | null>(null);
   const { showActionToast } = useToast();
+
+  // --- Biometric session gate state ---
+  const BIOMETRIC_KEY = 'BIOMETRIC_ENABLED';
+  const BIOMETRIC_TIMEOUT_MS = 60 * 1000; // 30–60s per spec (keep 60s)
+  const [biometricEnabled, setBiometricEnabled] = React.useState(false);
+  const [biometricUnlocked, setBiometricUnlocked] = React.useState(false);
+  const [lastUnlockTs, setLastUnlockTs] = React.useState<number>(0);
+  const backgroundAtRef = React.useRef<number>(0);
+  const appStateRef = React.useRef<AppStateStatus>(AppState.currentState);
 
   // Load persisted fallback session early so offline sync features work even when Clerk user
   // isn't immediately available (e.g., cold start without internet).
@@ -118,10 +129,11 @@ const AppContent = () => {
         const sess = await s.getSession();
         if (mounted) {
           setLocalSessionId(sess?.id ?? null);
+          setLocalSessionClerkId((sess as any)?.clerk_id ? String((sess as any).clerk_id) : null);
           try {
             const del = await s.getAccountDeletedAt();
             setAccountDeletedAt(del);
-          } catch (e) {}
+          } catch (e) { }
         }
       } catch (e) {
         if (__DEV__) console.warn('[AppContent] failed to load local session', e);
@@ -135,23 +147,100 @@ const AppContent = () => {
       unsub = se.subscribeSession((s: any) => {
         try {
           setLocalSessionId(s?.id ?? null);
+          setLocalSessionClerkId(s?.clerk_id ? String(s.clerk_id) : null);
           try {
             const mod = require('./src/db/session');
             if (mod && typeof mod.getAccountDeletedAt === 'function') {
               mod.getAccountDeletedAt().then((v: any) => setAccountDeletedAt(v));
             }
-          } catch (e) {}
-        } catch (e) {}
+          } catch (e) { }
+        } catch (e) { }
       });
-    } catch (e) {}
+    } catch (e) { }
 
     return () => {
       mounted = false;
       try {
         if (unsub) unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
+
+  // Load biometric enabled setting once, and refresh on foreground.
+  const refreshBiometricEnabled = React.useCallback(async () => {
+    try {
+      const enabledSetting = await SecureStore.getItemAsync(BIOMETRIC_KEY);
+      setBiometricEnabled(enabledSetting === 'true');
+    } catch (e) {
+      setBiometricEnabled(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshBiometricEnabled();
+  }, [refreshBiometricEnabled]);
+
+  const isAuthenticated = !!(user?.id || localSessionId);
+  // Account switch boundary: Clerk id is authoritative when present.
+  const accountKey = clerkUser?.id ? String(clerkUser.id) : localSessionClerkId || null;
+  const lastAccountKeyRef = React.useRef<string | null>(null);
+
+  // Reset biometric session on logout or account switch.
+  useEffect(() => {
+    const prev = lastAccountKeyRef.current;
+    const next = accountKey;
+    lastAccountKeyRef.current = next;
+
+    if (!isAuthenticated) {
+      setBiometricUnlocked(false);
+      setLastUnlockTs(0);
+      return;
+    }
+
+    if (prev && next && prev !== next) {
+      setBiometricUnlocked(false);
+      setLastUnlockTs(0);
+    }
+  }, [accountKey, isAuthenticated]);
+
+  // Cold start behavior: if enabled and authenticated, require unlock once per session.
+  useEffect(() => {
+    if (!biometricEnabled || !isAuthenticated) return;
+    // Do not re-lock repeatedly; only lock if not yet unlocked in this session.
+    if (!biometricUnlocked) return;
+  }, [biometricEnabled, isAuthenticated, biometricUnlocked]);
+
+  // App lifecycle: lock only after timeout in background.
+  useEffect(() => {
+    const onChange = (nextState: AppStateStatus) => {
+      const prevState = appStateRef.current;
+      appStateRef.current = nextState;
+
+      if (!biometricEnabled || !isAuthenticated) return;
+
+      if (prevState === 'active' && nextState.match(/inactive|background/)) {
+        backgroundAtRef.current = Date.now();
+      }
+
+      if (prevState.match(/inactive|background/) && nextState === 'active') {
+        void refreshBiometricEnabled();
+        const bgAt = backgroundAtRef.current;
+        backgroundAtRef.current = 0;
+
+        if (!biometricUnlocked) return;
+
+        if (bgAt && Date.now() - bgAt > BIOMETRIC_TIMEOUT_MS) {
+          setBiometricUnlocked(false);
+          setLastUnlockTs(0);
+        }
+      }
+    };
+
+    const sub = AppState.addEventListener('change', onChange);
+    return () => sub.remove();
+  }, [biometricEnabled, isAuthenticated, biometricUnlocked, refreshBiometricEnabled]);
+
+  const biometricLocked = biometricEnabled && isAuthenticated && !biometricUnlocked;
 
   // Background OTA updates: fetch quietly, then show a toast to install.
   // - No banners
@@ -170,7 +259,7 @@ const AppContent = () => {
               'Update ready to install.',
               'Install',
               () => {
-                Updates.reloadAsync().catch(() => {});
+                Updates.reloadAsync().catch(() => { });
               },
               'info',
               8000
@@ -178,7 +267,7 @@ const AppContent = () => {
           }
         } catch (e) {
           // Fallback to silent behavior
-          runBackgroundUpdateCheck().catch(() => {});
+          runBackgroundUpdateCheck().catch(() => { });
         }
       })();
     });
@@ -194,7 +283,7 @@ const AppContent = () => {
 
   // 2. Health Check (Neon)
   useEffect(() => {
-    checkNeonConnection().catch(() => {});
+    checkNeonConnection().catch(() => { });
   }, []);
 
   // 3. User Synchronization
@@ -238,13 +327,13 @@ const AppContent = () => {
             try {
               const { notifyEntriesChanged } = require('./src/utils/dbEvents');
               notifyEntriesChanged();
-            } catch (e) {}
+            } catch (e) { }
             try {
               const holder = require('./src/utils/queryClientHolder');
               if (holder && typeof holder.clearQueryCache === 'function') {
                 await holder.clearQueryCache();
               }
-            } catch (e) {}
+            } catch (e) { }
           }
           await ownerMod.setOfflineDbOwner(String(id));
         } catch (e) {
@@ -286,8 +375,17 @@ const AppContent = () => {
         <RootStack.Screen name="Main" component={MainNavigator} />
       </RootStack.Navigator>
 
-      {/* Biometric overlay (keeps being an overlay) */}
-      <BiometricAuth />
+      {/* Biometric overlay: session gate (never per-screen) */}
+      <BiometricAuth
+        enabled={biometricEnabled && isAuthenticated}
+        locked={biometricLocked}
+        promptMessage="Unlock DhanDiary"
+        onUnlocked={() => {
+          const now = Date.now();
+          setBiometricUnlocked(true);
+          setLastUnlockTs(now);
+        }}
+      />
 
       {/* no modal here: navigation handles account-deleted flow */}
     </View>
@@ -330,7 +428,7 @@ function AppWithDb() {
     try {
       const holder = require('./src/utils/queryClientHolder');
       if (holder?.setQueryClient) holder.setQueryClient(queryClient);
-    } catch (e) {}
+    } catch (e) { }
   }, [queryClient]);
 
   const initializeDatabase = useCallback(async () => {
@@ -356,16 +454,16 @@ function AppWithDb() {
     if (!dbReady) return;
 
     if (AppState.currentState === 'active') {
-      runFullSync().catch(() => {});
+      runFullSync().catch(() => { });
     }
 
     startForegroundSyncScheduler(15000);
-    startBackgroundFetch().catch(() => {});
+    startBackgroundFetch().catch(() => { });
 
     // Background Expo Updates: fetch quietly, apply on next restart.
     // Never block app launch.
     InteractionManager.runAfterInteractions(() => {
-      runBackgroundUpdateCheck().catch(() => {});
+      runBackgroundUpdateCheck().catch(() => { });
     });
 
     return () => {
@@ -380,7 +478,7 @@ function AppWithDb() {
     const handleAppStateChange = (nextState: AppStateStatus) => {
       if (nextState === 'active' && !isSyncRunning) {
         setTimeout(() => {
-          runFullSync().catch(() => {});
+          runFullSync().catch(() => { });
         }, 500);
       }
     };
@@ -456,11 +554,11 @@ export default function App() {
                 '[App] JS Error suppressed in production:',
                 error && error.message ? error.message : error
               );
-            } catch (e) {}
+            } catch (e) { }
             // Optionally send to analytics here
           });
         }
-      } catch (e) {}
+      } catch (e) { }
 
       // Catch unhandled promise rejections
       try {
@@ -471,9 +569,9 @@ export default function App() {
               '[App] Unhandled Promise Rejection suppressed in production:',
               reason && reason.message ? reason.message : reason
             );
-          } catch (e) {}
+          } catch (e) { }
         };
-      } catch (e) {}
+      } catch (e) { }
     }
     // Warn if CLERK_SECRET exists in runtime config — this is insecure for clients
     try {
@@ -484,8 +582,8 @@ export default function App() {
           '[App] SECURITY WARNING: CLERK_SECRET is present in client runtime. Do NOT ship admin secrets to mobile clients. Prefer a server-side deletion endpoint.'
         );
       }
-    } catch (e) {}
-  } catch (e) {}
+    } catch (e) { }
+  } catch (e) { }
   if (!CLERK_PUBLISHABLE_KEY) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
