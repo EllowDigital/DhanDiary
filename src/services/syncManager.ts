@@ -338,6 +338,15 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
   const state = await NetInfo.fetch();
   if (!state.isConnected) return { ok: false, reason: 'offline' } satisfies SyncResult;
 
+  // Legacy repair: ensure all local transaction ids are UUIDs before pushing to Neon.
+  // (Older builds created ids like "local_..." which Neon rejects.)
+  try {
+    const { migrateNonUuidTransactionIds } = require('../db/transactions');
+    if (typeof migrateNonUuidTransactionIds === 'function') {
+      await migrateNonUuidTransactionIds();
+    }
+  } catch (e) {}
+
   _syncInProgress = true;
   // notify listeners that sync started
   try {

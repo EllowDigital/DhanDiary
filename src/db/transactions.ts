@@ -1,5 +1,6 @@
 import { executeSqlAsync } from './sqlite';
 import { notifyEntriesChanged } from '../utils/dbEvents';
+import { v4 as uuidv4 } from 'uuid';
 
 // Matches 'transactions' table in schema.sql
 export type TransactionRow = {
@@ -288,6 +289,53 @@ export async function getUnsyncedTransactions() {
     rows.push(res.rows.item(i) as TransactionRow);
   }
   return rows;
+}
+
+const isUuid = (s: any) =>
+  typeof s === 'string' &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+
+/**
+ * Legacy repair: older builds created local transaction ids like "local_...".
+ * Neon requires UUID primary keys, so those rows could never sync.
+ *
+ * This converts any non-UUID `transactions.id` into a new UUID and marks them dirty.
+ */
+export async function migrateNonUuidTransactionIds(): Promise<{ migrated: number }> {
+  let migrated = 0;
+
+  const [, res] = await executeSqlAsync('SELECT id FROM transactions;', []);
+  const ids: string[] = [];
+  try {
+    for (let i = 0; i < (res?.rows?.length || 0); i++) {
+      const row = res.rows.item(i);
+      if (row?.id) ids.push(String(row.id));
+    }
+  } catch (e) {
+    return { migrated: 0 };
+  }
+
+  for (const oldId of ids) {
+    if (isUuid(oldId)) continue;
+    const newId = uuidv4();
+    try {
+      await executeSqlAsync(
+        'UPDATE transactions SET id = ?, sync_status = 0, need_sync = 1, updated_at = ? WHERE id = ?;',
+        [newId, Date.now(), oldId]
+      );
+      migrated += 1;
+    } catch (e) {
+      // ignore per-row failures
+    }
+  }
+
+  if (migrated > 0) {
+    try {
+      notifyEntriesChanged();
+    } catch (e) {}
+  }
+
+  return { migrated };
 }
 
 /**

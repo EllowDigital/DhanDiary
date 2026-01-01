@@ -19,6 +19,7 @@ import { resetRoot } from '../utils/rootNavigation';
 import { ensureCategory, DEFAULT_CATEGORY } from '../constants/categories';
 import { toCanonical, isIncome } from '../utils/transactionType';
 import { scheduleSync } from '../services/syncManager';
+import { v4 as uuidv4 } from 'uuid';
 
 /* ----------------------------------------------------------
    Types & Interfaces
@@ -393,8 +394,8 @@ export const useEntries = (userId?: string | null) => {
       const now = new Date().toISOString();
 
       const created = normalizeDate((entry as any).date || (entry as any).created_at, now);
-      // Simple client-side id for offline mode
-      const localId = entry.local_id || `local_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+      // Use UUIDs even offline so rows are always syncable to Neon.
+      const localId = uuidv4();
 
       const toInsert = {
         id: localId,
