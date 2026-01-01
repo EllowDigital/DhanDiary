@@ -338,6 +338,68 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
   const state = await NetInfo.fetch();
   if (!state.isConnected) return { ok: false, reason: 'offline' } satisfies SyncResult;
 
+  // If the saved session UUID doesn't exist in Neon (common after an offline fallback),
+  // try to recover by matching the user's email and migrating local rows to the real
+  // Neon user id. Without this, pullFromNeon will query a non-existent user_id and
+  // will always return 0 rows.
+  try {
+    const sess: any = await getSession();
+    const uid = sess?.id ? String(sess.id) : null;
+    const email = sess?.email ? String(sess.email).trim().toLowerCase() : null;
+    if (uid && isUuid(uid) && email) {
+      let exists = false;
+      try {
+        const rows = await safeQ('SELECT id FROM users WHERE id = $1 LIMIT 1', [uid]);
+        exists = !!(rows && rows.length);
+      } catch (e) {
+        // ignore (Neon may be flaky); sync will fail later with an error state
+      }
+
+      if (!exists) {
+        try {
+          const byEmail = await safeQ('SELECT id FROM users WHERE lower(email) = $1 LIMIT 1', [
+            email,
+          ]);
+          const realId = byEmail && byEmail.length ? String((byEmail as any)[0]?.id || '') : '';
+          if (realId && isUuid(realId) && realId !== uid) {
+            try {
+              const { executeSqlAsync } = require('../db/sqlite');
+              // Move local rows under the real Neon user id so UI + pull use one identity.
+              await executeSqlAsync('UPDATE transactions SET user_id = ? WHERE user_id = ?;', [
+                realId,
+                uid,
+              ]);
+
+              // Reset pull checkpoints for both ids so we always re-bootstrap after migration.
+              try {
+                const oldKey = `last_pull_server_version:${uid}`;
+                const newKey = `last_pull_server_version:${realId}`;
+                await executeSqlAsync('DELETE FROM meta WHERE key IN (?, ?);', [oldKey, newKey]);
+              } catch (e) {}
+            } catch (e) {}
+
+            try {
+              await saveSession(
+                realId,
+                String(sess?.name || ''),
+                String(sess?.email || ''),
+                (sess as any)?.image ?? null,
+                (sess as any)?.imageUrl ?? null
+              );
+            } catch (e) {}
+
+            try {
+              const { notifyEntriesChanged } = require('../utils/dbEvents');
+              notifyEntriesChanged();
+            } catch (e) {}
+          }
+        } catch (e) {
+          // If lookup fails, proceed; pull will likely return 0 and sync will be up_to_date.
+        }
+      }
+    }
+  } catch (e) {}
+
   // Legacy repair: ensure all local transaction ids are UUIDs before pushing to Neon.
   // (Older builds created ids like "local_..." which Neon rejects.)
   try {
