@@ -278,6 +278,9 @@ const HomeScreen = () => {
   const [chartType, setChartType] = useState<'wave' | 'pie' | 'list'>('wave');
   const [isSyncing, setIsSyncing] = useState(false);
 
+  const entriesCount = (entries as any[] | undefined)?.length ?? 0;
+  const showBootstrapSyncHint = entriesCount === 0 && isSyncing;
+
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -287,7 +290,7 @@ const HomeScreen = () => {
     return () => {
       try {
         if (unsub) unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, [fadeAnim]);
 
@@ -298,7 +301,7 @@ const HomeScreen = () => {
       try {
         const s = await getSession();
         if (mounted) setFallbackSession(s);
-      } catch (e) {}
+      } catch (e) { }
     };
     load();
     const unsub = subscribeSession((s) => {
@@ -308,7 +311,7 @@ const HomeScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -504,6 +507,13 @@ const HomeScreen = () => {
               </Text>
             </View>
 
+            {showBootstrapSyncHint ? (
+              <View style={styles.bootstrapSyncHint}>
+                <ActivityIndicator size="small" color="rgba(255,255,255,0.85)" />
+                <Text style={styles.bootstrapSyncHintText}>Syncing your data…</Text>
+              </View>
+            ) : null}
+
             <View style={styles.statsContainer}>
               {/* Income */}
               <View style={styles.statItem}>
@@ -666,7 +676,7 @@ const HomeScreen = () => {
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
         {/* Loading Overlay */}
-        {showLoading && (
+        {showLoading && entriesCount === 0 && (
           <View style={styles.loadingOverlay}>
             <ActivityIndicator size="large" color={COLORS.primary} />
           </View>
@@ -690,7 +700,19 @@ const HomeScreen = () => {
           ListEmptyComponent={
             !isLoading ? (
               <View style={styles.emptyList}>
-                <Text style={styles.emptyText}>No recent transactions found.</Text>
+                {showBootstrapSyncHint ? (
+                  <>
+                    <ActivityIndicator size="small" color={COLORS.primary} />
+                    <Text style={[styles.emptyText, { marginTop: 10 }]}>
+                      Syncing your data from cloud…
+                    </Text>
+                    <Text style={[styles.emptyText, { marginTop: 4, fontSize: 13 }]}>
+                      Your entries will appear here once sync completes.
+                    </Text>
+                  </>
+                ) : (
+                  <Text style={styles.emptyText}>No recent transactions found.</Text>
+                )}
                 <TouchableOpacity
                   style={styles.emptyBtn}
                   onPress={() => navigation.navigate('AddEntry')}
@@ -716,6 +738,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: 150,
     backgroundColor: 'rgba(248, 250, 252, 0.5)',
+  },
+
+  bootstrapSyncHint: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  bootstrapSyncHintText: {
+    marginLeft: 8,
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 13,
+    fontWeight: '600',
   },
 
   // Header

@@ -49,9 +49,19 @@ interface MutationContext {
    Helpers
 ---------------------------------------------------------- */
 
+const isUuid = (s: any) =>
+  typeof s === 'string' &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+
 // Resolve an effective user ID (explicit → session → existing-local → guest)
 const resolveUserId = async (passedId?: string | null): Promise<string> => {
-  if (passedId) return passedId;
+  // IMPORTANT:
+  // Many auth providers (e.g., Clerk) provide a non-UUID user id.
+  // Our local SQLite and Neon queries are scoped by a UUID (session.id).
+  // If we blindly use a non-UUID `passedId`, the app can appear to "reset to 0"
+  // (reading a different user_id namespace) especially when toggling offline/online.
+  const passed = passedId ? String(passedId) : null;
+  if (passed && isUuid(passed)) return passed;
 
   // 1) Read persisted fallback session (if any)
   let s: any = null;
@@ -60,6 +70,12 @@ const resolveUserId = async (passedId?: string | null): Promise<string> => {
   } catch (e) {
     if (__DEV__) console.warn('[resolveUserId] getSession failed', e);
   }
+
+  // If caller provided a non-UUID auth id (provider id), prefer the persisted
+  // local session UUID so we always read/write the same local SQLite rows.
+  try {
+    if (passed && !isUuid(passed) && s?.id) return String(s.id);
+  } catch (e) {}
 
   // 2) Read any existing user_id already present in local transactions
   let existingUser: string | null = null;
