@@ -22,6 +22,15 @@ let cachedNetInfoAt = 0;
 let cachedIsConnected: boolean | null = null;
 let warmPromise: Promise<void> | null = null;
 
+const isVerboseNeonLoggingEnabled = () => {
+  try {
+    const g: any = globalThis as any;
+    return Boolean(g.__NEON_VERBOSE__ || g.__SYNC_VERBOSE__);
+  } catch (e) {
+    return false;
+  }
+};
+
 export type NeonHealthSnapshot = {
   isConfigured: boolean;
   lastHealthyAt: number | null;
@@ -79,7 +88,9 @@ const ensureRecentNetState = async () => {
   cachedNetInfoAt = now;
   try {
     const snapshot = await NetInfo.fetch();
-    cachedIsConnected = !!snapshot.isConnected;
+    // `isInternetReachable` can be null on some platforms; treat null as "unknown" (optimistic)
+    // but treat explicit false as offline.
+    cachedIsConnected = !!snapshot.isConnected && snapshot.isInternetReachable !== false;
   } catch (err) {
     cachedIsConnected = true;
   }
@@ -104,6 +115,11 @@ export const warmNeonConnection = async () => {
     while (attempt < maxAttempts) {
       attempt += 1;
       try {
+        const online = await ensureRecentNetState();
+        if (!online) {
+          recordFailure(new Error('Offline'));
+          break;
+        }
         const start = Date.now();
         if (typeof (sql as any).query === 'function') {
           // Increase timeout for warm-up and allow a retry attempt with backoff
@@ -116,7 +132,7 @@ export const warmNeonConnection = async () => {
         }
       } catch (err) {
         recordFailure(err);
-        if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        if (typeof __DEV__ !== 'undefined' && __DEV__ && isVerboseNeonLoggingEnabled()) {
           console.warn('[Neon] Warm-up failed (attempt', attempt, '):', err);
         }
         if (attempt >= maxAttempts) {
@@ -248,22 +264,28 @@ export const query = async <T = any>(
       attempt += 1;
       const backoff = Math.min(2000 * attempt, 8000);
       bumpCircuit(attempt);
-      const host = getHostFromUrl(NEON_URL as any);
-      console.warn(
-        `Neon Query transient error (${host || 'host unknown'}), retrying attempt ${attempt}/${retries} after ${backoff}ms`,
-        error
-      );
+      if (typeof __DEV__ !== 'undefined' && __DEV__ && isVerboseNeonLoggingEnabled()) {
+        const host = getHostFromUrl(NEON_URL as any);
+        console.warn(
+          `Neon Query transient error (${host || 'host unknown'}), retrying attempt ${attempt}/${retries} after ${backoff}ms`,
+          error
+        );
+      }
       if (attempt > retries) break;
       await sleep(backoff);
     }
   }
 
+  // Avoid emitting console.error here, because it triggers a red LogBox "Console Error"
+  // overlay in dev and is noisy for offline/slow networks. Callers can decide how to surface
+  // errors (banner/toast/etc.).
   if (typeof __DEV__ !== 'undefined' && __DEV__) {
-    console.error('Neon Query failed after retries:', lastErr);
+    if (isVerboseNeonLoggingEnabled()) {
+      console.warn('Neon Query failed after retries:', lastErr);
+    }
     throw lastErr;
-  } else {
-    // Hide implementation details from end-users; rethrow a generic error
-    console.warn('Neon Query failed after retries (suppressed)');
-    throw new Error('Server temporarily unavailable. Please try again later.');
   }
+
+  // Hide implementation details from end-users; rethrow a generic error
+  throw new Error('Server temporarily unavailable. Please try again later.');
 };

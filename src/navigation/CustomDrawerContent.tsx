@@ -271,19 +271,6 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
 
       {/* 2. STICKY FOOTER */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
-        <View style={styles.divider} />
-
-        <TouchableOpacity
-          style={styles.footerItem}
-          onPress={() => handleNavigate('Export')}
-          activeOpacity={0.7}
-        >
-          <View style={styles.iconWrapper}>
-            <MaterialIcon name="cloud-download" size={22} color={colors.text || '#334155'} />
-          </View>
-          <Text style={styles.footerText}>Backup & Export</Text>
-        </TouchableOpacity>
-
         <TouchableOpacity style={styles.footerItem} onPress={handleLogout} activeOpacity={0.7}>
           <View style={styles.iconWrapper}>
             <MaterialIcon name="logout" size={22} color={DANGER_COLOR} />
@@ -331,10 +318,10 @@ const styles = StyleSheet.create({
   },
 
   divider: {
-    height: 1,
+    height: StyleSheet.hairlineWidth,
     backgroundColor: colors.border || '#E2E8F0',
-    width: '90%',
-    alignSelf: 'center',
+    width: '100%',
+    alignSelf: 'stretch',
     marginVertical: 10,
     opacity: 0.6,
   },
@@ -361,7 +348,7 @@ const styles = StyleSheet.create({
   /* MENU */
   menuSection: {
     paddingHorizontal: 12,
-    marginTop: 10,
+    marginTop: 6,
   },
   sectionTitle: {
     fontSize: 11,
@@ -383,7 +370,7 @@ const styles = StyleSheet.create({
   menuItemActive: {
     backgroundColor: colors.primarySoft || 'rgba(37, 99, 235, 0.08)',
   },
-  iconWrapper: { width: 44, alignItems: 'center', marginRight: 12 },
+  iconWrapper: { width: 40, alignItems: 'center', marginRight: 12 },
   iconCircle: {
     width: 36,
     height: 36,
@@ -414,8 +401,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     backgroundColor: BACKGROUND_COLOR,
     // Ensure footer sits above content if minimal scrolling
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.03)',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border || 'rgba(0,0,0,0.08)',
+    paddingTop: 8,
   },
   footerItem: {
     flexDirection: 'row',
