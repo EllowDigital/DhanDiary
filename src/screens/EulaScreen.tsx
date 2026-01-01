@@ -11,7 +11,6 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { subscribeBanner, isBannerVisible } from '../utils/bannerState';
 import { Text } from '@rneui/themed';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import ScreenHeader from '../components/ScreenHeader';
@@ -116,22 +115,13 @@ const EulaScreen = () => {
     }
   };
 
-  const [bannerVisible, setBannerVisible] = React.useState<boolean>(false);
-  React.useEffect(() => {
-    setBannerVisible(isBannerVisible());
-    const unsub = subscribeBanner((v: boolean) => setBannerVisible(v));
-    return () => {
-      if (unsub) unsub();
-    };
-  }, []);
-
   return (
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background || '#F8FAFC'} />
 
       <SafeAreaView
         style={styles.safeArea}
-        edges={bannerVisible ? (['left', 'right'] as any) : (['top', 'left', 'right'] as any)}
+        edges={['top', 'left', 'right'] as any}
       >
         {/* Header container constrained to max width */}
         <View

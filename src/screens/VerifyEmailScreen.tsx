@@ -19,7 +19,7 @@ import { useSignIn, useSignUp } from '@clerk/clerk-expo';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { subscribeBanner, isBannerVisible } from '../utils/bannerState';
+// Sync banner is a floating overlay now; no per-screen layout adjustments needed.
 import NetInfo from '@react-native-community/netinfo';
 import OfflineNotice from '../components/OfflineNotice';
 
@@ -182,7 +182,7 @@ const VerifyEmailScreen = () => {
           setOfflineVisible(true);
           return;
         }
-      } catch (e) {}
+      } catch (e) { }
       Alert.alert('Error', msg);
     } finally {
       setLoading(false);
@@ -260,7 +260,7 @@ const VerifyEmailScreen = () => {
           setOfflineVisible(true);
           return;
         }
-      } catch (e) {}
+      } catch (e) { }
 
       if (errCode === 'verification_failed') {
         Alert.alert('Incorrect Code', 'The code you entered is invalid. Please try again.');
@@ -292,15 +292,6 @@ const VerifyEmailScreen = () => {
   };
 
   // --- RENDER ---
-  const [bannerVisible, setBannerVisible] = React.useState<boolean>(false);
-  React.useEffect(() => {
-    setBannerVisible(isBannerVisible());
-    const unsub = subscribeBanner((v: boolean) => setBannerVisible(v));
-    return () => {
-      if (unsub) unsub();
-    };
-  }, []);
-
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
@@ -315,7 +306,7 @@ const VerifyEmailScreen = () => {
 
       <SafeAreaView
         style={{ flex: 1 }}
-        edges={bannerVisible ? (['left', 'right'] as any) : (['top', 'left', 'right'] as any)}
+        edges={['top', 'left', 'right'] as any}
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}

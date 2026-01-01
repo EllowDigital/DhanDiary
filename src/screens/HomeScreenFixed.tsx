@@ -29,7 +29,7 @@ import { subscribeSession } from '../utils/sessionEvents';
 import { useEntries } from '../hooks/useEntries';
 import useDelayedLoading from '../hooks/useDelayedLoading';
 import UserAvatar from '../components/UserAvatar';
-import { subscribeBanner } from '../utils/bannerState';
+// Sync banner is a floating overlay now; no per-screen layout adjustments needed.
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { dayjsFrom, formatDate } from '../utils/date';
 import { subscribeSyncStatus } from '../services/syncManager';
@@ -255,7 +255,6 @@ const HomeScreen = () => {
   const showLoading = useDelayedLoading(Boolean(isLoading), 300);
   const { width: screenWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const [bannerVisible, setBannerVisible] = useState(false);
 
   // Constants for Chart
   const CHART_PADDING = 40; // Inner card padding
@@ -277,18 +276,9 @@ const HomeScreen = () => {
     return () => {
       try {
         if (unsub) unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, [fadeAnim]);
-
-  useEffect(() => {
-    const unsub = subscribeBanner((v) => setBannerVisible(v));
-    return () => {
-      try {
-        unsub();
-      } catch (e) {}
-    };
-  }, []);
 
   // Load local fallback session and subscribe to changes so avatar/name are available
   useEffect(() => {
@@ -297,7 +287,7 @@ const HomeScreen = () => {
       try {
         const s = await getSession();
         if (mounted) setFallbackSession(s);
-      } catch (e) {}
+      } catch (e) { }
     };
     load();
     const unsub = subscribeSession((s) => {
@@ -307,7 +297,7 @@ const HomeScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -600,7 +590,7 @@ const HomeScreen = () => {
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
       <SafeAreaView
         style={styles.safeArea}
-        edges={bannerVisible ? ['left', 'right'] : ['top', 'left', 'right']}
+        edges={['top', 'left', 'right']}
       >
         {/* Loading Overlay */}
         {showLoading && (

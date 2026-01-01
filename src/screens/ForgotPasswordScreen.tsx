@@ -17,7 +17,6 @@ import {
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { subscribeBanner, isBannerVisible } from '../utils/bannerState';
 import { useSignIn } from '@clerk/clerk-expo';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -76,15 +75,6 @@ const ForgotPasswordScreen = () => {
 
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, []);
-
-  const [bannerVisible, setBannerVisible] = React.useState<boolean>(false);
-  React.useEffect(() => {
-    setBannerVisible(isBannerVisible());
-    const unsub = subscribeBanner((v: boolean) => setBannerVisible(v));
-    return () => {
-      if (unsub) unsub();
     };
   }, []);
 
@@ -153,7 +143,7 @@ const ForgotPasswordScreen = () => {
           setOfflineVisible(true);
           return;
         }
-      } catch (e) {}
+      } catch (e) { }
       Alert.alert('Error', msg);
     } finally {
       setLoading(false);
@@ -194,7 +184,7 @@ const ForgotPasswordScreen = () => {
           setOfflineVisible(true);
           return;
         }
-      } catch (e) {}
+      } catch (e) { }
       Alert.alert('Error', msg);
     } finally {
       setLoading(false);
@@ -234,7 +224,7 @@ const ForgotPasswordScreen = () => {
 
       <SafeAreaView
         style={{ flex: 1 }}
-        edges={bannerVisible ? (['left', 'right'] as any) : (['top', 'left', 'right'] as any)}
+        edges={['top', 'left', 'right'] as any}
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}

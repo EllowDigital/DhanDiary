@@ -19,7 +19,6 @@ import dayjs from 'dayjs';
 
 // --- CUSTOM IMPORTS ---
 import ScreenHeader from '../components/ScreenHeader';
-import { subscribeBanner, isBannerVisible } from '../utils/bannerState';
 import { useEntries } from '../hooks/useEntries';
 import { useAuth } from '../hooks/useAuth';
 import { colors } from '../utils/design';
@@ -110,15 +109,6 @@ const FormatOption = React.memo(
 );
 
 const ExportScreen = () => {
-  const [bannerVisible, setBannerVisible] = React.useState<boolean>(false);
-
-  React.useEffect(() => {
-    setBannerVisible(isBannerVisible());
-    const unsub = subscribeBanner((v: boolean) => setBannerVisible(v));
-    return () => {
-      if (unsub) unsub();
-    };
-  }, []);
   const { user } = useAuth();
   const { entries = [], refetch } = useEntries(user?.id);
 
@@ -151,7 +141,7 @@ const ExportScreen = () => {
           'pivot=',
           pivotDate.format()
         );
-      } catch (e) {}
+      } catch (e) { }
     }
 
     let startUnix = -Infinity;
@@ -337,7 +327,7 @@ const ExportScreen = () => {
   return (
     <SafeAreaView
       style={styles.safeArea}
-      edges={bannerVisible ? (['left', 'right'] as any) : (['top', 'left', 'right'] as any)}
+      edges={['top', 'left', 'right'] as any}
     >
       {/* HEADER */}
       <View style={styles.headerContainer}>

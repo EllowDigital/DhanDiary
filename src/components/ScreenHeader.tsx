@@ -18,7 +18,6 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { colors as themeColors } from '../utils/design';
-import { subscribeBanner } from '../utils/bannerState';
 
 // --- TYPES ---
 export type ScreenHeaderProps = {
@@ -106,24 +105,9 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({
 
   const topPadding = (useSafeAreaPadding ? insets.top : 0) + 12; // Base padding
 
-  // If a global banner is visible we should not add the safe-area top padding
-  // here (the banner already includes the safe area). Subscribe to banner visibility.
-  const [bannerVisible, setBannerVisible] = React.useState(false);
-
-  useEffect(() => {
-    const unsub = subscribeBanner((v) => setBannerVisible(v));
-    return () => {
-      try {
-        unsub();
-      } catch (e) {}
-    };
-  }, []);
-
-  const effectiveTopPadding = bannerVisible && useSafeAreaPadding ? 12 : topPadding;
-
   return (
     <Animated.View
-      style={[styles.wrapper, { paddingTop: effectiveTopPadding }, headerAnimatedStyle, style]}
+      style={[styles.wrapper, { paddingTop: topPadding }, headerAnimatedStyle, style]}
       accessibilityRole="header"
     >
       <View style={styles.contentRow}>

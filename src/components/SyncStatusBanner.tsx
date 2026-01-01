@@ -246,9 +246,8 @@ const SyncStatusBanner = () => {
   });
 
   return (
-    <View pointerEvents="box-none" style={styles.wrapper}>
+    <View pointerEvents="none" style={styles.wrapper}>
       <Animated.View
-        pointerEvents="auto"
         style={[
           styles.pill,
           {
@@ -296,7 +295,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   pill: {
-    maxWidth: 340,
+    maxWidth: 420,
     width: '92%',
     backgroundColor: colors.card,
     borderWidth: 1,

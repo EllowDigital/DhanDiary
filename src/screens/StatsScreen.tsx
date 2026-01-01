@@ -15,7 +15,6 @@ import {
   UIManager,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { subscribeBanner, isBannerVisible } from '../utils/bannerState';
 import { Text } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { PieChart } from 'react-native-chart-kit';
@@ -318,15 +317,6 @@ const StatsScreen = () => {
     };
   }, [filter, rangeStart?.valueOf(), rangeEnd?.valueOf(), entries?.length, user?.id]);
 
-  const [bannerVisible, setBannerVisible] = React.useState<boolean>(false);
-  React.useEffect(() => {
-    setBannerVisible(isBannerVisible());
-    const unsub = subscribeBanner((v: boolean) => setBannerVisible(v));
-    return () => {
-      if (unsub) unsub();
-    };
-  }, []);
-
   // --- RENDER HELPERS ---
   const currencySymbol = stats?.currency === 'USD' ? '$' : '₹';
 
@@ -342,7 +332,7 @@ const StatsScreen = () => {
   return (
     <SafeAreaView
       style={styles.safeArea}
-      edges={bannerVisible ? (['left', 'right'] as any) : (['top', 'left', 'right'] as any)}
+      edges={['top', 'left', 'right'] as any}
     >
       <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
 

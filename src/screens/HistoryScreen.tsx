@@ -18,7 +18,6 @@ import {
   LayoutAnimation,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { subscribeBanner, isBannerVisible } from '../utils/bannerState';
 import { Text, Button, Input } from '@rneui/themed';
 import { Swipeable } from 'react-native-gesture-handler';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
@@ -430,7 +429,6 @@ const EditTransactionModal = React.memo(
 // --- 3. MAIN SCREEN ---
 const HistoryScreen = () => {
   const insets = useSafeAreaInsets();
-  const [bannerVisible, setBannerVisible] = useState<boolean>(isBannerVisible());
   const { user } = useAuth();
   const { entries = [], isLoading, updateEntry, deleteEntry } = useEntries(user?.id);
   const { showToast } = useToast();
@@ -455,13 +453,6 @@ const HistoryScreen = () => {
 
     return list.sort((a, b) => resolveEntryMoment(b).valueOf() - resolveEntryMoment(a).valueOf());
   }, [entries, quickFilter]);
-
-  useEffect(() => {
-    const unsub = subscribeBanner((v) => setBannerVisible(!!v));
-    return () => {
-      if (unsub) unsub();
-    };
-  }, []);
 
   const summary = useMemo(() => {
     let net = 0;
@@ -578,7 +569,7 @@ const HistoryScreen = () => {
   return (
     <SafeAreaView
       style={styles.container}
-      edges={bannerVisible ? ['left', 'right'] : ['top', 'left', 'right']}
+      edges={['top', 'left', 'right']}
     >
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
 

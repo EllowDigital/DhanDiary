@@ -15,7 +15,6 @@ import {
   UIManager,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { subscribeBanner, isBannerVisible } from '../utils/bannerState';
 import { Button, Text } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useNavigation, useRoute, useFocusEffect, RouteProp } from '@react-navigation/native';
@@ -72,7 +71,6 @@ const AddEntryScreen: React.FC = () => {
   const navigation = useNavigation();
   const route = useRoute<AddEntryRouteProp>();
   const insets = useSafeAreaInsets();
-  const [bannerVisible, setBannerVisible] = useState<boolean>(isBannerVisible());
   const scrollRef = useRef<ScrollView>(null);
 
   const { user } = useAuth();
@@ -132,13 +130,6 @@ const AddEntryScreen: React.FC = () => {
       Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true }),
     ]).start();
   }, [fadeAnim, slideAnim]);
-
-  useEffect(() => {
-    const unsub = subscribeBanner((v) => setBannerVisible(!!v));
-    return () => {
-      if (unsub) unsub();
-    };
-  }, []);
 
   // Trigger Color Animation on Type Change
   useEffect(() => {
@@ -336,7 +327,7 @@ const AddEntryScreen: React.FC = () => {
   return (
     <SafeAreaView
       style={styles.safeArea}
-      edges={bannerVisible ? ['left', 'right'] : ['top', 'left', 'right']}
+      edges={['top', 'left', 'right']}
     >
       <StatusBar barStyle="dark-content" backgroundColor={colors.background || '#F8FAFC'} />
 
