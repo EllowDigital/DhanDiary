@@ -47,6 +47,7 @@ import { saveSession as saveLocalSession } from './src/db/session';
 import { BiometricAuth } from './src/components/BiometricAuth';
 import tokenCache from './src/utils/tokenCache';
 import * as SecureStore from 'expo-secure-store';
+import { isUuid } from './src/utils/uuid';
 
 import {
   startForegroundSyncScheduler,
@@ -111,7 +112,7 @@ const AppContent = () => {
   const { showActionToast } = useToast();
 
   // --- Biometric session gate state ---
-  const BIOMETRIC_KEY = 'BIOMETRIC_ENABLED';
+  const BIOMETRIC_KEY = 'BIOMETRIC_ENABLED'; // legacy fallback key (not used for new per-user storage)
   const BIOMETRIC_TIMEOUT_MS = 60 * 1000; // 30–60s per spec (keep 60s)
   const [biometricEnabled, setBiometricEnabled] = React.useState(false);
   const [biometricUnlocked, setBiometricUnlocked] = React.useState(false);
@@ -169,12 +170,20 @@ const AppContent = () => {
   // Load biometric enabled setting once, and refresh on foreground.
   const refreshBiometricEnabled = React.useCallback(async () => {
     try {
-      const enabledSetting = await SecureStore.getItemAsync(BIOMETRIC_KEY);
+      // Derive stable session id to use for per-user biometric flag.
+      const uid = localSessionId || (user && isUuid(user.id) ? user.id : null);
+      let enabledSetting: string | null = null;
+      if (uid) {
+        enabledSetting = await SecureStore.getItemAsync(`${BIOMETRIC_KEY}:${uid}`);
+      } else {
+        // No stable id yet — default to disabled. Do NOT migrate global key automatically.
+        enabledSetting = null;
+      }
       setBiometricEnabled(enabledSetting === 'true');
     } catch (e) {
       setBiometricEnabled(false);
     }
-  }, []);
+  }, [localSessionId, user]);
 
   useEffect(() => {
     void refreshBiometricEnabled();

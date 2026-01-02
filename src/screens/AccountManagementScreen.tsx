@@ -24,6 +24,7 @@ import { getSession } from '../db/session';
 import { subscribeSession } from '../utils/sessionEvents';
 import { useNavigation } from '@react-navigation/native';
 import * as SecureStore from 'expo-secure-store';
+import { isUuid } from '../utils/uuid';
 import * as LocalAuthentication from 'expo-local-authentication';
 
 // --- CUSTOM HOOKS & SERVICES (Assumed paths) ---
@@ -207,7 +208,12 @@ const AccountManagementScreen = () => {
           setBiometricType('Fingerprint');
         }
 
-        const enabled = await SecureStore.getItemAsync('BIOMETRIC_ENABLED');
+        // Store biometric preference per-user (keyed by internal session UUID)
+        const currentUserId = (fallbackSession && fallbackSession.id) || (user as any)?.id || null;
+        let enabled: string | null = null;
+        if (currentUserId && isUuid(currentUserId)) {
+          enabled = await SecureStore.getItemAsync(`BIOMETRIC_ENABLED:${currentUserId}`);
+        }
         setBiometricsEnabled(enabled === 'true');
       }
     } catch (e) {
@@ -229,12 +235,20 @@ const AccountManagementScreen = () => {
       }
 
       setBiometricsEnabled(val);
-      if (val) {
-        await SecureStore.setItemAsync('BIOMETRIC_ENABLED', 'true');
-        showToast(`${biometricType} Enabled`);
+      const currentUserId = (fallbackSession && fallbackSession.id) || (user as any)?.id || null;
+      if (currentUserId && isUuid(currentUserId)) {
+        const key = `BIOMETRIC_ENABLED:${currentUserId}`;
+        if (val) {
+          await SecureStore.setItemAsync(key, 'true');
+          showToast(`${biometricType} Enabled`);
+        } else {
+          await SecureStore.deleteItemAsync(key);
+          showToast(`${biometricType} Disabled`);
+        }
       } else {
-        await SecureStore.deleteItemAsync('BIOMETRIC_ENABLED');
-        showToast(`${biometricType} Disabled`);
+        // No stable session id: do not persist preference yet.
+        if (val) showToast(`${biometricType} Enabled for this session`);
+        else showToast(`${biometricType} Disabled for this session`);
       }
     } catch (e) {
       showToast('Failed to update security settings', 'error');
