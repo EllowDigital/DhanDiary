@@ -54,10 +54,12 @@ const LoginScreen = () => {
 
   const insets = useSafeAreaInsets();
   const isCompactHeight = windowHeight < 700;
+  const isVeryCompactHeight = windowHeight < 650;
   const brandTopSpacing = Math.min(
     72,
     Math.max(16, (insets?.top || 0) + (isCompactHeight ? 12 : 24))
   );
+  const sheetBottomPadding = Math.max(16, (insets?.bottom || 0) + 16);
 
   const navigation = useNavigation<any>();
   const { signIn, setActive, isLoaded } = useSignIn();
@@ -383,7 +385,8 @@ const LoginScreen = () => {
           <ScrollView
             contentContainerStyle={[
               styles.scrollContent,
-              { paddingBottom: Math.max(16, (insets?.bottom || 0) + 16) },
+              // Bottom safe-area is handled by the sheet itself.
+              { paddingBottom: 16 },
             ]}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
@@ -411,8 +414,22 @@ const LoginScreen = () => {
                   resizeMode="contain"
                 />
               </View>
-              <Text style={styles.brandTitle}>DhanDiary</Text>
-              <Text style={styles.brandSubtitle}>Master your finances</Text>
+              <Text
+                style={[
+                  styles.brandTitle,
+                  isVeryCompactHeight && { fontSize: 24 },
+                ]}
+              >
+                DhanDiary
+              </Text>
+              <Text
+                style={[
+                  styles.brandSubtitle,
+                  isVeryCompactHeight && { fontSize: 14 },
+                ]}
+              >
+                Master your finances
+              </Text>
             </Animated.View>
 
             {/* Bottom Sheet Form */}
@@ -422,6 +439,8 @@ const LoginScreen = () => {
                 {
                   opacity: fadeAnim,
                   transform: [{ translateY: slideAnim }],
+                  paddingTop: isCompactHeight ? 24 : 32,
+                  paddingBottom: sheetBottomPadding,
                 },
               ]}
             >
@@ -609,7 +628,6 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 32,
     paddingHorizontal: 24,
     paddingTop: 32,
-    paddingBottom: 40,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.05,
