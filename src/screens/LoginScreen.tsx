@@ -18,7 +18,7 @@ import {
   Animated,
   Easing,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSignIn, useOAuth, useUser, useAuth } from '@clerk/clerk-expo';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
@@ -51,6 +51,8 @@ const { width, height } = Dimensions.get('window');
 
 const LoginScreen = () => {
   useWarmUpBrowser();
+
+  const insets = useSafeAreaInsets();
 
   const navigation = useNavigation<any>();
   const { signIn, setActive, isLoaded } = useSignIn();
@@ -101,7 +103,7 @@ const LoginScreen = () => {
     ]).start();
 
     // Pre-warm DB connection
-    warmNeonConnection().catch(() => {});
+    warmNeonConnection().catch(() => { });
   }, []);
 
   // --- AUTO-SYNC LOGIC ---
@@ -218,7 +220,7 @@ const LoginScreen = () => {
               setLoading(false);
               return false;
             }
-          } catch (e) {}
+          } catch (e) { }
           Alert.alert('Login Failed', msg);
           setLoading(false);
         }
@@ -270,7 +272,7 @@ const LoginScreen = () => {
             setLoading(false);
             return false;
           }
-        } catch (e) {}
+        } catch (e) { }
 
         if (code === 'strategy_for_user_invalid') {
           Alert.alert(
@@ -367,13 +369,16 @@ const LoginScreen = () => {
         end={{ x: 1, y: 1 }}
       />
 
-      <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right'] as any}>
+      <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right', 'bottom'] as any}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
         >
           <ScrollView
-            contentContainerStyle={styles.scrollContent}
+            contentContainerStyle={[
+              styles.scrollContent,
+              { paddingBottom: Math.max(16, (insets?.bottom || 0) + 16) },
+            ]}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
