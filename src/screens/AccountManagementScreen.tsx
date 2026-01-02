@@ -177,7 +177,7 @@ const AccountManagementScreen = () => {
       try {
         const s = await getSession();
         if (mounted) setFallbackSession(s);
-      } catch (e) { }
+      } catch (e) {}
     };
     load();
     const unsub = subscribeSession((s) => {
@@ -187,7 +187,7 @@ const AccountManagementScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, []);
 
@@ -264,7 +264,10 @@ const AccountManagementScreen = () => {
       showToast(val ? `${biometricType} Enabled` : `${biometricType} Disabled`);
     } catch (e) {
       const msg = String(e?.message || '').trim();
-      showToast(msg ? `Failed to update security settings: ${msg}` : 'Failed to update security settings', 'error');
+      showToast(
+        msg ? `Failed to update security settings: ${msg}` : 'Failed to update security settings',
+        'error'
+      );
     }
   };
 
@@ -387,7 +390,7 @@ const AccountManagementScreen = () => {
               } catch (navErr) {
                 try {
                   navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
-                } catch (e) { }
+                } catch (e) {}
               }
               Alert.alert('Error', err?.message || 'Failed to delete account');
             } finally {
@@ -465,10 +468,10 @@ const AccountManagementScreen = () => {
                   {(user as any)?.emailAddresses?.some(
                     (e: any) => e.verification?.status === 'verified'
                   ) && (
-                      <View style={styles.verifiedBadge}>
-                        <MaterialIcon name="check" size={12} color="white" />
-                      </View>
-                    )}
+                    <View style={styles.verifiedBadge}>
+                      <MaterialIcon name="check" size={12} color="white" />
+                    </View>
+                  )}
                 </View>
 
                 <View style={styles.heroInfo}>
