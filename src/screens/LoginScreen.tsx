@@ -14,7 +14,7 @@ import {
   Image,
   AppState,
   AppStateStatus,
-  Dimensions,
+  useWindowDimensions,
   Animated,
   Easing,
 } from 'react-native';
@@ -47,12 +47,17 @@ const useWarmUpBrowser = () => {
   }, []);
 };
 
-const { width, height } = Dimensions.get('window');
-
 const LoginScreen = () => {
   useWarmUpBrowser();
 
+  const { height: windowHeight } = useWindowDimensions();
+
   const insets = useSafeAreaInsets();
+  const isCompactHeight = windowHeight < 700;
+  const brandTopSpacing = Math.min(
+    72,
+    Math.max(16, (insets?.top || 0) + (isCompactHeight ? 12 : 24))
+  );
 
   const navigation = useNavigation<any>();
   const { signIn, setActive, isLoaded } = useSignIn();
@@ -369,7 +374,8 @@ const LoginScreen = () => {
         end={{ x: 1, y: 1 }}
       />
 
-      <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right', 'bottom'] as any}>
+      {/* Avoid double bottom padding: we apply bottom inset via ScrollView paddingBottom */}
+      <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right'] as any}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
@@ -383,11 +389,25 @@ const LoginScreen = () => {
             showsVerticalScrollIndicator={false}
           >
             {/* Top Brand Section */}
-            <Animated.View style={[styles.brandSection, { opacity: fadeAnim }]}>
-              <View style={styles.logoCircle}>
+            <Animated.View
+              style={[
+                styles.brandSection,
+                {
+                  opacity: fadeAnim,
+                  marginTop: brandTopSpacing,
+                  marginBottom: isCompactHeight ? 24 : 40,
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.logoCircle,
+                  isCompactHeight && { width: 72, height: 72, borderRadius: 20 },
+                ]}
+              >
                 <Image
                   source={require('../../assets/splash-icon.png')}
-                  style={styles.logo}
+                  style={[styles.logo, isCompactHeight && { width: 44, height: 44 }]}
                   resizeMode="contain"
                 />
               </View>
@@ -550,8 +570,6 @@ const styles = StyleSheet.create({
   /* BRAND SECTION */
   brandSection: {
     alignItems: 'center',
-    marginTop: height * 0.08,
-    marginBottom: 40,
   },
   logoCircle: {
     width: 80,
@@ -597,7 +615,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 16,
     elevation: 20,
-    flex: 1,
   },
   welcomeText: {
     fontSize: 24,
