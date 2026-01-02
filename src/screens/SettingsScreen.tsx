@@ -19,8 +19,8 @@ import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 
 // Optional Haptics: prefer runtime require so builds without expo-haptics still work.
 let Haptics: any = {
-  impactAsync: async () => {},
-  notificationAsync: async () => {},
+  impactAsync: async () => { },
+  notificationAsync: async () => { },
   ImpactFeedbackStyle: { Medium: 'medium' },
   NotificationFeedbackType: { Warning: 'warning' },
 };
@@ -85,15 +85,7 @@ const SettingsScreen = () => {
   const { showToast } = useToast();
   const { user } = useAuth(); // Clerk or Custom Auth hook
 
-  // Clerk Auth (Safe Import for optional usage)
-  let clerkSignOut: any = null;
-  try {
-    const clerk = require('@clerk/clerk-expo');
-    const auth = clerk.useAuth();
-    clerkSignOut = auth.signOut;
-  } catch (e) {
-    // Clerk not installed or configured, ignore
-  }
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   // Layout
   const { width } = useWindowDimensions();
@@ -140,13 +132,13 @@ const SettingsScreen = () => {
         const d = new Date(last);
         setLastSyncTime(`${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`);
       }
-    } catch (e) {}
+    } catch (e) { }
 
     return () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -178,7 +170,7 @@ const SettingsScreen = () => {
         showToast('Cloud sync is disabled in this build.', 'error');
         return;
       }
-    } catch (e) {}
+    } catch (e) { }
 
     // Haptic feedback
     if (Platform.OS !== 'web') {
@@ -229,22 +221,16 @@ const SettingsScreen = () => {
   };
 
   const handleLogout = () => {
+    if (isSigningOut) return;
     Alert.alert('Sign Out', 'Are you sure you want to log out?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Sign Out',
         style: 'destructive',
         onPress: async () => {
+          if (isSigningOut) return;
+          setIsSigningOut(true);
           try {
-            // Sign out from Clerk first (if available)
-            if (clerkSignOut && typeof clerkSignOut === 'function') {
-              try {
-                await clerkSignOut();
-              } catch (e) {
-                console.warn('[Settings] Clerk signOut failed', e);
-              }
-            }
-
             const ok = await logout();
             try {
               query.clear();
@@ -253,6 +239,7 @@ const SettingsScreen = () => {
             }
 
             if (ok) showToast('Signed out successfully');
+            else showToast('Signed out, but some cleanup may be incomplete.', 'error');
 
             // Force navigation reset (root)
             try {
@@ -264,6 +251,8 @@ const SettingsScreen = () => {
           } catch (e) {
             console.warn('[Settings] logout failed', e);
             showToast('Sign out failed. Please try again.', 'error');
+          } finally {
+            setIsSigningOut(false);
           }
         },
       },
@@ -283,14 +272,22 @@ const SettingsScreen = () => {
           text: 'Reset Everything',
           style: 'destructive',
           onPress: async () => {
-            await logout();
-            query.clear();
-            showToast('App has been reset');
+            if (isSigningOut) return;
+            setIsSigningOut(true);
             try {
-              const { resetRoot } = await import('../utils/rootNavigation');
-              resetRoot({ index: 0, routes: [{ name: 'Auth' }] });
-            } catch (e) {
-              navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
+              await logout({ clearAllStorage: true });
+              try {
+                query.clear();
+              } catch (e) { }
+              showToast('App has been reset');
+              try {
+                const { resetRoot } = await import('../utils/rootNavigation');
+                resetRoot({ index: 0, routes: [{ name: 'Auth' }] });
+              } catch (e) {
+                navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
+              }
+            } finally {
+              setIsSigningOut(false);
             }
           },
         },
@@ -447,7 +444,12 @@ const SettingsScreen = () => {
 
             {/* 4. FOOTER */}
             <Animated.View style={[getAnimStyle(4), { marginTop: 24, marginBottom: 40 }]}>
-              <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.7}>
+              <TouchableOpacity
+                style={[styles.logoutBtn, isSigningOut && { opacity: 0.6 }]}
+                onPress={handleLogout}
+                activeOpacity={0.7}
+                disabled={isSigningOut}
+              >
                 <MaterialIcon name="logout" size={20} color={colors.accentRed} />
                 <Text style={styles.logoutText}>Sign Out</Text>
               </TouchableOpacity>

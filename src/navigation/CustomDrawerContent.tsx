@@ -35,9 +35,10 @@ const TEXT_SUB_COLOR = INACTIVE_COLOR;
 // --- DRAWER COMPONENT ---
 const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   const insets = useSafeAreaInsets();
-  const { signOut } = useAuth();
+  const { signOut: _clerkSignOut } = useAuth();
   const { user } = useUser();
   const [fallbackSession, setFallbackSession] = useState<any>(null);
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   // Animation Refs
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -80,7 +81,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -129,15 +130,18 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   };
 
   const handleLogout = () => {
+    if (isSigningOut) return;
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Sign Out',
         style: 'destructive',
         onPress: async () => {
+          if (isSigningOut) return;
+          setIsSigningOut(true);
           try {
-            await signOut(); // Clerk
-            await logout(); // Local storage clean up
+            // Centralized logout handles best-effort Clerk signOut too.
+            await logout();
 
             // Reset nav stack to prevent going back
             try {
@@ -149,6 +153,8 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
           } catch (e) {
             console.error('[Drawer] Logout failed', e);
             Alert.alert('Error', 'Failed to sign out. Please try again.');
+          } finally {
+            setIsSigningOut(false);
           }
         },
       },
