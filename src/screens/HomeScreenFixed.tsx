@@ -71,6 +71,40 @@ interface Transaction {
   date: string | Date;
 }
 
+const formatInrCompactNumber = (value: number): string => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '0';
+  const sign = n < 0 ? '-' : '';
+  const abs = Math.abs(n);
+
+  const fmt = (den: number, suffix: string) => {
+    const v = abs / den;
+    const fixed = v >= 100 ? v.toFixed(0) : v >= 10 ? v.toFixed(1) : v.toFixed(2);
+    return `${sign}${fixed}${suffix}`;
+  };
+
+  // Indian-ish compact units
+  if (abs >= 1e11) return fmt(1e11, 'Kh'); // Kharab
+  if (abs >= 1e9) return fmt(1e9, 'Ar'); // Arab
+  if (abs >= 1e7) return fmt(1e7, 'Cr'); // Crore
+  if (abs >= 1e5) return fmt(1e5, 'L'); // Lakh
+  if (abs >= 1e3) return fmt(1e3, 'K');
+
+  return `${sign}${Math.round(abs).toLocaleString('en-IN')}`;
+};
+
+const formatInrNumber = (value: number): string => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '0';
+  // Switch to compact for big numbers to keep UI stable.
+  if (Math.abs(n) >= 1e7) return formatInrCompactNumber(n);
+  return Math.round(n).toLocaleString('en-IN');
+};
+
+const formatInrWithSymbol = (value: number): string => {
+  return `₹${formatInrNumber(value)}`;
+};
+
 // --- SUB-COMPONENTS ---
 
 // 1. WAVE CHART (Optimized)
@@ -474,19 +508,14 @@ const HomeScreen = () => {
         </View>
 
         {/* 2. Hero Card */}
-        {
-          // Compute responsive sizes from screen width so the hero card
-          // and contained typography scale across Android devices.
-        }
         <Animated.View
           style={
             [
               styles.heroCard,
               {
                 opacity: fadeAnim,
-                height: Math.max(160, Math.min(300, Math.round(screenWidth * 0.5))),
+                minHeight: Math.max(180, Math.min(320, Math.round(screenWidth * 0.56))),
                 borderRadius: Math.max(16, Math.round(screenWidth * 0.06)),
-                padding: Math.round(Math.max(12, screenWidth * 0.05)),
               },
             ]
           }
@@ -504,7 +533,15 @@ const HomeScreen = () => {
             <Circle cx="10%" cy="90%" r="50" fill="white" fillOpacity="0.08" />
           </Svg>
 
-          <View style={[styles.cardInner, { padding: Math.round(Math.max(12, screenWidth * 0.05)) }]}>
+          <View
+            style={[
+              styles.cardInner,
+              {
+                padding: Math.round(Math.max(14, screenWidth * 0.05)),
+                justifyContent: 'space-between',
+              },
+            ]}
+          >
             <View style={styles.cardHeader}>
               <Text style={styles.balanceLabel}>Total Balance</Text>
               <TouchableOpacity onPress={() => setShowBalance(!showBalance)} style={styles.eyeBtn}>
@@ -532,8 +569,9 @@ const HomeScreen = () => {
                 ]}
                 numberOfLines={1}
                 adjustsFontSizeToFit
+                minimumFontScale={0.6}
               >
-                {showBalance ? stats.bal.toLocaleString('en-IN') : '••••••'}
+                {showBalance ? formatInrNumber(stats.bal) : '••••••'}
               </Text>
             </View>
 
@@ -544,23 +582,34 @@ const HomeScreen = () => {
               </View>
             ) : null}
 
-            <View
-              style={[
-                styles.statsContainer,
-                { padding: Math.max(8, Math.round(screenWidth * 0.02)), flexWrap: 'wrap' },
-              ]}
-            >
+            <View style={[styles.statsContainer, { padding: Math.max(8, Math.round(screenWidth * 0.02)) }]}>
               {/* Income */}
-              <View style={[styles.statItem, { minWidth: Math.round((screenWidth - 80) / 2) }]}>
+              <View style={styles.statItem}>
                 <View style={[styles.statIcon, { backgroundColor: 'rgba(16, 185, 129, 0.2)' }]}>
                   <MaterialIcon name="arrow-downward" size={16} color="#4ADE80" />
                 </View>
-                <View>
-                  <Text style={[styles.statLabel, { fontSize: Math.max(10, Math.round(screenWidth * 0.03)) }]}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text
+                    style={[
+                      styles.statLabel,
+                      { fontSize: Math.max(10, Math.round(screenWidth * 0.03)) },
+                    ]}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                  >
                     Income {period === 'week' ? '(7 Days)' : '(This Month)'}
                   </Text>
-                  <Text style={[styles.statValue, { fontSize: Math.max(12, Math.round(screenWidth * 0.035)) }]}>
-                    {showBalance ? `₹${stats.in.toLocaleString()}` : '••••'}
+                  <Text
+                    style={[
+                      styles.statValue,
+                      { fontSize: Math.max(12, Math.round(screenWidth * 0.035)) },
+                    ]}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.7}
+                  >
+                    {showBalance ? formatInrWithSymbol(stats.in) : '••••'}
                   </Text>
                 </View>
               </View>
@@ -568,16 +617,32 @@ const HomeScreen = () => {
               <View style={styles.statDivider} />
 
               {/* Expense */}
-              <View style={[styles.statItem, { minWidth: Math.round((screenWidth - 80) / 2) }]}>
+              <View style={styles.statItem}>
                 <View style={[styles.statIcon, { backgroundColor: 'rgba(239, 68, 68, 0.2)' }]}>
                   <MaterialIcon name="arrow-upward" size={16} color="#F87171" />
                 </View>
-                <View>
-                  <Text style={[styles.statLabel, { fontSize: Math.max(10, Math.round(screenWidth * 0.03)) }]}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text
+                    style={[
+                      styles.statLabel,
+                      { fontSize: Math.max(10, Math.round(screenWidth * 0.03)) },
+                    ]}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                  >
                     Expense {period === 'week' ? '(7 Days)' : '(This Month)'}
                   </Text>
-                  <Text style={[styles.statValue, { fontSize: Math.max(12, Math.round(screenWidth * 0.035)) }]}>
-                    {showBalance ? `₹${stats.out.toLocaleString()}` : '••••'}
+                  <Text
+                    style={[
+                      styles.statValue,
+                      { fontSize: Math.max(12, Math.round(screenWidth * 0.035)) },
+                    ]}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.7}
+                  >
+                    {showBalance ? formatInrWithSymbol(stats.out) : '••••'}
                   </Text>
                 </View>
               </View>
@@ -836,7 +901,7 @@ const styles = StyleSheet.create({
   // Hero Card
   heroCard: {
     width: '100%',
-    height: 200,
+    minHeight: 200,
     borderRadius: 24,
     marginBottom: 24,
     overflow: 'hidden',
@@ -867,7 +932,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 12,
   },
-  statItem: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  statItem: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10 },
   statIcon: {
     width: 32,
     height: 32,
@@ -877,7 +942,12 @@ const styles = StyleSheet.create({
   },
   statLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: '500' },
   statValue: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  statDivider: { width: 1, backgroundColor: 'rgba(255,255,255,0.2)', marginHorizontal: 12 },
+  statDivider: {
+    width: 1,
+    alignSelf: 'stretch',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    marginHorizontal: 12,
+  },
 
   // Action Grid
   actionGrid: {
