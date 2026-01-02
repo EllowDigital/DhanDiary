@@ -32,6 +32,7 @@ import { dayjsFrom } from '../utils/date';
 import { getSession } from '../db/session';
 import { subscribeSession } from '../utils/sessionEvents';
 import { executeSqlAsync } from '../db/sqlite';
+import { subscribeSyncStatus } from '../services/syncManager';
 
 // --- ANIMATION SETUP ---
 if (Platform.OS === 'android') {
@@ -132,6 +133,9 @@ const StatsScreen = () => {
   const [txCacheBuster, setTxCacheBuster] = useState<number>(0);
   const [availableMonths, setAvailableMonths] = useState<any[]>([]);
   const [availableYears, setAvailableYears] = useState<number[]>([]);
+
+  const lastSyncStatusRef = useRef<'idle' | 'syncing' | 'error'>('idle');
+  const lastAutoRefreshAtRef = useRef<number>(0);
 
   // --- REFS & ANIMATION ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -246,6 +250,31 @@ const StatsScreen = () => {
       } catch (e) { }
     };
   }, [navigation, refreshPeriods]);
+
+  // Auto-refresh Analytics right after sync finishes.
+  useEffect(() => {
+    const unsub = subscribeSyncStatus((status) => {
+      const prev = lastSyncStatusRef.current;
+      lastSyncStatusRef.current = status;
+
+      // Only act on a real completion transition.
+      if (prev === 'syncing' && status === 'idle') {
+        const now = Date.now();
+        // De-dupe rapid consecutive idle transitions.
+        if (now - lastAutoRefreshAtRef.current < 800) return;
+        lastAutoRefreshAtRef.current = now;
+
+        // This updates the cache buster and period lists;
+        // analysis re-runs automatically via txCacheBuster dependency.
+        refreshPeriods();
+      }
+    });
+    return () => {
+      try {
+        unsub();
+      } catch (e) { }
+    };
+  }, [refreshPeriods]);
 
   // Sync Defaults
   useEffect(() => {
