@@ -1,5 +1,6 @@
 import AsyncStorage from '../utils/AsyncStorageWrapper';
 import { notifySessionChanged } from '../utils/sessionEvents';
+import { isUuid, uuidv4 } from '../utils/uuid';
 
 export type Session = {
   id: string; // internal UUID used by app for Neon queries
@@ -13,17 +14,6 @@ export type Session = {
 const KEY = 'FALLBACK_SESSION';
 const NO_GUEST_KEY = 'NO_GUEST_MODE';
 const ACCOUNT_DELETED_KEY = 'ACCOUNT_DELETED_AT';
-
-const uuidValidate = (s: any) =>
-  typeof s === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(s);
-
-const uuidv4 = () => {
-  const hex = () =>
-    Math.floor((1 + Math.random()) * 0x10000)
-      .toString(16)
-      .substring(1);
-  return `${hex()}${hex()}-${hex()}-${hex()}-${hex()}-${hex()}${hex()}${hex()}`;
-};
 
 export const getSession = async (): Promise<Session> => {
   try {
@@ -58,7 +48,7 @@ export const saveSession = async (
     } catch (e) {}
 
     let payload: any = { name: name || '', email: email || '' };
-    if (uuidValidate(id)) {
+    if (isUuid(id)) {
       payload.id = id;
       // Prefer explicitly provided clerkId; otherwise preserve existing stored clerk_id.
       const nextClerk = typeof clerkId !== 'undefined' ? clerkId : existing?.clerk_id;

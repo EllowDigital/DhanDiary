@@ -300,29 +300,44 @@ export async function getUnsyncedTransactions() {
 export async function migrateNonUuidTransactionIds(): Promise<{ migrated: number }> {
   let migrated = 0;
 
-  const [, res] = await executeSqlAsync('SELECT id FROM transactions;', []);
-  const ids: string[] = [];
-  try {
-    for (let i = 0; i < (res?.rows?.length || 0); i++) {
-      const row = res.rows.item(i);
-      if (row?.id) ids.push(String(row.id));
-    }
-  } catch (e) {
-    return { migrated: 0 };
-  }
+  const BATCH_SIZE = 200;
+  let safety = 0;
+  while (safety++ < 10_000) {
+    // Select only likely-non-UUID ids to keep scans light.
+    const [, res] = await executeSqlAsync(
+      "SELECT id FROM transactions WHERE id NOT LIKE '________-____-____-____-____________' LIMIT ?;",
+      [BATCH_SIZE]
+    );
 
-  for (const oldId of ids) {
-    if (isUuid(oldId)) continue;
-    const newId = uuidv4();
+    const ids: string[] = [];
     try {
-      await executeSqlAsync(
-        'UPDATE transactions SET id = ?, sync_status = 0, need_sync = 1, updated_at = ? WHERE id = ?;',
-        [newId, Date.now(), oldId]
-      );
-      migrated += 1;
+      for (let i = 0; i < (res?.rows?.length || 0); i++) {
+        const row = res.rows.item(i);
+        if (row?.id) ids.push(String(row.id));
+      }
     } catch (e) {
-      // ignore per-row failures
+      break;
     }
+
+    if (ids.length === 0) break;
+
+    const before = migrated;
+    for (const oldId of ids) {
+      if (isUuid(oldId)) continue;
+      const newId = uuidv4();
+      try {
+        await executeSqlAsync(
+          'UPDATE transactions SET id = ?, sync_status = 0, need_sync = 1, updated_at = ? WHERE id = ?;',
+          [newId, Date.now(), oldId]
+        );
+        migrated += 1;
+      } catch (e) {
+        // ignore per-row failures
+      }
+    }
+
+    // If we couldn't migrate any row from this batch, avoid looping forever.
+    if (migrated === before) break;
   }
 
   if (migrated > 0) {
@@ -475,7 +490,11 @@ export async function upsertTransactionFromRemote(
       0, // need_sync = 0 because it came from server
     ]);
 
-    if (__DEV__) console.log('[transactions] upsert remote', txn.id);
+    try {
+      if (__DEV__ && (globalThis as any).__SYNC_VERBOSE__) {
+        console.log('[transactions] upsert remote', txn.id);
+      }
+    } catch (e) {}
     if (opts?.notify) {
       try {
         const rowsAffected = Number(writeRes?.rowsAffected || 0);

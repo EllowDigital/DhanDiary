@@ -251,15 +251,26 @@ export async function wipeLocalData(): Promise<void> {
   }
 
   // Delete rows (fast) rather than dropping tables (can be slow and racy).
+  // Wrap in a transaction to avoid partial wipes across tables.
   try {
-    await executeSqlAsync('DELETE FROM transactions;', []);
-  } catch (e) {}
-  try {
-    await executeSqlAsync('DELETE FROM categories;', []);
-  } catch (e) {}
-  try {
-    await executeSqlAsync('DELETE FROM meta;', []);
-  } catch (e) {}
+    await runAsync('BEGIN TRANSACTION;');
+    await runAsync('DELETE FROM transactions;');
+    await runAsync('DELETE FROM categories;');
+    await runAsync('DELETE FROM meta;');
+    await runAsync('COMMIT;');
+  } catch (e) {
+    try {
+      await runAsync('ROLLBACK;');
+    } catch (rollbackError) {
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.warn('[sqlite] wipeLocalData rollback failed', rollbackError);
+      }
+    }
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.warn('[sqlite] wipeLocalData failed', e);
+    }
+    throw e;
+  }
 }
 
 export default sqliteClient;

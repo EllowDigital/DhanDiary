@@ -49,6 +49,11 @@ const cacheKey = (
  * ------------------------------------------------------------------
  */
 const aggregateLocally = async (userId: string, start: dayjs.Dayjs, end: dayjs.Dayjs) => {
+  const totalDays = Math.abs(end.diff(start, 'day'));
+  const bucketFmt = totalDays > 1095 ? '%Y' : totalDays > 60 ? '%Y-%m' : '%Y-%m-%d';
+  const bucketUnit: 'year' | 'month' | 'day' =
+    totalDays > 1095 ? 'year' : totalDays > 60 ? 'month' : 'day';
+
   // IMPORTANT:
   // We group and filter by the user's *local day* so Analytics matches what the
   // user sees on screen (not UTC day boundaries).
@@ -81,38 +86,46 @@ const aggregateLocally = async (userId: string, start: dayjs.Dayjs, end: dayjs.D
   const maxExpense = Number(totalRow?.max_out || 0);
   const count = Number(totalRow?.cnt || 0);
 
-  // B. Daily Trend (Expenses)
-  const dailySql = `
-    SELECT ${localDayExpr} as d,
+  // B. Trend (Adaptive Bucketing)
+  const bucketExpr = `strftime('${bucketFmt}', COALESCE(date, created_at), 'localtime')`;
+  const trendSql = `
+    SELECT ${bucketExpr} as b,
            COALESCE(SUM(CASE WHEN type='expense' THEN amount ELSE 0 END),0) AS total_out
     FROM transactions
     WHERE user_id = ?
       AND deleted_at IS NULL
       AND ${localDayExpr} >= ?
       AND ${localDayExpr} <= ?
-    GROUP BY ${localDayExpr}
-    ORDER BY ${localDayExpr};
+    GROUP BY ${bucketExpr}
+    ORDER BY ${bucketExpr};
   `;
-  const [, dailyRes] = await executeSqlAsync(dailySql, [userId, startKey, endKey]);
-  const dailyMap = new Map<string, number>();
-  for (let i = 0; i < dailyRes.rows.length; i++) {
-    const r: any = dailyRes.rows.item(i) || {};
-    dailyMap.set(String(r.d || ''), Number(r.total_out || 0));
+  const [, trendRes] = await executeSqlAsync(trendSql, [userId, startKey, endKey]);
+  const trendMap = new Map<string, number>();
+  for (let i = 0; i < trendRes.rows.length; i++) {
+    const r: any = trendRes.rows.item(i) || {};
+    trendMap.set(String(r.b || ''), Number(r.total_out || 0));
   }
 
-  // Fill Date Gaps
-  const days: string[] = [];
-  let cur = start.startOf('day');
-  const last = end.startOf('day');
+  // Fill gaps at the chosen bucket granularity
+  const buckets: string[] = [];
+  let cur = start.startOf(bucketUnit);
+  const last = end.startOf(bucketUnit);
   while (cur.isSameOrBefore(last)) {
-    days.push(cur.format('YYYY-MM-DD'));
-    cur = cur.add(1, 'day');
+    if (bucketUnit === 'year') buckets.push(cur.format('YYYY'));
+    else if (bucketUnit === 'month') buckets.push(cur.format('YYYY-MM'));
+    else buckets.push(cur.format('YYYY-MM-DD'));
+    cur = cur.add(1, bucketUnit);
   }
 
-  const dailyTrend = days.map((d) => ({
-    label: dayjs(d).format('DD MMM'),
-    value: dailyMap.get(d) || 0,
-    date: d,
+  const dailyTrend = buckets.map((b) => ({
+    label:
+      bucketUnit === 'year'
+        ? dayjs(b).format('YYYY')
+        : bucketUnit === 'month'
+          ? dayjs(`${b}-01`).format('MMM YY')
+          : dayjs(b).format('DD MMM'),
+    value: trendMap.get(b) || 0,
+    date: b,
   }));
 
   // C. Category Distribution
@@ -141,7 +154,7 @@ const aggregateLocally = async (userId: string, start: dayjs.Dayjs, end: dayjs.D
     });
   }
 
-  const daysCount = Math.max(1, days.length);
+  const daysCount = Math.max(1, end.diff(start, 'day') + 1);
   const avgPerDay = daysCount > 0 ? Number(totalOut) / daysCount : 0;
   const savingsRate = totalIn > 0 ? ((totalIn - totalOut) / totalIn) * 100 : 0;
 

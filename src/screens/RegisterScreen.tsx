@@ -15,7 +15,7 @@ import {
   Animated,
   Easing,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import NetInfo from '@react-native-community/netinfo';
 import { Ionicons } from '@expo/vector-icons';
@@ -31,6 +31,8 @@ const { height } = Dimensions.get('window');
 const RegisterScreen = () => {
   const navigation = useNavigation<any>();
   const { isLoaded, signUp } = useSignUp();
+
+  const insets = useSafeAreaInsets();
 
   // --- STATE ---
   const [firstName, setFirstName] = useState('');
@@ -209,13 +211,16 @@ const RegisterScreen = () => {
         end={{ x: 1, y: 1 }}
       />
 
-      <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right'] as any}>
+      <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right', 'bottom'] as any}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
         >
           <ScrollView
-            contentContainerStyle={styles.scrollContent}
+            contentContainerStyle={[
+              styles.scrollContent,
+              { paddingBottom: Math.max(16, (insets?.bottom || 0) + 16) },
+            ]}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >

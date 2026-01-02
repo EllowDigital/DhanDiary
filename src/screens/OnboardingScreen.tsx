@@ -9,7 +9,7 @@ import {
   useWindowDimensions,
   Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
 import { useNavigation } from '@react-navigation/native';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
@@ -201,6 +201,7 @@ const Paginator = ({ data, scrollX }: { data: typeof SLIDES; scrollX: Animated.V
 // --- MAIN SCREEN ---
 const OnboardingScreen = () => {
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
   const [currentIndex, setCurrentIndex] = useState(0);
   const scrollX = useRef(new Animated.Value(0)).current;
   const listRef = useRef<FlatList>(null);
@@ -237,7 +238,7 @@ const OnboardingScreen = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right'] as any}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom'] as any}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background || '#F9FAFB'} />
 
       {/* Header: Skip Button */}
@@ -273,7 +274,15 @@ const OnboardingScreen = () => {
       </View>
 
       {/* Footer: Dots & Button */}
-      <View style={[styles.footer, { paddingBottom: Platform.OS === 'android' ? 24 : 10 }]}>
+      <View
+        style={[
+          styles.footer,
+          {
+            // Keep CTA above gesture/navigation bar across Android devices
+            paddingBottom: Math.max(insets.bottom, Platform.OS === 'android' ? 16 : 10) + 12,
+          },
+        ]}
+      >
         <Paginator data={SLIDES} scrollX={scrollX} />
 
         <TouchableOpacity
@@ -393,7 +402,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 10,
     elevation: 8,
-    marginBottom: 10,
+    marginBottom: 0,
   },
   buttonText: {
     color: '#fff',

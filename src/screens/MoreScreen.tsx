@@ -105,7 +105,7 @@ const MoreScreen: React.FC = () => {
   );
 
   const handleEmail = useCallback(() => {
-    Linking.openURL('mailto:sarwanyadav26@outlook.com?subject=DhanDiary%20Support');
+    Linking.openURL('mailto:ellowdigitalindia@gmail.com?subject=DhanDiary%20Support');
   }, []);
 
   const handleRoadmap = useCallback(() => {

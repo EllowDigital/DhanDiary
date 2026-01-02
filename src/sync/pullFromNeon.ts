@@ -54,7 +54,7 @@ export async function pullFromNeon(options?: {
   ]);
 
   let cursorUpdatedAtMs = 0;
-  let cursorId = '';
+  let cursorId: string | null = null;
 
   try {
     if (lastRow && lastRow[1]) {
@@ -67,7 +67,7 @@ export async function pullFromNeon(options?: {
           const u = Number(parsed?.updatedAtMs || 0);
           const id = parsed?.id ? String(parsed.id) : '';
           if (Number.isFinite(u) && u >= 0) cursorUpdatedAtMs = u;
-          if (id) cursorId = id;
+          if (id && isUuid(id)) cursorId = id;
         }
       }
     }
@@ -145,7 +145,7 @@ export async function pullFromNeon(options?: {
         (EXTRACT(EPOCH FROM updated_at) * 1000)::bigint > $2::bigint
         OR (
           (EXTRACT(EPOCH FROM updated_at) * 1000)::bigint = $2::bigint
-          AND id::text > $3::text
+          AND ($3::uuid IS NULL OR id > $3::uuid)
         )
       )
     ORDER BY updated_at ASC, id ASC
@@ -158,7 +158,7 @@ export async function pullFromNeon(options?: {
 
   const processedIds = new Set<string>();
   let pageCursorUpdatedAtMs = cursorUpdatedAtMs;
-  let pageCursorId = cursorId;
+  let pageCursorId: string | null = cursorId;
 
   const yieldToUi = async () => {
     // Yield to the JS event loop so UI stays responsive during large syncs
@@ -185,7 +185,7 @@ export async function pullFromNeon(options?: {
 
     let remoteRows: Array<any> = [];
     try {
-      const params = [userId, pageCursorUpdatedAtMs || 0, pageCursorId || ''];
+      const params = [userId, pageCursorUpdatedAtMs || 0, pageCursorId || null];
       remoteRows = (await neonQuery(sql, params)) || [];
     } catch (e: any) {
       const msg = (e && (e.message || String(e))).toLowerCase();
@@ -220,7 +220,7 @@ export async function pullFromNeon(options?: {
       const lu = Number(last?.updated_at || 0);
       const lid = last?.id ? String(last.id) : '';
       if (Number.isFinite(lu) && lu >= 0) pageCursorUpdatedAtMs = lu;
-      if (lid) pageCursorId = lid;
+      if (lid && isUuid(lid)) pageCursorId = lid;
     } catch (e) {}
 
     // Process remote rows in small chunks to avoid blocking the JS thread.

@@ -274,6 +274,16 @@ export const useAuth = () => {
 
     (async () => {
       try {
+        // Offline-first: do not attempt network bridge when offline.
+        // Let the catch block preserve existing UUID session or create a stable local UUID.
+        try {
+          const NetInfo = require('@react-native-community/netinfo');
+          const net = await NetInfo.fetch();
+          if (!net.isConnected) throw new Error('offline');
+        } catch (e) {
+          // If NetInfo fails, proceed best-effort.
+        }
+
         const { syncClerkUserToNeon } = require('../services/clerkUserSync');
         const bridge = await syncClerkUserToNeon({
           id,

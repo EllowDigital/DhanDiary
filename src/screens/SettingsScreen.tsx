@@ -16,11 +16,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
+import { useAuth as useClerkAuth } from '@clerk/clerk-expo';
 
 // Optional Haptics: prefer runtime require so builds without expo-haptics still work.
 let Haptics: any = {
-  impactAsync: async () => {},
-  notificationAsync: async () => {},
+  impactAsync: async () => { },
+  notificationAsync: async () => { },
   ImpactFeedbackStyle: { Medium: 'medium' },
   NotificationFeedbackType: { Warning: 'warning' },
 };
@@ -32,10 +33,9 @@ try {
 }
 
 // Logic
-import { logout } from '../services/auth';
+import { performHardSignOut } from '../services/signOutFlow';
 import { syncBothWays, getLastSuccessfulSyncAt } from '../services/syncManager';
 import NetInfo from '@react-native-community/netinfo';
-import { useAuth } from '../hooks/useAuth';
 import { useNavigation } from '@react-navigation/native';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '../context/ToastContext';
@@ -43,6 +43,7 @@ import { colors, spacing } from '../utils/design';
 import ScreenHeader from '../components/ScreenHeader';
 import { getNeonHealth } from '../api/neonClient';
 import appConfig from '../../app.json';
+import { wipeLocalData, initDB } from '../db/sqlite';
 
 // Safe Package Import for Version
 let pkg: { version?: string } = {};
@@ -83,17 +84,8 @@ const SettingsScreen = () => {
   const navigation = useNavigation<any>();
   const query = useQueryClient();
   const { showToast } = useToast();
-  const { user } = useAuth(); // Clerk or Custom Auth hook
-
-  // Clerk Auth (Safe Import for optional usage)
-  let clerkSignOut: any = null;
-  try {
-    const clerk = require('@clerk/clerk-expo');
-    const auth = clerk.useAuth();
-    clerkSignOut = auth.signOut;
-  } catch (e) {
-    // Clerk not installed or configured, ignore
-  }
+  const { signOut: clerkSignOut } = useClerkAuth();
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   // Layout
   const { width } = useWindowDimensions();
@@ -140,13 +132,13 @@ const SettingsScreen = () => {
         const d = new Date(last);
         setLastSyncTime(`${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`);
       }
-    } catch (e) {}
+    } catch (e) { }
 
     return () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -178,7 +170,7 @@ const SettingsScreen = () => {
         showToast('Cloud sync is disabled in this build.', 'error');
         return;
       }
-    } catch (e) {}
+    } catch (e) { }
 
     // Haptic feedback
     if (Platform.OS !== 'web') {
@@ -229,41 +221,42 @@ const SettingsScreen = () => {
   };
 
   const handleLogout = () => {
+    if (isSigningOut) return;
     Alert.alert('Sign Out', 'Are you sure you want to log out?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Sign Out',
         style: 'destructive',
         onPress: async () => {
+          if (isSigningOut) return;
+          setIsSigningOut(true);
           try {
-            // Sign out from Clerk first (if available)
-            if (clerkSignOut && typeof clerkSignOut === 'function') {
-              try {
+            await performHardSignOut({
+              clerkSignOut: async () => {
                 await clerkSignOut();
-              } catch (e) {
-                console.warn('[Settings] Clerk signOut failed', e);
-              }
-            }
+              },
+              navigateToAuth: () => {
+                try {
+                  // Force navigation reset (root)
+                  // (This is a hard boundary; prevent back navigation)
+                  const { resetRoot } = require('../utils/rootNavigation');
+                  resetRoot({ index: 0, routes: [{ name: 'Auth' }] });
+                } catch (e) {
+                  navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
+                }
+              },
+            });
 
-            const ok = await logout();
             try {
               query.clear();
-            } catch (e) {
-              // ignore
-            }
+            } catch (e) { }
 
-            if (ok) showToast('Signed out successfully');
-
-            // Force navigation reset (root)
-            try {
-              const { resetRoot } = await import('../utils/rootNavigation');
-              resetRoot({ index: 0, routes: [{ name: 'Auth' }] });
-            } catch (e) {
-              navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
-            }
+            showToast('Signed out successfully');
           } catch (e) {
             console.warn('[Settings] logout failed', e);
             showToast('Sign out failed. Please try again.', 'error');
+          } finally {
+            setIsSigningOut(false);
           }
         },
       },
@@ -275,22 +268,29 @@ const SettingsScreen = () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     }
     Alert.alert(
-      'Reset Application?',
-      'This will clear all local data, sign you out, and restart the app. Your cloud data will remain safe.',
+      'Reset Local Data?',
+      'This clears local SQLite data only. You will stay signed in.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Reset Everything',
+          text: 'Reset Data',
           style: 'destructive',
           onPress: async () => {
-            await logout();
-            query.clear();
-            showToast('App has been reset');
+            if (isSigningOut) return;
+            setIsSigningOut(true);
             try {
-              const { resetRoot } = await import('../utils/rootNavigation');
-              resetRoot({ index: 0, routes: [{ name: 'Auth' }] });
-            } catch (e) {
-              navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
+              await wipeLocalData();
+              await initDB();
+              try {
+                query.clear();
+              } catch (e) { }
+              try {
+                const { notifyEntriesChanged } = require('../utils/dbEvents');
+                notifyEntriesChanged();
+              } catch (e) { }
+              showToast('Local data cleared');
+            } finally {
+              setIsSigningOut(false);
             }
           },
         },
@@ -299,7 +299,7 @@ const SettingsScreen = () => {
   };
 
   const handleContactSupport = () => {
-    Linking.openURL('mailto:support@dhandiary.com?subject=App Support');
+    Linking.openURL('mailto:ellowdigitalindia@gmail.com?subject=App Support');
   };
 
   return (
@@ -431,8 +431,8 @@ const SettingsScreen = () => {
                   }}
                 >
                   <View style={{ flex: 1, paddingRight: 10 }}>
-                    <Text style={styles.dangerTitle}>Reset Application</Text>
-                    <Text style={styles.dangerDesc}>Clears local cache & restarts.</Text>
+                    <Text style={styles.dangerTitle}>Reset Local Data</Text>
+                    <Text style={styles.dangerDesc}>Clears SQLite data only.</Text>
                   </View>
                   <TouchableOpacity
                     style={styles.dangerBtn}
@@ -447,7 +447,12 @@ const SettingsScreen = () => {
 
             {/* 4. FOOTER */}
             <Animated.View style={[getAnimStyle(4), { marginTop: 24, marginBottom: 40 }]}>
-              <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.7}>
+              <TouchableOpacity
+                style={[styles.logoutBtn, isSigningOut && { opacity: 0.6 }]}
+                onPress={handleLogout}
+                activeOpacity={0.7}
+                disabled={isSigningOut}
+              >
                 <MaterialIcon name="logout" size={20} color={colors.accentRed} />
                 <Text style={styles.logoutText}>Sign Out</Text>
               </TouchableOpacity>

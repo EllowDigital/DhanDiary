@@ -20,7 +20,7 @@ import Constants from 'expo-constants'; // Standard way to access version
 // Ensure these paths are correct in your project
 import { colors } from '../utils/design';
 import UserAvatar from '../components/UserAvatar';
-import { logout } from '../services/auth';
+import { performHardSignOut } from '../services/signOutFlow';
 import { resetRoot } from '../utils/rootNavigation';
 import { getSession } from '../db/session';
 import { subscribeSession } from '../utils/sessionEvents';
@@ -35,9 +35,10 @@ const TEXT_SUB_COLOR = INACTIVE_COLOR;
 // --- DRAWER COMPONENT ---
 const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   const insets = useSafeAreaInsets();
-  const { signOut } = useAuth();
+  const { signOut: clerkSignOut } = useAuth();
   const { user } = useUser();
   const [fallbackSession, setFallbackSession] = useState<any>(null);
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   // Animation Refs
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -129,26 +130,33 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   };
 
   const handleLogout = () => {
+    if (isSigningOut) return;
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Sign Out',
         style: 'destructive',
         onPress: async () => {
+          if (isSigningOut) return;
+          setIsSigningOut(true);
           try {
-            await signOut(); // Clerk
-            await logout(); // Local storage clean up
-
-            // Reset nav stack to prevent going back
-            try {
-              resetRoot({ index: 0, routes: [{ name: 'Auth' }] });
-            } catch (e) {
-              // fallback
-              props.navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
-            }
+            await performHardSignOut({
+              clerkSignOut: async () => {
+                await clerkSignOut();
+              },
+              navigateToAuth: () => {
+                try {
+                  resetRoot({ index: 0, routes: [{ name: 'Auth' }] });
+                } catch (e) {
+                  props.navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
+                }
+              },
+            });
           } catch (e) {
             console.error('[Drawer] Logout failed', e);
             Alert.alert('Error', 'Failed to sign out. Please try again.');
+          } finally {
+            setIsSigningOut(false);
           }
         },
       },

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState, memo } from 'react';
+import React, { useEffect, useMemo, useRef, useState, memo, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -19,18 +19,20 @@ import { Text } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { PieChart } from 'react-native-chart-kit';
 import dayjs from 'dayjs';
+import { useNavigation } from '@react-navigation/native';
 
 // --- CUSTOM IMPORTS (Assumed based on your context) ---
-import { useEntries } from '../hooks/useEntries';
 import { useAuth } from '../hooks/useAuth';
 import { useInternetStatus } from '../hooks/useInternetStatus';
 import { colors } from '../utils/design';
 import ScreenHeader from '../components/ScreenHeader';
 import DailyTrendChart from '../components/charts/DailyTrendChart';
-import { LocalEntry } from '../db/entries';
-import asyncAggregator from '../utils/asyncAggregator';
 import { aggregateWithPreferSummary } from '../services/aggregates';
 import { dayjsFrom } from '../utils/date';
+import { getSession } from '../db/session';
+import { subscribeSession } from '../utils/sessionEvents';
+import { executeSqlAsync } from '../db/sqlite';
+import { subscribeSyncStatus } from '../services/syncManager';
 
 // --- ANIMATION SETUP ---
 if (Platform.OS === 'android') {
@@ -121,25 +123,19 @@ const CategoryRow = memo(({ item, currency }: { item: any; currency: string }) =
 // --- MAIN SCREEN ---
 const StatsScreen = () => {
   const { width } = useWindowDimensions();
+  const navigation = useNavigation<any>();
   const { user, loading: authLoading } = useAuth();
   const isOnline = useInternetStatus();
-  const { entries: entriesRaw = [], isLoading } = useEntries(user?.id);
-  const entries = entriesRaw as LocalEntry[];
 
-  // Bust aggregator cache when local entries change (sync/pull writes to SQLite).
-  // This prevents Analytics from staying stale for up to the cache TTL.
-  const entriesCacheBuster = useMemo(() => {
-    try {
-      let maxTs = 0;
-      for (const e of entries) {
-        const t = Number((e as any)?.updated_at || 0);
-        if (Number.isFinite(t) && t > maxTs) maxTs = t;
-      }
-      return String(maxTs);
-    } catch (e) {
-      return '';
-    }
-  }, [entries]);
+  const [fallbackSession, setFallbackSession] = useState<any>(null);
+  const effectiveUserId: string | null = (user?.id as any) || (fallbackSession?.id as any) || null;
+
+  const [txCacheBuster, setTxCacheBuster] = useState<number>(0);
+  const [availableMonths, setAvailableMonths] = useState<any[]>([]);
+  const [availableYears, setAvailableYears] = useState<number[]>([]);
+
+  const lastSyncStatusRef = useRef<'idle' | 'syncing' | 'error'>('idle');
+  const lastAutoRefreshAtRef = useRef<number>(0);
 
   // --- REFS & ANIMATION ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -161,35 +157,130 @@ const StatsScreen = () => {
   // Chart Sizing
   const donutSize = Math.min(contentWidth * 0.55, 220);
 
-  // --- 1. DATA PREPARATION (Memoized) ---
-  const { availableMonths, availableYears } = useMemo(() => {
-    const monthMap = new Map();
-    const yearSet = new Set<number>();
-
-    entries.forEach((e) => {
-      const d = dayjsFrom(e.date || e.created_at);
-      if (!d.isValid()) return;
-
-      const mKey = d.format('YYYY-MM');
-      if (!monthMap.has(mKey)) {
-        monthMap.set(mKey, { key: mKey, label: d.format('MMM YYYY'), date: d.startOf('month') });
-      }
-      yearSet.add(d.year());
+  // Load local fallback session and subscribe so Analytics works fully offline.
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const s = await getSession();
+        if (mounted) setFallbackSession(s);
+      } catch (e) {}
+    };
+    load();
+    const unsub = subscribeSession((s) => {
+      if (mounted) setFallbackSession(s);
     });
+    return () => {
+      mounted = false;
+      try {
+        unsub();
+      } catch (e) {}
+    };
+  }, []);
 
-    const months = Array.from(monthMap.values()).sort(
-      (a, b) => b.date.valueOf() - a.date.valueOf()
-    );
-    const years = Array.from(yearSet).sort((a, b) => b - a);
+  const refreshPeriods = useCallback(async () => {
+    if (!effectiveUserId) {
+      setAvailableMonths([]);
+      setAvailableYears([]);
+      setTxCacheBuster(0);
+      return;
+    }
 
-    return { availableMonths: months, availableYears: years };
-  }, [entries]);
+    try {
+      const localDateExpr = 'COALESCE(date, created_at)';
+      const monthExpr = `strftime('%Y-%m', ${localDateExpr}, 'localtime')`;
+      const yearExpr = `strftime('%Y', ${localDateExpr}, 'localtime')`;
+
+      const maxSql = `
+        SELECT COALESCE(MAX(COALESCE(updated_at, 0)), 0) AS max_updated
+        FROM transactions
+        WHERE user_id = ? AND deleted_at IS NULL;`;
+
+      const monthsSql = `
+        SELECT DISTINCT ${monthExpr} AS m
+        FROM transactions
+        WHERE user_id = ? AND deleted_at IS NULL
+        ORDER BY m DESC;`;
+
+      const yearsSql = `
+        SELECT DISTINCT ${yearExpr} AS y
+        FROM transactions
+        WHERE user_id = ? AND deleted_at IS NULL
+        ORDER BY y DESC;`;
+
+      const [[, maxRes], [, monthsRes], [, yearsRes]] = await Promise.all([
+        executeSqlAsync(maxSql, [effectiveUserId]),
+        executeSqlAsync(monthsSql, [effectiveUserId]),
+        executeSqlAsync(yearsSql, [effectiveUserId]),
+      ]);
+
+      const maxUpdated = maxRes.rows.length ? Number((maxRes.rows.item(0) as any)?.max_updated) : 0;
+      setTxCacheBuster(Number.isFinite(maxUpdated) ? maxUpdated : 0);
+
+      const months: any[] = [];
+      for (let i = 0; i < monthsRes.rows.length; i++) {
+        const m = String((monthsRes.rows.item(i) as any)?.m || '');
+        if (!m || m === 'null') continue;
+        const d = dayjs(`${m}-01`);
+        months.push({ key: m, label: d.isValid() ? d.format('MMM YYYY') : m, date: d });
+      }
+      const years: number[] = [];
+      for (let i = 0; i < yearsRes.rows.length; i++) {
+        const yStr = String((yearsRes.rows.item(i) as any)?.y || '');
+        const y = Number(yStr);
+        if (Number.isFinite(y) && y > 1900) years.push(y);
+      }
+
+      setAvailableMonths(months);
+      setAvailableYears(years);
+    } catch (e) {
+      // If anything fails, keep UI usable; analysis will still fall back.
+    }
+  }, [effectiveUserId]);
+
+  // Refresh period lists when screen focuses (covers new local entries).
+  useEffect(() => {
+    refreshPeriods();
+    const unsub = navigation.addListener('focus', () => {
+      refreshPeriods();
+    });
+    return () => {
+      try {
+        unsub();
+      } catch (e) {}
+    };
+  }, [navigation, refreshPeriods]);
+
+  // Auto-refresh Analytics right after sync finishes.
+  useEffect(() => {
+    const unsub = subscribeSyncStatus((status) => {
+      const prev = lastSyncStatusRef.current;
+      lastSyncStatusRef.current = status;
+
+      // Only act on a real completion transition.
+      if (prev === 'syncing' && status === 'idle') {
+        const now = Date.now();
+        // De-dupe rapid consecutive idle transitions.
+        if (now - lastAutoRefreshAtRef.current < 800) return;
+        lastAutoRefreshAtRef.current = now;
+
+        // This updates the cache buster and period lists;
+        // analysis re-runs automatically via txCacheBuster dependency.
+        refreshPeriods();
+      }
+    });
+    return () => {
+      try {
+        unsub();
+      } catch (e) {}
+    };
+  }, [refreshPeriods]);
 
   // Sync Defaults
   useEffect(() => {
     if (availableMonths.length && !activeMonthKey) setActiveMonthKey(availableMonths[0].key);
     if (availableYears.length && activeYear === null) setActiveYear(availableYears[0]);
-  }, [availableMonths, availableYears]);
+  }, [availableMonths, availableYears, activeMonthKey, activeYear]);
 
   // --- 2. DATE RANGE LOGIC ---
   const { rangeStart, rangeEnd } = useMemo(() => {
@@ -249,33 +340,16 @@ const StatsScreen = () => {
     await new Promise((r) => InteractionManager.runAfterInteractions(() => r(null)));
 
     try {
-      let result;
-      // Prefer server-side summary if user is synced, otherwise calculate locally
-      if (user?.id) {
-        result = await aggregateWithPreferSummary(user.id, rangeStart, rangeEnd, {
+      const result = await aggregateWithPreferSummary(
+        effectiveUserId || undefined,
+        rangeStart,
+        rangeEnd,
+        {
           signal: controller.signal,
-          cacheBuster: entriesCacheBuster,
+          cacheBuster: String(txCacheBuster),
           allowRemote: Boolean(isOnline),
-        });
-      } else if (filter === 'All' || entries.length > 5000) {
-        // Stream entries in pages for heavy loads (Offline mode)
-        async function* pagesFromEntries(items: LocalEntry[], pageSize: number) {
-          for (let i = 0; i < items.length; i += pageSize) {
-            const slice = items.slice(i, i + pageSize);
-            yield slice;
-            await Promise.resolve(); // Yield to JS event loop
-          }
         }
-        const pages = pagesFromEntries(entries as LocalEntry[], 1000);
-        result = await asyncAggregator.aggregateFromPages(pages, rangeStart, rangeEnd, {
-          signal: controller.signal,
-        });
-      } else {
-        // Standard in-memory calculation
-        result = await asyncAggregator.aggregateForRange(entries, rangeStart, rangeEnd, {
-          signal: controller.signal,
-        });
-      }
+      );
 
       if (result && !controller.signal.aborted) {
         const totalIn = Number(result.totalIn || 0);
@@ -338,24 +412,14 @@ const StatsScreen = () => {
     filter,
     rangeStart?.valueOf(),
     rangeEnd?.valueOf(),
-    entries?.length,
-    entriesCacheBuster,
-    user?.id,
+    effectiveUserId,
+    txCacheBuster,
     isOnline,
   ]);
 
   // --- RENDER HELPERS ---
   const currencySymbol = stats?.currency === 'USD' ? '$' : '₹';
   const isEmptyPeriod = Boolean(stats && Number(stats.count || 0) === 0);
-
-  if (authLoading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>Loading finances...</Text>
-      </View>
-    );
-  }
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right'] as any}>
@@ -369,6 +433,13 @@ const StatsScreen = () => {
           useSafeAreaPadding={false}
         />
       </View>
+
+      {authLoading ? (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Loading finances...</Text>
+        </View>
+      ) : null}
 
       <ScrollView
         style={styles.container}

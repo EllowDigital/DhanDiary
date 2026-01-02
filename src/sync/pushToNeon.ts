@@ -194,9 +194,9 @@ export async function pushToNeon(): Promise<{ pushed: string[]; deleted: string[
     }
   }
 
-  // If we had local work to push but could not push a single row, bubble up an error.
-  // This prevents showing "up to date" when Neon is unreachable or rejects every write.
-  if (dirty.length > 0 && pushedIds.length + deletedIds.length === 0 && lastError) {
+  // If we had local work to push but could not push all rows, bubble up an error.
+  // This prevents showing "up to date" when Neon is unreachable or rejects some/all writes.
+  if (dirty.length > 0 && dirty.length > pushedIds.length + deletedIds.length && lastError) {
     throw lastError;
   }
 

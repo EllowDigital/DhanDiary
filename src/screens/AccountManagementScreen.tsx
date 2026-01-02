@@ -19,14 +19,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Input, Button } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
-import { useUser } from '@clerk/clerk-expo';
-import { getSession } from '../db/session';
-import { subscribeSession } from '../utils/sessionEvents';
+import { useAuth, useUser } from '@clerk/clerk-expo';
 import { useNavigation } from '@react-navigation/native';
-import * as SecureStore from 'expo-secure-store';
 import * as LocalAuthentication from 'expo-local-authentication';
 
-// --- CUSTOM HOOKS & SERVICES (Assumed paths) ---
+import { getSession } from '../db/session';
+import { subscribeSession } from '../utils/sessionEvents';
+import { getBiometricEnabled, setBiometricEnabled } from '../utils/biometricSettings';
+import { performHardSignOut } from '../services/signOutFlow';
 import { useToast } from '../context/ToastContext';
 import { colors } from '../utils/design';
 import ScreenHeader from '../components/ScreenHeader';
@@ -86,7 +86,7 @@ const ExpandableCard = ({
       duration: 250,
       useNativeDriver: true,
     }).start();
-  }, [isExpanded]);
+  }, [isExpanded, rotateAnim]);
 
   const arrowRotation = rotateAnim.interpolate({
     inputRange: [0, 1],
@@ -129,6 +129,7 @@ const ExpandableCard = ({
 // --- MAIN SCREEN ---
 const AccountManagementScreen = () => {
   const { user, isLoaded } = useUser();
+  const { signOut: clerkSignOut } = useAuth();
   const [fallbackSession, setFallbackSession] = useState<any>(null);
   const navigation = useNavigation<any>();
   const { showToast } = useToast();
@@ -177,7 +178,7 @@ const AccountManagementScreen = () => {
       try {
         const s = await getSession();
         if (mounted) setFallbackSession(s);
-      } catch (e) {}
+      } catch (e) { }
     };
     load();
     const unsub = subscribeSession((s) => {
@@ -187,7 +188,7 @@ const AccountManagementScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -207,8 +208,16 @@ const AccountManagementScreen = () => {
           setBiometricType('Fingerprint');
         }
 
-        const enabled = await SecureStore.getItemAsync('BIOMETRIC_ENABLED');
-        setBiometricsEnabled(enabled === 'true');
+        // Always key by the internal session UUID used elsewhere in the app (App.tsx biometric gate).
+        // `fallbackSession` may not be loaded yet on first render, so read fresh from storage.
+        const sess = await getSession();
+        const uid = sess?.id ? String(sess.id) : null;
+        if (uid) {
+          const enabled = await getBiometricEnabled(uid);
+          setBiometricsEnabled(enabled);
+        } else {
+          setBiometricsEnabled(false);
+        }
       }
     } catch (e) {
       console.log('Biometric check error', e);
@@ -217,27 +226,48 @@ const AccountManagementScreen = () => {
     }
   };
 
+  // Re-check once we have a local session available (fixes “enabled resets after restart”).
+  useEffect(() => {
+    if (!fallbackSession?.id) return;
+    void checkBiometrics();
+  }, [fallbackSession?.id]);
+
   const toggleBiometrics = async (val: boolean) => {
     try {
+      const hasHw = await LocalAuthentication.hasHardwareAsync();
+      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+      if (val && (!hasHw || !isEnrolled)) {
+        showToast(`Please set up ${biometricType} in your device settings first.`, 'error');
+        return;
+      }
+
       if (val) {
         // If turning ON, verify identity first
         const result = await LocalAuthentication.authenticateAsync({
           promptMessage: `Enable ${biometricType}`,
           fallbackLabel: 'Use Passcode',
+          disableDeviceFallback: false,
         });
         if (!result.success) return;
       }
 
-      setBiometricsEnabled(val);
-      if (val) {
-        await SecureStore.setItemAsync('BIOMETRIC_ENABLED', 'true');
-        showToast(`${biometricType} Enabled`);
-      } else {
-        await SecureStore.deleteItemAsync('BIOMETRIC_ENABLED');
-        showToast(`${biometricType} Disabled`);
+      // Persist by internal session UUID so App.tsx biometric lock can enforce it.
+      const sess = await getSession();
+      const uid = sess?.id ? String(sess.id) : null;
+      if (!uid) {
+        showToast('Please wait a moment and try again.', 'error');
+        return;
       }
+
+      await setBiometricEnabled(uid, val);
+      setBiometricsEnabled(val);
+      showToast(val ? `${biometricType} Enabled` : `${biometricType} Disabled`);
     } catch (e) {
-      showToast('Failed to update security settings', 'error');
+      const msg = (e instanceof Error ? e.message : String(e ?? '')).trim();
+      showToast(
+        msg ? `Failed to update security settings: ${msg}` : 'Failed to update security settings',
+        'error'
+      );
     }
   };
 
@@ -360,7 +390,7 @@ const AccountManagementScreen = () => {
               } catch (navErr) {
                 try {
                   navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
-                } catch (e) {}
+                } catch (e) { }
               }
               Alert.alert('Error', err?.message || 'Failed to delete account');
             } finally {
@@ -438,10 +468,10 @@ const AccountManagementScreen = () => {
                   {(user as any)?.emailAddresses?.some(
                     (e: any) => e.verification?.status === 'verified'
                   ) && (
-                    <View style={styles.verifiedBadge}>
-                      <MaterialIcon name="check" size={12} color="white" />
-                    </View>
-                  )}
+                      <View style={styles.verifiedBadge}>
+                        <MaterialIcon name="check" size={12} color="white" />
+                      </View>
+                    )}
                 </View>
 
                 <View style={styles.heroInfo}>

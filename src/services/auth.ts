@@ -205,56 +205,88 @@ export const loginOnline = async (email: string, password: string): Promise<Auth
   return { id: user.id, name: user.name || '', email: user.email };
 };
 
-export const logout = async (): Promise<boolean> => {
-  // Helper to safely run a promise without throwing
+export const logout = async (opts?: {
+  /**
+   * When true, performs a heavier "reset" cleanup (clears AsyncStorage and local wrapper storage).
+   * Default: false (fast sign-out; removes only auth/sync-critical keys).
+   */
+  clearAllStorage?: boolean;
+}): Promise<boolean> => {
+  const clearAllStorage = Boolean(opts?.clearAllStorage);
+
   const safeRun = async (fn: () => Promise<any> | any) => {
     try {
       await fn();
     } catch (e) {
-      // Ignore cleanup errors
+      // best-effort cleanup: ignore
     }
   };
 
-  // 1. Stop background sync and fetch (Dynamic requires to avoid circular deps)
-  await safeRun(async () => {
-    const sync = require('./syncManager'); // Ensure this path matches your file structure
+  // 0) Cancel sync immediately (don’t wait) to keep UI responsive.
+  try {
+    const sync = require('./syncManager');
     if (sync) {
-      // Preferred: single helper that cancels timers + listeners + background fetch.
-      if (typeof sync.stopSyncEngine === 'function') {
-        await sync.stopSyncEngine();
-        return;
-      }
-      // Immediately cancel any in-flight sync loops so logout remains responsive.
       if (typeof sync.cancelSyncWork === 'function') sync.cancelSyncWork();
-      if (typeof sync.stopAutoSyncListener === 'function') sync.stopAutoSyncListener();
-      if (typeof sync.stopForegroundSyncScheduler === 'function')
-        sync.stopForegroundSyncScheduler();
-      if (typeof sync.stopBackgroundFetch === 'function') await sync.stopBackgroundFetch();
     }
+  } catch (e) {}
+
+  // 1) Stop background sync & listeners (best-effort, but we do await to reduce races).
+  await safeRun(async () => {
+    const sync = require('./syncManager');
+    if (!sync) return;
+    if (typeof sync.stopSyncEngine === 'function') {
+      await sync.stopSyncEngine();
+      return;
+    }
+    if (typeof sync.stopAutoSyncListener === 'function') sync.stopAutoSyncListener();
+    if (typeof sync.stopForegroundSyncScheduler === 'function') sync.stopForegroundSyncScheduler();
+    if (typeof sync.stopBackgroundFetch === 'function') await sync.stopBackgroundFetch();
   });
 
-  // 2. Wipe Local Data
-  await safeRun(wipeLocalDatabase);
-  await safeRun(clearAllData);
+  // 2) Clear local DB + persisted session FIRST (critical for sign-out correctness).
+  // wipeLocalDatabase is already best-effort internally; we still treat failure as non-fatal.
+  let wipedOk = true;
+  try {
+    const res: any = await wipeLocalDatabase();
+    if (res && typeof res.ok === 'boolean' && res.ok === false) wipedOk = false;
+  } catch (e) {
+    wipedOk = false;
+  }
 
   // Re-create local tables after wipe so any in-flight queries (e.g., useEntries)
-  // don't hit "no such table: transactions" during logout/navigation transitions.
+  // don't hit "no such table" during logout/navigation transitions.
   await safeRun(async () => {
     const { initDB } = await import('../db/sqlite');
     if (typeof initDB === 'function') await initDB();
   });
 
-  // 3. Clear Storage
-  try {
-    await AsyncStorage.clear();
-  } catch (e) {
-    // Fallback if clear fails
-    await safeRun(() => AsyncStorage.removeItem('FALLBACK_SESSION'));
-    await safeRun(() => AsyncStorage.removeItem('last_sync_at'));
-    await safeRun(() => AsyncStorage.removeItem('last_sync_count'));
+  // 3) Storage cleanup
+  if (clearAllStorage) {
+    // Heavy reset mode (used by "Reset Application").
+    await safeRun(clearAllData);
+    await safeRun(async () => {
+      await AsyncStorage.clear();
+    });
+  } else {
+    // Fast sign-out mode: remove only auth/sync-critical keys.
+    const keysToRemove = [
+      'FALLBACK_SESSION',
+      'ACCOUNT_DELETED_AT',
+      'offline_db_owner_v1',
+      'last_sync_at',
+      'last_sync_count',
+      'sync_paused_v1',
+    ];
+    await safeRun(async () => {
+      if (typeof (AsyncStorage as any).multiRemove === 'function') {
+        await (AsyncStorage as any).multiRemove(keysToRemove);
+      } else {
+        for (const k of keysToRemove) await AsyncStorage.removeItem(k);
+      }
+    });
   }
 
-  // 4. Notify UI
+  // 4) Notify UI
   await safeRun(() => {
     const { notifyEntriesChanged } = require('../utils/dbEvents');
     notifyEntriesChanged();
@@ -265,17 +297,7 @@ export const logout = async (): Promise<boolean> => {
     await notifySessionChanged();
   });
 
-  // 5. Sign out from Clerk (Best Effort)
-  await safeRun(async () => {
-    const clerk = require('@clerk/clerk-expo');
-    if (clerk) {
-      if (typeof clerk.signOut === 'function') {
-        await clerk.signOut();
-      }
-    }
-  });
-
-  // 6. Clear React Query Cache
+  // 5) Clear React Query Cache
   await safeRun(async () => {
     const holder = require('../utils/queryClientHolder');
     if (holder && typeof holder.clearQueryCache === 'function') {
@@ -283,7 +305,7 @@ export const logout = async (): Promise<boolean> => {
     }
   });
 
-  return true;
+  return wipedOk;
 };
 
 export const deleteAccount = async (opts?: { clerkUserId?: string }) => {
@@ -330,26 +352,7 @@ export const deleteAccount = async (opts?: { clerkUserId?: string }) => {
     }
   }
 
-  // 2. Wipe Local Data
-  // Mark account deleted flag (persisted) so UI can show a targeted message
-  try {
-    const sessMod = require('../db/session');
-    if (sessMod && typeof sessMod.setAccountDeletedAt === 'function') {
-      await sessMod.setAccountDeletedAt(new Date().toISOString());
-    }
-  } catch (e) {}
-
-  await wipeLocalDatabase();
-
-  // Re-initialize DB schema so app restarts in clean state
-  try {
-    const { initDB } = await import('../db/sqlite');
-    if (typeof initDB === 'function') await initDB();
-  } catch (e) {
-    console.warn('[Auth] initDB after wipe failed', e);
-  }
-
-  // 3. Clerk Deletion
+  // 2. Clerk Deletion (best-effort; prefer backend endpoint)
   try {
     // Prefer calling a backend delete endpoint (recommended). If your app
     // configures `CLERK_DELETE_URL` (in expo extra or env), we'll POST to it
@@ -401,33 +404,8 @@ export const deleteAccount = async (opts?: { clerkUserId?: string }) => {
         }
       }
     }
-
-    // Also attempt client-side best-effort signOut if available
-    const clerk = require('@clerk/clerk-expo');
-    if (clerk && typeof clerk.signOut === 'function') {
-      await clerk.signOut();
-    }
   } catch (e) {
     console.warn('[Auth] Clerk clean up failed', (e as any)?.message || e);
-  }
-
-  // Ensure we run standard logout cleanup (stop sync, clear caches/storage)
-  try {
-    await logout();
-  } catch (e) {
-    // best-effort: ignore errors here but log for diagnostics
-    console.warn('[Auth] logout during deleteAccount failed', e);
-  }
-
-  // Prevent the app from auto-creating a guest session after account deletion.
-  try {
-    const sessMod = require('../db/session');
-    if (sessMod && typeof sessMod.setNoGuestMode === 'function') {
-      // Persist 'no guest' so on next cold start the app won't create guest_... sessions.
-      await sessMod.setNoGuestMode(true);
-    }
-  } catch (e) {
-    if (typeof __DEV__ !== 'undefined' && __DEV__) console.warn('[Auth] setNoGuestMode failed', e);
   }
 
   const deletionInfo = {

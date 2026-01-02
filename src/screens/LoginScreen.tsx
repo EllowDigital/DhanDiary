@@ -14,11 +14,11 @@ import {
   Image,
   AppState,
   AppStateStatus,
-  Dimensions,
+  useWindowDimensions,
   Animated,
   Easing,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSignIn, useOAuth, useUser, useAuth } from '@clerk/clerk-expo';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
@@ -47,10 +47,19 @@ const useWarmUpBrowser = () => {
   }, []);
 };
 
-const { width, height } = Dimensions.get('window');
-
 const LoginScreen = () => {
   useWarmUpBrowser();
+
+  const { height: windowHeight } = useWindowDimensions();
+
+  const insets = useSafeAreaInsets();
+  const isCompactHeight = windowHeight < 700;
+  const isVeryCompactHeight = windowHeight < 650;
+  const brandTopSpacing = Math.min(
+    72,
+    Math.max(16, (insets?.top || 0) + (isCompactHeight ? 12 : 24))
+  );
+  const sheetBottomPadding = Math.max(12, (insets?.bottom || 0) + 12);
 
   const navigation = useNavigation<any>();
   const { signIn, setActive, isLoaded } = useSignIn();
@@ -367,27 +376,50 @@ const LoginScreen = () => {
         end={{ x: 1, y: 1 }}
       />
 
+      {/* Avoid double bottom padding: we apply bottom inset via ScrollView paddingBottom */}
       <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right'] as any}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
         >
           <ScrollView
-            contentContainerStyle={styles.scrollContent}
+            contentContainerStyle={[
+              styles.scrollContent,
+              // Bottom safe-area is handled by the sheet itself.
+              { paddingBottom: 0 },
+            ]}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
             {/* Top Brand Section */}
-            <Animated.View style={[styles.brandSection, { opacity: fadeAnim }]}>
-              <View style={styles.logoCircle}>
+            <Animated.View
+              style={[
+                styles.brandSection,
+                {
+                  opacity: fadeAnim,
+                  marginTop: brandTopSpacing,
+                  marginBottom: isCompactHeight ? 24 : 40,
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.logoCircle,
+                  isCompactHeight && { width: 72, height: 72, borderRadius: 20 },
+                ]}
+              >
                 <Image
                   source={require('../../assets/splash-icon.png')}
-                  style={styles.logo}
+                  style={[styles.logo, isCompactHeight && { width: 44, height: 44 }]}
                   resizeMode="contain"
                 />
               </View>
-              <Text style={styles.brandTitle}>DhanDiary</Text>
-              <Text style={styles.brandSubtitle}>Master your finances</Text>
+              <Text style={[styles.brandTitle, isVeryCompactHeight && { fontSize: 24 }]}>
+                DhanDiary
+              </Text>
+              <Text style={[styles.brandSubtitle, isVeryCompactHeight && { fontSize: 14 }]}>
+                Master your finances
+              </Text>
             </Animated.View>
 
             {/* Bottom Sheet Form */}
@@ -397,6 +429,8 @@ const LoginScreen = () => {
                 {
                   opacity: fadeAnim,
                   transform: [{ translateY: slideAnim }],
+                  paddingTop: isCompactHeight ? 24 : 32,
+                  paddingBottom: sheetBottomPadding,
                 },
               ]}
             >
@@ -545,8 +579,6 @@ const styles = StyleSheet.create({
   /* BRAND SECTION */
   brandSection: {
     alignItems: 'center',
-    marginTop: height * 0.08,
-    marginBottom: 40,
   },
   logoCircle: {
     width: 80,
@@ -586,13 +618,11 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 32,
     paddingHorizontal: 24,
     paddingTop: 32,
-    paddingBottom: 40,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.05,
     shadowRadius: 16,
     elevation: 20,
-    flex: 1,
   },
   welcomeText: {
     fontSize: 24,
