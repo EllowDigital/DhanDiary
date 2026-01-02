@@ -23,9 +23,8 @@ import { useUser } from '@clerk/clerk-expo';
 import { getSession } from '../db/session';
 import { subscribeSession } from '../utils/sessionEvents';
 import { useNavigation } from '@react-navigation/native';
-import * as SecureStore from 'expo-secure-store';
-import { isUuid } from '../utils/uuid';
 import * as LocalAuthentication from 'expo-local-authentication';
+import { getBiometricEnabled, setBiometricEnabled } from '../utils/biometricSettings';
 
 // --- CUSTOM HOOKS & SERVICES (Assumed paths) ---
 import { useToast } from '../context/ToastContext';
@@ -178,7 +177,7 @@ const AccountManagementScreen = () => {
       try {
         const s = await getSession();
         if (mounted) setFallbackSession(s);
-      } catch (e) {}
+      } catch (e) { }
     };
     load();
     const unsub = subscribeSession((s) => {
@@ -188,7 +187,7 @@ const AccountManagementScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -208,13 +207,16 @@ const AccountManagementScreen = () => {
           setBiometricType('Fingerprint');
         }
 
-        // Store biometric preference per-user (keyed by internal session UUID)
-        const currentUserId = (fallbackSession && fallbackSession.id) || (user as any)?.id || null;
-        let enabled: string | null = null;
-        if (currentUserId && isUuid(currentUserId)) {
-          enabled = await SecureStore.getItemAsync(`BIOMETRIC_ENABLED:${currentUserId}`);
+        // Always key by the internal session UUID used elsewhere in the app (App.tsx biometric gate).
+        // `fallbackSession` may not be loaded yet on first render, so read fresh from storage.
+        const sess = await getSession();
+        const uid = sess?.id ? String(sess.id) : null;
+        if (uid) {
+          const enabled = await getBiometricEnabled(uid);
+          setBiometricsEnabled(enabled);
+        } else {
+          setBiometricsEnabled(false);
         }
-        setBiometricsEnabled(enabled === 'true');
       }
     } catch (e) {
       console.log('Biometric check error', e);
@@ -223,35 +225,46 @@ const AccountManagementScreen = () => {
     }
   };
 
+  // Re-check once we have a local session available (fixes “enabled resets after restart”).
+  useEffect(() => {
+    if (!fallbackSession?.id) return;
+    void checkBiometrics();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fallbackSession?.id]);
+
   const toggleBiometrics = async (val: boolean) => {
     try {
+      const hasHw = await LocalAuthentication.hasHardwareAsync();
+      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+      if (val && (!hasHw || !isEnrolled)) {
+        showToast(`Please set up ${biometricType} in your device settings first.`, 'error');
+        return;
+      }
+
       if (val) {
         // If turning ON, verify identity first
         const result = await LocalAuthentication.authenticateAsync({
           promptMessage: `Enable ${biometricType}`,
           fallbackLabel: 'Use Passcode',
+          disableDeviceFallback: false,
         });
         if (!result.success) return;
       }
 
-      setBiometricsEnabled(val);
-      const currentUserId = (fallbackSession && fallbackSession.id) || (user as any)?.id || null;
-      if (currentUserId && isUuid(currentUserId)) {
-        const key = `BIOMETRIC_ENABLED:${currentUserId}`;
-        if (val) {
-          await SecureStore.setItemAsync(key, 'true');
-          showToast(`${biometricType} Enabled`);
-        } else {
-          await SecureStore.deleteItemAsync(key);
-          showToast(`${biometricType} Disabled`);
-        }
-      } else {
-        // No stable session id: do not persist preference yet.
-        if (val) showToast(`${biometricType} Enabled for this session`);
-        else showToast(`${biometricType} Disabled for this session`);
+      // Persist by internal session UUID so App.tsx biometric lock can enforce it.
+      const sess = await getSession();
+      const uid = sess?.id ? String(sess.id) : null;
+      if (!uid) {
+        showToast('Please wait a moment and try again.', 'error');
+        return;
       }
+
+      await setBiometricEnabled(uid, val);
+      setBiometricsEnabled(val);
+      showToast(val ? `${biometricType} Enabled` : `${biometricType} Disabled`);
     } catch (e) {
-      showToast('Failed to update security settings', 'error');
+      const msg = String(e?.message || '').trim();
+      showToast(msg ? `Failed to update security settings: ${msg}` : 'Failed to update security settings', 'error');
     }
   };
 
@@ -374,7 +387,7 @@ const AccountManagementScreen = () => {
               } catch (navErr) {
                 try {
                   navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
-                } catch (e) {}
+                } catch (e) { }
               }
               Alert.alert('Error', err?.message || 'Failed to delete account');
             } finally {
@@ -452,10 +465,10 @@ const AccountManagementScreen = () => {
                   {(user as any)?.emailAddresses?.some(
                     (e: any) => e.verification?.status === 'verified'
                   ) && (
-                    <View style={styles.verifiedBadge}>
-                      <MaterialIcon name="check" size={12} color="white" />
-                    </View>
-                  )}
+                      <View style={styles.verifiedBadge}>
+                        <MaterialIcon name="check" size={12} color="white" />
+                      </View>
+                    )}
                 </View>
 
                 <View style={styles.heroInfo}>
