@@ -59,7 +59,7 @@ const LoginScreen = () => {
     72,
     Math.max(16, (insets?.top || 0) + (isCompactHeight ? 12 : 24))
   );
-  const sheetBottomPadding = Math.max(16, (insets?.bottom || 0) + 16);
+  const sheetBottomPadding = Math.max(12, (insets?.bottom || 0) + 12);
 
   const navigation = useNavigation<any>();
   const { signIn, setActive, isLoaded } = useSignIn();
@@ -386,7 +386,7 @@ const LoginScreen = () => {
             contentContainerStyle={[
               styles.scrollContent,
               // Bottom safe-area is handled by the sheet itself.
-              { paddingBottom: 16 },
+              { paddingBottom: 0 },
             ]}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
