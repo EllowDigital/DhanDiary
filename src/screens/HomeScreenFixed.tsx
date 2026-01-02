@@ -803,12 +803,19 @@ const HomeScreen = () => {
           ListHeaderComponent={header}
           refreshControl={
             <RefreshControl
-              refreshing={isLoading && isSyncing}
+              refreshing={Boolean(isLoading)}
               onRefresh={refetch}
               tintColor={COLORS.primary}
             />
           }
           renderItem={renderItem as any}
+          removeClippedSubviews={Platform.OS === 'android'}
+          initialNumToRender={8}
+          maxToRenderPerBatch={8}
+          updateCellsBatchingPeriod={50}
+          windowSize={7}
+          keyboardShouldPersistTaps="handled"
+          scrollEventThrottle={16}
           contentContainerStyle={{ paddingBottom: 100 }}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
