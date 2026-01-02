@@ -65,6 +65,8 @@ let _scheduledSyncTimer: any = null;
 let _scheduledSyncPromise: Promise<any> | null = null;
 let _scheduledSyncResolve: ((value: any) => void) | null = null;
 let _scheduledSyncReject: ((reason?: any) => void) | null = null;
+let _scheduledSyncOptions: { force?: boolean; source?: 'manual' | 'auto' } | null = null;
+let _pendingSyncForce = false;
 const _followUpPullQueuedAtByUser: Record<string, number> = {};
 // Sync status listeners (UI can subscribe to show progress or errors)
 export type SyncStatus = 'idle' | 'syncing' | 'error';
@@ -149,6 +151,7 @@ export const stopSyncEngine = async () => {
     if (_scheduledSyncTimer) clearTimeout(_scheduledSyncTimer);
   } catch (e) {}
   _scheduledSyncTimer = null;
+  _scheduledSyncOptions = null;
 
   try {
     if (_entriesSyncTimer) clearTimeout(_entriesSyncTimer);
@@ -156,6 +159,7 @@ export const stopSyncEngine = async () => {
   _entriesSyncTimer = null;
 
   _pendingSyncRequested = false;
+  _pendingSyncForce = false;
 };
 
 // Public: schedule a sync to run after interactions (UI-first) and de-dupe rapid triggers.
@@ -167,6 +171,20 @@ export const scheduleSync = (options?: { force?: boolean; source?: 'manual' | 'a
       return Promise.resolve({ ok: true, reason: 'throttled', upToDate: true } as any);
     }
 
+    // Merge options across rapid calls during debounce window.
+    // - `force`: sticky OR
+    // - `source`: prefer 'manual' if any caller is manual (helps analytics/UX decisions)
+    const merged: { force?: boolean; source?: 'manual' | 'auto' } = {
+      ...(_scheduledSyncOptions || {}),
+      ...(options || {}),
+    };
+    merged.force = Boolean((_scheduledSyncOptions as any)?.force || (options as any)?.force);
+    merged.source =
+      options?.source === 'manual' || _scheduledSyncOptions?.source === 'manual'
+        ? 'manual'
+        : options?.source || _scheduledSyncOptions?.source;
+    _scheduledSyncOptions = merged;
+
     if (_scheduledSyncPromise) return _scheduledSyncPromise;
 
     _scheduledSyncPromise = new Promise((resolve, reject) => {
@@ -177,8 +195,10 @@ export const scheduleSync = (options?: { force?: boolean; source?: 'manual' | 'a
     if (_scheduledSyncTimer) return _scheduledSyncPromise;
     _scheduledSyncTimer = setTimeout(() => {
       _scheduledSyncTimer = null;
+      const runOpts = _scheduledSyncOptions;
+      _scheduledSyncOptions = null;
       InteractionManager.runAfterInteractions(() => {
-        syncBothWays(options)
+        syncBothWays(runOpts || undefined)
           .then((res) => {
             try {
               _scheduledSyncResolve?.(res);
@@ -399,6 +419,7 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
 
   if (_syncInProgress) {
     _pendingSyncRequested = true;
+    _pendingSyncForce = _pendingSyncForce || !!options?.force;
     try {
       const verbose = Boolean(
         (globalThis as any).__NEON_VERBOSE__ || (globalThis as any).__SYNC_VERBOSE__
@@ -704,9 +725,11 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
     } catch (e) {}
     if (_pendingSyncRequested) {
       _pendingSyncRequested = false;
+      const forceFollowUp = _pendingSyncForce;
+      _pendingSyncForce = false;
       setTimeout(() => {
         // Use the UI-friendly scheduler so follow-up sync doesn't block taps/gestures.
-        scheduleSync().catch(() => {
+        scheduleSync(forceFollowUp ? { force: true, source: 'auto' } : undefined).catch(() => {
           // Swallow follow-up errors; banner/NetInfo will reflect offline state.
         });
       }, 500);
