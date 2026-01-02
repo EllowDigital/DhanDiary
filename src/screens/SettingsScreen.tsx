@@ -289,6 +289,9 @@ const SettingsScreen = () => {
                 notifyEntriesChanged();
               } catch (e) { }
               showToast('Local data cleared');
+            } catch (e) {
+              console.warn('[Settings] reset local data failed', e);
+              showToast('Failed to reset local data. Please try again.', 'error');
             } finally {
               setIsSigningOut(false);
             }

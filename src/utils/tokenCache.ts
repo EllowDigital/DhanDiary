@@ -3,16 +3,27 @@ import AsyncStorage from './AsyncStorageWrapper';
 
 const TOKEN_KEYS_INDEX = 'TOKEN_CACHE_KEYS_V1';
 
+// Serialize updates to the token keys index to avoid concurrent read-modify-write races.
+let tokenKeysIndexQueue: Promise<void> = Promise.resolve();
+
 const addKeyToIndex = async (key: string) => {
-  try {
-    const raw = await AsyncStorage.getItem(TOKEN_KEYS_INDEX);
-    const prev = raw ? (JSON.parse(raw) as string[]) : [];
-    if (prev.includes(key)) return;
-    prev.push(key);
-    await AsyncStorage.setItem(TOKEN_KEYS_INDEX, JSON.stringify(prev));
-  } catch (e) {
-    // best-effort
-  }
+  tokenKeysIndexQueue = tokenKeysIndexQueue
+    .then(async () => {
+      try {
+        const raw = await AsyncStorage.getItem(TOKEN_KEYS_INDEX);
+        const prev = raw ? (JSON.parse(raw) as string[]) : [];
+        if (prev.includes(key)) return;
+        prev.push(key);
+        await AsyncStorage.setItem(TOKEN_KEYS_INDEX, JSON.stringify(prev));
+      } catch (e) {
+        // best-effort
+      }
+    })
+    .catch(() => {
+      // keep chain intact
+    });
+
+  return tokenKeysIndexQueue;
 };
 
 export const clearTokenCache = async () => {
