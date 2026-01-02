@@ -1,5 +1,5 @@
 import NetInfo from '@react-native-community/netinfo';
-import { Platform, InteractionManager } from 'react-native';
+import { InteractionManager } from 'react-native';
 import Constants from 'expo-constants';
 import AsyncStorage from '../utils/AsyncStorageWrapper';
 import { getPendingProfileUpdates, markPendingProfileProcessed } from '../db/localDb';
@@ -65,7 +65,7 @@ let _scheduledSyncTimer: any = null;
 let _scheduledSyncPromise: Promise<any> | null = null;
 let _scheduledSyncResolve: ((value: any) => void) | null = null;
 let _scheduledSyncReject: ((reason?: any) => void) | null = null;
-let _followUpPullQueuedAt = 0;
+const _followUpPullQueuedAtByUser: Record<string, number> = {};
 // Sync status listeners (UI can subscribe to show progress or errors)
 export type SyncStatus = 'idle' | 'syncing' | 'error';
 let _syncStatus: SyncStatus = 'idle';
@@ -372,6 +372,7 @@ export type SyncResult = {
 };
 
 export const syncBothWays = async (options?: { force?: boolean; source?: 'manual' | 'auto' }) => {
+  let syncUserKey: string | null = null;
   // State machine: sync can be paused at any time.
   await loadSyncPrefsOnce();
   if (_syncPaused) {
@@ -487,9 +488,12 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
       } satisfies SyncResult;
     }
 
+    // Keep a stable key for throttling follow-up pulls.
+    syncUserKey = realId;
+
     // If we found a real Neon UUID and it differs from the current session uuid,
     // migrate local rows and reset pull cursors.
-    if (realId && isUuid(realId) && realId !== uid) {
+    if (realId !== uid) {
       try {
         const { executeSqlAsync } = require('../db/sqlite');
         await executeSqlAsync('UPDATE transactions SET user_id = ? WHERE user_id = ?;', [
@@ -524,7 +528,7 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
         const { notifyEntriesChanged } = require('../utils/dbEvents');
         notifyEntriesChanged();
       } catch (e) {}
-    } else if (realId && isUuid(realId)) {
+    } else {
       // Ensure clerk_id is persisted even when uuid already matches.
       try {
         await saveSession(
@@ -651,8 +655,10 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
       const hasMore = Boolean((runResult as any)?.pulled?.hasMore);
       if (hasMore && pulledCount > 0) {
         const now = Date.now();
-        if (now - _followUpPullQueuedAt > 5000) {
-          _followUpPullQueuedAt = now;
+        const key = syncUserKey || 'global';
+        const last = _followUpPullQueuedAtByUser[key] || 0;
+        if (now - last > 5000) {
+          _followUpPullQueuedAtByUser[key] = now;
           setTimeout(() => {
             try {
               scheduleSync({ source: 'auto', force: true } as any);

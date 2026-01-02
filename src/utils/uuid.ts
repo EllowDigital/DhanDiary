@@ -43,8 +43,11 @@ export const uuidv4 = (): string => {
       const { randomFillSync } = require('crypto');
       randomFillSync(rnds);
     } catch (_e) {
-      // Very last resort (should not happen in RN/Node)
-      for (let i = 0; i < rnds.length; i++) rnds[i] = Math.floor(Math.random() * 256);
+      // Do not fall back to Math.random(), which is not cryptographically secure.
+      // Fail explicitly so that environments without secure randomness are fixed/configured properly.
+      throw new Error(
+        'uuidv4: secure random number generation is not available in this environment'
+      );
     }
   }
 
