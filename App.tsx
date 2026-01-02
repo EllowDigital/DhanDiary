@@ -109,6 +109,7 @@ const AppContent = () => {
   const [localSessionId, setLocalSessionId] = React.useState<string | null>(null);
   const [localSessionClerkId, setLocalSessionClerkId] = React.useState<string | null>(null);
   const [accountDeletedAt, setAccountDeletedAt] = React.useState<string | null>(null);
+  const [isOnline, setIsOnline] = React.useState<boolean | null>(null);
   const { showActionToast } = useToast();
 
   // --- Biometric session gate state ---
@@ -134,7 +135,7 @@ const AppContent = () => {
           try {
             const del = await s.getAccountDeletedAt();
             setAccountDeletedAt(del);
-          } catch (e) {}
+          } catch (e) { }
         }
       } catch (e) {
         if (__DEV__) console.warn('[AppContent] failed to load local session', e);
@@ -154,16 +155,37 @@ const AppContent = () => {
             if (mod && typeof mod.getAccountDeletedAt === 'function') {
               mod.getAccountDeletedAt().then((v: any) => setAccountDeletedAt(v));
             }
-          } catch (e) {}
-        } catch (e) {}
+          } catch (e) { }
+        } catch (e) { }
       });
-    } catch (e) {}
+    } catch (e) { }
 
     return () => {
       mounted = false;
       try {
         if (unsub) unsub();
-      } catch (e) {}
+      } catch (e) { }
+    };
+  }, []);
+
+  // Track connectivity so we can retry online-only effects (e.g., Clerk->Neon bridge)
+  // when the device comes back online.
+  useEffect(() => {
+    let mounted = true;
+    const unsub = NetInfo.addEventListener((state) => {
+      if (!mounted) return;
+      setIsOnline(!!state.isConnected);
+    });
+    NetInfo.fetch()
+      .then((state) => {
+        if (mounted) setIsOnline(!!state.isConnected);
+      })
+      .catch(() => { });
+    return () => {
+      mounted = false;
+      try {
+        unsub();
+      } catch (e) { }
     };
   }, []);
 
@@ -261,7 +283,7 @@ const AppContent = () => {
               'Update ready to install.',
               'Install',
               () => {
-                Updates.reloadAsync().catch(() => {});
+                Updates.reloadAsync().catch(() => { });
               },
               'info',
               8000
@@ -269,7 +291,7 @@ const AppContent = () => {
           }
         } catch (e) {
           // Fallback to silent behavior
-          runBackgroundUpdateCheck().catch(() => {});
+          runBackgroundUpdateCheck().catch(() => { });
         }
       })();
     });
@@ -285,12 +307,14 @@ const AppContent = () => {
 
   // 2. Health Check (Neon)
   useEffect(() => {
-    checkNeonConnection().catch(() => {});
+    checkNeonConnection().catch(() => { });
   }, []);
 
   // 3. User Synchronization
   useEffect(() => {
     if (!clerkLoaded || !clerkUser) return;
+    // Ensure this effect re-runs when connectivity changes (offline -> online).
+    if (isOnline === false) return;
 
     const syncUser = async () => {
       try {
@@ -323,21 +347,42 @@ const AppContent = () => {
         try {
           const ownerMod = await import('./src/db/offlineOwner');
           const currentOwner = await ownerMod.getOfflineDbOwner();
-          if (currentOwner && String(currentOwner) !== String(id)) {
+
+          const PENDING_PREFIX = 'pending:';
+          const currentOwnerStr = currentOwner ? String(currentOwner) : null;
+          const isPending = !!currentOwnerStr && currentOwnerStr.startsWith(PENDING_PREFIX);
+          const currentOwnerValue =
+            isPending && currentOwnerStr
+              ? currentOwnerStr.slice(PENDING_PREFIX.length)
+              : currentOwnerStr;
+
+          const wipeAndResetCaches = async () => {
             const db = await import('./src/db/sqlite');
             if (typeof db.wipeLocalData === 'function') await db.wipeLocalData();
             try {
               const { notifyEntriesChanged } = require('./src/utils/dbEvents');
               notifyEntriesChanged();
-            } catch (e) {}
+            } catch (e) { }
             try {
               const holder = require('./src/utils/queryClientHolder');
               if (holder && typeof holder.clearQueryCache === 'function') {
                 await holder.clearQueryCache();
               }
-            } catch (e) {}
+            } catch (e) { }
+          };
+
+          // Crash-safety: mark owner as pending before wiping so a mid-wipe crash
+          // can't leave the app thinking the DB belongs to the new user.
+          if (isPending) {
+            await wipeAndResetCaches();
+            await ownerMod.setOfflineDbOwner(String(id));
+          } else if (currentOwnerValue && String(currentOwnerValue) !== String(id)) {
+            await ownerMod.setOfflineDbOwner(`${PENDING_PREFIX}${String(id)}`);
+            await wipeAndResetCaches();
+            await ownerMod.setOfflineDbOwner(String(id));
+          } else {
+            await ownerMod.setOfflineDbOwner(String(id));
           }
-          await ownerMod.setOfflineDbOwner(String(id));
         } catch (e) {
           // Best-effort; do not block login flow.
         }
@@ -364,7 +409,7 @@ const AppContent = () => {
     };
 
     syncUser();
-  }, [clerkLoaded, clerkUser]);
+  }, [clerkLoaded, clerkUser, isOnline]);
 
   return (
     <View style={{ flex: 1 }}>
@@ -430,7 +475,7 @@ function AppWithDb() {
     try {
       const holder = require('./src/utils/queryClientHolder');
       if (holder?.setQueryClient) holder.setQueryClient(queryClient);
-    } catch (e) {}
+    } catch (e) { }
   }, [queryClient]);
 
   const initializeDatabase = useCallback(async () => {
@@ -456,16 +501,16 @@ function AppWithDb() {
     if (!dbReady) return;
 
     if (AppState.currentState === 'active') {
-      runFullSync().catch(() => {});
+      runFullSync().catch(() => { });
     }
 
     startForegroundSyncScheduler(15000);
-    startBackgroundFetch().catch(() => {});
+    startBackgroundFetch().catch(() => { });
 
     // Background Expo Updates: fetch quietly, apply on next restart.
     // Never block app launch.
     InteractionManager.runAfterInteractions(() => {
-      runBackgroundUpdateCheck().catch(() => {});
+      runBackgroundUpdateCheck().catch(() => { });
     });
 
     return () => {
@@ -480,7 +525,7 @@ function AppWithDb() {
     const handleAppStateChange = (nextState: AppStateStatus) => {
       if (nextState === 'active' && !isSyncRunning) {
         setTimeout(() => {
-          runFullSync().catch(() => {});
+          runFullSync().catch(() => { });
         }, 500);
       }
     };
@@ -556,11 +601,11 @@ export default function App() {
                 '[App] JS Error suppressed in production:',
                 error && error.message ? error.message : error
               );
-            } catch (e) {}
+            } catch (e) { }
             // Optionally send to analytics here
           });
         }
-      } catch (e) {}
+      } catch (e) { }
 
       // Catch unhandled promise rejections
       try {
@@ -571,9 +616,9 @@ export default function App() {
               '[App] Unhandled Promise Rejection suppressed in production:',
               reason && reason.message ? reason.message : reason
             );
-          } catch (e) {}
+          } catch (e) { }
         };
-      } catch (e) {}
+      } catch (e) { }
     }
     // Warn if CLERK_SECRET exists in runtime config — this is insecure for clients
     try {
@@ -584,8 +629,8 @@ export default function App() {
           '[App] SECURITY WARNING: CLERK_SECRET is present in client runtime. Do NOT ship admin secrets to mobile clients. Prefer a server-side deletion endpoint.'
         );
       }
-    } catch (e) {}
-  } catch (e) {}
+    } catch (e) { }
+  } catch (e) { }
   if (!CLERK_PUBLISHABLE_KEY) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
