@@ -164,7 +164,7 @@ const StatsScreen = () => {
       try {
         const s = await getSession();
         if (mounted) setFallbackSession(s);
-      } catch (e) { }
+      } catch (e) {}
     };
     load();
     const unsub = subscribeSession((s) => {
@@ -174,7 +174,7 @@ const StatsScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, []);
 
@@ -187,7 +187,7 @@ const StatsScreen = () => {
     }
 
     try {
-      const localDateExpr = "COALESCE(date, created_at)";
+      const localDateExpr = 'COALESCE(date, created_at)';
       const monthExpr = `strftime('%Y-%m', ${localDateExpr}, 'localtime')`;
       const yearExpr = `strftime('%Y', ${localDateExpr}, 'localtime')`;
 
@@ -247,7 +247,7 @@ const StatsScreen = () => {
     return () => {
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, [navigation, refreshPeriods]);
 
@@ -272,7 +272,7 @@ const StatsScreen = () => {
     return () => {
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, [refreshPeriods]);
 
@@ -340,11 +340,16 @@ const StatsScreen = () => {
     await new Promise((r) => InteractionManager.runAfterInteractions(() => r(null)));
 
     try {
-      const result = await aggregateWithPreferSummary(effectiveUserId || undefined, rangeStart, rangeEnd, {
-        signal: controller.signal,
-        cacheBuster: String(txCacheBuster),
-        allowRemote: Boolean(isOnline),
-      });
+      const result = await aggregateWithPreferSummary(
+        effectiveUserId || undefined,
+        rangeStart,
+        rangeEnd,
+        {
+          signal: controller.signal,
+          cacheBuster: String(txCacheBuster),
+          allowRemote: Boolean(isOnline),
+        }
+      );
 
       if (result && !controller.signal.aborted) {
         const totalIn = Number(result.totalIn || 0);
