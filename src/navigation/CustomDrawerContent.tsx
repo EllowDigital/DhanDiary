@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-navigation/drawer';
 import { Text } from '@rneui/themed';
-import { useUser } from '@clerk/clerk-expo';
+import { useAuth, useUser } from '@clerk/clerk-expo';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import Constants from 'expo-constants'; // Standard way to access version
@@ -20,7 +20,7 @@ import Constants from 'expo-constants'; // Standard way to access version
 // Ensure these paths are correct in your project
 import { colors } from '../utils/design';
 import UserAvatar from '../components/UserAvatar';
-import { logout } from '../services/auth';
+import { performHardSignOut } from '../services/signOutFlow';
 import { resetRoot } from '../utils/rootNavigation';
 import { getSession } from '../db/session';
 import { subscribeSession } from '../utils/sessionEvents';
@@ -35,6 +35,7 @@ const TEXT_SUB_COLOR = INACTIVE_COLOR;
 // --- DRAWER COMPONENT ---
 const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   const insets = useSafeAreaInsets();
+  const { signOut: clerkSignOut } = useAuth();
   const { user } = useUser();
   const [fallbackSession, setFallbackSession] = useState<any>(null);
   const [isSigningOut, setIsSigningOut] = useState(false);
@@ -80,7 +81,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -139,16 +140,18 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
           if (isSigningOut) return;
           setIsSigningOut(true);
           try {
-            // Centralized logout handles best-effort Clerk signOut too.
-            await logout();
-
-            // Reset nav stack to prevent going back
-            try {
-              resetRoot({ index: 0, routes: [{ name: 'Auth' }] });
-            } catch (e) {
-              // fallback
-              props.navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
-            }
+            await performHardSignOut({
+              clerkSignOut: async () => {
+                await clerkSignOut();
+              },
+              navigateToAuth: () => {
+                try {
+                  resetRoot({ index: 0, routes: [{ name: 'Auth' }] });
+                } catch (e) {
+                  props.navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
+                }
+              },
+            });
           } catch (e) {
             console.error('[Drawer] Logout failed', e);
             Alert.alert('Error', 'Failed to sign out. Please try again.');

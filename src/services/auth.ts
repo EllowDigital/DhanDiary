@@ -297,15 +297,7 @@ export const logout = async (opts?: {
     await notifySessionChanged();
   });
 
-  // 5) Sign out from Clerk (Best Effort)
-  await safeRun(async () => {
-    const clerk = require('@clerk/clerk-expo');
-    if (clerk && typeof clerk.signOut === 'function') {
-      await clerk.signOut();
-    }
-  });
-
-  // 6) Clear React Query Cache
+  // 5) Clear React Query Cache
   await safeRun(async () => {
     const holder = require('../utils/queryClientHolder');
     if (holder && typeof holder.clearQueryCache === 'function') {
@@ -360,26 +352,7 @@ export const deleteAccount = async (opts?: { clerkUserId?: string }) => {
     }
   }
 
-  // 2. Wipe Local Data
-  // Mark account deleted flag (persisted) so UI can show a targeted message
-  try {
-    const sessMod = require('../db/session');
-    if (sessMod && typeof sessMod.setAccountDeletedAt === 'function') {
-      await sessMod.setAccountDeletedAt(new Date().toISOString());
-    }
-  } catch (e) {}
-
-  await wipeLocalDatabase();
-
-  // Re-initialize DB schema so app restarts in clean state
-  try {
-    const { initDB } = await import('../db/sqlite');
-    if (typeof initDB === 'function') await initDB();
-  } catch (e) {
-    console.warn('[Auth] initDB after wipe failed', e);
-  }
-
-  // 3. Clerk Deletion
+  // 2. Clerk Deletion (best-effort; prefer backend endpoint)
   try {
     // Prefer calling a backend delete endpoint (recommended). If your app
     // configures `CLERK_DELETE_URL` (in expo extra or env), we'll POST to it
@@ -431,33 +404,8 @@ export const deleteAccount = async (opts?: { clerkUserId?: string }) => {
         }
       }
     }
-
-    // Also attempt client-side best-effort signOut if available
-    const clerk = require('@clerk/clerk-expo');
-    if (clerk && typeof clerk.signOut === 'function') {
-      await clerk.signOut();
-    }
   } catch (e) {
     console.warn('[Auth] Clerk clean up failed', (e as any)?.message || e);
-  }
-
-  // Ensure we run standard logout cleanup (stop sync, clear caches/storage)
-  try {
-    await logout({ clearAllStorage: true });
-  } catch (e) {
-    // best-effort: ignore errors here but log for diagnostics
-    console.warn('[Auth] logout during deleteAccount failed', e);
-  }
-
-  // Prevent the app from auto-creating a guest session after account deletion.
-  try {
-    const sessMod = require('../db/session');
-    if (sessMod && typeof sessMod.setNoGuestMode === 'function') {
-      // Persist 'no guest' so on next cold start the app won't create guest_... sessions.
-      await sessMod.setNoGuestMode(true);
-    }
-  } catch (e) {
-    if (typeof __DEV__ !== 'undefined' && __DEV__) console.warn('[Auth] setNoGuestMode failed', e);
   }
 
   const deletionInfo = {
