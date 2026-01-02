@@ -514,7 +514,8 @@ const HomeScreen = () => {
               styles.heroCard,
               {
                 opacity: fadeAnim,
-                minHeight: Math.max(180, Math.min(320, Math.round(screenWidth * 0.56))),
+                // Keep the hero compact and consistent across devices.
+                minHeight: Math.max(200, Math.min(260, Math.round(screenWidth * 0.5))),
                 borderRadius: Math.max(16, Math.round(screenWidth * 0.06)),
               },
             ]
@@ -538,7 +539,7 @@ const HomeScreen = () => {
               styles.cardInner,
               {
                 padding: Math.round(Math.max(14, screenWidth * 0.05)),
-                justifyContent: 'space-between',
+                justifyContent: 'flex-start',
               },
             ]}
           >
@@ -582,7 +583,15 @@ const HomeScreen = () => {
               </View>
             ) : null}
 
-            <View style={[styles.statsContainer, { padding: Math.max(8, Math.round(screenWidth * 0.02)) }]}>
+            <View
+              style={[
+                styles.statsContainer,
+                {
+                  padding: Math.max(10, Math.round(screenWidth * 0.02)),
+                  marginTop: 12,
+                },
+              ]}
+            >
               {/* Income */}
               <View style={styles.statItem}>
                 <View style={[styles.statIcon, { backgroundColor: 'rgba(16, 185, 129, 0.2)' }]}>
@@ -844,18 +853,20 @@ const styles = StyleSheet.create({
     marginTop: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    width: '100%',
-    paddingVertical: 8,
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+    paddingVertical: 6,
     paddingHorizontal: 10,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    // allow wrapping and prevent overlap with balance/stats on narrow screens
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
     flexShrink: 1,
   },
   bootstrapSyncHintText: {
     marginLeft: 8,
     color: 'rgba(255,255,255,0.85)',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     flex: 1,
     flexWrap: 'wrap',
@@ -928,9 +939,11 @@ const styles = StyleSheet.create({
 
   statsContainer: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 18,
     padding: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.16)',
   },
   statItem: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10 },
   statIcon: {
@@ -940,7 +953,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  statLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: '500' },
+  statLabel: { color: 'rgba(255,255,255,0.78)', fontSize: 11, fontWeight: '600' },
   statValue: { color: '#fff', fontSize: 14, fontWeight: '700' },
   statDivider: {
     width: 1,
