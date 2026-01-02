@@ -509,150 +509,155 @@ const HomeScreen = () => {
 
         {/* 2. Hero Card */}
         <Animated.View
-          style={
-            [
-              styles.heroCard,
-              {
-                opacity: fadeAnim,
-                // Keep the hero compact and consistent across devices.
-                minHeight: Math.max(200, Math.min(260, Math.round(screenWidth * 0.5))),
-                borderRadius: Math.max(16, Math.round(screenWidth * 0.06)),
-              },
-            ]
-          }
+          style={[
+            styles.heroCardShadow,
+            {
+              opacity: fadeAnim,
+              // Keep the hero compact and consistent across devices.
+              minHeight: Math.max(200, Math.min(260, Math.round(screenWidth * 0.5))),
+              borderRadius: Math.max(16, Math.round(screenWidth * 0.06)),
+            },
+          ]}
         >
-          <Svg style={StyleSheet.absoluteFill}>
-            <Defs>
-              <LinearGradient id="heroGrad" x1="0" y1="0" x2="1" y2="1">
-                <Stop offset="0" stopColor="#3B82F6" />
-                <Stop offset="1" stopColor="#1D4ED8" />
-              </LinearGradient>
-            </Defs>
-            <Rect width="100%" height="100%" fill="url(#heroGrad)" />
-            {/* Decorative Circles */}
-            <Circle cx="85%" cy="15%" r="80" fill="white" fillOpacity="0.1" />
-            <Circle cx="10%" cy="90%" r="50" fill="white" fillOpacity="0.08" />
-          </Svg>
-
           <View
             style={[
-              styles.cardInner,
-              {
-                padding: Math.round(Math.max(14, screenWidth * 0.05)),
-                justifyContent: 'flex-start',
-              },
+              styles.heroCardSurface,
+              { borderRadius: Math.max(16, Math.round(screenWidth * 0.06)) },
             ]}
           >
-            <View style={styles.cardHeader}>
-              <Text style={styles.balanceLabel}>Total Balance</Text>
-              <TouchableOpacity onPress={() => setShowBalance(!showBalance)} style={styles.eyeBtn}>
-                <MaterialIcon
-                  name={showBalance ? 'visibility' : 'visibility-off'}
-                  size={18}
-                  color="rgba(255,255,255,0.7)"
-                />
-              </TouchableOpacity>
-            </View>
-
-            <View style={[styles.balanceRow, { alignItems: 'flex-start' }]}>
-              <Text
-                style={[
-                  styles.currencySymbol,
-                  { fontSize: Math.max(18, Math.round(screenWidth * 0.05)) },
-                ]}
-              >
-                ₹
-              </Text>
-              <Text
-                style={[
-                  styles.balanceAmount,
-                  { fontSize: Math.max(28, Math.round(screenWidth * 0.11)) },
-                ]}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.6}
-              >
-                {showBalance ? formatInrNumber(stats.bal) : '••••••'}
-              </Text>
-            </View>
-
-            {showBootstrapSyncHint ? (
-              <View style={styles.bootstrapSyncHint}>
-                <ActivityIndicator size="small" color="rgba(255,255,255,0.85)" />
-                <Text style={styles.bootstrapSyncHintText}>Syncing your data…</Text>
-              </View>
-            ) : null}
+            <Svg style={StyleSheet.absoluteFill}>
+              <Defs>
+                <LinearGradient id="heroGrad" x1="0" y1="0" x2="1" y2="1">
+                  <Stop offset="0" stopColor="#3B82F6" />
+                  <Stop offset="1" stopColor="#1D4ED8" />
+                </LinearGradient>
+              </Defs>
+              <Rect width="100%" height="100%" fill="url(#heroGrad)" />
+              {/* Decorative Circles */}
+              <Circle cx="85%" cy="15%" r="80" fill="white" fillOpacity="0.1" />
+              <Circle cx="10%" cy="90%" r="50" fill="white" fillOpacity="0.08" />
+            </Svg>
 
             <View
               style={[
-                styles.statsContainer,
+                styles.cardInner,
                 {
-                  padding: Math.max(10, Math.round(screenWidth * 0.02)),
-                  marginTop: 12,
+                  padding: Math.round(Math.max(14, screenWidth * 0.05)),
+                  justifyContent: 'flex-start',
                 },
               ]}
             >
-              {/* Income */}
-              <View style={styles.statItem}>
-                <View style={[styles.statIcon, { backgroundColor: 'rgba(16, 185, 129, 0.2)' }]}>
-                  <MaterialIcon name="arrow-downward" size={16} color="#4ADE80" />
-                </View>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text
-                    style={[
-                      styles.statLabel,
-                      { fontSize: Math.max(10, Math.round(screenWidth * 0.03)) },
-                    ]}
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                  >
-                    Income {period === 'week' ? '(7 Days)' : '(This Month)'}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.statValue,
-                      { fontSize: Math.max(12, Math.round(screenWidth * 0.035)) },
-                    ]}
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.7}
-                  >
-                    {showBalance ? formatInrWithSymbol(stats.in) : '••••'}
-                  </Text>
-                </View>
+              <View style={styles.cardHeader}>
+                <Text style={styles.balanceLabel}>Total Balance</Text>
+                <TouchableOpacity onPress={() => setShowBalance(!showBalance)} style={styles.eyeBtn}>
+                  <MaterialIcon
+                    name={showBalance ? 'visibility' : 'visibility-off'}
+                    size={18}
+                    color="rgba(255,255,255,0.7)"
+                  />
+                </TouchableOpacity>
               </View>
 
-              <View style={styles.statDivider} />
+              <View style={[styles.balanceRow, { alignItems: 'flex-start' }]}>
+                <Text
+                  style={[
+                    styles.currencySymbol,
+                    { fontSize: Math.max(18, Math.round(screenWidth * 0.05)) },
+                  ]}
+                >
+                  ₹
+                </Text>
+                <Text
+                  style={[
+                    styles.balanceAmount,
+                    { fontSize: Math.max(28, Math.round(screenWidth * 0.11)) },
+                  ]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.6}
+                >
+                  {showBalance ? formatInrNumber(stats.bal) : '••••••'}
+                </Text>
+              </View>
 
-              {/* Expense */}
-              <View style={styles.statItem}>
-                <View style={[styles.statIcon, { backgroundColor: 'rgba(239, 68, 68, 0.2)' }]}>
-                  <MaterialIcon name="arrow-upward" size={16} color="#F87171" />
+              {showBootstrapSyncHint ? (
+                <View style={styles.bootstrapSyncHint}>
+                  <ActivityIndicator size="small" color="rgba(255,255,255,0.85)" />
+                  <Text style={styles.bootstrapSyncHintText}>Syncing your data…</Text>
                 </View>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text
-                    style={[
-                      styles.statLabel,
-                      { fontSize: Math.max(10, Math.round(screenWidth * 0.03)) },
-                    ]}
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                  >
-                    Expense {period === 'week' ? '(7 Days)' : '(This Month)'}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.statValue,
-                      { fontSize: Math.max(12, Math.round(screenWidth * 0.035)) },
-                    ]}
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.7}
-                  >
-                    {showBalance ? formatInrWithSymbol(stats.out) : '••••'}
-                  </Text>
+              ) : null}
+
+              <View
+                style={[
+                  styles.statsContainer,
+                  {
+                    padding: Math.max(10, Math.round(screenWidth * 0.02)),
+                    marginTop: 'auto',
+                  },
+                ]}
+              >
+                {/* Income */}
+                <View style={styles.statItem}>
+                  <View style={[styles.statIcon, { backgroundColor: 'rgba(16, 185, 129, 0.2)' }]}>
+                    <MaterialIcon name="arrow-downward" size={16} color="#4ADE80" />
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text
+                      style={[
+                        styles.statLabel,
+                        { fontSize: Math.max(10, Math.round(screenWidth * 0.03)) },
+                      ]}
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
+                    >
+                      Income {period === 'week' ? '(7 Days)' : '(This Month)'}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.statValue,
+                        { fontSize: Math.max(12, Math.round(screenWidth * 0.035)) },
+                      ]}
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.7}
+                    >
+                      {showBalance ? formatInrWithSymbol(stats.in) : '••••'}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.statDivider} />
+
+                {/* Expense */}
+                <View style={styles.statItem}>
+                  <View style={[styles.statIcon, { backgroundColor: 'rgba(239, 68, 68, 0.2)' }]}>
+                    <MaterialIcon name="arrow-upward" size={16} color="#F87171" />
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text
+                      style={[
+                        styles.statLabel,
+                        { fontSize: Math.max(10, Math.round(screenWidth * 0.03)) },
+                      ]}
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
+                    >
+                      Expense {period === 'week' ? '(7 Days)' : '(This Month)'}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.statValue,
+                        { fontSize: Math.max(12, Math.round(screenWidth * 0.035)) },
+                      ]}
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.7}
+                    >
+                      {showBalance ? formatInrWithSymbol(stats.out) : '••••'}
+                    </Text>
+                  </View>
                 </View>
               </View>
             </View>
@@ -910,18 +915,22 @@ const styles = StyleSheet.create({
   },
 
   // Hero Card
-  heroCard: {
+  heroCardShadow: {
     width: '100%',
     minHeight: 200,
     borderRadius: 24,
     marginBottom: 24,
-    overflow: 'hidden',
-    // Shadow
+    // Shadow (keep on wrapper; no overflow clipping)
     shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 15,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.22,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  heroCardSurface: {
+    flex: 1,
+    borderRadius: 24,
+    overflow: 'hidden',
   },
   cardInner: { flex: 1, padding: 20, justifyContent: 'space-between' },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
