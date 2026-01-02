@@ -324,7 +324,7 @@ const HomeScreen = () => {
     return () => {
       try {
         if (unsub) unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, [fadeAnim]);
 
@@ -335,7 +335,7 @@ const HomeScreen = () => {
       try {
         const s = await getSession();
         if (mounted) setFallbackSession(s);
-      } catch (e) { }
+      } catch (e) {}
     };
     load();
     const unsub = subscribeSession((s) => {
@@ -345,7 +345,7 @@ const HomeScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, []);
 
@@ -549,7 +549,10 @@ const HomeScreen = () => {
             >
               <View style={styles.cardHeader}>
                 <Text style={styles.balanceLabel}>Total Balance</Text>
-                <TouchableOpacity onPress={() => setShowBalance(!showBalance)} style={styles.eyeBtn}>
+                <TouchableOpacity
+                  onPress={() => setShowBalance(!showBalance)}
+                  style={styles.eyeBtn}
+                >
                   <MaterialIcon
                     name={showBalance ? 'visibility' : 'visibility-off'}
                     size={18}
