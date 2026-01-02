@@ -290,7 +290,7 @@ const HomeScreen = () => {
     return () => {
       try {
         if (unsub) unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, [fadeAnim]);
 
@@ -301,7 +301,7 @@ const HomeScreen = () => {
       try {
         const s = await getSession();
         if (mounted) setFallbackSession(s);
-      } catch (e) {}
+      } catch (e) { }
     };
     load();
     const unsub = subscribeSession((s) => {
@@ -311,7 +311,7 @@ const HomeScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -474,7 +474,23 @@ const HomeScreen = () => {
         </View>
 
         {/* 2. Hero Card */}
-        <Animated.View style={[styles.heroCard, { opacity: fadeAnim }]}>
+        {
+          // Compute responsive sizes from screen width so the hero card
+          // and contained typography scale across Android devices.
+        }
+        <Animated.View
+          style={
+            [
+              styles.heroCard,
+              {
+                opacity: fadeAnim,
+                height: Math.max(160, Math.min(300, Math.round(screenWidth * 0.5))),
+                borderRadius: Math.max(16, Math.round(screenWidth * 0.06)),
+                padding: Math.round(Math.max(12, screenWidth * 0.05)),
+              },
+            ]
+          }
+        >
           <Svg style={StyleSheet.absoluteFill}>
             <Defs>
               <LinearGradient id="heroGrad" x1="0" y1="0" x2="1" y2="1">
@@ -488,7 +504,7 @@ const HomeScreen = () => {
             <Circle cx="10%" cy="90%" r="50" fill="white" fillOpacity="0.08" />
           </Svg>
 
-          <View style={styles.cardInner}>
+          <View style={[styles.cardInner, { padding: Math.round(Math.max(12, screenWidth * 0.05)) }]}>
             <View style={styles.cardHeader}>
               <Text style={styles.balanceLabel}>Total Balance</Text>
               <TouchableOpacity onPress={() => setShowBalance(!showBalance)} style={styles.eyeBtn}>
@@ -500,9 +516,23 @@ const HomeScreen = () => {
               </TouchableOpacity>
             </View>
 
-            <View style={styles.balanceRow}>
-              <Text style={styles.currencySymbol}>₹</Text>
-              <Text style={styles.balanceAmount} numberOfLines={1} adjustsFontSizeToFit>
+            <View style={[styles.balanceRow, { alignItems: 'flex-start' }]}>
+              <Text
+                style={[
+                  styles.currencySymbol,
+                  { fontSize: Math.max(18, Math.round(screenWidth * 0.05)) },
+                ]}
+              >
+                ₹
+              </Text>
+              <Text
+                style={[
+                  styles.balanceAmount,
+                  { fontSize: Math.max(28, Math.round(screenWidth * 0.11)) },
+                ]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+              >
                 {showBalance ? stats.bal.toLocaleString('en-IN') : '••••••'}
               </Text>
             </View>
@@ -514,17 +544,22 @@ const HomeScreen = () => {
               </View>
             ) : null}
 
-            <View style={styles.statsContainer}>
+            <View
+              style={[
+                styles.statsContainer,
+                { padding: Math.max(8, Math.round(screenWidth * 0.02)), flexWrap: 'wrap' },
+              ]}
+            >
               {/* Income */}
-              <View style={styles.statItem}>
+              <View style={[styles.statItem, { minWidth: Math.round((screenWidth - 80) / 2) }]}>
                 <View style={[styles.statIcon, { backgroundColor: 'rgba(16, 185, 129, 0.2)' }]}>
                   <MaterialIcon name="arrow-downward" size={16} color="#4ADE80" />
                 </View>
                 <View>
-                  <Text style={styles.statLabel}>
+                  <Text style={[styles.statLabel, { fontSize: Math.max(10, Math.round(screenWidth * 0.03)) }]}>
                     Income {period === 'week' ? '(7 Days)' : '(This Month)'}
                   </Text>
-                  <Text style={styles.statValue}>
+                  <Text style={[styles.statValue, { fontSize: Math.max(12, Math.round(screenWidth * 0.035)) }]}>
                     {showBalance ? `₹${stats.in.toLocaleString()}` : '••••'}
                   </Text>
                 </View>
@@ -533,15 +568,15 @@ const HomeScreen = () => {
               <View style={styles.statDivider} />
 
               {/* Expense */}
-              <View style={styles.statItem}>
+              <View style={[styles.statItem, { minWidth: Math.round((screenWidth - 80) / 2) }]}>
                 <View style={[styles.statIcon, { backgroundColor: 'rgba(239, 68, 68, 0.2)' }]}>
                   <MaterialIcon name="arrow-upward" size={16} color="#F87171" />
                 </View>
                 <View>
-                  <Text style={styles.statLabel}>
+                  <Text style={[styles.statLabel, { fontSize: Math.max(10, Math.round(screenWidth * 0.03)) }]}>
                     Expense {period === 'week' ? '(7 Days)' : '(This Month)'}
                   </Text>
-                  <Text style={styles.statValue}>
+                  <Text style={[styles.statValue, { fontSize: Math.max(12, Math.round(screenWidth * 0.035)) }]}>
                     {showBalance ? `₹${stats.out.toLocaleString()}` : '••••'}
                   </Text>
                 </View>
@@ -744,12 +779,21 @@ const styles = StyleSheet.create({
     marginTop: 8,
     flexDirection: 'row',
     alignItems: 'center',
+    width: '100%',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    // allow wrapping and prevent overlap with balance/stats on narrow screens
+    flexShrink: 1,
   },
   bootstrapSyncHintText: {
     marginLeft: 8,
     color: 'rgba(255,255,255,0.85)',
     fontSize: 13,
     fontWeight: '600',
+    flex: 1,
+    flexWrap: 'wrap',
   },
 
   // Header
