@@ -326,7 +326,7 @@ const AboutScreen: React.FC = () => {
 
             <TouchableOpacity
               style={styles.halfBtn}
-              onPress={() => Linking.openURL('mailto:support@dhandiary.com')}
+              onPress={() => Linking.openURL('mailto:ellowdigitalindia@gmail.com')}
             >
               <MaterialIcon name="mail-outline" size={20} color={theme.primary} />
               <Text style={styles.halfBtnText}>Contact Us</Text>
