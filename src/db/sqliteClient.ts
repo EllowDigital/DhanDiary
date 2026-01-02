@@ -58,6 +58,20 @@ const mockClient: DatabaseClient = {
 let cachedDb: any | null = null;
 let cachedClient: DatabaseClient | null = null;
 
+let reopenInFlight: Promise<any> | null = null;
+
+const reopenDb = async (): Promise<any> => {
+  if (reopenInFlight) return reopenInFlight;
+  reopenInFlight = (async () => {
+    cachedDb = null;
+    cachedClient = null;
+    return openDb();
+  })().finally(() => {
+    reopenInFlight = null;
+  });
+  return reopenInFlight;
+};
+
 function openDb(): any {
   if (cachedDb) return cachedDb;
 
@@ -81,28 +95,32 @@ const createDbClientFromDb = (db: any): DatabaseClient => {
   // --- A: Modern API (SDK 50+) ---
   // If the database object has the new methods natively, pass them through.
   if (db && typeof db.getAllAsync === 'function') {
+    let dbRef: any = db;
     if (typeof __DEV__ !== 'undefined' && __DEV__)
       console.log('[sqliteClient] using modern native async API');
     // Heuristic for DDL statements where an empty/undefined result is normal
     const ddlRegex = /^\s*(?:DROP|VACUUM|CREATE|ALTER|PRAGMA)\b/i;
 
-    const withRetry = async <T>(fn: () => Promise<T>): Promise<T> => {
+    const withRetry = async <T>(call: (d: any) => Promise<T>): Promise<T> => {
       try {
-        return await fn();
+        return await call(dbRef);
       } catch (e) {
         if (!isReleasedDbError(e)) throw e;
-        // Re-open and retry once
-        cachedDb = null;
-        cachedClient = null;
-        const reopened = openDb();
-        cachedClient = createDbClientFromDb(reopened);
-        return await fn();
+        // Re-open and retry once, serialized.
+        const reopened = await reopenDb();
+        dbRef = reopened;
+        try {
+          cachedClient = createDbClientFromDb(reopened);
+        } catch (_e) {
+          // ignore cache update; this call still retries against reopened dbRef
+        }
+        return await call(dbRef);
       }
     };
 
     return {
       execAsync: (sql: string, params: any[] = []) => {
-        return withRetry(() => db.execAsync(sql, params) as Promise<any>).then((res: any) => {
+        return withRetry((d) => d.execAsync(sql, params) as Promise<any>).then((res: any) => {
           if (!res) {
             // For DDL-like statements, a falsy result is expected — don't spam warnings.
             if (!ddlRegex.test(sql)) {
@@ -119,11 +137,11 @@ const createDbClientFromDb = (db: any): DatabaseClient => {
           return [null, res];
         });
       },
-      runAsync: (sql: string, params: any[] = []) => withRetry(() => db.runAsync(sql, params)),
+      runAsync: (sql: string, params: any[] = []) => withRetry((d) => d.runAsync(sql, params)),
       getAllAsync: (sql: string, params: any[] = []) =>
-        withRetry(() => db.getAllAsync(sql, params)),
+        withRetry((d) => d.getAllAsync(sql, params)),
       getFirstAsync: (sql: string, params: any[] = []) =>
-        withRetry(() => db.getFirstAsync(sql, params)),
+        withRetry((d) => d.getFirstAsync(sql, params)),
     };
   }
 
@@ -131,9 +149,11 @@ const createDbClientFromDb = (db: any): DatabaseClient => {
   // Polyfills the new Async API using the old transaction API.
   console.log('Using Legacy SQLite Adapter');
 
+  let dbRef: any = db;
+
   const executeSql = (sql: string, params: any[] = []): Promise<any> => {
     return new Promise((resolve, reject) => {
-      db.transaction((tx: any) => {
+      dbRef.transaction((tx: any) => {
         tx.executeSql(
           sql,
           params,
@@ -152,9 +172,8 @@ const createDbClientFromDb = (db: any): DatabaseClient => {
       return await fn();
     } catch (e) {
       if (!isReleasedDbError(e)) throw e;
-      cachedDb = null;
-      cachedClient = null;
-      openDb();
+      const reopened = await reopenDb();
+      dbRef = reopened;
       return await fn();
     }
   };
