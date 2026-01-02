@@ -490,7 +490,11 @@ export async function upsertTransactionFromRemote(
       0, // need_sync = 0 because it came from server
     ]);
 
-    if (__DEV__) console.log('[transactions] upsert remote', txn.id);
+    try {
+      if (__DEV__ && (globalThis as any).__SYNC_VERBOSE__) {
+        console.log('[transactions] upsert remote', txn.id);
+      }
+    } catch (e) {}
     if (opts?.notify) {
       try {
         const rowsAffected = Number(writeRes?.rowsAffected || 0);
