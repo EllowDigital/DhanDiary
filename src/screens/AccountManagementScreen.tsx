@@ -20,73 +20,62 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Input, Button } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useAuth, useUser } from '@clerk/clerk-expo';
-console.info('[Account] deletion initiated', { userId: (user as any)?.id || null });
+import { useNavigation } from '@react-navigation/native';
+import * as LocalAuthentication from 'expo-local-authentication';
 
-// 1) Attempt remote deletion first (Neon + optional backend Clerk delete).
-let deletionResult: any = {};
-try {
-  deletionResult = await deleteAccount({ clerkUserId: (user as any)?.id });
-} catch (remoteErr) {
-  console.warn('[Account] deleteAccount() (remote) failed', remoteErr);
-}
+import { getSession } from '../db/session';
+import { subscribeSession } from '../utils/sessionEvents';
+import { getBiometricEnabled, setBiometricEnabled } from '../utils/biometricSettings';
+import { performHardSignOut } from '../services/signOutFlow';
+import { useToast } from '../context/ToastContext';
+import { colors } from '../utils/design';
+import ScreenHeader from '../components/ScreenHeader';
+import { deleteAccount } from '../services/auth';
+import UserAvatar from '../components/UserAvatar';
 
-// 2) Attempt deleting Clerk user on-device.
-try {
-  if (typeof (user as any).delete === 'function') {
-    await (user as any).delete();
+// Enable LayoutAnimation for Android
+if (Platform.OS === 'android') {
+  if (UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
   }
-} catch (clerkErr) {
-  console.warn('[Account] Clerk user.delete() failed (continuing)', clerkErr);
 }
 
-// 3) Hard boundary cleanup + navigation.
-await performHardSignOut({
-  clerkSignOut: async () => {
-    try {
-      await clerkSignOut();
-    } catch (e) {
-      // ignore
-    }
-  },
-  beforeNavigate: async () => {
-    // Prevent the app from auto-creating a guest session after account deletion.
-    try {
-      const sessMod = require('../db/session');
-      if (sessMod && typeof sessMod.setNoGuestMode === 'function') {
-        await sessMod.setNoGuestMode(true);
-      }
-    } catch (e) { }
-  },
-  navigateToAuth: () => {
-    // Navigate via root navigation so nested stacks are targeted reliably
-    try {
-      const { resetRoot } = require('../utils/rootNavigation');
-      resetRoot({
-        index: 0,
-        routes: [
-          {
-            name: 'Auth',
-            state: { routes: [{ name: 'AccountDeleted' }] },
-          },
-        ],
-      });
-    } catch (navErr) {
-      console.warn('[Account] root reset failed', navErr);
-      try {
-        navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
-      } catch (e) {
-        console.warn('[Account] fallback navigation.reset failed', e);
-      }
-    }
-  },
-});
+// --- TYPES ---
+interface CardItem {
+  id: string;
+  title: string;
+  description: string;
+  icon: keyof typeof MaterialIcon.glyphMap;
+  bgColor: string;
+  iconColor: string;
+}
 
-console.info('[Account] deletion completed', deletionResult || {});
-showToast('Account deleted');
-item: CardItem;
-isExpanded: boolean;
-onToggle: () => void;
-children: React.ReactNode;
+// --- SUB-COMPONENT: CUSTOM INPUT ---
+const CustomInput = ({ containerStyle, ...props }: any) => (
+  <Input
+    {...props}
+    autoCapitalize="none"
+    containerStyle={[styles.inputContainer, containerStyle]}
+    inputContainerStyle={styles.inputField}
+    inputStyle={styles.inputText}
+    labelStyle={styles.inputLabel}
+    placeholderTextColor={colors.muted || '#94A3B8'}
+    selectionColor={colors.primary}
+    renderErrorMessage={false}
+  />
+);
+
+// --- SUB-COMPONENT: EXPANDABLE CARD ---
+const ExpandableCard = ({
+  item,
+  isExpanded,
+  onToggle,
+  children,
+}: {
+  item: CardItem;
+  isExpanded: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
 }) => {
   // We use Animated for the arrow rotation, but LayoutAnimation for height (smoother)
   const rotateAnim = useRef(new Animated.Value(0)).current;
@@ -97,12 +86,12 @@ children: React.ReactNode;
       duration: 250,
       useNativeDriver: true,
     }).start();
-  }, [isExpanded]);
+  }, [isExpanded, rotateAnim]);
 
   const arrowRotation = rotateAnim.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '180deg'],
-  }, [user, clerkSignOut, navigation, showToast]);
+  });
 
   return (
     <View
