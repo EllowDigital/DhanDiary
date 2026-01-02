@@ -35,7 +35,6 @@ try {
 import { logout } from '../services/auth';
 import { syncBothWays, getLastSuccessfulSyncAt } from '../services/syncManager';
 import NetInfo from '@react-native-community/netinfo';
-import { useAuth } from '../hooks/useAuth';
 import { useNavigation } from '@react-navigation/native';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '../context/ToastContext';
@@ -83,8 +82,6 @@ const SettingsScreen = () => {
   const navigation = useNavigation<any>();
   const query = useQueryClient();
   const { showToast } = useToast();
-  const { user } = useAuth(); // Clerk or Custom Auth hook
-
   const [isSigningOut, setIsSigningOut] = useState(false);
 
   // Layout

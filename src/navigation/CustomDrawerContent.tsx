@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-navigation/drawer';
 import { Text } from '@rneui/themed';
-import { useAuth, useUser } from '@clerk/clerk-expo';
+import { useUser } from '@clerk/clerk-expo';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import Constants from 'expo-constants'; // Standard way to access version
@@ -35,7 +35,6 @@ const TEXT_SUB_COLOR = INACTIVE_COLOR;
 // --- DRAWER COMPONENT ---
 const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   const insets = useSafeAreaInsets();
-  const { signOut: _clerkSignOut } = useAuth();
   const { user } = useUser();
   const [fallbackSession, setFallbackSession] = useState<any>(null);
   const [isSigningOut, setIsSigningOut] = useState(false);

@@ -443,7 +443,7 @@ export const deleteAccount = async (opts?: { clerkUserId?: string }) => {
 
   // Ensure we run standard logout cleanup (stop sync, clear caches/storage)
   try {
-    await logout();
+    await logout({ clearAllStorage: true });
   } catch (e) {
     // best-effort: ignore errors here but log for diagnostics
     console.warn('[Auth] logout during deleteAccount failed', e);
