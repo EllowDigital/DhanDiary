@@ -230,7 +230,6 @@ const AccountManagementScreen = () => {
   useEffect(() => {
     if (!fallbackSession?.id) return;
     void checkBiometrics();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fallbackSession?.id]);
 
   const toggleBiometrics = async (val: boolean) => {
@@ -264,7 +263,7 @@ const AccountManagementScreen = () => {
       setBiometricsEnabled(val);
       showToast(val ? `${biometricType} Enabled` : `${biometricType} Disabled`);
     } catch (e) {
-      const msg = String(e?.message || '').trim();
+      const msg = (e instanceof Error ? e.message : String(e ?? '')).trim();
       showToast(
         msg ? `Failed to update security settings: ${msg}` : 'Failed to update security settings',
         'error'
