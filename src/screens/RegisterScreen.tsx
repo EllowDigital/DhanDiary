@@ -122,7 +122,7 @@ const RegisterScreen = () => {
               setOfflineVisible(true);
               return false;
             }
-          } catch (e) { }
+          } catch (e) {}
           Alert.alert('Registration Failed', errorMsg);
         }
         return false;

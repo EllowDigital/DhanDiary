@@ -110,7 +110,7 @@ const LoginScreen = () => {
     ]).start();
 
     // Pre-warm DB connection
-    warmNeonConnection().catch(() => { });
+    warmNeonConnection().catch(() => {});
   }, []);
 
   // --- AUTO-SYNC LOGIC ---
@@ -227,7 +227,7 @@ const LoginScreen = () => {
               setLoading(false);
               return false;
             }
-          } catch (e) { }
+          } catch (e) {}
           Alert.alert('Login Failed', msg);
           setLoading(false);
         }
@@ -279,7 +279,7 @@ const LoginScreen = () => {
             setLoading(false);
             return false;
           }
-        } catch (e) { }
+        } catch (e) {}
 
         if (code === 'strategy_for_user_invalid') {
           Alert.alert(
@@ -414,20 +414,10 @@ const LoginScreen = () => {
                   resizeMode="contain"
                 />
               </View>
-              <Text
-                style={[
-                  styles.brandTitle,
-                  isVeryCompactHeight && { fontSize: 24 },
-                ]}
-              >
+              <Text style={[styles.brandTitle, isVeryCompactHeight && { fontSize: 24 }]}>
                 DhanDiary
               </Text>
-              <Text
-                style={[
-                  styles.brandSubtitle,
-                  isVeryCompactHeight && { fontSize: 14 },
-                ]}
-              >
+              <Text style={[styles.brandSubtitle, isVeryCompactHeight && { fontSize: 14 }]}>
                 Master your finances
               </Text>
             </Animated.View>
