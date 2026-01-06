@@ -474,7 +474,7 @@ const HistoryScreen = () => {
   const dismissSwipeTip = useCallback(() => {
     const key = `history_swipe_tip_dismissed:${user?.id || 'anon'}`;
     setSwipeTipVisible(false);
-    AsyncStorage.setItem(key, '1').catch(() => { });
+    AsyncStorage.setItem(key, '1').catch(() => {});
   }, [user?.id]);
 
   const toggleFilter = useCallback((f: 'ALL' | 'WEEK' | 'MONTH') => {
@@ -623,7 +623,9 @@ const HistoryScreen = () => {
 
         {swipeTipVisible ? (
           <View style={styles.swipeHintRow}>
-            <Text style={styles.swipeHintText}>Tip: Swipe right to Edit · Swipe left to Delete</Text>
+            <Text style={styles.swipeHintText}>
+              Tip: Swipe right to Edit · Swipe left to Delete
+            </Text>
             <TouchableOpacity
               onPress={dismissSwipeTip}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}

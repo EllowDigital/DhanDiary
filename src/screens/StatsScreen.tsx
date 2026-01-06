@@ -164,7 +164,7 @@ const StatsScreen = () => {
       try {
         const s = await getSession();
         if (mounted) setFallbackSession(s);
-      } catch (e) { }
+      } catch (e) {}
     };
     load();
     const unsub = subscribeSession((s) => {
@@ -174,7 +174,7 @@ const StatsScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, []);
 
@@ -247,7 +247,7 @@ const StatsScreen = () => {
     return () => {
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, [navigation, refreshPeriods]);
 
@@ -272,7 +272,7 @@ const StatsScreen = () => {
     return () => {
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, [refreshPeriods]);
 
@@ -467,7 +467,9 @@ const StatsScreen = () => {
                       style={[styles.tab, filter === f && styles.tabActive]}
                       onPress={() => setFilter(f)}
                     >
-                      <Text style={[styles.tabText, filter === f && styles.tabTextActive]}>{f}</Text>
+                      <Text style={[styles.tabText, filter === f && styles.tabTextActive]}>
+                        {f}
+                      </Text>
                     </Pressable>
                   ))}
                 </View>
@@ -488,7 +490,9 @@ const StatsScreen = () => {
                         key={item.key || item}
                         style={[styles.chip, isActive && styles.chipActive]}
                         onPress={() =>
-                          filter === 'This Month' ? setActiveMonthKey(item.key) : setActiveYear(item)
+                          filter === 'This Month'
+                            ? setActiveMonthKey(item.key)
+                            : setActiveYear(item)
                         }
                       >
                         <Text style={[styles.chipText, isActive && styles.chipTextActive]}>
@@ -539,7 +543,9 @@ const StatsScreen = () => {
                   </View>
                 </View>
 
-                <Text style={[styles.mainBalance, { color: stats.net >= 0 ? '#059669' : '#DC2626' }]}>
+                <Text
+                  style={[styles.mainBalance, { color: stats.net >= 0 ? '#059669' : '#DC2626' }]}
+                >
                   {stats.net >= 0 ? '+' : ''}
                   {formatCompact(stats.net, stats.currency)}
                 </Text>
@@ -702,7 +708,9 @@ const StatsScreen = () => {
                       ) : (
                         <View style={styles.emptyState}>
                           <Text style={styles.emptyText}>No categories yet</Text>
-                          <Text style={styles.emptySubText}>Add expenses to see top categories.</Text>
+                          <Text style={styles.emptySubText}>
+                            Add expenses to see top categories.
+                          </Text>
                         </View>
                       )}
                     </View>
