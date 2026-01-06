@@ -18,6 +18,11 @@ export type AnnouncementConfig = AnnouncementContent & {
   id: string;
   type: AnnouncementType;
   /**
+   * Optional priority when multiple announcements are active.
+   * Higher wins. If equal/undefined, list order wins (backward-compatible).
+   */
+  priority?: number;
+  /**
    * Optional local-date window.
    * Format: YYYY-MM-DD
    * - festival: typically provide start+end (inclusive)
@@ -137,9 +142,16 @@ const DEFAULT_ANNOUNCEMENTS: AnnouncementConfig[] = [
 
 let announcements: AnnouncementConfig[] = DEFAULT_ANNOUNCEMENTS;
 
-export const getAnnouncements = (): AnnouncementConfig[] => announcements;
+export const getAnnouncements = (): AnnouncementConfig[] => announcements.slice();
 
 const isValidYmd = (s: string): boolean => /^\d{4}-\d{2}-\d{2}$/.test(s);
+
+const ymdToInt = (s: string): number | null => {
+  if (!isValidYmd(s)) return null;
+  // YYYY-MM-DD -> YYYYMMDD (safe numeric compare)
+  const n = Number(s.replace(/-/g, ''));
+  return Number.isFinite(n) ? n : null;
+};
 
 const toLocalYmd = (d: Date): string => {
   const year = d.getFullYear();
@@ -152,42 +164,109 @@ export const isAnnouncementActiveForLocalDate = (a: AnnouncementConfig, now: Dat
   if (a.isActive === false) return false;
 
   const today = toLocalYmd(now);
+  const todayInt = ymdToInt(today);
+  if (!todayInt) return false;
 
   // If no dates are provided, treat as active (backward-compatible behavior).
   if (!a.startDate && !a.endDate) return true;
 
-  if (a.startDate && !isValidYmd(a.startDate)) return false;
-  if (a.endDate && !isValidYmd(a.endDate)) return false;
+  const startInt = a.startDate ? ymdToInt(a.startDate) : null;
+  const endInt = a.endDate ? ymdToInt(a.endDate) : null;
+  if (a.startDate && !startInt) return false;
+  if (a.endDate && !endInt) return false;
 
   if (a.type === 'one_day') {
     // For one_day, require a startDate; endDate is optional.
     if (!a.startDate) return false;
-    return today === a.startDate;
+    return startInt === todayInt;
   }
 
   // For festival/critical: if both bounds exist, use inclusive range.
-  if (a.startDate && a.endDate) {
-    return a.startDate <= today && today <= a.endDate;
+  if (startInt && endInt) {
+    if (startInt > endInt) return false;
+    return startInt <= todayInt && todayInt <= endInt;
   }
 
   // If only one bound exists, treat it as a single-day match.
-  if (a.startDate) return today === a.startDate;
-  if (a.endDate) return today === a.endDate;
+  if (startInt) return todayInt === startInt;
+  if (endInt) return todayInt === endInt;
   return false;
 };
 
 export const getActiveAnnouncement = (now: Date = new Date()): AnnouncementConfig | null => {
   const list = getAnnouncements();
 
-  // Priority: first active critical, otherwise first active non-critical.
-  const active = list.filter((a) => isAnnouncementActiveForLocalDate(a, now));
-  const critical = active.find((a) => a.type === 'critical');
-  return critical ?? active[0] ?? null;
+  // Single-pass selection for performance.
+  // Priority: active critical wins; otherwise active non-critical.
+  // Within each bucket, higher `priority` wins; ties keep list order.
+  let bestCritical: AnnouncementConfig | null = null;
+  let bestNonCritical: AnnouncementConfig | null = null;
+
+  for (const a of list) {
+    if (!isAnnouncementActiveForLocalDate(a, now)) continue;
+
+    if (a.type === 'critical') {
+      if (!bestCritical) {
+        bestCritical = a;
+      } else {
+        const p = a.priority ?? 0;
+        const bestP = bestCritical.priority ?? 0;
+        if (p > bestP) bestCritical = a;
+      }
+      continue;
+    }
+
+    if (!bestNonCritical) {
+      bestNonCritical = a;
+      continue;
+    }
+
+    const p = a.priority ?? 0;
+    const bestP = bestNonCritical.priority ?? 0;
+    if (p > bestP) bestNonCritical = a;
+  }
+
+  return bestCritical ?? bestNonCritical;
+};
+
+const normalizeAnnouncements = (list: AnnouncementConfig[]): AnnouncementConfig[] => {
+  const out: AnnouncementConfig[] = [];
+  const seen = new Set<string>();
+
+  for (const a of list || []) {
+    const id = typeof a?.id === 'string' ? a.id.trim() : '';
+    if (!id) continue;
+    if (seen.has(id)) continue;
+    seen.add(id);
+
+    // Guard against invalid date strings / inverted ranges.
+    if (a.startDate && !isValidYmd(a.startDate)) continue;
+    if (a.endDate && !isValidYmd(a.endDate)) continue;
+    if (a.startDate && a.endDate) {
+      const s = ymdToInt(a.startDate);
+      const e = ymdToInt(a.endDate);
+      if (s && e && s > e) continue;
+    }
+
+    out.push(a);
+  }
+
+  // In dev, warn if the config likely has mistakes.
+  if (__DEV__) {
+    const inputCount = Array.isArray(list) ? list.length : 0;
+    if (out.length !== inputCount) {
+      console.warn(
+        `[announcements] normalized list from ${inputCount} -> ${out.length} (duplicates/invalid entries removed)`
+      );
+    }
+  }
+
+  return out;
 };
 
 export const __TESTING__ = {
   setAnnouncements(next: AnnouncementConfig[]) {
-    announcements = next;
+    announcements = normalizeAnnouncements(next);
   },
   resetAnnouncements() {
     announcements = DEFAULT_ANNOUNCEMENTS;
@@ -195,3 +274,6 @@ export const __TESTING__ = {
   toLocalYmd,
   isActiveForLocalDate: isAnnouncementActiveForLocalDate,
 };
+
+// Normalize defaults once at module load (cheap) to avoid surprises in production.
+announcements = normalizeAnnouncements(DEFAULT_ANNOUNCEMENTS);
