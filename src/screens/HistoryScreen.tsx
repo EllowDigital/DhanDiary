@@ -206,6 +206,7 @@ const SwipeableHistoryItem = React.memo(
 
 // --- 2. EDIT MODAL ---
 const EditTransactionModal = React.memo(({ visible, entryId, onClose, onSave }: EditModalProps) => {
+  const insets = useSafeAreaInsets();
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState(DEFAULT_CATEGORY);
   const [note, setNote] = useState('');
@@ -320,7 +321,8 @@ const EditTransactionModal = React.memo(({ visible, entryId, onClose, onSave }: 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
         style={{ flex: 1 }}
       >
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
@@ -338,7 +340,7 @@ const EditTransactionModal = React.memo(({ visible, entryId, onClose, onSave }: 
               <ScrollView
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
-                contentContainerStyle={{ paddingBottom: 20 }}
+                contentContainerStyle={{ paddingBottom: Math.max(24, insets.bottom + 16) }}
               >
                 <SimpleButtonGroup
                   buttons={['Expense', 'Income']}
