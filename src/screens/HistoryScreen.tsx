@@ -474,7 +474,7 @@ const HistoryScreen = () => {
   const dismissSwipeTip = useCallback(() => {
     const key = `history_swipe_tip_dismissed:${user?.id || 'anon'}`;
     setSwipeTipVisible(false);
-    AsyncStorage.setItem(key, '1').catch(() => {});
+    AsyncStorage.setItem(key, '1').catch(() => { });
   }, [user?.id]);
 
   const toggleFilter = useCallback((f: 'ALL' | 'WEEK' | 'MONTH') => {
@@ -696,11 +696,18 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background || '#F8FAFC' },
   listContent: { paddingHorizontal: 16 },
   headerContainer: { marginBottom: 12, marginTop: 8 },
-  swipeHintRow: { marginTop: 4, marginBottom: 4, paddingHorizontal: 4 },
+  swipeHintRow: {
+    marginTop: 4,
+    marginBottom: 4,
+    paddingHorizontal: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   swipeHintText: {
     fontSize: 12,
     color: colors.muted || '#64748B',
     fontWeight: '600',
+    flex: 1,
   },
   swipeHintDismiss: {
     marginLeft: 10,
