@@ -101,6 +101,7 @@ const AddEntryScreen: React.FC = () => {
   const colorAnim = useRef(new Animated.Value(initialType)).current;
 
   const activeType = typeConfigs[typeIndex];
+  const footerBottomPad = Math.max(insets.bottom, 12);
 
   // Dynamic Theme Interpolation
   const themeColor = colorAnim.interpolate({
@@ -334,12 +335,17 @@ const AddEntryScreen: React.FC = () => {
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        // Header is outside this KeyboardAvoidingView, so Android offset should be 0.
+        keyboardVerticalOffset={0}
       >
         <View style={styles.contentWrapper}>
           <ScrollView
             ref={scrollRef}
-            contentContainerStyle={styles.scrollContent}
+            contentContainerStyle={[
+              styles.scrollContent,
+              // Make sure content can scroll above the fixed footer button on all devices.
+              { paddingBottom: footerBottomPad + 140 },
+            ]}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
@@ -481,7 +487,7 @@ const AddEntryScreen: React.FC = () => {
           <View
             style={[
               styles.footerContainer,
-              { paddingBottom: Platform.OS === 'ios' ? insets.bottom : 20 },
+              { paddingBottom: footerBottomPad },
             ]}
           >
             <Button
