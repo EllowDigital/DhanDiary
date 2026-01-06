@@ -484,12 +484,7 @@ const AddEntryScreen: React.FC = () => {
           </ScrollView>
 
           {/* FOOTER BUTTON */}
-          <View
-            style={[
-              styles.footerContainer,
-              { paddingBottom: footerBottomPad },
-            ]}
-          >
+          <View style={[styles.footerContainer, { paddingBottom: footerBottomPad }]}>
             <Button
               title={editingLocalId ? 'Update Transaction' : 'Add Transaction'}
               onPress={handleSave}
