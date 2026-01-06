@@ -18,6 +18,7 @@ import {
   LayoutAnimation,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Text, Button, Input } from '@rneui/themed';
 import { Swipeable } from 'react-native-gesture-handler';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
@@ -445,9 +446,36 @@ const HistoryScreen = () => {
   const { showToast } = useToast();
   const { width } = useWindowDimensions();
 
+  const [swipeTipVisible, setSwipeTipVisible] = useState<boolean | null>(null);
+
   const showLoading = useDelayedLoading(Boolean(isLoading));
   const [quickFilter, setQuickFilter] = useState<'ALL' | 'WEEK' | 'MONTH'>('ALL');
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const key = `history_swipe_tip_dismissed:${user?.id || 'anon'}`;
+
+    AsyncStorage.getItem(key)
+      .then((v) => {
+        if (!mounted) return;
+        setSwipeTipVisible(v !== '1');
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setSwipeTipVisible(true);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [user?.id]);
+
+  const dismissSwipeTip = useCallback(() => {
+    const key = `history_swipe_tip_dismissed:${user?.id || 'anon'}`;
+    setSwipeTipVisible(false);
+    AsyncStorage.setItem(key, '1').catch(() => { });
+  }, [user?.id]);
 
   const toggleFilter = useCallback((f: 'ALL' | 'WEEK' | 'MONTH') => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -593,12 +621,23 @@ const HistoryScreen = () => {
           ))}
         </ScrollView>
 
-        <View style={styles.swipeHintRow}>
-          <Text style={styles.swipeHintText}>Tip: Swipe right to Edit · Swipe left to Delete</Text>
-        </View>
+        {swipeTipVisible ? (
+          <View style={styles.swipeHintRow}>
+            <Text style={styles.swipeHintText}>Tip: Swipe right to Edit · Swipe left to Delete</Text>
+            <TouchableOpacity
+              onPress={dismissSwipeTip}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={styles.swipeHintDismiss}
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss tip"
+            >
+              <MaterialIcon name="close" size={18} color={colors.muted || '#64748B'} />
+            </TouchableOpacity>
+          </View>
+        ) : null}
       </View>
     ),
-    [summary, quickFilter]
+    [dismissSwipeTip, quickFilter, summary, swipeTipVisible]
   );
 
   return (
@@ -660,6 +699,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.muted || '#64748B',
     fontWeight: '600',
+  },
+  swipeHintDismiss: {
+    marginLeft: 10,
+    padding: 2,
   },
 
   // Hero Card
