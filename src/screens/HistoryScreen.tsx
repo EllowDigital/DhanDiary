@@ -323,7 +323,7 @@ const EditTransactionModal = React.memo(({ visible, entryId, onClose, onSave }: 
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : insets.bottom}
         style={{ flex: 1 }}
       >
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
@@ -474,7 +474,7 @@ const HistoryScreen = () => {
   const dismissSwipeTip = useCallback(() => {
     const key = `history_swipe_tip_dismissed:${user?.id || 'anon'}`;
     setSwipeTipVisible(false);
-    AsyncStorage.setItem(key, '1').catch(() => {});
+    AsyncStorage.setItem(key, '1').catch(() => { });
   }, [user?.id]);
 
   const toggleFilter = useCallback((f: 'ALL' | 'WEEK' | 'MONTH') => {
