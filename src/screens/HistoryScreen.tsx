@@ -592,6 +592,10 @@ const HistoryScreen = () => {
             </TouchableOpacity>
           ))}
         </ScrollView>
+
+        <View style={styles.swipeHintRow}>
+          <Text style={styles.swipeHintText}>Tip: Swipe right to Edit · Swipe left to Delete</Text>
+        </View>
       </View>
     ),
     [summary, quickFilter]
@@ -651,6 +655,12 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background || '#F8FAFC' },
   listContent: { paddingHorizontal: 16 },
   headerContainer: { marginBottom: 12, marginTop: 8 },
+  swipeHintRow: { marginTop: 4, marginBottom: 4, paddingHorizontal: 4 },
+  swipeHintText: {
+    fontSize: 12,
+    color: colors.muted || '#64748B',
+    fontWeight: '600',
+  },
 
   // Hero Card
   compactHero: {

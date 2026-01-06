@@ -301,16 +301,6 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 14,
     borderRadius: 20,
-
-    // Float Shadow
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 3,
-
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.02)',
   },
   hintText: {
     fontSize: 11,

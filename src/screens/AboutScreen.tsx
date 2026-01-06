@@ -68,6 +68,7 @@ const AboutScreen: React.FC = () => {
   const isExpoGo = Constants.appOwnership === 'expo';
   const isOnline = useInternetStatus();
   const { showToast, showActionToast } = useToast();
+  const [scrollOffset, setScrollOffset] = useState(0);
 
   // --- ANIMATIONS ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -119,7 +120,7 @@ const AboutScreen: React.FC = () => {
       try {
         const state = await NetInfo.fetch();
         if (state.isConnected === false || state.isInternetReachable === false) offline = true;
-      } catch {}
+      } catch { }
 
       if (offline) {
         showToast('You are offline.', 'info');
@@ -162,7 +163,7 @@ const AboutScreen: React.FC = () => {
       try {
         const state = await NetInfo.fetch();
         if (state.isConnected === false || state.isInternetReachable === false) offline = true;
-      } catch {}
+      } catch { }
 
       if (offline) {
         showToast('You are offline.', 'info');
@@ -237,7 +238,8 @@ const AboutScreen: React.FC = () => {
         <ScreenHeader
           title="About"
           subtitle="System status & info"
-          showScrollHint={false}
+          showScrollHint
+          scrollOffset={scrollOffset}
           useSafeAreaPadding={false}
         />
       </View>
@@ -245,6 +247,8 @@ const AboutScreen: React.FC = () => {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 40 }]}
+        onScroll={(e) => setScrollOffset(e.nativeEvent.contentOffset.y)}
+        scrollEventThrottle={16}
       >
         <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
           {/* 1. HERO CARD */}

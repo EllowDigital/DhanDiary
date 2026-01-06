@@ -181,7 +181,7 @@ const MoreScreen: React.FC = () => {
             title="More"
             subtitle="Tools & Menu"
             scrollOffset={scrollOffset}
-            showScrollHint={false}
+            showScrollHint
             useSafeAreaPadding={false}
             density="compact"
             style={{ width: '100%' }}
