@@ -164,7 +164,7 @@ const StatsScreen = () => {
       try {
         const s = await getSession();
         if (mounted) setFallbackSession(s);
-      } catch (e) {}
+      } catch (e) { }
     };
     load();
     const unsub = subscribeSession((s) => {
@@ -174,7 +174,7 @@ const StatsScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -247,7 +247,7 @@ const StatsScreen = () => {
     return () => {
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, [navigation, refreshPeriods]);
 
@@ -272,7 +272,7 @@ const StatsScreen = () => {
     return () => {
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, [refreshPeriods]);
 
@@ -420,6 +420,7 @@ const StatsScreen = () => {
   // --- RENDER HELPERS ---
   const currencySymbol = stats?.currency === 'USD' ? '$' : '₹';
   const isEmptyPeriod = Boolean(stats && Number(stats.count || 0) === 0);
+  const showAuthGateLoading = authLoading && !effectiveUserId;
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right'] as any}>
@@ -434,285 +435,286 @@ const StatsScreen = () => {
         />
       </View>
 
-      {authLoading ? (
+      {showAuthGateLoading ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Loading finances...</Text>
         </View>
-      ) : null}
-
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={[styles.scrollContent]}
-        showsVerticalScrollIndicator={false}
-      >
-        <Animated.View
-          style={{
-            opacity: fadeAnim,
-            transform: [{ translateY: slideAnim }],
-            ...containerStyle,
-          }}
+      ) : (
+        <ScrollView
+          style={styles.container}
+          contentContainerStyle={[styles.scrollContent]}
+          showsVerticalScrollIndicator={false}
         >
-          {/* --- 1. FILTERS --- */}
-          <View style={styles.filterSection}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.tabScroll}
-            >
-              <View style={styles.tabContainer}>
-                {FILTERS.map((f) => (
-                  <Pressable
-                    key={f}
-                    style={[styles.tab, filter === f && styles.tabActive]}
-                    onPress={() => setFilter(f)}
-                  >
-                    <Text style={[styles.tabText, filter === f && styles.tabTextActive]}>{f}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            </ScrollView>
-
-            {/* Sub-filters for Month/Year */}
-            {(filter === 'This Month' || filter === 'This Year') && (
+          <Animated.View
+            style={{
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }],
+              ...containerStyle,
+            }}
+          >
+            {/* --- 1. FILTERS --- */}
+            <View style={styles.filterSection}>
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                style={styles.subFilterScroll}
+                contentContainerStyle={styles.tabScroll}
               >
-                {(filter === 'This Month' ? availableMonths : availableYears).map((item: any) => {
-                  const isActive =
-                    filter === 'This Month' ? activeMonthKey === item.key : activeYear === item;
-                  return (
+                <View style={styles.tabContainer}>
+                  {FILTERS.map((f) => (
                     <Pressable
-                      key={item.key || item}
-                      style={[styles.chip, isActive && styles.chipActive]}
-                      onPress={() =>
-                        filter === 'This Month' ? setActiveMonthKey(item.key) : setActiveYear(item)
-                      }
+                      key={f}
+                      style={[styles.tab, filter === f && styles.tabActive]}
+                      onPress={() => setFilter(f)}
                     >
-                      <Text style={[styles.chipText, isActive && styles.chipTextActive]}>
-                        {filter === 'This Month' ? item.label : item}
-                      </Text>
+                      <Text style={[styles.tabText, filter === f && styles.tabTextActive]}>{f}</Text>
                     </Pressable>
-                  );
-                })}
+                  ))}
+                </View>
               </ScrollView>
-            )}
 
-            {computing && (
-              <ActivityIndicator size="small" color={colors.primary} style={styles.loader} />
-            )}
-          </View>
-
-          {/* --- 2. NET BALANCE CARD --- */}
-          {!stats ? (
-            <View style={[styles.card, { height: 200, justifyContent: 'center' }]}>
-              <ActivityIndicator color={colors.primary} />
-            </View>
-          ) : isEmptyPeriod ? (
-            <View style={styles.card}>
-              <View style={styles.rowBetween}>
-                <Text style={styles.cardLabel}>ANALYTICS</Text>
-              </View>
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyText}>No transactions for this period yet.</Text>
-                <Text style={styles.emptySubText}>Add income/expense to see insights here.</Text>
-              </View>
-            </View>
-          ) : (
-            <View style={styles.card}>
-              <View style={styles.rowBetween}>
-                <Text style={styles.cardLabel}>NET BALANCE</Text>
-                <View
-                  style={[
-                    styles.badge,
-                    { backgroundColor: stats.net >= 0 ? '#DCFCE7' : '#FEE2E2' },
-                  ]}
+              {/* Sub-filters for Month/Year */}
+              {(filter === 'This Month' || filter === 'This Year') && (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.subFilterScroll}
                 >
-                  <Text
-                    style={[styles.badgeText, { color: stats.net >= 0 ? '#166534' : '#991B1B' }]}
-                  >
-                    {stats.net >= 0 ? 'Surplus' : 'Deficit'}
-                  </Text>
-                </View>
-              </View>
-
-              <Text style={[styles.mainBalance, { color: stats.net >= 0 ? '#059669' : '#DC2626' }]}>
-                {stats.net >= 0 ? '+' : ''}
-                {formatCompact(stats.net, stats.currency)}
-              </Text>
-
-              <View style={styles.balanceRow}>
-                <View>
-                  <Text style={styles.subLabel}>INCOME</Text>
-                  <Text style={styles.incomeValue}>
-                    {formatCompact(stats.totalIn, stats.currency)}
-                  </Text>
-                </View>
-                <View style={styles.vertDivider} />
-                <View>
-                  <Text style={styles.subLabel}>EXPENSE</Text>
-                  <Text style={styles.expenseValue}>
-                    {formatCompact(stats.totalOut, stats.currency)}
-                  </Text>
-                </View>
-              </View>
-            </View>
-          )}
-
-          {/* --- 3. KEY METRICS GRID --- */}
-          {stats && (
-            <View style={styles.gridContainer}>
-              <MetricCard
-                title="MAX IN"
-                value={isEmptyPeriod ? '—' : formatCompact(stats.maxIncome || 0, stats.currency)}
-                icon="trending-up"
-                colorBg="#DBEAFE"
-                colorIcon="#1E40AF"
-                subTitle={isEmptyPeriod ? 'No data yet' : undefined}
-                style={{ flex: 1 }}
-              />
-              <MetricCard
-                title="MAX OUT"
-                value={isEmptyPeriod ? '—' : formatCompact(stats.maxExpense || 0, stats.currency)}
-                icon="trending-down"
-                colorBg="#FEE2E2"
-                colorIcon="#991B1B"
-                subTitle={isEmptyPeriod ? 'No data yet' : undefined}
-                style={{ flex: 1 }}
-              />
-              <MetricCard
-                title="SAVINGS"
-                value={isEmptyPeriod ? '—' : `${Math.round(stats.savingsRate)}%`}
-                icon="savings"
-                colorBg="#F0FDF4"
-                colorIcon="#166534"
-                subTitle={isEmptyPeriod ? 'Add transactions' : undefined}
-                style={{ flex: 1 }}
-              />
-            </View>
-          )}
-
-          {/* --- 4. PERFORMANCE GRID --- */}
-          {stats && (
-            <View style={styles.gridContainer}>
-              <MetricCard
-                title="AVG / DAY"
-                value={isEmptyPeriod ? '—' : formatCompact(stats.avgPerDay || 0, stats.currency)}
-                icon="speed"
-                colorBg="#FFF7ED"
-                colorIcon="#EA580C"
-                subTitle={isEmptyPeriod ? 'No spending yet' : undefined}
-                style={{ flex: 1 }}
-              />
-              <MetricCard
-                title="TXNS"
-                value={stats.count || '0'}
-                icon="receipt"
-                colorBg="#F3F4F6"
-                colorIcon="#4B5563"
-                subTitle={isEmptyPeriod ? 'No transactions' : undefined}
-                style={{ flex: 1 }}
-              />
-            </View>
-          )}
-
-          {/* --- 5. CHARTS --- */}
-          {stats && (
-            <>
-              {/* Spending Trend */}
-              <View style={styles.card}>
-                <Text style={styles.sectionTitle}>Spending Trend</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  {stats.dailyTrend?.length > 0 ? (
-                    <DailyTrendChart
-                      data={
-                        stats.dailyTrend.length === 1
-                          ? [stats.dailyTrend[0], { ...stats.dailyTrend[0], label: '' }]
-                          : stats.dailyTrend
-                      }
-                      width={Math.max(contentWidth - 60, stats.dailyTrend.length * 40)}
-                      currency={currencySymbol}
-                    />
-                  ) : (
-                    <View style={styles.emptyState}>
-                      <Text style={styles.emptyText}>No spending trend yet</Text>
-                      <Text style={styles.emptySubText}>Add expenses to see a chart here.</Text>
-                    </View>
-                  )}
-                </ScrollView>
-              </View>
-
-              {/* Distribution & Top Expenses */}
-              <View style={styles.dualChartContainer}>
-                {/* Donut Chart */}
-                <View style={styles.card}>
-                  <Text style={styles.sectionTitle}>Distribution</Text>
-                  {stats.pieData?.length > 0 ? (
-                    <View style={styles.chartWrapper}>
-                      <PieChart
-                        data={stats.pieData}
-                        width={donutSize + 60} // Padding for labels
-                        height={donutSize}
-                        chartConfig={CHART_CONFIG}
-                        accessor="population"
-                        backgroundColor="transparent"
-                        paddingLeft="15"
-                        hasLegend={false}
-                        center={[donutSize / 4, 0]} // Correct centering for library
-                        absolute
-                      />
-                      {/* Hole Overlay */}
-                      <View
-                        style={[
-                          styles.donutHole,
-                          {
-                            width: donutSize * 0.6,
-                            height: donutSize * 0.6,
-                            borderRadius: (donutSize * 0.6) / 2,
-                            // Dynamic centering relative to the library's quirks
-                            left: donutSize / 4 + donutSize * 0.2 + 15,
-                          },
-                        ]}
+                  {(filter === 'This Month' ? availableMonths : availableYears).map((item: any) => {
+                    const isActive =
+                      filter === 'This Month' ? activeMonthKey === item.key : activeYear === item;
+                    return (
+                      <Pressable
+                        key={item.key || item}
+                        style={[styles.chip, isActive && styles.chipActive]}
+                        onPress={() =>
+                          filter === 'This Month' ? setActiveMonthKey(item.key) : setActiveYear(item)
+                        }
                       >
-                        <Text style={styles.holeLabel}>TOTAL</Text>
-                        <Text style={styles.holeValue} numberOfLines={1} adjustsFontSizeToFit>
-                          {formatCompact(stats.totalOut, stats.currency)}
+                        <Text style={[styles.chipText, isActive && styles.chipTextActive]}>
+                          {filter === 'This Month' ? item.label : item}
                         </Text>
-                      </View>
-                    </View>
-                  ) : (
-                    <View style={styles.emptyState}>
-                      <Text style={styles.emptyText}>No expenses to analyze</Text>
-                      <Text style={styles.emptySubText}>Add expenses to see distribution.</Text>
-                    </View>
-                  )}
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              )}
+
+              {/* Avoid double loaders on first load: show this only when refreshing existing stats */}
+              {computing && stats ? (
+                <ActivityIndicator size="small" color={colors.primary} style={styles.loader} />
+              ) : null}
+            </View>
+
+            {/* --- 2. NET BALANCE CARD --- */}
+            {!stats ? (
+              <View style={[styles.card, { height: 200, justifyContent: 'center' }]}>
+                <ActivityIndicator color={colors.primary} />
+              </View>
+            ) : isEmptyPeriod ? (
+              <View style={styles.card}>
+                <View style={styles.rowBetween}>
+                  <Text style={styles.cardLabel}>ANALYTICS</Text>
+                </View>
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyText}>No transactions for this period yet.</Text>
+                  <Text style={styles.emptySubText}>Add income/expense to see insights here.</Text>
+                </View>
+              </View>
+            ) : (
+              <View style={styles.card}>
+                <View style={styles.rowBetween}>
+                  <Text style={styles.cardLabel}>NET BALANCE</Text>
+                  <View
+                    style={[
+                      styles.badge,
+                      { backgroundColor: stats.net >= 0 ? '#DCFCE7' : '#FEE2E2' },
+                    ]}
+                  >
+                    <Text
+                      style={[styles.badgeText, { color: stats.net >= 0 ? '#166534' : '#991B1B' }]}
+                    >
+                      {stats.net >= 0 ? 'Surplus' : 'Deficit'}
+                    </Text>
+                  </View>
                 </View>
 
-                {/* Categories List */}
-                <View style={styles.card}>
-                  <Text style={styles.sectionTitle}>Top Expenses</Text>
-                  <View style={{ marginTop: 10 }}>
-                    {stats.pieData?.length > 0 ? (
-                      stats.pieData.map((cat: any) => (
-                        <CategoryRow key={cat.name} item={cat} currency={stats.currency} />
-                      ))
-                    ) : (
-                      <View style={styles.emptyState}>
-                        <Text style={styles.emptyText}>No categories yet</Text>
-                        <Text style={styles.emptySubText}>Add expenses to see top categories.</Text>
-                      </View>
-                    )}
+                <Text style={[styles.mainBalance, { color: stats.net >= 0 ? '#059669' : '#DC2626' }]}>
+                  {stats.net >= 0 ? '+' : ''}
+                  {formatCompact(stats.net, stats.currency)}
+                </Text>
+
+                <View style={styles.balanceRow}>
+                  <View>
+                    <Text style={styles.subLabel}>INCOME</Text>
+                    <Text style={styles.incomeValue}>
+                      {formatCompact(stats.totalIn, stats.currency)}
+                    </Text>
+                  </View>
+                  <View style={styles.vertDivider} />
+                  <View>
+                    <Text style={styles.subLabel}>EXPENSE</Text>
+                    <Text style={styles.expenseValue}>
+                      {formatCompact(stats.totalOut, stats.currency)}
+                    </Text>
                   </View>
                 </View>
               </View>
-            </>
-          )}
+            )}
 
-          <View style={{ height: 40 }} />
-        </Animated.View>
-      </ScrollView>
+            {/* --- 3. KEY METRICS GRID --- */}
+            {stats && (
+              <View style={styles.gridContainer}>
+                <MetricCard
+                  title="MAX IN"
+                  value={isEmptyPeriod ? '—' : formatCompact(stats.maxIncome || 0, stats.currency)}
+                  icon="trending-up"
+                  colorBg="#DBEAFE"
+                  colorIcon="#1E40AF"
+                  subTitle={isEmptyPeriod ? 'No data yet' : undefined}
+                  style={{ flex: 1 }}
+                />
+                <MetricCard
+                  title="MAX OUT"
+                  value={isEmptyPeriod ? '—' : formatCompact(stats.maxExpense || 0, stats.currency)}
+                  icon="trending-down"
+                  colorBg="#FEE2E2"
+                  colorIcon="#991B1B"
+                  subTitle={isEmptyPeriod ? 'No data yet' : undefined}
+                  style={{ flex: 1 }}
+                />
+                <MetricCard
+                  title="SAVINGS"
+                  value={isEmptyPeriod ? '—' : `${Math.round(stats.savingsRate)}%`}
+                  icon="savings"
+                  colorBg="#F0FDF4"
+                  colorIcon="#166534"
+                  subTitle={isEmptyPeriod ? 'Add transactions' : undefined}
+                  style={{ flex: 1 }}
+                />
+              </View>
+            )}
+
+            {/* --- 4. PERFORMANCE GRID --- */}
+            {stats && (
+              <View style={styles.gridContainer}>
+                <MetricCard
+                  title="AVG / DAY"
+                  value={isEmptyPeriod ? '—' : formatCompact(stats.avgPerDay || 0, stats.currency)}
+                  icon="speed"
+                  colorBg="#FFF7ED"
+                  colorIcon="#EA580C"
+                  subTitle={isEmptyPeriod ? 'No spending yet' : undefined}
+                  style={{ flex: 1 }}
+                />
+                <MetricCard
+                  title="TXNS"
+                  value={stats.count || '0'}
+                  icon="receipt"
+                  colorBg="#F3F4F6"
+                  colorIcon="#4B5563"
+                  subTitle={isEmptyPeriod ? 'No transactions' : undefined}
+                  style={{ flex: 1 }}
+                />
+              </View>
+            )}
+
+            {/* --- 5. CHARTS --- */}
+            {stats && (
+              <>
+                {/* Spending Trend */}
+                <View style={styles.card}>
+                  <Text style={styles.sectionTitle}>Spending Trend</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    {stats.dailyTrend?.length > 0 ? (
+                      <DailyTrendChart
+                        data={
+                          stats.dailyTrend.length === 1
+                            ? [stats.dailyTrend[0], { ...stats.dailyTrend[0], label: '' }]
+                            : stats.dailyTrend
+                        }
+                        width={Math.max(contentWidth - 60, stats.dailyTrend.length * 40)}
+                        currency={currencySymbol}
+                      />
+                    ) : (
+                      <View style={styles.emptyState}>
+                        <Text style={styles.emptyText}>No spending trend yet</Text>
+                        <Text style={styles.emptySubText}>Add expenses to see a chart here.</Text>
+                      </View>
+                    )}
+                  </ScrollView>
+                </View>
+
+                {/* Distribution & Top Expenses */}
+                <View style={styles.dualChartContainer}>
+                  {/* Donut Chart */}
+                  <View style={styles.card}>
+                    <Text style={styles.sectionTitle}>Distribution</Text>
+                    {stats.pieData?.length > 0 ? (
+                      <View style={styles.chartWrapper}>
+                        <PieChart
+                          data={stats.pieData}
+                          width={donutSize + 60} // Padding for labels
+                          height={donutSize}
+                          chartConfig={CHART_CONFIG}
+                          accessor="population"
+                          backgroundColor="transparent"
+                          paddingLeft="15"
+                          hasLegend={false}
+                          center={[donutSize / 4, 0]} // Correct centering for library
+                          absolute
+                        />
+                        {/* Hole Overlay */}
+                        <View
+                          style={[
+                            styles.donutHole,
+                            {
+                              width: donutSize * 0.6,
+                              height: donutSize * 0.6,
+                              borderRadius: (donutSize * 0.6) / 2,
+                              // Dynamic centering relative to the library's quirks
+                              left: donutSize / 4 + donutSize * 0.2 + 15,
+                            },
+                          ]}
+                        >
+                          <Text style={styles.holeLabel}>TOTAL</Text>
+                          <Text style={styles.holeValue} numberOfLines={1} adjustsFontSizeToFit>
+                            {formatCompact(stats.totalOut, stats.currency)}
+                          </Text>
+                        </View>
+                      </View>
+                    ) : (
+                      <View style={styles.emptyState}>
+                        <Text style={styles.emptyText}>No expenses to analyze</Text>
+                        <Text style={styles.emptySubText}>Add expenses to see distribution.</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Categories List */}
+                  <View style={styles.card}>
+                    <Text style={styles.sectionTitle}>Top Expenses</Text>
+                    <View style={{ marginTop: 10 }}>
+                      {stats.pieData?.length > 0 ? (
+                        stats.pieData.map((cat: any) => (
+                          <CategoryRow key={cat.name} item={cat} currency={stats.currency} />
+                        ))
+                      ) : (
+                        <View style={styles.emptyState}>
+                          <Text style={styles.emptyText}>No categories yet</Text>
+                          <Text style={styles.emptySubText}>Add expenses to see top categories.</Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                </View>
+              </>
+            )}
+
+            <View style={{ height: 40 }} />
+          </Animated.View>
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 };
