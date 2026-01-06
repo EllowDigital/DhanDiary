@@ -52,17 +52,17 @@ const typeConfigs = [
   {
     value: 'out',
     label: 'Expense',
-    color: '#EF4444', // Red
-    bg: '#FEF2F2',
-    border: '#FECACA',
+    color: colors.accentRed,
+    bg: colors.accentRedSoft,
+    border: colors.accentRedBorder,
     icon: 'arrow-outward',
   },
   {
     value: 'in',
     label: 'Income',
-    color: '#10B981', // Green
-    bg: '#ECFDF5',
-    border: '#A7F3D0',
+    color: colors.accentGreen,
+    bg: colors.accentGreenSoft,
+    border: colors.accentGreenBorder,
     icon: 'arrow-downward',
   },
 ] as const;
@@ -106,17 +106,17 @@ const AddEntryScreen: React.FC = () => {
   // Dynamic Theme Interpolation
   const themeColor = colorAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ['#EF4444', '#10B981'],
+    outputRange: [colors.accentRed, colors.accentGreen],
   });
 
   const themeBg = colorAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ['#FEF2F2', '#ECFDF5'],
+    outputRange: [colors.accentRedSoft, colors.accentGreenSoft],
   });
 
   const themeBorder = colorAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ['#FECACA', '#A7F3D0'],
+    outputRange: [colors.accentRedBorder, colors.accentGreenBorder],
   });
 
   useEffect(() => {
