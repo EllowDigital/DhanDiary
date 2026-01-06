@@ -102,6 +102,18 @@ const AboutScreen: React.FC = () => {
     });
   }, []);
 
+  const isOfflineNow = useCallback(async (): Promise<boolean> => {
+    if (!isOnline) return true;
+
+    try {
+      const state = await NetInfo.fetch();
+      return state.isConnected === false || state.isInternetReachable === false;
+    } catch {
+      // If NetInfo fails, fall back to the latest hook value.
+      return !isOnline;
+    }
+  }, [isOnline]);
+
   // --- UPDATE LOGIC ---
   const applyUpdate = useCallback(async () => {
     if (isExpoGo) return;
@@ -116,13 +128,7 @@ const AboutScreen: React.FC = () => {
       await Updates.fetchUpdateAsync();
       await Updates.reloadAsync();
     } catch (err: any) {
-      let offline = !isOnline;
-      try {
-        const state = await NetInfo.fetch();
-        if (state.isConnected === false || state.isInternetReachable === false) offline = true;
-      } catch {}
-
-      if (offline) {
+      if (await isOfflineNow()) {
         showToast('You are offline.', 'info');
       } else {
         showToast(err?.message || 'Update failed. Please try again.', 'error');
@@ -133,7 +139,7 @@ const AboutScreen: React.FC = () => {
     } finally {
       setChecking(false);
     }
-  }, [failureCount, isExpoGo, isOnline, showToast]);
+  }, [failureCount, isExpoGo, isOfflineNow, showToast]);
 
   const checkForUpdates = useCallback(async () => {
     if (isExpoGo) {
@@ -159,13 +165,7 @@ const AboutScreen: React.FC = () => {
         showToast("You're up to date.", 'success');
       }
     } catch (err: any) {
-      let offline = !isOnline;
-      try {
-        const state = await NetInfo.fetch();
-        if (state.isConnected === false || state.isInternetReachable === false) offline = true;
-      } catch {}
-
-      if (offline) {
+      if (await isOfflineNow()) {
         showToast('You are offline.', 'info');
       } else {
         showToast(err?.message || 'Unable to check for updates.', 'error');
@@ -173,7 +173,7 @@ const AboutScreen: React.FC = () => {
     } finally {
       setChecking(false);
     }
-  }, [applyUpdate, isExpoGo, isOnline, showActionToast, showToast]);
+  }, [applyUpdate, isExpoGo, isOfflineNow, isOnline, showActionToast, showToast]);
 
   const clearRetryState = async () => {
     await AsyncStorage.removeItem('UPDATE_FAIL_COUNT');
