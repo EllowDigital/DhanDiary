@@ -1,7 +1,7 @@
 import { colors } from '../utils/design';
 
 // IMPORTANT: Change this ID for every new announcement delivered via Expo Updates.
-export const ANNOUNCEMENT_ID = 'new_year_2026';
+export const ANNOUNCEMENT_ID = 'jan_festivals_2026';
 
 export type AnnouncementType = 'festival' | 'one_day' | 'critical';
 
@@ -56,6 +56,71 @@ export const OTA_UPDATE_ANNOUNCEMENT: AnnouncementConfig = {
 };
 
 const DEFAULT_ANNOUNCEMENTS: AnnouncementConfig[] = [
+  // Priority rule: when multiple announcements are active, we show the first one
+  // in this list (unless a 'critical' announcement is active).
+  // Put specific one-day events first so they override broader festival ranges.
+
+  // --- PRIORITY 1: Specific One-Day Events ---
+
+  // Republic Day (Jan 26)
+  {
+    id: 'republic_day_2026',
+    type: 'one_day',
+    title: 'Happy Republic Day',
+    message: 'Celebrating the spirit of India and our Constitution. Jai Hind!',
+    emoji: '🇮🇳',
+    autoHideMs: 5000,
+    accentColor: colors.primary,
+    startDate: '2026-01-26',
+    endDate: '2026-01-26',
+    isActive: true,
+  },
+
+  // Lohri (Jan 13)
+  {
+    id: 'lohri_2026',
+    type: 'one_day',
+    title: 'Happy Lohri',
+    message: 'May the bonfire of Lohri burn all sadness and bring warmth and joy.',
+    emoji: '🔥',
+    autoHideMs: 5000,
+    accentColor: colors.primary,
+    startDate: '2026-01-13',
+    endDate: '2026-01-13',
+    isActive: true,
+  },
+
+  // National Youth Day (Jan 12)
+  {
+    id: 'youth_day_2026',
+    type: 'one_day',
+    title: 'National Youth Day',
+    message: 'Arise, awake, and stop not till the goal is reached. - Swami Vivekananda',
+    emoji: '📚',
+    autoHideMs: 5000,
+    accentColor: colors.primary,
+    startDate: '2026-01-12',
+    endDate: '2026-01-12',
+    isActive: true,
+  },
+
+  // --- PRIORITY 2: Festival Windows / Multi-Day Events ---
+
+  // Makar Sankranti / Pongal / Harvest Festivals Window (Jan 14 - Jan 17)
+  {
+    id: 'harvest_festivals_2026',
+    type: 'festival',
+    title: 'Happy Makar Sankranti & Pongal',
+    message: 'Celebrating the harvest season with joy, kites, and sweet beginnings.',
+    emoji: '🪁',
+    autoHideMs: 5000,
+    accentColor: colors.primary,
+    startDate: '2026-01-14',
+    endDate: '2026-01-17',
+    isActive: true,
+  },
+
+  // New Year (Dec 31 - Jan 12)
   {
     id: ANNOUNCEMENT_ID,
     type: 'festival',
@@ -64,9 +129,8 @@ const DEFAULT_ANNOUNCEMENTS: AnnouncementConfig[] = [
     emoji: CURRENT_ANNOUNCEMENT.emoji,
     autoHideMs: CURRENT_ANNOUNCEMENT.autoHideMs,
     accentColor: CURRENT_ANNOUNCEMENT.accentColor,
-    // Example: New Year window. Adjust per Expo Update.
     startDate: '2025-12-31',
-    endDate: '2026-01-14',
+    endDate: '2026-01-12',
     isActive: true,
   },
 ];
