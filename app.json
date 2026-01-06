@@ -4,7 +4,7 @@
     "name": "DhanDiary",
     "slug": "dhandiary",
     "scheme": "dhandiary",
-    "version": "2.4.0",
+    "version": "2.4.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "jsEngine": "hermes",
@@ -17,12 +17,12 @@
     },
     "ios": {
       "bundleIdentifier": "com.ellowdigital.dhandiary",
-      "buildNumber": "240",
+      "buildNumber": "242",
       "supportsTablet": true
     },
     "android": {
       "package": "com.ellowdigital.dhandiary",
-      "versionCode": 240,
+      "versionCode": 242,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
