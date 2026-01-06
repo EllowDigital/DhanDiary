@@ -11,7 +11,7 @@ export default ({ config }) => {
   return {
     ...config,
     // App versioning (kept in sync with app.json / package.json)
-    version: '2.4.0',
+    version: '2.4.2',
 
     // 🔗 REQUIRED for Clerk + Google OAuth (NO proxy)
     scheme: 'dhandiary',
@@ -22,12 +22,12 @@ export default ({ config }) => {
     android: {
       ...config.android,
       package: 'com.ellowdigital.dhandiary',
-      versionCode: 240,
+      versionCode: 242,
     },
 
     ios: {
       ...config.ios,
-      buildNumber: '240',
+      buildNumber: '242',
     },
 
     extra: {

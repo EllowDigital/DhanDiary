@@ -52,17 +52,17 @@ const typeConfigs = [
   {
     value: 'out',
     label: 'Expense',
-    color: '#EF4444', // Red
-    bg: '#FEF2F2',
-    border: '#FECACA',
+    color: colors.accentRed,
+    bg: colors.accentRedSoft,
+    border: colors.accentRedBorder,
     icon: 'arrow-outward',
   },
   {
     value: 'in',
     label: 'Income',
-    color: '#10B981', // Green
-    bg: '#ECFDF5',
-    border: '#A7F3D0',
+    color: colors.accentGreen,
+    bg: colors.accentGreenSoft,
+    border: colors.accentGreenBorder,
     icon: 'arrow-downward',
   },
 ] as const;
@@ -101,21 +101,22 @@ const AddEntryScreen: React.FC = () => {
   const colorAnim = useRef(new Animated.Value(initialType)).current;
 
   const activeType = typeConfigs[typeIndex];
+  const footerBottomPad = Math.max(insets.bottom, 12);
 
   // Dynamic Theme Interpolation
   const themeColor = colorAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ['#EF4444', '#10B981'],
+    outputRange: [colors.accentRed, colors.accentGreen],
   });
 
   const themeBg = colorAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ['#FEF2F2', '#ECFDF5'],
+    outputRange: [colors.accentRedSoft, colors.accentGreenSoft],
   });
 
   const themeBorder = colorAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ['#FECACA', '#A7F3D0'],
+    outputRange: [colors.accentRedBorder, colors.accentGreenBorder],
   });
 
   useEffect(() => {
@@ -334,12 +335,17 @@ const AddEntryScreen: React.FC = () => {
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        // Header is outside this KeyboardAvoidingView, so Android offset should be 0.
+        keyboardVerticalOffset={0}
       >
         <View style={styles.contentWrapper}>
           <ScrollView
             ref={scrollRef}
-            contentContainerStyle={styles.scrollContent}
+            contentContainerStyle={[
+              styles.scrollContent,
+              // Make sure content can scroll above the fixed footer button on all devices.
+              { paddingBottom: footerBottomPad + 140 },
+            ]}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
@@ -478,12 +484,7 @@ const AddEntryScreen: React.FC = () => {
           </ScrollView>
 
           {/* FOOTER BUTTON */}
-          <View
-            style={[
-              styles.footerContainer,
-              { paddingBottom: Platform.OS === 'ios' ? insets.bottom : 20 },
-            ]}
-          >
+          <View style={[styles.footerContainer, { paddingBottom: footerBottomPad }]}>
             <Button
               title={editingLocalId ? 'Update Transaction' : 'Add Transaction'}
               onPress={handleSave}

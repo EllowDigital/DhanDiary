@@ -7,8 +7,37 @@ import {
   isAnnouncementActiveForLocalDate,
 } from './announcementConfig';
 import { checkForOtaUpdateAvailable } from '../services/backgroundUpdates';
+import { getSession } from '../db/session';
 
+// Legacy (global) key kept for backward compatibility.
 const STORAGE_KEY = 'last_seen_announcement_id';
+const STORAGE_KEY_PREFIX = `${STORAGE_KEY}:`;
+
+let cachedScopedStorageKey:
+  | {
+      key: string;
+      expiresAt: number;
+    }
+  | undefined;
+
+const getScopedStorageKey = async (): Promise<string> => {
+  const now = Date.now();
+  if (cachedScopedStorageKey && cachedScopedStorageKey.expiresAt > now) {
+    return cachedScopedStorageKey.key;
+  }
+
+  try {
+    const session = await getSession();
+    const userId = session?.id ? String(session.id) : 'anon';
+    const key = `${STORAGE_KEY_PREFIX}${userId}`;
+    cachedScopedStorageKey = { key, expiresAt: now + 5 * 60 * 1000 };
+    return key;
+  } catch (e) {
+    const key = `${STORAGE_KEY_PREFIX}anon`;
+    cachedScopedStorageKey = { key, expiresAt: now + 60 * 1000 };
+    return key;
+  }
+};
 
 let sessionDismissedAnnouncementIds = new Set<string>();
 
@@ -53,8 +82,13 @@ export const getCurrentAnnouncement = (now: Date = new Date()): AnnouncementConf
 
 export const getLastSeenAnnouncementId = async (): Promise<string | null> => {
   try {
-    const v = await AsyncStorage.getItem(STORAGE_KEY);
-    return v ? String(v) : null;
+    const scopedKey = await getScopedStorageKey();
+    const scoped = await AsyncStorage.getItem(scopedKey);
+    if (scoped) return String(scoped);
+
+    // Fallback to legacy key for older installs.
+    const legacy = await AsyncStorage.getItem(STORAGE_KEY);
+    return legacy ? String(legacy) : null;
   } catch (e) {
     return null;
   }
@@ -83,7 +117,13 @@ export const markCurrentAnnouncementSeen = async (now: Date = new Date()): Promi
   }
 
   try {
-    await AsyncStorage.setItem(STORAGE_KEY, current.id);
+    const scopedKey = await getScopedStorageKey();
+    await AsyncStorage.setItem(scopedKey, current.id);
+
+    // Keep legacy key in sync so older app versions/tests still behave.
+    if (scopedKey !== STORAGE_KEY) {
+      await AsyncStorage.setItem(STORAGE_KEY, current.id);
+    }
   } catch (e) {
     // best-effort; if this fails, announcement may reappear next launch (acceptable)
   }
@@ -94,6 +134,7 @@ export const __TESTING__ = {
   resetSessionDismissals() {
     sessionDismissedAnnouncementIds = new Set<string>();
     cachedResolvedAnnouncement = undefined;
+    cachedScopedStorageKey = undefined;
   },
   setSessionDismissed(ids: string[]) {
     sessionDismissedAnnouncementIds = new Set(ids);

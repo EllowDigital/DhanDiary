@@ -1,8 +1,5 @@
-export const colors = {
-  primary: '#2563eb',
-  background: '#ffffff',
-  text: '#111827',
-  muted: '#6b7280',
-};
+export { colors } from '../utils/design';
 
-export default colors;
+// Keep default export for legacy imports.
+import { colors as designColors } from '../utils/design';
+export default designColors;

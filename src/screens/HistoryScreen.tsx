@@ -18,6 +18,7 @@ import {
   LayoutAnimation,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Text, Button, Input } from '@rneui/themed';
 import { Swipeable } from 'react-native-gesture-handler';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
@@ -206,6 +207,7 @@ const SwipeableHistoryItem = React.memo(
 
 // --- 2. EDIT MODAL ---
 const EditTransactionModal = React.memo(({ visible, entryId, onClose, onSave }: EditModalProps) => {
+  const insets = useSafeAreaInsets();
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState(DEFAULT_CATEGORY);
   const [note, setNote] = useState('');
@@ -320,7 +322,8 @@ const EditTransactionModal = React.memo(({ visible, entryId, onClose, onSave }: 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
         style={{ flex: 1 }}
       >
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
@@ -338,7 +341,7 @@ const EditTransactionModal = React.memo(({ visible, entryId, onClose, onSave }: 
               <ScrollView
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
-                contentContainerStyle={{ paddingBottom: 20 }}
+                contentContainerStyle={{ paddingBottom: Math.max(24, insets.bottom + 16) }}
               >
                 <SimpleButtonGroup
                   buttons={['Expense', 'Income']}
@@ -443,9 +446,36 @@ const HistoryScreen = () => {
   const { showToast } = useToast();
   const { width } = useWindowDimensions();
 
+  const [swipeTipVisible, setSwipeTipVisible] = useState<boolean | null>(null);
+
   const showLoading = useDelayedLoading(Boolean(isLoading));
   const [quickFilter, setQuickFilter] = useState<'ALL' | 'WEEK' | 'MONTH'>('ALL');
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const key = `history_swipe_tip_dismissed:${user?.id || 'anon'}`;
+
+    AsyncStorage.getItem(key)
+      .then((v) => {
+        if (!mounted) return;
+        setSwipeTipVisible(v !== '1');
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setSwipeTipVisible(true);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [user?.id]);
+
+  const dismissSwipeTip = useCallback(() => {
+    const key = `history_swipe_tip_dismissed:${user?.id || 'anon'}`;
+    setSwipeTipVisible(false);
+    AsyncStorage.setItem(key, '1').catch(() => {});
+  }, [user?.id]);
 
   const toggleFilter = useCallback((f: 'ALL' | 'WEEK' | 'MONTH') => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -590,9 +620,26 @@ const HistoryScreen = () => {
             </TouchableOpacity>
           ))}
         </ScrollView>
+
+        {swipeTipVisible ? (
+          <View style={styles.swipeHintRow}>
+            <Text style={styles.swipeHintText}>
+              Tip: Swipe right to Edit · Swipe left to Delete
+            </Text>
+            <TouchableOpacity
+              onPress={dismissSwipeTip}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={styles.swipeHintDismiss}
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss tip"
+            >
+              <MaterialIcon name="close" size={18} color={colors.muted || '#64748B'} />
+            </TouchableOpacity>
+          </View>
+        ) : null}
       </View>
     ),
-    [summary, quickFilter]
+    [dismissSwipeTip, quickFilter, summary, swipeTipVisible]
   );
 
   return (
@@ -649,6 +696,23 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background || '#F8FAFC' },
   listContent: { paddingHorizontal: 16 },
   headerContainer: { marginBottom: 12, marginTop: 8 },
+  swipeHintRow: {
+    marginTop: 4,
+    marginBottom: 4,
+    paddingHorizontal: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  swipeHintText: {
+    fontSize: 12,
+    color: colors.muted || '#64748B',
+    fontWeight: '600',
+    flex: 1,
+  },
+  swipeHintDismiss: {
+    marginLeft: 10,
+    padding: 2,
+  },
 
   // Hero Card
   compactHero: {

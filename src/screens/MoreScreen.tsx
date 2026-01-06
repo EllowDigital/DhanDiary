@@ -177,16 +177,15 @@ const MoreScreen: React.FC = () => {
       <SafeAreaView style={styles.safeArea}>
         {/* HEADER */}
         <View style={styles.headerWrapper}>
-          <View style={{ width: contentWidth }}>
-            <ScreenHeader
-              title="More"
-              subtitle="Tools & Menu"
-              scrollOffset={scrollOffset}
-              showScrollHint
-              useSafeAreaPadding={false}
-              density="compact"
-            />
-          </View>
+          <ScreenHeader
+            title="More"
+            subtitle="Tools & Menu"
+            scrollOffset={scrollOffset}
+            showScrollHint
+            useSafeAreaPadding={false}
+            density="compact"
+            style={{ width: '100%' }}
+          />
         </View>
 
         <Animated.View

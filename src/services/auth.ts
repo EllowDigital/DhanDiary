@@ -211,6 +211,13 @@ export const logout = async (opts?: {
    * Default: false (fast sign-out; removes only auth/sync-critical keys).
    */
   clearAllStorage?: boolean;
+
+  /**
+   * Optional dependency injection for Clerk signOut.
+   * Prefer using performHardSignOut() from UI layers; this is a fallback for
+   * non-hook contexts that still want to ensure Clerk is signed out.
+   */
+  clerkSignOut?: () => Promise<any>;
 }): Promise<boolean> => {
   const clearAllStorage = Boolean(opts?.clearAllStorage);
 
@@ -304,6 +311,31 @@ export const logout = async (opts?: {
       await holder.clearQueryCache();
     }
   });
+
+  // 6) Best-effort Clerk sign-out (to avoid leaving an auth session active)
+  // NOTE: In most UI flows we use performHardSignOut() with useAuth().signOut.
+  if (typeof opts?.clerkSignOut === 'function') {
+    await safeRun(async () => {
+      await opts.clerkSignOut!();
+    });
+  } else {
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.warn(
+        '[Auth] logout() called without clerkSignOut; prefer performHardSignOut() from UI layers'
+      );
+    }
+    await safeRun(async () => {
+      try {
+        const mod = require('@clerk/clerk-expo');
+        const clerk = (mod && (mod.clerk || mod.default || mod)) as any;
+        if (clerk && typeof clerk.signOut === 'function') {
+          await clerk.signOut();
+        }
+      } catch (e) {
+        // ignore
+      }
+    });
+  }
 
   return wipedOk;
 };

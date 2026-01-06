@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Text } from '@rneui/themed';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Updates from 'expo-updates';
+import NetInfo from '@react-native-community/netinfo';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useInternetStatus } from '../hooks/useInternetStatus';
 import { useNeonStatus, describeNeonHealth } from '../hooks/useNeonStatus';
@@ -65,7 +66,9 @@ const AboutScreen: React.FC = () => {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const isExpoGo = Constants.appOwnership === 'expo';
+  const isOnline = useInternetStatus();
   const { showToast, showActionToast } = useToast();
+  const [scrollOffset, setScrollOffset] = useState(0);
 
   // --- ANIMATIONS ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -102,23 +105,44 @@ const AboutScreen: React.FC = () => {
   // --- UPDATE LOGIC ---
   const applyUpdate = useCallback(async () => {
     if (isExpoGo) return;
+
+    if (!isOnline) {
+      showToast('You are offline.', 'info');
+      return;
+    }
+
     setChecking(true);
     try {
       await Updates.fetchUpdateAsync();
       await Updates.reloadAsync();
     } catch (err: any) {
-      showToast(err?.message || 'Update failed. Please try again.', 'error');
-      const newCount = failureCount + 1;
-      setFailureCount(newCount);
-      AsyncStorage.setItem('UPDATE_FAIL_COUNT', String(newCount));
+      let offline = !isOnline;
+      try {
+        const state = await NetInfo.fetch();
+        if (state.isConnected === false || state.isInternetReachable === false) offline = true;
+      } catch {}
+
+      if (offline) {
+        showToast('You are offline.', 'info');
+      } else {
+        showToast(err?.message || 'Update failed. Please try again.', 'error');
+        const newCount = failureCount + 1;
+        setFailureCount(newCount);
+        AsyncStorage.setItem('UPDATE_FAIL_COUNT', String(newCount));
+      }
     } finally {
       setChecking(false);
     }
-  }, [failureCount, isExpoGo, showToast]);
+  }, [failureCount, isExpoGo, isOnline, showToast]);
 
   const checkForUpdates = useCallback(async () => {
     if (isExpoGo) {
       showToast('Over-the-air updates are disabled in Expo Go.', 'error');
+      return;
+    }
+
+    if (!isOnline) {
+      showToast('You are offline.', 'info');
       return;
     }
 
@@ -135,11 +159,21 @@ const AboutScreen: React.FC = () => {
         showToast("You're up to date.", 'success');
       }
     } catch (err: any) {
-      showToast(err?.message || 'Unable to check for updates.', 'error');
+      let offline = !isOnline;
+      try {
+        const state = await NetInfo.fetch();
+        if (state.isConnected === false || state.isInternetReachable === false) offline = true;
+      } catch {}
+
+      if (offline) {
+        showToast('You are offline.', 'info');
+      } else {
+        showToast(err?.message || 'Unable to check for updates.', 'error');
+      }
     } finally {
       setChecking(false);
     }
-  }, [applyUpdate, isExpoGo, showActionToast, showToast]);
+  }, [applyUpdate, isExpoGo, isOnline, showActionToast, showToast]);
 
   const clearRetryState = async () => {
     await AsyncStorage.removeItem('UPDATE_FAIL_COUNT');
@@ -204,7 +238,8 @@ const AboutScreen: React.FC = () => {
         <ScreenHeader
           title="About"
           subtitle="System status & info"
-          showScrollHint={false}
+          showScrollHint
+          scrollOffset={scrollOffset}
           useSafeAreaPadding={false}
         />
       </View>
@@ -212,6 +247,8 @@ const AboutScreen: React.FC = () => {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 40 }]}
+        onScroll={(e) => setScrollOffset(e.nativeEvent.contentOffset.y)}
+        scrollEventThrottle={16}
       >
         <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
           {/* 1. HERO CARD */}
@@ -284,7 +321,11 @@ const AboutScreen: React.FC = () => {
               <View style={{ flex: 1 }}>
                 <Text style={styles.cardTitle}>App Version</Text>
                 <Text style={styles.cardDesc}>
-                  {updateAvailable ? 'New features available.' : 'You are up to date.'}
+                  {!isOnline
+                    ? 'You are offline.'
+                    : updateAvailable
+                      ? 'New features available.'
+                      : 'You are up to date.'}
                 </Text>
               </View>
             </View>

@@ -1,27 +1,38 @@
 export const spacing = (multiplier = 1) => 8 * multiplier;
 
 export const colors = {
-  background: '#F5F7FB',
+  // Light, modern neutral base
+  background: '#F8FAFC',
   card: '#FFFFFF',
   softCard: '#EEF2FF',
-  surfaceMuted: '#F8FAFF',
+  surfaceMuted: '#F1F5F9',
+
+  // Brand
   primary: '#2563EB',
   primarySoft: '#E0E7FF',
-  secondary: '#0EA5E9',
-  accentGreen: '#22C55E',
-  accentGreenSoft: '#DCFCE7',
+  secondary: '#4F46E5',
+
+  // Accents
+  accentGreen: '#10B981',
+  accentGreenSoft: '#D1FAE5',
+  accentGreenBorder: '#A7F3D0',
   accentRed: '#EF4444',
   accentRedSoft: '#FEE2E2',
-  accentOrange: '#F97316',
-  accentBlue: '#38BDF8',
-  text: '#0F172A',
+  accentRedBorder: '#FECACA',
+  accentOrange: '#F59E0B',
+  accentBlue: '#06B6D4',
+
+  // Text
+  text: '#0B1220',
   muted: '#64748B',
   mutedSoft: '#94A3B8',
   subtleText: '#475569',
   strongMuted: '#334155',
+
+  // Lines / overlays
   border: '#E2E8F0',
-  divider: '#F1F5F9',
-  overlay: 'rgba(15, 23, 42, 0.08)',
+  divider: '#EAF0F7',
+  overlay: 'rgba(15, 23, 42, 0.06)',
   backdrop: 'rgba(15, 23, 42, 0.35)',
   white: '#FFFFFF',
   shadow: 'rgba(15, 23, 42, 0.08)',

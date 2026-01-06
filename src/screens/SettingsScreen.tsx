@@ -20,8 +20,8 @@ import { useAuth as useClerkAuth } from '@clerk/clerk-expo';
 
 // Optional Haptics: prefer runtime require so builds without expo-haptics still work.
 let Haptics: any = {
-  impactAsync: async () => { },
-  notificationAsync: async () => { },
+  impactAsync: async () => {},
+  notificationAsync: async () => {},
   ImpactFeedbackStyle: { Medium: 'medium' },
   NotificationFeedbackType: { Warning: 'warning' },
 };
@@ -86,6 +86,7 @@ const SettingsScreen = () => {
   const { showToast } = useToast();
   const { signOut: clerkSignOut } = useClerkAuth();
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [scrollOffset, setScrollOffset] = useState(0);
 
   // Layout
   const { width } = useWindowDimensions();
@@ -132,13 +133,13 @@ const SettingsScreen = () => {
         const d = new Date(last);
         setLastSyncTime(`${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`);
       }
-    } catch (e) { }
+    } catch (e) {}
 
     return () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, []);
 
@@ -170,7 +171,7 @@ const SettingsScreen = () => {
         showToast('Cloud sync is disabled in this build.', 'error');
         return;
       }
-    } catch (e) { }
+    } catch (e) {}
 
     // Haptic feedback
     if (Platform.OS !== 'web') {
@@ -249,7 +250,7 @@ const SettingsScreen = () => {
 
             try {
               query.clear();
-            } catch (e) { }
+            } catch (e) {}
 
             showToast('Signed out successfully');
           } catch (e) {
@@ -283,12 +284,15 @@ const SettingsScreen = () => {
               await initDB();
               try {
                 query.clear();
-              } catch (e) { }
+              } catch (e) {}
               try {
                 const { notifyEntriesChanged } = require('../utils/dbEvents');
                 notifyEntriesChanged();
-              } catch (e) { }
+              } catch (e) {}
               showToast('Local data cleared');
+            } catch (e) {
+              console.warn('[Settings] reset local data failed', e);
+              showToast('Failed to reset local data. Please try again.', 'error');
             } finally {
               setIsSigningOut(false);
             }
@@ -310,7 +314,8 @@ const SettingsScreen = () => {
           <ScreenHeader
             title="Settings"
             subtitle="Preferences & Security"
-            showScrollHint={false}
+            showScrollHint
+            scrollOffset={scrollOffset}
             useSafeAreaPadding={false}
           />
         </View>
@@ -318,6 +323,8 @@ const SettingsScreen = () => {
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 100, paddingTop: 10 }}
+          onScroll={(e) => setScrollOffset(e.nativeEvent.contentOffset.y)}
+          scrollEventThrottle={16}
         >
           <View style={{ width: contentWidth, alignSelf: 'center' }}>
             {/* 1. DATA & SYNC CARD */}
