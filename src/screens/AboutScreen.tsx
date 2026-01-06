@@ -119,7 +119,7 @@ const AboutScreen: React.FC = () => {
       try {
         const state = await NetInfo.fetch();
         if (state.isConnected === false || state.isInternetReachable === false) offline = true;
-      } catch { }
+      } catch {}
 
       if (offline) {
         showToast('You are offline.', 'info');
@@ -162,7 +162,7 @@ const AboutScreen: React.FC = () => {
       try {
         const state = await NetInfo.fetch();
         if (state.isConnected === false || state.isInternetReachable === false) offline = true;
-      } catch { }
+      } catch {}
 
       if (offline) {
         showToast('You are offline.', 'info');
