@@ -104,7 +104,7 @@ const ForgotPasswordScreen = () => {
     const lower = msg.toLowerCase();
 
     if (lower.includes('account not found') || lower.includes('password reset not supported')) {
-      return "We couldn’t start a password reset for that email. Double-check the address, or try signing in with the method you used when creating the account.";
+      return 'We couldn’t start a password reset for that email. Double-check the address, or try signing in with the method you used when creating the account.';
     }
 
     return null;
@@ -152,7 +152,7 @@ const ForgotPasswordScreen = () => {
 
       if (!factor) {
         showToast(
-          "We couldn’t start a password reset for that email. Double-check the address, or try signing in with the method you used when creating the account.",
+          'We couldn’t start a password reset for that email. Double-check the address, or try signing in with the method you used when creating the account.',
           'error'
         );
         return;

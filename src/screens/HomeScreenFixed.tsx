@@ -12,8 +12,9 @@ import {
   ActivityIndicator,
   NativeModules,
   RefreshControl,
+  Image,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useNavigation } from '@react-navigation/native';
@@ -21,40 +22,37 @@ import Svg, { Defs, LinearGradient, Stop, Rect, Circle } from 'react-native-svg'
 import { LineChart, PieChart } from 'react-native-chart-kit';
 import dayjs from 'dayjs';
 
-// --- CUSTOM HOOKS & UTILS IMPORTS ---
-// Assuming these paths exist based on your snippets.
+// --- CUSTOM HOOKS & UTILS ---
 import { useAuth } from '../hooks/useAuth';
 import { getSession } from '../db/session';
 import { subscribeSession } from '../utils/sessionEvents';
 import { useEntries } from '../hooks/useEntries';
 import useDelayedLoading from '../hooks/useDelayedLoading';
 import UserAvatar from '../components/UserAvatar';
-// Sync banner is a floating overlay now; no per-screen layout adjustments needed.
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { dayjsFrom, formatDate } from '../utils/date';
 import { subscribeSyncStatus } from '../services/syncManager';
 import { isExpense as isExpenseType, isIncome as isIncomeType } from '../utils/transactionType';
 import { getIconForCategory } from '../constants/categories';
 import { colors as themeColors } from '../utils/design';
 
-// --- ANIMATION SETUP ---
+// Enable LayoutAnimation on Android
 if (Platform.OS === 'android') {
   if (NativeModules.UIManager?.setLayoutAnimationEnabledExperimental) {
     NativeModules.UIManager.setLayoutAnimationEnabledExperimental(true);
   }
 }
 
-// --- CONSTANTS & THEME ---
+// --- CONSTANTS ---
 const COLORS = {
-  primary: '#2563EB', // Royal Blue
+  primary: '#2563EB',
   primaryDark: '#1E40AF',
-  background: '#F8FAFC', // Slate 50
+  background: '#F8FAFC',
   card: '#FFFFFF',
-  textMain: '#0F172A', // Slate 900
-  textSub: '#64748B', // Slate 500
-  success: '#10B981', // Emerald 500
+  textMain: '#0F172A',
+  textSub: '#64748B',
+  success: '#10B981',
   successBg: 'rgba(16, 185, 129, 0.15)',
-  danger: '#EF4444', // Red 500
+  danger: '#EF4444',
   dangerBg: 'rgba(239, 68, 68, 0.15)',
   border: '#E2E8F0',
 };
@@ -71,33 +69,10 @@ interface Transaction {
   date: string | Date;
 }
 
-const formatInrCompactNumber = (value: number): string => {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return '0';
-  const sign = n < 0 ? '-' : '';
-  const abs = Math.abs(n);
-
-  const fmt = (den: number, suffix: string) => {
-    const v = abs / den;
-    const fixed = v >= 100 ? v.toFixed(0) : v >= 10 ? v.toFixed(1) : v.toFixed(2);
-    return `${sign}${fixed}${suffix}`;
-  };
-
-  // Indian-ish compact units
-  if (abs >= 1e11) return fmt(1e11, 'Kh'); // Kharab
-  if (abs >= 1e9) return fmt(1e9, 'Ar'); // Arab
-  if (abs >= 1e7) return fmt(1e7, 'Cr'); // Crore
-  if (abs >= 1e5) return fmt(1e5, 'L'); // Lakh
-  if (abs >= 1e3) return fmt(1e3, 'K');
-
-  return `${sign}${Math.round(abs).toLocaleString('en-IN')}`;
-};
-
+// --- FORMATTING UTILS ---
 const formatInrNumber = (value: number): string => {
   const n = Number(value);
   if (!Number.isFinite(n)) return '0';
-  // Switch to compact for big numbers to keep UI stable.
-  if (Math.abs(n) >= 1e7) return formatInrCompactNumber(n);
   return Math.round(n).toLocaleString('en-IN');
 };
 
@@ -107,11 +82,13 @@ const formatInrWithSymbol = (value: number): string => {
 
 // --- SUB-COMPONENTS ---
 
-// 1. WAVE CHART (Optimized)
+// 1. WAVE CHART
 const CleanWaveChart = React.memo(({ data, width }: { data: number[]; width: number }) => {
-  const hasAny = Array.isArray(data) && data.some((v) => Number(v || 0) !== 0);
+  // Ensure we have enough data points to draw a line, or fill with zeros
+  const safeData = data.length > 0 ? data : [0, 0, 0, 0, 0, 0];
+  const hasValues = safeData.some((v) => v !== 0);
 
-  if (!hasAny) {
+  if (!hasValues) {
     return (
       <View style={styles.emptyChartBox}>
         <MaterialIcon name="show-chart" size={48} color={COLORS.border} />
@@ -120,15 +97,12 @@ const CleanWaveChart = React.memo(({ data, width }: { data: number[]; width: num
     );
   }
 
-  // Ensure we always have data to prevent rendering errors
-  const chartData = data.length > 1 ? data : [0, 0, 0, 0, 0, 0];
-
   return (
     <View style={styles.chartContainer}>
       <LineChart
         data={{
           labels: [],
-          datasets: [{ data: chartData }],
+          datasets: [{ data: safeData }],
         }}
         width={width}
         height={180}
@@ -159,9 +133,11 @@ const CleanWaveChart = React.memo(({ data, width }: { data: number[]; width: num
   );
 });
 
-// 2. PIE CHART (With Custom Legend)
+// 2. PIE CHART
 const CleanPieChart = React.memo(({ data, width }: { data: any[]; width: number }) => {
-  if (!data || data.length === 0 || data.every((d) => d.population === 0)) {
+  const hasData = data && data.length > 0 && data.some((d) => d.population > 0);
+
+  if (!hasData) {
     return (
       <View style={styles.emptyChartBox}>
         <MaterialIcon name="donut-large" size={48} color={COLORS.border} />
@@ -182,7 +158,7 @@ const CleanPieChart = React.memo(({ data, width }: { data: any[]; width: number 
         accessor="population"
         backgroundColor="transparent"
         paddingLeft="0"
-        center={[width / 4, 0]} // Centers the circle relative to the container
+        center={[width / 4, 0]}
         absolute={false}
         hasLegend={false}
       />
@@ -247,7 +223,6 @@ const TransactionItem = React.memo(
     const category = item.category || 'Uncategorized';
     const amount = Number(item.amount) || 0;
 
-    // Dynamic Icon Logic
     let iconName = getIconForCategory(category);
     if (!iconName) iconName = isInc ? 'arrow-downward' : 'arrow-upward';
 
@@ -274,12 +249,7 @@ const TransactionItem = React.memo(
           </Text>
         </View>
         <View style={styles.txnRight}>
-          <Text
-            style={[
-              styles.txnAmount,
-              { color: isInc ? COLORS.success : COLORS.textMain }, // Expenses just dark, Income Green
-            ]}
-          >
+          <Text style={[styles.txnAmount, { color: isInc ? COLORS.success : COLORS.textMain }]}>
             {isInc ? '+' : '-'}₹{amount.toLocaleString()}
           </Text>
           <Text style={styles.txnDate}>{dayjsFrom(item.date).format('h:mm A')}</Text>
@@ -294,19 +264,18 @@ const HomeScreen = () => {
   const navigation = useNavigation<any>();
   const { user } = useAuth();
   const [fallbackSession, setFallbackSession] = useState<any>(null);
-  const { entries, isLoading, refetch } = useEntries(user?.id);
 
-  // Use slightly longer delay for loading spinner to avoid flicker
+  const { entries, isLoading, refetch } = useEntries(user?.id);
   const showLoading = useDelayedLoading(Boolean(isLoading), 300);
+
   const { width: screenWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
-  // Constants for Chart
-  const CHART_PADDING = 40; // Inner card padding
-  const SCREEN_PADDING = 32; // Outer screen padding
-  const CHART_WIDTH = screenWidth - SCREEN_PADDING - CHART_PADDING;
+  // Responsive Caps
+  const layoutWidth = Math.min(screenWidth, 720);
+  const CHART_WIDTH = Math.max(240, layoutWidth - 72); // Screen padding accounted
 
-  // Local State
+  // State
   const [showBalance, setShowBalance] = useState(true);
   const [period, setPeriod] = useState<'week' | 'month'>('month');
   const [chartType, setChartType] = useState<'wave' | 'pie' | 'list'>('wave');
@@ -321,14 +290,10 @@ const HomeScreen = () => {
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }).start();
     const unsub = subscribeSyncStatus((s) => setIsSyncing(s === 'syncing'));
-    return () => {
-      try {
-        if (unsub) unsub();
-      } catch (e) {}
-    };
-  }, [fadeAnim]);
+    return () => unsub && unsub();
+  }, []);
 
-  // Load local fallback session and subscribe to changes so avatar/name are available
+  // Session & User Info
   useEffect(() => {
     let mounted = true;
     const load = async () => {
@@ -343,13 +308,9 @@ const HomeScreen = () => {
     });
     return () => {
       mounted = false;
-      try {
-        unsub();
-      } catch (e) {}
+      unsub();
     };
   }, []);
-
-  // Dev logging removed — production-ready
 
   const animateLayout = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -365,10 +326,9 @@ const HomeScreen = () => {
     setPeriod(p);
   }, []);
 
-  // --- DATA PROCESSING (Memoized) ---
+  // --- DATA PROCESSING ---
   const { stats, chartData, recentEntries } = useMemo(() => {
     const rawEntries = (entries || []) as any[];
-
     const cutOffMs =
       period === 'week'
         ? dayjs().subtract(6, 'day').startOf('day').valueOf()
@@ -384,22 +344,20 @@ const HomeScreen = () => {
     let periodIn = 0;
     let periodOut = 0;
 
-    // Keep top-N recent entries without sorting the whole dataset.
-    // This avoids O(n log n) cost when you have lots of rows.
-    const TOP_N = 7;
     const topRecent: Array<{ ts: number; e: any }> = [];
+    const TOP_N = 7;
 
     for (const e of rawEntries) {
       const amount = Number(e?.amount) || 0;
       const isInc = isIncomeType(e?.type);
       const isExp = isExpenseType(e?.type);
+
       if (isInc) totalInAll += amount;
       if (isExp) totalOutAll += amount;
 
-      // Use a single timestamp for comparisons and recent ordering.
-      const ts = dayjsFrom(e?.date ?? e?.created_at ?? e?.updated_at).valueOf();
+      const ts = dayjsFrom(e?.date ?? e?.created_at).valueOf();
 
-      // Insert into topRecent (descending), keep only TOP_N.
+      // Recent Transactions Logic (Insertion Sort for Top N)
       if (Number.isFinite(ts)) {
         if (topRecent.length < TOP_N || ts > topRecent[topRecent.length - 1].ts) {
           let inserted = false;
@@ -415,7 +373,7 @@ const HomeScreen = () => {
         }
       }
 
-      // Period analytics: compute dayStart once.
+      // Chart Data Logic
       const dayStartMs = dayjs(ts).startOf('day').valueOf();
       if (dayStartMs < cutOffMs) continue;
 
@@ -448,11 +406,7 @@ const HomeScreen = () => {
       .sort((a, b) => b.population - a.population);
 
     return {
-      stats: {
-        in: periodIn,
-        out: periodOut,
-        bal: totalInAll - totalOutAll,
-      },
+      stats: { in: periodIn, out: periodOut, bal: totalInAll - totalOutAll },
       chartData: { wave: wavePoints, pie: piePoints },
       recentEntries: topRecent.map((x) => x.e),
     };
@@ -464,67 +418,27 @@ const HomeScreen = () => {
         {/* 1. Top Bar */}
         <View style={styles.topBar}>
           <View style={styles.userInfoRow}>
-            {(() => {
-              const effectiveName =
-                (user && (user.name || (user as any).fullName || (user as any).firstName)) ||
-                fallbackSession?.name ||
-                null;
-              const effectiveImage =
-                user?.imageUrl ||
-                user?.image ||
-                fallbackSession?.imageUrl ||
-                fallbackSession?.image;
-
-              return (
-                <>
-                  <View style={styles.avatarWrap}>
-                    <UserAvatar
-                      size={42}
-                      name={effectiveName || undefined}
-                      imageUrl={effectiveImage}
-                      onPress={() => navigation.navigate('Account')}
-                    />
-                    {fallbackSession && !user ? (
-                      <View style={styles.localBadge}>
-                        <MaterialIcon name="cloud-off" size={12} color="#B91C1C" />
-                      </View>
-                    ) : null}
-                  </View>
-                  <View style={{ marginLeft: 12 }}>
-                    <Text style={styles.greetingText}>Welcome Back,</Text>
-                    <Text style={styles.userName}>{effectiveName || 'User'}</Text>
-                  </View>
-                </>
-              );
-            })()}
+            <UserAvatar
+              size={42}
+              name={user?.fullName || fallbackSession?.name}
+              imageUrl={user?.imageUrl || fallbackSession?.image}
+              onPress={() => navigation.navigate('Account')}
+            />
+            <View style={{ marginLeft: 12 }}>
+              <Text style={styles.greetingText}>Welcome Back,</Text>
+              <Text style={styles.userName}>
+                {user?.firstName || fallbackSession?.name?.split(' ')[0] || 'User'}
+              </Text>
+            </View>
           </View>
-          <TouchableOpacity
-            onPress={() => navigation.openDrawer()}
-            style={styles.menuBtn}
-            accessibilityLabel="Open Menu"
-          >
+          <TouchableOpacity onPress={() => navigation.openDrawer()} style={styles.menuBtn}>
             <MaterialIcon name="menu" size={26} color={COLORS.textMain} />
           </TouchableOpacity>
         </View>
 
         {/* 2. Hero Card */}
-        <Animated.View
-          style={[
-            styles.heroCardShadow,
-            {
-              opacity: fadeAnim,
-              // Keep the hero compact and consistent across devices.
-              minHeight: Math.max(200, Math.min(260, Math.round(screenWidth * 0.5))),
-              borderRadius: Math.max(16, Math.round(screenWidth * 0.06)),
-            },
-          ]}
-        >
-          <View
-            style={[
-              styles.heroCardSurface,
-              { borderRadius: Math.max(16, Math.round(screenWidth * 0.06)) },
-            ]}
-          >
+        <Animated.View style={[styles.heroCardShadow, { opacity: fadeAnim }]}>
+          <View style={styles.heroCardSurface}>
             <Svg style={StyleSheet.absoluteFill}>
               <Defs>
                 <LinearGradient id="heroGrad" x1="0" y1="0" x2="1" y2="1">
@@ -533,20 +447,11 @@ const HomeScreen = () => {
                 </LinearGradient>
               </Defs>
               <Rect width="100%" height="100%" fill="url(#heroGrad)" />
-              {/* Decorative Circles */}
               <Circle cx="85%" cy="15%" r="80" fill="white" fillOpacity="0.1" />
               <Circle cx="10%" cy="90%" r="50" fill="white" fillOpacity="0.08" />
             </Svg>
 
-            <View
-              style={[
-                styles.cardInner,
-                {
-                  padding: Math.round(Math.max(14, screenWidth * 0.05)),
-                  justifyContent: 'flex-start',
-                },
-              ]}
-            >
+            <View style={styles.cardInner}>
               <View style={styles.cardHeader}>
                 <Text style={styles.balanceLabel}>Total Balance</Text>
                 <TouchableOpacity
@@ -561,103 +466,46 @@ const HomeScreen = () => {
                 </TouchableOpacity>
               </View>
 
-              <View style={[styles.balanceRow, { alignItems: 'flex-start' }]}>
-                <Text
-                  style={[
-                    styles.currencySymbol,
-                    { fontSize: Math.max(18, Math.round(screenWidth * 0.05)) },
-                  ]}
-                >
-                  ₹
-                </Text>
-                <Text
-                  style={[
-                    styles.balanceAmount,
-                    { fontSize: Math.max(28, Math.round(screenWidth * 0.11)) },
-                  ]}
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.6}
-                >
+              <View style={styles.balanceRow}>
+                <Text style={styles.currencySymbol}>₹</Text>
+                <Text style={styles.balanceAmount} numberOfLines={1} adjustsFontSizeToFit>
                   {showBalance ? formatInrNumber(stats.bal) : '••••••'}
                 </Text>
               </View>
 
-              {showBootstrapSyncHint ? (
+              {showBootstrapSyncHint && (
                 <View style={styles.bootstrapSyncHint}>
                   <ActivityIndicator size="small" color="rgba(255,255,255,0.85)" />
                   <Text style={styles.bootstrapSyncHintText}>Syncing your data…</Text>
                 </View>
-              ) : null}
+              )}
 
-              <View
-                style={[
-                  styles.statsContainer,
-                  {
-                    padding: Math.max(10, Math.round(screenWidth * 0.02)),
-                    marginTop: 'auto',
-                  },
-                ]}
-              >
+              <View style={styles.statsContainer}>
                 {/* Income */}
                 <View style={styles.statItem}>
                   <View style={[styles.statIcon, { backgroundColor: 'rgba(16, 185, 129, 0.2)' }]}>
                     <MaterialIcon name="arrow-downward" size={16} color="#4ADE80" />
                   </View>
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text
-                      style={[
-                        styles.statLabel,
-                        { fontSize: Math.max(10, Math.round(screenWidth * 0.03)) },
-                      ]}
-                      numberOfLines={1}
-                      ellipsizeMode="tail"
-                    >
-                      Income {period === 'week' ? '(7 Days)' : '(This Month)'}
+                  <View>
+                    <Text style={styles.statLabel}>
+                      Income {period === 'week' ? '(7d)' : '(Mo)'}
                     </Text>
-                    <Text
-                      style={[
-                        styles.statValue,
-                        { fontSize: Math.max(12, Math.round(screenWidth * 0.035)) },
-                      ]}
-                      numberOfLines={1}
-                      ellipsizeMode="tail"
-                      adjustsFontSizeToFit
-                      minimumFontScale={0.7}
-                    >
+                    <Text style={styles.statValue}>
                       {showBalance ? formatInrWithSymbol(stats.in) : '••••'}
                     </Text>
                   </View>
                 </View>
-
                 <View style={styles.statDivider} />
-
                 {/* Expense */}
                 <View style={styles.statItem}>
                   <View style={[styles.statIcon, { backgroundColor: 'rgba(239, 68, 68, 0.2)' }]}>
                     <MaterialIcon name="arrow-upward" size={16} color="#F87171" />
                   </View>
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text
-                      style={[
-                        styles.statLabel,
-                        { fontSize: Math.max(10, Math.round(screenWidth * 0.03)) },
-                      ]}
-                      numberOfLines={1}
-                      ellipsizeMode="tail"
-                    >
-                      Expense {period === 'week' ? '(7 Days)' : '(This Month)'}
+                  <View>
+                    <Text style={styles.statLabel}>
+                      Expense {period === 'week' ? '(7d)' : '(Mo)'}
                     </Text>
-                    <Text
-                      style={[
-                        styles.statValue,
-                        { fontSize: Math.max(12, Math.round(screenWidth * 0.035)) },
-                      ]}
-                      numberOfLines={1}
-                      ellipsizeMode="tail"
-                      adjustsFontSizeToFit
-                      minimumFontScale={0.7}
-                    >
+                    <Text style={styles.statValue}>
                       {showBalance ? formatInrWithSymbol(stats.out) : '••••'}
                     </Text>
                   </View>
@@ -676,12 +524,7 @@ const HomeScreen = () => {
           ].map((item, idx) => (
             <TouchableOpacity
               key={idx}
-              style={[
-                styles.actionCard,
-                item.primary
-                  ? { backgroundColor: COLORS.primary }
-                  : { backgroundColor: COLORS.card },
-              ]}
+              style={[styles.actionCard, item.primary && { backgroundColor: COLORS.primary }]}
               onPress={() => navigation.navigate(item.nav)}
               activeOpacity={0.8}
             >
@@ -697,10 +540,9 @@ const HomeScreen = () => {
           ))}
         </View>
 
-        {/* 4. Analytics Widget */}
+        {/* 4. Chart Widget */}
         <View style={styles.chartCard}>
           <View style={styles.chartHeader}>
-            {/* Chart Type Toggles */}
             <View style={styles.chartToggles}>
               {[
                 { id: 'wave', icon: 'show-chart' },
@@ -720,8 +562,6 @@ const HomeScreen = () => {
                 </TouchableOpacity>
               ))}
             </View>
-
-            {/* Time Period Switch */}
             <View style={styles.periodSwitch}>
               {['week', 'month'].map((p) => (
                 <TouchableOpacity
@@ -736,7 +576,6 @@ const HomeScreen = () => {
               ))}
             </View>
           </View>
-
           <View style={styles.chartBody}>
             {chartType === 'wave' && <CleanWaveChart data={chartData.wave} width={CHART_WIDTH} />}
             {chartType === 'pie' && <CleanPieChart data={chartData.pie} width={CHART_WIDTH} />}
@@ -744,7 +583,7 @@ const HomeScreen = () => {
           </View>
         </View>
 
-        {/* 5. Recent Section Header */}
+        {/* 5. Recent Header */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Recent Transactions</Text>
           <TouchableOpacity onPress={() => navigation.navigate('History')}>
@@ -759,13 +598,10 @@ const HomeScreen = () => {
       fallbackSession,
       fadeAnim,
       showBalance,
-      stats.bal,
-      stats.in,
-      stats.out,
+      stats,
       period,
       chartType,
-      chartData.wave,
-      chartData.pie,
+      chartData,
       CHART_WIDTH,
       handleToggleChart,
       handleTogglePeriod,
@@ -785,25 +621,19 @@ const HomeScreen = () => {
     [navigation]
   );
 
-  const keyExtractor = useCallback((item: any, index: number) => {
-    return String(item?.local_id || item?.id || item?.remote_id || index);
-  }, []);
-
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-        {/* Loading Overlay */}
         {showLoading && entriesCount === 0 && (
           <View style={styles.loadingOverlay}>
             <ActivityIndicator size="large" color={COLORS.primary} />
           </View>
         )}
 
-        {/* Using FlatList for the entire screen allows pull-to-refresh */}
         <FlatList
           data={recentEntries}
-          keyExtractor={keyExtractor}
+          keyExtractor={(item, index) => String(item?.local_id || index)}
           ListHeaderComponent={header}
           refreshControl={
             <RefreshControl
@@ -813,37 +643,24 @@ const HomeScreen = () => {
             />
           }
           renderItem={renderItem as any}
-          removeClippedSubviews={Platform.OS === 'android'}
-          initialNumToRender={8}
-          maxToRenderPerBatch={8}
-          updateCellsBatchingPeriod={50}
-          windowSize={7}
-          keyboardShouldPersistTaps="handled"
-          scrollEventThrottle={16}
           contentContainerStyle={{ paddingBottom: 100 }}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             !isLoading ? (
               <View style={styles.emptyList}>
                 {showBootstrapSyncHint ? (
-                  <>
-                    <ActivityIndicator size="small" color={COLORS.primary} />
-                    <Text style={[styles.emptyText, { marginTop: 10 }]}>
-                      Syncing your data from cloud…
-                    </Text>
-                    <Text style={[styles.emptyText, { marginTop: 4, fontSize: 13 }]}>
-                      Your entries will appear here once sync completes.
-                    </Text>
-                  </>
+                  <Text style={styles.emptyText}>Syncing data...</Text>
                 ) : (
-                  <Text style={styles.emptyText}>No recent transactions found.</Text>
+                  <>
+                    <Text style={styles.emptyText}>No recent transactions found.</Text>
+                    <TouchableOpacity
+                      style={styles.emptyBtn}
+                      onPress={() => navigation.navigate('AddEntry')}
+                    >
+                      <Text style={styles.emptyBtnText}>Add your first entry</Text>
+                    </TouchableOpacity>
+                  </>
                 )}
-                <TouchableOpacity
-                  style={styles.emptyBtn}
-                  onPress={() => navigation.navigate('AddEntry')}
-                >
-                  <Text style={styles.emptyBtnText}>Add your first entry</Text>
-                </TouchableOpacity>
               </View>
             ) : null
           }
@@ -861,60 +678,29 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     zIndex: 99,
     alignItems: 'center',
-    paddingTop: 150,
-    backgroundColor: 'rgba(248, 250, 252, 0.5)',
+    paddingTop: 200,
+    backgroundColor: 'rgba(248, 250, 252, 0.7)',
   },
 
   bootstrapSyncHint: {
-    marginTop: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-start',
-    maxWidth: '100%',
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.10)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.14)',
-    flexShrink: 1,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    padding: 6,
+    borderRadius: 8,
+    marginTop: 8,
   },
-  bootstrapSyncHintText: {
-    marginLeft: 8,
-    color: 'rgba(255,255,255,0.85)',
-    fontSize: 12,
-    fontWeight: '600',
-    flex: 1,
-    flexWrap: 'wrap',
-  },
+  bootstrapSyncHintText: { color: '#fff', marginLeft: 8, fontSize: 12 },
 
   // Header
   headerContainer: { paddingHorizontal: 20, paddingTop: 12 },
   topBar: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 24,
   },
   userInfoRow: { flexDirection: 'row', alignItems: 'center' },
-  avatarWrap: {
-    width: 42,
-    height: 42,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-
-  localBadge: {
-    position: 'absolute',
-    right: -6,
-    bottom: -6,
-    backgroundColor: '#FEF2F2',
-    borderRadius: 10,
-    padding: 3,
-    borderWidth: 1,
-    borderColor: 'rgba(185,28,28,0.12)',
-  },
   greetingText: { fontSize: 12, color: COLORS.textSub, fontWeight: '500' },
   userName: { fontSize: 18, fontWeight: '700', color: COLORS.textMain },
   menuBtn: {
@@ -931,18 +717,13 @@ const styles = StyleSheet.create({
     minHeight: 200,
     borderRadius: 24,
     marginBottom: 24,
-    // Shadow (keep on wrapper; no overflow clipping)
     shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.22,
     shadowRadius: 12,
     elevation: 8,
   },
-  heroCardSurface: {
-    flex: 1,
-    borderRadius: 24,
-    overflow: 'hidden',
-  },
+  heroCardSurface: { flex: 1, borderRadius: 24, overflow: 'hidden' },
   cardInner: { flex: 1, padding: 20, justifyContent: 'space-between' },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   balanceLabel: { color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: '500' },
@@ -964,8 +745,9 @@ const styles = StyleSheet.create({
     padding: 12,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.16)',
+    marginTop: 'auto',
   },
-  statItem: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  statItem: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
   statIcon: {
     width: 32,
     height: 32,
@@ -975,20 +757,10 @@ const styles = StyleSheet.create({
   },
   statLabel: { color: 'rgba(255,255,255,0.78)', fontSize: 11, fontWeight: '600' },
   statValue: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  statDivider: {
-    width: 1,
-    alignSelf: 'stretch',
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    marginHorizontal: 12,
-  },
+  statDivider: { width: 1, backgroundColor: 'rgba(255,255,255,0.2)', marginHorizontal: 12 },
 
-  // Action Grid
-  actionGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: 24,
-  },
+  // Actions
+  actionGrid: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, marginBottom: 24 },
   actionCard: {
     flex: 1,
     height: 80,
@@ -996,7 +768,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    // Soft Shadow
+    backgroundColor: COLORS.card,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.05,
@@ -1005,7 +777,7 @@ const styles = StyleSheet.create({
   },
   actionLabel: { fontSize: 12, fontWeight: '600', color: COLORS.textMain },
 
-  // Chart Card
+  // Charts
   chartCard: {
     backgroundColor: COLORS.card,
     borderRadius: 24,
@@ -1029,11 +801,11 @@ const styles = StyleSheet.create({
   periodBtnActive: { backgroundColor: COLORS.card, elevation: 1 },
   periodText: { fontSize: 11, fontWeight: '600', color: COLORS.textSub },
   periodTextActive: { color: COLORS.primary },
-
   chartBody: { alignItems: 'center', justifyContent: 'center', minHeight: 180 },
   chartContainer: { alignItems: 'center', justifyContent: 'center' },
+  emptyChartBox: { alignItems: 'center', justifyContent: 'center', height: 180, gap: 10 },
 
-  // Pie
+  // Pie & Rank
   pieContainer: { alignItems: 'center', width: '100%' },
   legendContainer: {
     flexDirection: 'row',
@@ -1045,8 +817,6 @@ const styles = StyleSheet.create({
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendText: { fontSize: 11, fontWeight: '500', color: COLORS.textSub },
-
-  // Rank List
   rankContainer: { width: '100%' },
   rankRow: { marginBottom: 16 },
   rankHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
@@ -1058,9 +828,7 @@ const styles = StyleSheet.create({
   progressBarBg: { height: 6, width: '100%', backgroundColor: COLORS.background, borderRadius: 3 },
   progressBarFill: { height: '100%', borderRadius: 3 },
 
-  emptyChartBox: { alignItems: 'center', justifyContent: 'center', height: 180, gap: 10 },
-
-  // Section
+  // Transactions
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1070,8 +838,6 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { fontSize: 17, fontWeight: '700', color: COLORS.textMain },
   seeAllBtn: { fontSize: 13, fontWeight: '600', color: COLORS.primary },
-
-  // Transactions
   itemWrapper: { paddingHorizontal: 20 },
   txnCard: {
     flexDirection: 'row',
@@ -1083,7 +849,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: COLORS.border,
-    elevation: 0,
   },
   txnIconBox: {
     width: 42,
@@ -1100,7 +865,7 @@ const styles = StyleSheet.create({
   txnAmount: { fontSize: 15, fontWeight: '700', marginBottom: 2 },
   txnDate: { fontSize: 11, color: COLORS.textSub },
 
-  // Empty States
+  // Empty
   emptyList: { alignItems: 'center', padding: 40, gap: 10 },
   emptyText: { color: COLORS.textSub, fontSize: 14 },
   emptyBtn: {
