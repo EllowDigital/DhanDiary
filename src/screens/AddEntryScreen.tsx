@@ -13,6 +13,7 @@ import {
   TextInput,
   LayoutAnimation,
   UIManager,
+  Keyboard,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Text } from '@rneui/themed';
@@ -52,17 +53,17 @@ const typeConfigs = [
   {
     value: 'out',
     label: 'Expense',
-    color: colors.accentRed,
-    bg: colors.accentRedSoft,
-    border: colors.accentRedBorder,
+    color: colors.accentRed || '#EF4444',
+    bg: colors.accentRedSoft || '#FEF2F2',
+    border: colors.accentRedBorder || '#FECACA',
     icon: 'arrow-outward',
   },
   {
     value: 'in',
     label: 'Income',
-    color: colors.accentGreen,
-    bg: colors.accentGreenSoft,
-    border: colors.accentGreenBorder,
+    color: colors.accentGreen || '#10B981',
+    bg: colors.accentGreenSoft || '#ECFDF5',
+    border: colors.accentGreenBorder || '#A7F3D0',
     icon: 'arrow-downward',
   },
 ] as const;
@@ -106,17 +107,17 @@ const AddEntryScreen: React.FC = () => {
   // Dynamic Theme Interpolation
   const themeColor = colorAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [colors.accentRed, colors.accentGreen],
+    outputRange: [colors.accentRed || '#EF4444', colors.accentGreen || '#10B981'],
   });
 
   const themeBg = colorAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [colors.accentRedSoft, colors.accentGreenSoft],
+    outputRange: [colors.accentRedSoft || '#FEF2F2', colors.accentGreenSoft || '#ECFDF5'],
   });
 
   const themeBorder = colorAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [colors.accentRedBorder, colors.accentGreenBorder],
+    outputRange: [colors.accentRedBorder || '#FECACA', colors.accentGreenBorder || '#A7F3D0'],
   });
 
   useEffect(() => {

@@ -25,7 +25,7 @@ import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import dayjs from 'dayjs';
 
-// --- CUSTOM IMPORTS (Assumed Paths) ---
+// --- CUSTOM IMPORTS ---
 import SimpleButtonGroup from '../components/SimpleButtonGroup';
 import CategoryPickerModal from '../components/CategoryPickerModal';
 import { useEntries } from '../hooks/useEntries';
@@ -82,7 +82,7 @@ const resolveEntryMoment = (entry: TransactionEntry) => {
   if (v === null || v === undefined) return dayjs();
   const num = Number(v);
   if (!Number.isNaN(num)) {
-    // If it's a number, check if it's seconds or ms (heuristic: 1e12 is roughly year 2001 in ms)
+    // heuristic: < 1e12 usually means seconds (unix timestamp)
     const ms = num < 1e12 ? num * 1000 : num;
     return dayjs(ms);
   }
@@ -178,7 +178,7 @@ const SwipeableHistoryItem = React.memo(
               <Text style={styles.compactCategory} numberOfLines={1}>
                 {item.category}
               </Text>
-              {/* Sync Status Badge */}
+
               <View style={styles.syncIconWrapper}>
                 {item.sync_status === 1 ? (
                   <MaterialIcon name="check-circle" size={14} color="#10B981" />
@@ -188,6 +188,7 @@ const SwipeableHistoryItem = React.memo(
                   <MaterialIcon name="delete" size={14} color="#EF4444" />
                 ) : null}
               </View>
+
               <Text style={[styles.compactAmount, { color }]}>
                 {isInc ? '+' : '-'}₹{item.__amountStr}
               </Text>
@@ -231,7 +232,7 @@ const EditTransactionModal = React.memo(({ visible, entryId, onClose, onSave }: 
           return;
         }
 
-        // Tombstone guard
+        // Deleted guard
         if ((row as any).deleted_at || Number((row as any).sync_status) === 2) {
           Alert.alert('Cannot edit', 'This transaction is deleted.');
           onClose();
@@ -259,7 +260,7 @@ const EditTransactionModal = React.memo(({ visible, entryId, onClose, onSave }: 
           }
         };
 
-        // Optional: warn if pending sync
+        // Warn if pending sync
         if (Number((row as any).need_sync) === 1) {
           Alert.alert('Pending changes', 'This entry is waiting to sync. Edit anyway?', [
             { text: 'Cancel', style: 'cancel', onPress: onClose },
@@ -309,12 +310,8 @@ const EditTransactionModal = React.memo(({ visible, entryId, onClose, onSave }: 
   };
 
   const onDateChange = (_event: DateTimePickerEvent, selectedDate?: Date) => {
-    if (Platform.OS === 'android') {
-      setShowDatePicker(false);
-    }
-    if (selectedDate) {
-      setDate(selectedDate);
-    }
+    if (Platform.OS === 'android') setShowDatePicker(false);
+    if (selectedDate) setDate(selectedDate);
   };
 
   const quickAmounts = ['100', '500', '1000', '2000'];
@@ -447,7 +444,6 @@ const HistoryScreen = () => {
   const { width } = useWindowDimensions();
 
   const [swipeTipVisible, setSwipeTipVisible] = useState<boolean | null>(null);
-
   const showLoading = useDelayedLoading(Boolean(isLoading));
   const [quickFilter, setQuickFilter] = useState<'ALL' | 'WEEK' | 'MONTH'>('ALL');
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
@@ -455,17 +451,13 @@ const HistoryScreen = () => {
   useEffect(() => {
     let mounted = true;
     const key = `history_swipe_tip_dismissed:${user?.id || 'anon'}`;
-
     AsyncStorage.getItem(key)
       .then((v) => {
-        if (!mounted) return;
-        setSwipeTipVisible(v !== '1');
+        if (mounted) setSwipeTipVisible(v !== '1');
       })
       .catch(() => {
-        if (!mounted) return;
-        setSwipeTipVisible(true);
+        if (mounted) setSwipeTipVisible(true);
       });
-
     return () => {
       mounted = false;
     };
@@ -482,7 +474,7 @@ const HistoryScreen = () => {
     setQuickFilter(f);
   }, []);
 
-  // --- FILTER LOGIC ---
+  // Filter Logic
   const preparedEntries = useMemo<PreparedEntry[]>(() => {
     const list = entries || [];
     return list.map((e) => {
@@ -505,13 +497,9 @@ const HistoryScreen = () => {
     const startMonthTs = now.startOf('month').valueOf();
 
     let list = preparedEntries;
-    if (quickFilter === 'WEEK') {
-      list = preparedEntries.filter((e) => e.__ts >= startWeekTs);
-    } else if (quickFilter === 'MONTH') {
-      list = preparedEntries.filter((e) => e.__ts >= startMonthTs);
-    }
+    if (quickFilter === 'WEEK') list = preparedEntries.filter((e) => e.__ts >= startWeekTs);
+    else if (quickFilter === 'MONTH') list = preparedEntries.filter((e) => e.__ts >= startMonthTs);
 
-    // Avoid mutating the source array
     return [...list].sort((a, b) => b.__ts - a.__ts);
   }, [preparedEntries, quickFilter]);
 
@@ -523,7 +511,6 @@ const HistoryScreen = () => {
     return { net, count: filtered.length };
   }, [filtered]);
 
-  // --- ACTIONS ---
   const handleSaveEdit = useCallback(
     async (id: string, updates: Partial<TransactionEntry>) => {
       try {
@@ -532,7 +519,6 @@ const HistoryScreen = () => {
         setEditingEntryId(null);
       } catch (err) {
         showToast('Update failed', 'error');
-        // Rethrow to let the modal stay open if needed, or handle here
         throw err;
       }
     },
@@ -541,33 +527,28 @@ const HistoryScreen = () => {
 
   const handleDelete = useCallback(
     (id: string) => {
-      Alert.alert(
-        'Delete Transaction',
-        'This will delete it locally now and remove it from all devices after the next sync.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Delete',
-            style: 'destructive',
-            onPress: () => {
-              runInBackground(async () => {
-                try {
-                  await deleteEntry(id);
-                  showToast('Deleted');
-                } catch (e) {
-                  showToast('Delete failed', 'error');
-                }
-              });
-            },
+      Alert.alert('Delete Transaction', 'Delete this entry permanently?', [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            runInBackground(async () => {
+              try {
+                await deleteEntry(id);
+                showToast('Deleted');
+              } catch (e) {
+                showToast('Delete failed', 'error');
+              }
+            });
           },
-        ]
-      );
+        },
+      ]);
     },
     [deleteEntry, showToast]
   );
 
   const attemptEdit = useCallback((item: TransactionEntry) => {
-    // Authoritative checks are done inside the modal via fresh SQLite read.
     setEditingEntryId(item.local_id);
   }, []);
 
@@ -621,7 +602,7 @@ const HistoryScreen = () => {
           ))}
         </ScrollView>
 
-        {swipeTipVisible ? (
+        {swipeTipVisible && (
           <View style={styles.swipeHintRow}>
             <Text style={styles.swipeHintText}>
               Tip: Swipe right to Edit · Swipe left to Delete
@@ -630,13 +611,11 @@ const HistoryScreen = () => {
               onPress={dismissSwipeTip}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               style={styles.swipeHintDismiss}
-              accessibilityRole="button"
-              accessibilityLabel="Dismiss tip"
             >
               <MaterialIcon name="close" size={18} color={colors.muted || '#64748B'} />
             </TouchableOpacity>
           </View>
-        ) : null}
+        )}
       </View>
     ),
     [dismissSwipeTip, quickFilter, summary, swipeTipVisible]
@@ -645,7 +624,6 @@ const HistoryScreen = () => {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-
       <View style={{ paddingHorizontal: width >= 768 ? spacing(4) : 0 }}>
         <ScreenHeader
           title="History"
@@ -696,6 +674,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background || '#F8FAFC' },
   listContent: { paddingHorizontal: 16 },
   headerContainer: { marginBottom: 12, marginTop: 8 },
+
   swipeHintRow: {
     marginTop: 4,
     marginBottom: 4,
@@ -703,18 +682,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  swipeHintText: {
-    fontSize: 12,
-    color: colors.muted || '#64748B',
-    fontWeight: '600',
-    flex: 1,
-  },
-  swipeHintDismiss: {
-    marginLeft: 10,
-    padding: 2,
-  },
+  swipeHintText: { fontSize: 12, color: colors.muted || '#64748B', fontWeight: '600', flex: 1 },
+  swipeHintDismiss: { marginLeft: 10, padding: 2 },
 
-  // Hero Card
+  // Hero
   compactHero: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -725,7 +696,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: colors.border || '#E2E8F0',
-    // Shadow
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.03,
@@ -747,7 +717,7 @@ const styles = StyleSheet.create({
   },
   countText: { fontSize: 12, fontWeight: '600', color: colors.text || '#1E293B' },
 
-  // Filter Chips
+  // Chips
   chipRow: { gap: 8, paddingBottom: 8 },
   filterChip: {
     paddingHorizontal: 16,
@@ -801,7 +771,7 @@ const styles = StyleSheet.create({
   compactNote: { fontSize: 12, color: colors.muted || '#94A3B8', flex: 1, marginRight: 8 },
   compactDate: { fontSize: 11, color: colors.subtleText || '#CBD5E1' },
 
-  // Actions
+  // Swipe Actions
   leftAction: {
     backgroundColor: '#3B82F6',
     justifyContent: 'center',
