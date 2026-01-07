@@ -290,8 +290,12 @@ const HomeScreen = () => {
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }).start();
     const unsub = subscribeSyncStatus((s) => setIsSyncing(s === 'syncing'));
-    return () => unsub && unsub();
-  }, []);
+    return () => {
+      try {
+        unsub?.();
+      } catch (e) {}
+    };
+  }, [fadeAnim]);
 
   // Session & User Info
   useEffect(() => {
@@ -420,14 +424,16 @@ const HomeScreen = () => {
           <View style={styles.userInfoRow}>
             <UserAvatar
               size={42}
-              name={user?.fullName || fallbackSession?.name}
-              imageUrl={user?.imageUrl || fallbackSession?.image}
+              name={user?.name || fallbackSession?.name}
+              imageUrl={
+                user?.imageUrl || user?.image || fallbackSession?.imageUrl || fallbackSession?.image
+              }
               onPress={() => navigation.navigate('Account')}
             />
             <View style={{ marginLeft: 12 }}>
               <Text style={styles.greetingText}>Welcome Back,</Text>
               <Text style={styles.userName}>
-                {user?.firstName || fallbackSession?.name?.split(' ')[0] || 'User'}
+                {user?.name?.split(' ')[0] || fallbackSession?.name?.split(' ')[0] || 'User'}
               </Text>
             </View>
           </View>

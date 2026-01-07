@@ -69,7 +69,7 @@ const DrawerNavigator = () => {
       // Item Styling
       drawerActiveTintColor: colors.primary || '#2563EB',
       drawerInactiveTintColor: colors.text || '#334155',
-      drawerActiveBackgroundColor: colors.primaryLight || '#EFF6FF', // Very light blue
+      drawerActiveBackgroundColor: colors.primarySoft || '#EFF6FF', // Very light blue
 
       drawerItemStyle: {
         borderRadius: 12,
@@ -105,11 +105,17 @@ const DrawerNavigator = () => {
         screenListeners={{
           state: (e) => {
             // Check strictly if drawer is open to toggle banner visibility
-            const isOpen = (e.data as any).state.history.some((it: any) => it.type === 'drawer');
-            setIsDrawerOpen(isOpen);
+            try {
+              const state = (e.data as any)?.state;
+              const history = state?.history || [];
+              const isOpen =
+                Array.isArray(history) && history.some((it: any) => it?.type === 'drawer');
+              setIsDrawerOpen(Boolean(isOpen));
+            } catch (err) {
+              // If we can't determine state, keep banner visible.
+              setIsDrawerOpen(false);
+            }
           },
-          drawerOpen: () => setIsDrawerOpen(true),
-          drawerClose: () => setIsDrawerOpen(false),
         }}
         initialRouteName="Dashboard"
       >

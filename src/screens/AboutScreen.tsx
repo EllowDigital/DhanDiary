@@ -35,7 +35,11 @@ const ELLOW_URL = 'https://www.ellowdigital.space';
 const BRAND_NAME = 'EllowDigital';
 
 // Safe Version Access using Expo Constants instead of require('package.json')
-const APP_VERSION = Constants.expoConfig?.version || Constants.manifest?.version || '1.0.0';
+const APP_VERSION =
+  Constants.expoConfig?.version ||
+  (Constants as any)?.manifest2?.version ||
+  (Constants as any)?.manifest?.version ||
+  '1.0.0';
 const BUILD_TYPE = Constants.expoConfig?.extra?.BUILD_TYPE || (__DEV__ ? 'Development' : 'Release');
 
 // Mock Share Link (Replace with your actual dynamic link logic if needed)

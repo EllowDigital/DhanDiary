@@ -115,7 +115,7 @@ const AccountDeletedScreen = () => {
             <MaterialCommunityIcons
               name="heart-broken"
               size={iconSize * 0.5}
-              color={colors.danger || '#EF4444'}
+              color={colors.accentRed || '#EF4444'}
             />
           </Animated.View>
 

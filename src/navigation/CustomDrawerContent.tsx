@@ -28,7 +28,7 @@ import { subscribeSession } from '../utils/sessionEvents';
 const ACTIVE_COLOR = colors.primary || '#2563EB';
 const INACTIVE_COLOR = '#64748B';
 const BACKGROUND_COLOR = colors.background || '#F8FAFC';
-const DANGER_COLOR = colors.danger || '#EF4444';
+const DANGER_COLOR = colors.accentRed || '#EF4444';
 const TEXT_SUB_COLOR = INACTIVE_COLOR;
 
 // --- DRAWER COMPONENT ---
