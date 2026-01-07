@@ -32,6 +32,7 @@ import ScreenHeader from '../components/ScreenHeader';
 
 // --- CONSTANTS ---
 const ELLOW_URL = 'https://www.ellowdigital.space';
+const APP_WEBSITE_URL = 'https://dhandiary.netlify.app/roadmap';
 const BRAND_NAME = 'EllowDigital';
 
 // Safe Version Access using Expo Constants instead of require('package.json')
@@ -297,7 +298,7 @@ const AboutScreen: React.FC = () => {
         title: 'DhanDiary',
         message: `Check out DhanDiary! ${link}`,
       });
-    } catch (e) {}
+    } catch (e) { }
   };
 
   const infoGrid = useMemo(
@@ -354,10 +355,23 @@ const AboutScreen: React.FC = () => {
               <Text style={styles.heroFooterText}>
                 Designed by <Text style={styles.heroBrand}>{BRAND_NAME}</Text>
               </Text>
-              <TouchableOpacity style={styles.visitBtn} onPress={() => Linking.openURL(ELLOW_URL)}>
-                <Text style={styles.visitText}>Visit Website</Text>
-                <MaterialIcon name="arrow-forward" size={14} color="#fff" />
-              </TouchableOpacity>
+              <View style={styles.visitBtnRow}>
+                <TouchableOpacity
+                  style={styles.visitBtn}
+                  onPress={() => Linking.openURL(ELLOW_URL)}
+                >
+                  <Text style={styles.visitText}>EllowDigital</Text>
+                  <MaterialIcon name="arrow-forward" size={14} color="#fff" />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.visitBtn}
+                  onPress={() => Linking.openURL(APP_WEBSITE_URL)}
+                >
+                  <Text style={styles.visitText}>App Website</Text>
+                  <MaterialIcon name="arrow-forward" size={14} color="#fff" />
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
 
@@ -523,6 +537,11 @@ const styles = StyleSheet.create({
   activeText: { color: theme.accentGreen, fontSize: 11, fontWeight: '700' },
 
   // Visit Btn
+  visitBtnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   visitBtn: {
     flexDirection: 'row',
     alignItems: 'center',
