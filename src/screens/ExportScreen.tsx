@@ -22,7 +22,6 @@ import ScreenHeader from '../components/ScreenHeader';
 import { useEntries } from '../hooks/useEntries';
 import { useAuth } from '../hooks/useAuth';
 import { colors } from '../utils/design';
-// FIX: Removed ensureExportPermissions import
 import { exportToFile, shareFile } from '../utils/reportExporter';
 import FullScreenSpinner from '../components/FullScreenSpinner';
 
@@ -161,7 +160,7 @@ const ExportScreen = () => {
   const [includeNotes, setIncludeNotes] = useState(true);
   const [groupBy, setGroupBy] = useState<'none' | 'category'>('category');
 
-  // --- FILTERING ENGINE (Optimized) ---
+  // --- FILTERING ENGINE ---
   const entriesWithUnix = useMemo(() => {
     if (!entries.length) return [] as Array<{ e: any; t: number }>;
     const out: Array<{ e: any; t: number }> = new Array(entries.length);
@@ -176,23 +175,9 @@ const ExportScreen = () => {
   const { targetEntries, count } = useMemo(() => {
     if (!entriesWithUnix.length) return { targetEntries: [], count: 0 };
 
-    if (__DEV__) {
-      try {
-        console.log(
-          '[ExportScreen] entries.len=',
-          entriesWithUnix.length,
-          'mode=',
-          mode,
-          'pivot=',
-          pivotDate.format()
-        );
-      } catch (e) {}
-    }
-
     let startUnix = -Infinity;
     let endUnix = Infinity;
 
-    // Calculate boundaries based on pivotDate state
     const p = pivotDate; // dayjs object
 
     switch (mode) {
@@ -223,25 +208,13 @@ const ExportScreen = () => {
         break;
     }
 
-    // Single pass filter
     const filtered: any[] = [];
     for (let i = 0; i < entriesWithUnix.length; i++) {
       const { e, t } = entriesWithUnix[i];
-      // Check date field first, fallbacks if missing
       if (!Number.isFinite(t)) {
-        if (__DEV__)
-          console.warn(
-            '[ExportScreen] invalid date for entry',
-            e && ((e as any).local_id || (e as any).id),
-            (e as any).date
-          );
-        // If user selected ALL, include rows with unparseable dates so they can be exported.
-        if (mode === 'All') {
-          filtered.push(e);
-        }
+        if (mode === 'All') filtered.push(e);
         continue;
       }
-
       if (t >= startUnix && t <= endUnix) {
         filtered.push(e);
       }
@@ -255,7 +228,6 @@ const ExportScreen = () => {
   const handleModeChange = useCallback((label: FilterLabel) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
 
-    // Convert UI label to internal mode
     let newMode: InternalMode = 'Month';
     if (label === 'Daily') newMode = 'Day';
     else if (label === 'Weekly') newMode = 'Week';
@@ -264,7 +236,6 @@ const ExportScreen = () => {
 
     setMode(newMode);
 
-    // Reset pivot if switching away from browsing modes
     if (newMode === 'Today' || newMode === 'All') {
       setPivotDate(dayjs());
     }
@@ -272,7 +243,6 @@ const ExportScreen = () => {
 
   const handleDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
     const currentMode = pickerMode;
-    // On Android, the picker dismisses itself
     if (Platform.OS === 'android') setPickerMode(null);
 
     if (event.type === 'dismissed' || !selectedDate) {
@@ -294,16 +264,13 @@ const ExportScreen = () => {
   const executeExport = async () => {
     setExporting(true);
 
-    // Use interaction manager to allow UI render to complete (spinner to show)
     await new Promise<void>((resolve) => InteractionManager.runAfterInteractions(() => resolve()));
 
     try {
-      // 1. Attempt Sync
       try {
         const NetInfo = require('@react-native-community/netinfo');
         const net = await NetInfo.fetch();
         if (net.isConnected) {
-          // Try pulling latest data from Neon (best-effort, time-bounded)
           const pullMod = await import('../sync/pullFromNeon');
           const didPull = await Promise.race<boolean>([
             Promise.resolve()
@@ -312,19 +279,16 @@ const ExportScreen = () => {
               .catch(() => false),
             new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 3500)),
           ]);
-          // Only refetch if we actually pulled (avoid extra work on timeout).
           if (didPull) await refetch?.();
         }
       } catch (e) {
-        console.warn('[Export] Sync check failed, proceeding with local data', e);
+        // Continue with local data if sync fails
       }
 
-      // 2. Prepare Data (avoid unnecessary copies)
       const finalData = includeNotes
         ? (targetEntries as any[])
         : (targetEntries as any[]).map(({ note, ...rest }: any) => rest);
 
-      // 3. Generate Report
       const periodLabel =
         mode === 'All'
           ? 'All Time'
@@ -332,7 +296,6 @@ const ExportScreen = () => {
             ? `${dayjs(customStart).format('D MMM')} - ${dayjs(customEnd).format('D MMM')}`
             : getDateLabel();
 
-      // Yield once so spinner/layout can update before heavy generation.
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
       const filePath = await exportToFile(format, finalData, {
@@ -355,8 +318,6 @@ const ExportScreen = () => {
 
   const handleExportPress = () => {
     if (count === 0) return;
-
-    // Warn on large PDF
     if (format === 'pdf' && count > 800) {
       Alert.alert('Large Report', `Generating a PDF with ${count} items may be slow. Continue?`, [
         { text: 'Cancel', style: 'cancel' },
@@ -377,7 +338,6 @@ const ExportScreen = () => {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right'] as any}>
-      {/* HEADER */}
       <View style={styles.headerContainer}>
         <ScreenHeader
           title="Export Data"
@@ -406,7 +366,6 @@ const ExportScreen = () => {
 
           <View style={styles.chipGrid}>
             {FILTERS.map((f) => {
-              // Logic to determine active state visually
               let isActive = false;
               if (f === 'Daily' && mode === 'Day') isActive = true;
               else if (f === 'Weekly' && mode === 'Week') isActive = true;
@@ -424,7 +383,6 @@ const ExportScreen = () => {
             })}
           </View>
 
-          {/* Navigation Controls */}
           {['Day', 'Week', 'Month'].includes(mode) && (
             <View style={styles.navRow}>
               <TouchableOpacity
@@ -445,7 +403,6 @@ const ExportScreen = () => {
             </View>
           )}
 
-          {/* Custom Date Pickers */}
           {mode === 'Custom' && (
             <View style={styles.customRow}>
               <TouchableOpacity style={styles.dateInput} onPress={() => setPickerMode('start')}>
@@ -474,7 +431,6 @@ const ExportScreen = () => {
             </View>
           )}
 
-          {/* Status Feedback */}
           <View style={[styles.infoBox, { backgroundColor: count > 0 ? '#F0FDF4' : '#FEF2F2' }]}>
             <MaterialIcon
               name={count > 0 ? 'check-circle' : 'info'}
@@ -569,7 +525,6 @@ const ExportScreen = () => {
         <View style={{ height: 60 }} />
       </ScrollView>
 
-      {/* Date Picker Modal */}
       {pickerMode && (
         <DateTimePicker
           value={pickerMode === 'start' ? customStart : customEnd}
@@ -581,13 +536,11 @@ const ExportScreen = () => {
         />
       )}
 
-      {/* Full Screen Spinner Overlay */}
       <FullScreenSpinner visible={exporting} message="Creating Report..." />
     </SafeAreaView>
   );
 };
 
-// --- STYLES ---
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.background },
   headerContainer: { paddingHorizontal: 16, paddingBottom: 8 },
@@ -598,7 +551,6 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     padding: 20,
     marginBottom: 16,
-    // Modern shadow
     shadowColor: '#000',
     shadowOpacity: 0.06,
     shadowRadius: 12,
@@ -633,7 +585,6 @@ const styles = StyleSheet.create({
   },
   countLabel: { fontSize: fontScale(12), fontWeight: '700', color: colors.primary },
 
-  // Chips
   chipGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 },
   chip: {
     paddingVertical: 10,
@@ -647,7 +598,6 @@ const styles = StyleSheet.create({
   chipText: { fontSize: fontScale(12), fontWeight: '600', color: '#64748B' },
   chipTextActive: { color: '#fff' },
 
-  // Nav Row
   navRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -660,7 +610,6 @@ const styles = StyleSheet.create({
   navBtn: { padding: 8, backgroundColor: '#fff', borderRadius: 12, elevation: 1 },
   navLabel: { fontSize: fontScale(14), fontWeight: '700', color: '#334155' },
 
-  // Custom Date
   customRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
   dateInput: {
     flex: 1,
@@ -675,11 +624,9 @@ const styles = StyleSheet.create({
   inputText: { fontSize: fontScale(13), fontWeight: '700', color: '#1E293B' },
   calIcon: { position: 'absolute', right: 12, top: 16, opacity: 0.5 },
 
-  // Info Box
   infoBox: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 12, gap: 10 },
   infoText: { fontSize: fontScale(12), fontWeight: '600', flex: 1 },
 
-  // Formats
   formatRow: { flexDirection: 'row', gap: 12, marginBottom: 20 },
   formatBtn: {
     flex: 1,
@@ -706,13 +653,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  // Options
   optionsContainer: { borderTopWidth: 1, borderTopColor: '#F1F5F9', paddingTop: 16, gap: 14 },
   checkRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   checkText: { fontSize: fontScale(13), fontWeight: '600', color: '#475569' },
   helperNote: { fontSize: fontScale(12), fontWeight: '600', color: '#64748B', marginTop: 2 },
 
-  // Main Button
   exportBtn: {
     backgroundColor: colors.primary,
     borderRadius: 20,
