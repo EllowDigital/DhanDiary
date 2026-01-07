@@ -67,9 +67,9 @@ const SystemStatus: React.FC = () => {
   const desc = describeNeonHealth(health);
 
   // Decide visual state
-  let dotColor = '#10B981';
-  let label = 'System Operational';
-  let tone: 'positive' | 'warning' | 'neutral' = 'positive';
+  let dotColor: string;
+  let label: string;
+  let tone: 'positive' | 'warning' | 'neutral';
 
   if (!isOnline) {
     label = 'You are offline';
