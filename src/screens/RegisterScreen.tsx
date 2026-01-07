@@ -11,9 +11,10 @@ import {
   Platform,
   ScrollView,
   StatusBar,
-  Dimensions,
+  useWindowDimensions,
   Animated,
   Easing,
+  Keyboard,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -26,13 +27,18 @@ import OfflineNotice from '../components/OfflineNotice';
 // --- CUSTOM IMPORTS ---
 import { colors } from '../utils/design';
 
-const { height } = Dimensions.get('window');
-
 const RegisterScreen = () => {
   const navigation = useNavigation<any>();
   const { isLoaded, signUp } = useSignUp();
-
   const insets = useSafeAreaInsets();
+
+  // --- RESPONSIVE LAYOUT LOGIC ---
+  const { width, height } = useWindowDimensions();
+  const isLandscape = width > height;
+  const isTablet = width >= 600;
+
+  // Switch to "Card Mode" on Tablets or Landscape phones
+  const isCardLayout = isTablet || isLandscape;
 
   // --- STATE ---
   const [firstName, setFirstName] = useState('');
@@ -47,7 +53,7 @@ const RegisterScreen = () => {
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(50)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
 
   // Entrance Animation
   useEffect(() => {
@@ -60,7 +66,7 @@ const RegisterScreen = () => {
       Animated.timing(slideAnim, {
         toValue: 0,
         duration: 800,
-        easing: Easing.out(Easing.exp),
+        easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
     ]).start();
@@ -68,134 +74,77 @@ const RegisterScreen = () => {
 
   const onSignUpPress = async () => {
     if (!isLoaded) return;
-
-    // Basic Validation
     if (!firstName || !lastName || !email || !password) {
       return Alert.alert('Missing Fields', 'Please fill in all fields to continue.');
     }
 
     setLoading(true);
+    Keyboard.dismiss();
 
-    const MAX_ATTEMPTS = 3;
-
-    const doSignUp = async () => {
-      try {
-        if (!signUp) return false;
-        // 1. Create the user in Clerk
-        await signUp.create({
-          firstName,
-          lastName,
-          emailAddress: email,
-          password,
-        });
-
-        // 2. Prepare the email verification (Send Code)
-        await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
-
-        // 3. Navigate to Verification Screen
-        navigation.navigate('VerifyEmail', {
-          email,
-          mode: 'signup',
-          firstName,
-          lastName,
-        });
-        return true;
-      } catch (err: any) {
-        console.error('Registration error:', err);
-
-        const errors = err?.errors || [];
-        const errorMsg = errors.length > 0 ? errors[0].message : err.message;
-
-        // User-friendly error mapping
-        if (errorMsg.includes('already exists')) {
-          Alert.alert('Account Exists', 'That email is already in use. Please log in instead.');
-        } else if (errorMsg.includes('password')) {
-          Alert.alert(
-            'Weak Password',
-            'Please choose a stronger password (min 8 chars, mixed case/numbers).'
-          );
-        } else {
-          try {
-            const net = await NetInfo.fetch();
-            if (!net.isConnected) {
-              setOfflineAttemptsLeft(3);
-              setOfflineVisible(true);
-              return false;
-            }
-          } catch (e) {}
-          Alert.alert('Registration Failed', errorMsg);
-        }
-        return false;
-      }
-    };
-
-    try {
-      const net = await NetInfo.fetch();
-      if (net.isConnected) {
-        await doSignUp();
-        return;
-      }
-    } catch (e) {
-      // ignore
+    // Check connection before starting
+    const net = await NetInfo.fetch();
+    if (!net.isConnected) {
+      startOfflineFlow();
+      return;
     }
 
-    // Offline: show modal and attempt exponential backoff retries
+    await attemptSignUp();
+  };
+
+  const attemptSignUp = async () => {
+    try {
+      if (!signUp) return;
+      await signUp.create({ firstName, lastName, emailAddress: email, password });
+      await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
+
+      setLoading(false);
+      navigation.navigate('VerifyEmail', { email, mode: 'signup', firstName, lastName });
+    } catch (err: any) {
+      handleSignUpError(err);
+    }
+  };
+
+  const handleSignUpError = (err: any) => {
+    const errors = err?.errors || [];
+    const errorMsg = errors.length > 0 ? errors[0].message : err.message;
+
+    if (errorMsg.includes('already exists')) {
+      Alert.alert('Account Exists', 'That email is already in use. Please log in instead.');
+    } else if (errorMsg.includes('password')) {
+      Alert.alert(
+        'Weak Password',
+        'Please choose a stronger password (min 8 chars, mixed case/numbers).'
+      );
+    } else {
+      Alert.alert('Registration Failed', errorMsg);
+    }
+    setLoading(false);
+  };
+
+  const startOfflineFlow = async () => {
     setOfflineVisible(true);
     setOfflineRetrying(true);
+    setLoading(false);
+
+    // Simple retry logic simulation
+    const MAX_ATTEMPTS = 3;
     setOfflineAttemptsLeft(MAX_ATTEMPTS);
 
-    let attemptsLeft = MAX_ATTEMPTS;
-    while (attemptsLeft > 0) {
-      const waitMs = Math.pow(2, MAX_ATTEMPTS - attemptsLeft) * 1000; // 1s,2s,4s
-      await new Promise((r) => setTimeout(r, waitMs));
-      try {
-        const net = await NetInfo.fetch();
-        if (net.isConnected) {
-          setOfflineVisible(false);
-          setOfflineRetrying(false);
-          await doSignUp();
-          return;
-        }
-      } catch (e) {
-        // continue
-      }
-      attemptsLeft -= 1;
-      setOfflineAttemptsLeft(attemptsLeft);
-    }
-
+    // (In a real app, you might loop check NetInfo here,
+    // but typically we wait for user manual retry)
     setOfflineRetrying(false);
-    setLoading(false);
   };
 
   const offlineManualRetry = async () => {
     setOfflineRetrying(true);
-    setOfflineAttemptsLeft((v) => (typeof v === 'number' ? Math.max(0, v - 1) : undefined));
-    try {
-      const net = await NetInfo.fetch();
-      if (net.isConnected) {
-        setOfflineVisible(false);
-        setOfflineRetrying(false);
-        setLoading(true);
-        try {
-          // attempt signup once
-          if (!signUp) throw new Error('Signup not available');
-          await signUp.create({
-            firstName,
-            lastName,
-            emailAddress: email,
-            password,
-          });
-          await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
-          navigation.navigate('VerifyEmail', { email, mode: 'signup', firstName, lastName });
-        } catch (err: any) {
-          const errors = err?.errors || [];
-          const errorMsg = errors.length > 0 ? errors[0].message : err.message;
-          Alert.alert('Registration Failed', errorMsg);
-          setLoading(false);
-        }
-      }
-    } catch (e) {
+    const net = await NetInfo.fetch();
+    if (net.isConnected) {
+      setOfflineVisible(false);
       setOfflineRetrying(false);
+      setLoading(true);
+      await attemptSignUp();
+    } else {
+      setTimeout(() => setOfflineRetrying(false), 1000);
     }
   };
 
@@ -203,7 +152,6 @@ const RegisterScreen = () => {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
-      {/* Background Gradient */}
       <LinearGradient
         colors={['#E0F2FE', '#F0F9FF', '#FFFFFF']}
         style={StyleSheet.absoluteFill}
@@ -211,148 +159,153 @@ const RegisterScreen = () => {
         end={{ x: 1, y: 1 }}
       />
 
-      <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right', 'bottom'] as any}>
+      <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right', 'bottom']}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1 }}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
         >
           <ScrollView
             contentContainerStyle={[
               styles.scrollContent,
-              { paddingBottom: Math.max(16, (insets?.bottom || 0) + 16) },
+              // If Card Layout, center content vertically
+              isCardLayout ? styles.centerContent : null,
+              { paddingBottom: Math.max(20, insets.bottom + 20) },
             ]}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            {/* Header */}
-            <View style={styles.header}>
-              <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-                <Ionicons name="arrow-back" size={24} color="#0F172A" />
-              </TouchableOpacity>
+            {/* MAIN CONTENT CONTAINER 
+              - Constrains width on tablets/landscape
+              - Aligns self center
+            */}
+            <View style={[styles.responsiveContainer, isCardLayout && styles.cardContainer]}>
+              {/* Header */}
+              <View style={styles.header}>
+                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+                  <Ionicons name="arrow-back" size={24} color="#0F172A" />
+                </TouchableOpacity>
 
-              {/* Step Indicator */}
-              <View style={styles.stepContainer}>
-                <View style={styles.stepDotActive} />
-                <View style={styles.stepLine} />
-                <View style={styles.stepDotInactive} />
+                {/* Step Indicator */}
+                <View style={styles.stepContainer}>
+                  <View style={styles.stepDotActive} />
+                  <View style={styles.stepLine} />
+                  <View style={styles.stepDotInactive} />
+                </View>
               </View>
-            </View>
 
-            <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-              <Text style={styles.title}>Create Account</Text>
-              <Text style={styles.subtitle}>Start your financial journey today.</Text>
+              <Animated.View
+                style={[
+                  styles.formWrapper,
+                  { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+                ]}
+              >
+                <Text style={styles.title}>Create Account</Text>
+                <Text style={styles.subtitle}>Start your financial journey today.</Text>
 
-              <View style={styles.formContainer}>
-                {/* Name Row */}
-                <View style={styles.row}>
-                  <View style={[styles.inputContainer, { flex: 1 }]}>
+                <View style={styles.formContainer}>
+                  {/* Name Row */}
+                  <View style={styles.row}>
+                    <View style={[styles.inputContainer, { flex: 1 }]}>
+                      <Ionicons
+                        name="person-outline"
+                        size={20}
+                        color={colors.muted || '#94A3B8'}
+                        style={styles.inputIcon}
+                      />
+                      <TextInput
+                        style={styles.input}
+                        placeholder="First Name"
+                        placeholderTextColor="#94A3B8"
+                        value={firstName}
+                        onChangeText={setFirstName}
+                        autoCapitalize="words"
+                        autoComplete="name-given"
+                      />
+                    </View>
+                    <View style={{ width: 12 }} />
+                    <View style={[styles.inputContainer, { flex: 1 }]}>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Last Name"
+                        placeholderTextColor="#94A3B8"
+                        value={lastName}
+                        onChangeText={setLastName}
+                        autoCapitalize="words"
+                        autoComplete="name-family"
+                      />
+                    </View>
+                  </View>
+
+                  {/* Email */}
+                  <View style={styles.inputContainer}>
                     <Ionicons
-                      name="person-outline"
+                      name="mail-outline"
                       size={20}
                       color={colors.muted || '#94A3B8'}
                       style={styles.inputIcon}
                     />
                     <TextInput
                       style={styles.input}
-                      placeholder="First Name"
+                      placeholder="Email Address"
                       placeholderTextColor="#94A3B8"
-                      value={firstName}
-                      onChangeText={setFirstName}
-                      autoCapitalize="words"
-                      textContentType="givenName"
-                      autoComplete="name-given"
-                      importantForAutofill="yes"
+                      value={email}
+                      onChangeText={setEmail}
+                      autoCapitalize="none"
+                      keyboardType="email-address"
+                      autoComplete="email"
                     />
                   </View>
-                  <View style={{ width: 12 }} />
-                  <View style={[styles.inputContainer, { flex: 1 }]}>
+
+                  {/* Password */}
+                  <View style={styles.inputContainer}>
+                    <Ionicons
+                      name="lock-closed-outline"
+                      size={20}
+                      color={colors.muted || '#94A3B8'}
+                      style={styles.inputIcon}
+                    />
                     <TextInput
                       style={styles.input}
-                      placeholder="Last Name"
+                      placeholder="Create Password"
                       placeholderTextColor="#94A3B8"
-                      value={lastName}
-                      onChangeText={setLastName}
-                      autoCapitalize="words"
-                      textContentType="familyName"
-                      autoComplete="name-family"
-                      importantForAutofill="yes"
+                      value={password}
+                      onChangeText={setPassword}
+                      secureTextEntry={!showPassword}
+                      autoCapitalize="none"
                     />
+                    <TouchableOpacity
+                      onPress={() => setShowPassword(!showPassword)}
+                      style={styles.eyeBtn}
+                    >
+                      <Ionicons name={showPassword ? 'eye' : 'eye-off'} size={20} color="#94A3B8" />
+                    </TouchableOpacity>
                   </View>
-                </View>
 
-                {/* Email */}
-                <View style={styles.inputContainer}>
-                  <Ionicons
-                    name="mail-outline"
-                    size={20}
-                    color={colors.muted || '#94A3B8'}
-                    style={styles.inputIcon}
-                  />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Email Address"
-                    placeholderTextColor="#94A3B8"
-                    value={email}
-                    onChangeText={setEmail}
-                    autoCapitalize="none"
-                    keyboardType="email-address"
-                    textContentType="emailAddress"
-                    autoComplete="email"
-                    importantForAutofill="yes"
-                  />
-                </View>
-
-                {/* Password */}
-                <View style={styles.inputContainer}>
-                  <Ionicons
-                    name="lock-closed-outline"
-                    size={20}
-                    color={colors.muted || '#94A3B8'}
-                    style={styles.inputIcon}
-                  />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Create Password"
-                    placeholderTextColor="#94A3B8"
-                    value={password}
-                    onChangeText={setPassword}
-                    secureTextEntry={!showPassword}
-                    autoCapitalize="none"
-                    textContentType="newPassword"
-                    autoComplete="password-new"
-                    importantForAutofill="yes"
-                  />
+                  {/* Action Button */}
                   <TouchableOpacity
-                    onPress={() => setShowPassword(!showPassword)}
-                    style={styles.eyeBtn}
+                    style={[styles.primaryBtn, loading && styles.disabledBtn]}
+                    onPress={onSignUpPress}
+                    disabled={loading}
+                    activeOpacity={0.8}
                   >
-                    <Ionicons name={showPassword ? 'eye' : 'eye-off'} size={20} color="#94A3B8" />
+                    {loading ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <Text style={styles.primaryBtnText}>Continue</Text>
+                    )}
                   </TouchableOpacity>
                 </View>
 
-                {/* Action Button */}
-                <TouchableOpacity
-                  style={[styles.primaryBtn, loading && styles.disabledBtn]}
-                  onPress={onSignUpPress}
-                  disabled={loading}
-                  activeOpacity={0.8}
-                >
-                  {loading ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <Text style={styles.primaryBtnText}>Continue</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-
-              {/* Footer */}
-              <View style={styles.footer}>
-                <Text style={styles.footerText}>Already have an account? </Text>
-                <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-                  <Text style={styles.linkText}>Log In</Text>
-                </TouchableOpacity>
-              </View>
-            </Animated.View>
+                {/* Footer */}
+                <View style={styles.footer}>
+                  <Text style={styles.footerText}>Already have an account? </Text>
+                  <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+                    <Text style={styles.linkText}>Log In</Text>
+                  </TouchableOpacity>
+                </View>
+              </Animated.View>
+            </View>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -374,9 +327,34 @@ const RegisterScreen = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+
   scrollContent: {
     flexGrow: 1,
     padding: 24,
+  },
+
+  // Center content vertically for Card Layout
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // Responsive Container
+  responsiveContainer: {
+    width: '100%',
+  },
+  // Card Styles (Tablets/Landscape)
+  cardContainer: {
+    maxWidth: 480,
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 32,
+    // Shadow for card look
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 8,
   },
 
   /* Header */
@@ -384,8 +362,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 40,
-    marginTop: 10,
+    marginBottom: 32,
+    marginTop: 8,
   },
   backBtn: {
     width: 44,
@@ -425,7 +403,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#E2E8F0',
   },
 
-  /* Titles */
+  /* Form Content */
+  formWrapper: {
+    width: '100%',
+  },
   title: {
     fontSize: 28,
     fontWeight: '800',
@@ -440,7 +421,7 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
 
-  /* Form */
+  /* Inputs */
   formContainer: {
     gap: 16,
     marginBottom: 24,
@@ -500,7 +481,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 16,
+    marginTop: 8,
   },
   footerText: {
     color: '#64748B',
