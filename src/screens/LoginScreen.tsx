@@ -13,7 +13,6 @@ import {
   StatusBar,
   Image,
   AppState,
-  AppStateStatus,
   useWindowDimensions,
   Animated,
   Easing,
@@ -29,6 +28,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import NetInfo from '@react-native-community/netinfo';
 
 // --- CUSTOM IMPORTS ---
+// Ensure these paths match your project structure
 import OfflineNotice from '../components/OfflineNotice';
 import { syncClerkUserToNeon } from '../services/clerkUserSync';
 import { saveSession } from '../db/session';
@@ -55,8 +55,11 @@ const LoginScreen = () => {
   // --- RESPONSIVE DIMENSIONS ---
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
-  const isTablet = width >= 768;
-  const isSmallScreen = height < 700;
+  const isTablet = width >= 600; // Standard tablet breakpoint
+
+  // Specific check for Tablet Portrait vs Phone Portrait
+  const isTabletPortrait = isTablet && !isLandscape;
+  const isPhonePortrait = !isTablet && !isLandscape;
 
   // --- CLERK HOOKS ---
   const { signIn, setActive, isLoaded } = useSignIn();
@@ -76,23 +79,19 @@ const LoginScreen = () => {
 
   // Offline State
   const [offlineVisible, setOfflineVisible] = useState(false);
-  const [offlineRetrying, setOfflineRetrying] = useState(false);
-  const [offlineAttemptsLeft, setOfflineAttemptsLeft] = useState<number | undefined>(undefined);
 
   // --- ANIMATIONS ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
 
-  // App State (Android Background Fix)
+  // App State
   const isActiveRef = useRef(true);
 
   useEffect(() => {
-    // App State Listener
     const sub = AppState.addEventListener('change', (next) => {
       isActiveRef.current = next === 'active';
     });
 
-    // Entrance Animation
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -107,7 +106,6 @@ const LoginScreen = () => {
       }),
     ]).start();
 
-    // DB Warmup
     warmNeonConnection().catch(() => {});
     return () => sub.remove();
   }, []);
@@ -185,7 +183,6 @@ const LoginScreen = () => {
       if (result.status === 'complete') {
         await setActive({ session: result.createdSessionId });
       } else {
-        // Handle 2FA or other statuses
         Alert.alert('Verification', 'Please check your email for verification.');
         setLoading(false);
       }
@@ -197,15 +194,12 @@ const LoginScreen = () => {
   const handleLoginError = async (err: any) => {
     const code = err.errors?.[0]?.code;
     const msg = err.errors?.[0]?.message || 'Invalid credentials.';
-
-    // Check Offline
     const net = await NetInfo.fetch();
     if (!net.isConnected) {
       setOfflineVisible(true);
       setLoading(false);
       return;
     }
-
     if (code === 'strategy_for_user_invalid') {
       Alert.alert('Social Login Required', 'Please use Google or GitHub to sign in.');
     } else if (code === 'form_identifier_not_found') {
@@ -236,7 +230,6 @@ const LoginScreen = () => {
     }
   };
 
-  // --- RENDER HELPERS ---
   const renderBrand = () => (
     <Animated.View style={[styles.brandContainer, { opacity: fadeAnim }]}>
       <View style={[styles.logoCircle, isLandscape && styles.logoCircleSmall]}>
@@ -247,13 +240,61 @@ const LoginScreen = () => {
         />
       </View>
       <View>
-        <Text style={[styles.brandTitle, isLandscape && styles.brandTitleSmall]}>DhanDiary</Text>
-        <Text style={[styles.brandSubtitle, isLandscape && styles.brandSubtitleSmall]}>
+        <Text
+          style={[
+            styles.brandTitle,
+            isLandscape && styles.brandTitleSmall,
+            isTablet && styles.brandTitleTablet,
+          ]}
+        >
+          DhanDiary
+        </Text>
+        <Text
+          style={[
+            styles.brandSubtitle,
+            isLandscape && styles.brandSubtitleSmall,
+            isTablet && styles.brandSubtitleTablet,
+          ]}
+        >
           Master your finances
         </Text>
       </View>
     </Animated.View>
   );
+
+  // --- DYNAMIC STYLES CALCULATION ---
+
+  // 1. Determine Content Container Style for ScrollView
+  let contentContainerStyle;
+  if (isLandscape) {
+    contentContainerStyle = styles.rowContentContainer; // Split View
+  } else if (isTabletPortrait) {
+    contentContainerStyle = styles.centerContentContainer; // Centered Card
+  } else {
+    contentContainerStyle = styles.columnContentContainer; // Bottom Sheet (Phone)
+  }
+
+  // 2. Determine Wrapper Style (Positioning of Brand vs Form)
+  let brandWrapperStyle, formWrapperStyle;
+
+  if (isLandscape) {
+    // Landscape: Side by Side
+    brandWrapperStyle = styles.brandWrapperSplit;
+    formWrapperStyle = styles.formWrapperSplit;
+  } else if (isTabletPortrait) {
+    // Tablet Portrait: Stacked but Centered vertically
+    brandWrapperStyle = styles.brandWrapperCenter;
+    formWrapperStyle = styles.formWrapperCenter;
+  } else {
+    // Phone Portrait: Stacked, Brand Top, Form Bottom
+    brandWrapperStyle = styles.brandWrapperStacked;
+    formWrapperStyle = styles.formWrapperBottom;
+  }
+
+  // 3. Card Styling (Borders & Widths)
+  // On Tablet (Portrait or Landscape), we want a "Card" look (all corners rounded).
+  // On Phone Portrait, we want a "Sheet" look (top corners rounded only).
+  const isCardStyle = isTablet || isLandscape;
 
   return (
     <View style={styles.container}>
@@ -273,46 +314,15 @@ const LoginScreen = () => {
           keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
         >
           <ScrollView
-            contentContainerStyle={[
-              styles.scrollContent,
-              // Landscape: Center the row. Portrait: Space between.
-              isLandscape
-                ? { justifyContent: 'center', paddingVertical: 20 }
-                : { justifyContent: 'space-between' },
-            ]}
+            contentContainerStyle={[styles.scrollBase, contentContainerStyle]}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            {/* CONTAINER: Switches between Column (Portrait) and Row (Landscape) */}
-            <View
-              style={[
-                styles.responsiveContainer,
-                isLandscape ? styles.rowLayout : styles.columnLayout,
-                isTablet && styles.tabletLayout,
-              ]}
-            >
-              {/* BRAND SECTION */}
-              <View
-                style={[
-                  styles.brandWrapper,
-                  isLandscape
-                    ? {
-                        flex: 0.45,
-                        paddingRight: 20,
-                        alignItems: 'flex-start',
-                        justifyContent: 'center',
-                      }
-                    : {
-                        alignItems: 'center',
-                        marginTop: isSmallScreen ? 20 : 60,
-                        marginBottom: 40,
-                      },
-                ]}
-              >
-                {renderBrand()}
-              </View>
+            {/* BRAND SECTION */}
+            <View style={[styles.brandWrapper, brandWrapperStyle]}>{renderBrand()}</View>
 
-              {/* FORM SECTION */}
+            {/* FORM SECTION */}
+            <View style={[styles.formWrapper, formWrapperStyle]}>
               <Animated.View
                 style={[
                   styles.formCard,
@@ -320,23 +330,24 @@ const LoginScreen = () => {
                     opacity: fadeAnim,
                     transform: [{ translateY: slideAnim }],
                   },
-                  // Responsive Widths
-                  isLandscape ? { flex: 0.55, minWidth: 350 } : { width: '100%' },
-                  // Responsive Padding/Radius
-                  isLandscape
-                    ? { borderRadius: 24, padding: 24 }
+                  // Width Constraints
+                  isCardStyle && { maxWidth: 480, width: '100%', alignSelf: 'center' },
+                  !isCardStyle && { width: '100%' },
+
+                  // Border Radius & Padding Logic
+                  isCardStyle
+                    ? { borderRadius: 24, padding: 32 } // Card Look
                     : {
                         borderTopLeftRadius: 32,
                         borderTopRightRadius: 32,
                         padding: 32,
                         paddingBottom: Math.max(insets.bottom + 20, 32),
-                      },
+                      }, // Sheet Look
                 ]}
               >
                 <Text style={styles.welcomeText}>Welcome Back!</Text>
                 <Text style={styles.promptText}>Please sign in to continue</Text>
 
-                {/* Input Fields */}
                 <View style={styles.inputGroup}>
                   <View style={styles.inputContainer}>
                     <Ionicons name="mail" size={20} color={colors.muted} style={styles.inputIcon} />
@@ -450,7 +461,6 @@ const LoginScreen = () => {
   );
 };
 
-// Sub-component for Social Button
 const SocialButton = ({ label, icon, onPress }: any) => (
   <TouchableOpacity style={styles.socialBtn} onPress={onPress}>
     <Image source={{ uri: icon }} style={styles.socialIcon} resizeMode="contain" />
@@ -460,31 +470,63 @@ const SocialButton = ({ label, icon, onPress }: any) => (
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  scrollContent: { flexGrow: 1 },
+  scrollBase: { flexGrow: 1 },
 
-  // Layout Containers
-  responsiveContainer: {
-    flex: 1,
-    width: '100%',
-  },
-  columnLayout: {
+  // --- SCROLL CONTENT LAYOUTS ---
+  columnContentContainer: {
     flexDirection: 'column',
+    justifyContent: 'space-between', // Pushes brand up, form down (Phone)
   },
-  rowLayout: {
+  centerContentContainer: {
+    flexDirection: 'column',
+    justifyContent: 'center', // Centers everything (Tablet Portrait)
+    paddingVertical: 40,
+  },
+  rowContentContainer: {
     flexDirection: 'row',
-    paddingHorizontal: 40, // Gutter for landscape
     alignItems: 'center',
-    maxWidth: 900,
-    alignSelf: 'center',
-  },
-  tabletLayout: {
-    maxWidth: 600,
-    alignSelf: 'center',
-    width: '100%',
+    justifyContent: 'center', // Centers split view (Landscape)
+    paddingVertical: 40,
+    paddingHorizontal: 60,
   },
 
-  // Brand Styles
+  // --- BRAND WRAPPERS ---
   brandWrapper: {},
+  brandWrapperStacked: {
+    alignItems: 'center',
+    marginTop: 60,
+    marginBottom: 40,
+    flexShrink: 0,
+  },
+  brandWrapperCenter: {
+    alignItems: 'center',
+    marginBottom: 40, // Space between logo and card on Tablet
+    flexShrink: 0,
+  },
+  brandWrapperSplit: {
+    flex: 1,
+    paddingRight: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // --- FORM WRAPPERS ---
+  formWrapper: { width: '100%' },
+  formWrapperBottom: {
+    flex: 1,
+    justifyContent: 'flex-end', // Pushes to bottom (Phone)
+  },
+  formWrapperCenter: {
+    alignItems: 'center',
+    justifyContent: 'center', // Centers in middle (Tablet)
+  },
+  formWrapperSplit: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // --- BRAND VISUALS ---
   brandContainer: { alignItems: 'center', flexDirection: 'column' },
   logoCircle: {
     width: 80,
@@ -500,10 +542,13 @@ const styles = StyleSheet.create({
     elevation: 10,
     marginBottom: 16,
   },
-  logoCircleSmall: { width: 60, height: 60, borderRadius: 16, marginBottom: 12 },
+  logoCircleSmall: { width: 70, height: 70, borderRadius: 20, marginBottom: 12 },
   logo: { width: 50, height: 50 },
+
   brandTitle: { fontSize: 28, fontWeight: '800', color: '#0F172A', textAlign: 'center' },
   brandTitleSmall: { fontSize: 24 },
+  brandTitleTablet: { fontSize: 32 },
+
   brandSubtitle: {
     fontSize: 16,
     color: '#64748B',
@@ -512,8 +557,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   brandSubtitleSmall: { fontSize: 14 },
+  brandSubtitleTablet: { fontSize: 18 },
 
-  // Form Card/Sheet
+  // --- FORM CARD ---
   formCard: {
     backgroundColor: '#fff',
     shadowColor: '#000',
@@ -525,7 +571,6 @@ const styles = StyleSheet.create({
   welcomeText: { fontSize: 24, fontWeight: '700', color: '#0F172A', marginBottom: 8 },
   promptText: { fontSize: 14, color: '#64748B', marginBottom: 24 },
 
-  // Inputs
   inputGroup: { gap: 16, marginBottom: 24 },
   inputContainer: {
     flexDirection: 'row',
@@ -541,7 +586,6 @@ const styles = StyleSheet.create({
   input: { flex: 1, height: '100%', color: '#0F172A', fontSize: 16, fontWeight: '500' },
   eyeBtn: { padding: 8 },
 
-  // Buttons
   primaryBtn: {
     backgroundColor: '#2563EB',
     height: 56,
@@ -560,7 +604,6 @@ const styles = StyleSheet.create({
   forgotBtn: { alignItems: 'center', marginTop: 16, marginBottom: 8 },
   forgotText: { color: '#64748B', fontSize: 14, fontWeight: '600' },
 
-  // Divider
   divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 24 },
   line: { flex: 1, height: 1, backgroundColor: '#E2E8F0' },
   dividerText: {
@@ -571,7 +614,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
 
-  // Social
   socialRow: { flexDirection: 'row', gap: 16, marginBottom: 32 },
   socialBtn: {
     flex: 1,
@@ -592,12 +634,10 @@ const styles = StyleSheet.create({
   socialIcon: { width: 20, height: 20, marginRight: 8 },
   socialBtnText: { fontSize: 14, fontWeight: '600', color: '#1E293B' },
 
-  // Footer
   footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
   footerText: { color: '#64748B', fontSize: 14 },
   linkText: { color: '#2563EB', fontWeight: '700', fontSize: 14 },
 
-  // Overlay
   overlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(255,255,255,0.95)',
