@@ -1,13 +1,5 @@
-import React, { useEffect, useState, useMemo } from 'react';
-import {
-  View,
-  StyleSheet,
-  LayoutChangeEvent,
-  Pressable,
-  Text,
-  Platform,
-  Dimensions,
-} from 'react-native';
+import React, { useEffect } from 'react';
+import { View, StyleSheet, Pressable, Text, useWindowDimensions } from 'react-native';
 import { createBottomTabNavigator, BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
@@ -20,28 +12,26 @@ import Animated, {
 } from 'react-native-reanimated';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
-// --- Placeholder Screens (Replace with your actual imports) ---
+// --- Placeholder Screens (Ensure these match your actual file structure) ---
 import HomeScreen from '../screens/HomeScreen';
 import HistoryScreen from '../screens/HistoryScreen';
 import MoreScreen from '../screens/MoreScreen';
 
 // --- Design System ---
 const colors = {
-  primary: '#000000', // Active Icon Color
-  background: '#F8FAFC', // Screen Background
-  card: '#FFFFFF', // Tab Bar Background
+  primary: '#2563EB', // Brand Blue (Matches Drawer)
+  background: '#F8FAFC',
+  card: '#FFFFFF',
   text: '#1E293B',
-  muted: '#94A3B8', // Inactive Icon Color
-  activePill: '#F1F5F9', // Soft background for active tab
+  muted: '#94A3B8',
+  activePill: '#EFF6FF', // Light Blue Tint
   shadow: '#000000',
+  border: '#E2E8F0',
 };
 
-const TAB_HEIGHT = 70; // Slightly taller for modern look
+const TAB_HEIGHT = 64; // Compact height
 const ICON_SIZE = 24;
-const SPRING_CONFIG = { damping: 15, stiffness: 120 };
-
-// --- Types ---
-type TabRouteName = 'Home' | 'History' | 'More';
+const SPRING_CONFIG = { damping: 15, stiffness: 100 };
 
 const Tab = createBottomTabNavigator();
 
@@ -63,40 +53,38 @@ const TabButton = ({
 }) => {
   const scale = useSharedValue(1);
 
-  // Derived animation values based on focus state
+  // Derived value for focus animation (0 to 1)
   const focusValue = useDerivedValue(() => {
-    return withTiming(isFocused ? 1 : 0, { duration: 250 });
+    return withTiming(isFocused ? 1 : 0, { duration: 200 });
   }, [isFocused]);
 
   const handlePressIn = () => {
-    scale.value = withSpring(0.9, { duration: 100 });
+    scale.value = withSpring(0.95);
   };
 
   const handlePressOut = () => {
-    scale.value = withSpring(1, { duration: 100 });
+    scale.value = withSpring(1);
     onPress();
   };
 
-  // Styles
+  // Icon Animation: Bounce + Color Transition logic (handled via props mostly)
   const animatedIconStyle = useAnimatedStyle(() => {
     return {
       transform: [
         { scale: scale.value },
-        // Subtle bounce up when focused
+        // Slight vertical nudge when active
         { translateY: interpolate(focusValue.value, [0, 1], [0, -2]) },
       ],
-      // Color interpolation logic is usually handled better via React state for Icons,
-      // but opacity works well for transitions
-      opacity: interpolate(focusValue.value, [0, 1], [0.6, 1]),
     };
   });
 
+  // Label Animation: Fade In + Slide Up
   const animatedLabelStyle = useAnimatedStyle(() => {
     return {
       opacity: focusValue.value,
       transform: [
         { translateY: interpolate(focusValue.value, [0, 1], [4, 0]) },
-        { scale: interpolate(focusValue.value, [0, 1], [0.8, 1]) },
+        { scale: interpolate(focusValue.value, [0, 1], [0.9, 1]) },
       ],
     };
   });
@@ -118,7 +106,9 @@ const TabButton = ({
       </Animated.View>
 
       <Animated.View style={animatedLabelStyle}>
-        <Text style={styles.label}>{label}</Text>
+        <Text style={[styles.label, { color: isFocused ? colors.primary : colors.muted }]}>
+          {label}
+        </Text>
       </Animated.View>
     </Pressable>
   );
@@ -129,14 +119,12 @@ const TabButton = ({
  */
 const CustomTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => {
   const insets = useSafeAreaInsets();
-  const { width: screenWidth } = Dimensions.get('window');
+  const { width: screenWidth } = useWindowDimensions();
 
-  // Calculate tab width based on screen width directly to avoid layout jumping
   const tabWidth = screenWidth / state.routes.length;
-
   const translateX = useSharedValue(0);
 
-  // Update position when index changes
+  // Sync indicator position
   useEffect(() => {
     translateX.value = withSpring(state.index * tabWidth, SPRING_CONFIG);
   }, [state.index, tabWidth]);
@@ -159,12 +147,12 @@ const CustomTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => 
           },
         ]}
       >
-        {/* Animated Pill Indicator */}
+        {/* Animated Background Pill */}
         <Animated.View style={[styles.activeBackgroundContainer, animatedIndicatorStyle]}>
           <View style={styles.activePill} />
         </Animated.View>
 
-        {/* Tab Buttons */}
+        {/* Tab Buttons Row */}
         <View style={styles.tabBarContent}>
           {state.routes.map((route, index) => {
             const { options } = descriptors[route.key];
@@ -182,14 +170,14 @@ const CustomTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => 
               }
             };
 
-            // Icon Logic
+            // Icon Logic (Filled vs Outline)
             let iconName: keyof typeof MaterialCommunityIcons.glyphMap = 'circle';
             if (route.name === 'Home') {
-              iconName = isFocused ? 'home-variant' : 'home-variant-outline';
+              iconName = isFocused ? 'home' : 'home-outline';
             } else if (route.name === 'History') {
               iconName = isFocused ? 'clock' : 'clock-outline';
             } else if (route.name === 'More') {
-              iconName = isFocused ? 'dots-grid' : 'dots-grid'; // Modern "Menu" icon
+              iconName = 'dots-horizontal'; // Menu icon
             }
 
             return (
@@ -217,8 +205,7 @@ const BottomTabNavigator = () => {
         tabBar={(props) => <CustomTabBar {...props} />}
         screenOptions={{
           headerShown: false,
-          // Optimization: Don't unmount inactive screens to keep state
-          tabBarHideOnKeyboard: true,
+          tabBarHideOnKeyboard: true, // Hide on keyboard open
         }}
       >
         <Tab.Screen name="Home" component={HomeScreen} options={{ tabBarLabel: 'Home' }} />
@@ -242,31 +229,28 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  // Wrapper allows for absolute positioning/shadows without clipping
   tabBarWrapper: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
+    elevation: 0, // Remove default Android shadow to use custom one
     zIndex: 100,
   },
   tabBarContainer: {
     backgroundColor: colors.card,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
 
-    // --- Modern Rounded Top ---
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-
-    // --- High Quality Shadow ---
+    // Smooth Shadow
     shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 16,
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
     elevation: 10,
 
     borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.03)', // Subtle border for definition
-
+    borderTopColor: colors.border,
     justifyContent: 'flex-start',
   },
   tabBarContent: {
@@ -278,7 +262,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     height: '100%',
-    zIndex: 2, // Ensure clicks go above background
+    zIndex: 2,
   },
   iconContainer: {
     marginBottom: 4,
@@ -287,11 +271,10 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 11,
-    fontWeight: '700',
-    color: colors.primary,
+    fontWeight: '600',
     marginTop: 2,
   },
-  // The animated container that slides left/right
+  // Animated Pill Container
   activeBackgroundContainer: {
     position: 'absolute',
     top: 0,
@@ -300,12 +283,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // The actual visual "Pill"
   activePill: {
-    width: 64, // Fixed width for the pill looks cleaner than percentage
-    height: 44,
+    width: 50,
+    height: 50,
     backgroundColor: colors.activePill,
-    borderRadius: 16,
-    marginBottom: 10, // Push slightly up from bottom
+    borderRadius: 25,
+    marginBottom: 10, // Center it visually relative to icon
   },
 });

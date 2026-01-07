@@ -93,8 +93,6 @@ const SettingsScreen = () => {
   const isTablet = width >= 768;
   const contentWidth = Math.min(width - (isTablet ? spacing(8) : spacing(4)), 600);
 
-  // Sync banner is a floating overlay now; no per-screen layout adjustments needed.
-
   // Animations
   const animValues = useRef([...Array(6)].map(() => new Animated.Value(0))).current;
 
@@ -163,8 +161,6 @@ const SettingsScreen = () => {
       return;
     }
 
-    // In release APK builds, NEON_URL may be omitted (EXPO_ENABLE_NEON_CLIENT=0).
-    // Fail fast with a clear message instead of a generic sync failure.
     try {
       const h = getNeonHealth();
       if (!h.isConfigured) {
@@ -206,7 +202,7 @@ const SettingsScreen = () => {
           showToast("You're up to date.");
           return;
         }
-        // Could be offline or an internal failure
+
         const state = await NetInfo.fetch();
         if (!state.isConnected) {
           showToast('No network connection. Connect to the internet and try again.', 'error');
@@ -238,8 +234,6 @@ const SettingsScreen = () => {
               },
               navigateToAuth: () => {
                 try {
-                  // Force navigation reset (root)
-                  // (This is a hard boundary; prevent back navigation)
                   const { resetRoot } = require('../utils/rootNavigation');
                   resetRoot({ index: 0, routes: [{ name: 'Auth' }] });
                 } catch (e) {

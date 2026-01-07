@@ -1,39 +1,42 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   Animated,
-  Dimensions,
   StatusBar,
   ScrollView,
   Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors } from '../utils/design';
 
-const { width, height } = Dimensions.get('window');
-
-// Dynamic sizing for responsiveness
-const ICON_SIZE = Math.min(width * 0.35, 140); // Max 140px, but scales down
-const SPACING_VERTICAL = height > 700 ? 32 : 16; // Tighter spacing on small screens
-
 const AccountDeletedScreen = () => {
   const navigation = useNavigation<any>();
+  const { width, height } = useWindowDimensions();
 
-  // Animation Values
+  // --- RESPONSIVE VALUES ---
+  const isLandscape = width > height;
+  const isTablet = width >= 600;
+
+  // Calculate dynamic sizes based on current screen dimensions
+  const iconSize = Math.min(width * 0.3, 120);
+  const verticalSpacing = height < 700 ? 24 : 40;
+
+  // --- ANIMATIONS ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
+  const scaleAnim = useRef(new Animated.Value(0.8)).current;
 
   useEffect(() => {
-    // Start entrance animation
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 600,
+        duration: 800,
         useNativeDriver: true,
       }),
       Animated.spring(slideAnim, {
@@ -42,54 +45,42 @@ const AccountDeletedScreen = () => {
         tension: 40,
         useNativeDriver: true,
       }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 6,
+        useNativeDriver: true,
+      }),
     ]).start();
-  }, [fadeAnim, slideAnim]);
+  }, []);
 
-  const handleCreateAccount = async () => {
-    // Attempt global reset if utility exists
-    try {
-      // Dynamic import is valid, removed @ts-expect-error
-      const { resetRoot } = await import('../utils/rootNavigation');
-      resetRoot({
+  // --- NAVIGATION HANDLERS ---
+
+  // Helper to safely reset navigation stack to a specific route
+  const safeReset = useCallback(
+    async (targetScreen: 'Register' | 'Login') => {
+      // 1. Try importing the root navigation helper if available
+      try {
+        const { resetRoot } = await import('../utils/rootNavigation');
+        resetRoot({
+          index: 0,
+          routes: [{ name: 'Auth', state: { routes: [{ name: targetScreen }] } }],
+        });
+        return;
+      } catch (e) {
+        // ignore
+      }
+
+      // 2. Fallback to standard navigation reset
+      navigation.reset({
         index: 0,
-        routes: [{ name: 'Auth', state: { routes: [{ name: 'Register' }] } }],
+        routes: [{ name: 'Auth', params: { screen: targetScreen } }],
       });
-      return;
-    } catch (e) {
-      // Ignore module not found
-    }
-
-    // Fallback standard navigation reset
-    navigation.reset({
-      index: 1,
-      routes: [
-        { name: 'Auth', params: { screen: 'Login' } },
-        { name: 'Auth', params: { screen: 'Register' } },
-      ],
-    });
-  };
-
-  const handleSignIn = async () => {
-    try {
-      // Dynamic import is valid, removed @ts-expect-error
-      const { resetRoot } = await import('../utils/rootNavigation');
-      resetRoot({
-        index: 0,
-        routes: [{ name: 'Auth', state: { routes: [{ name: 'Login' }] } }],
-      });
-      return;
-    } catch (e) {
-      // Ignore module not found
-    }
-
-    navigation.reset({
-      index: 0,
-      routes: [{ name: 'Auth', params: { screen: 'Login' } }],
-    });
-  };
+    },
+    [navigation]
+  );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
       <ScrollView
@@ -98,20 +89,38 @@ const AccountDeletedScreen = () => {
         bounces={false}
       >
         <Animated.View
-          style={[styles.content, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
+          style={[
+            styles.container,
+            {
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }],
+              // Constrain width for tablets/landscape
+              maxWidth: isTablet || isLandscape ? 500 : '100%',
+            },
+          ]}
         >
-          {/* Visual Icon */}
-          <View
+          {/* 1. Icon Section */}
+          <Animated.View
             style={[
               styles.iconCircle,
-              { width: ICON_SIZE, height: ICON_SIZE, borderRadius: ICON_SIZE / 2 },
+              {
+                width: iconSize,
+                height: iconSize,
+                borderRadius: iconSize / 2,
+                marginBottom: verticalSpacing,
+                transform: [{ scale: scaleAnim }],
+              },
             ]}
           >
-            <MaterialCommunityIcons name="heart-broken" size={ICON_SIZE * 0.5} color="#EF4444" />
-          </View>
+            <MaterialCommunityIcons
+              name="heart-broken"
+              size={iconSize * 0.5}
+              color={colors.accentRed || '#EF4444'}
+            />
+          </Animated.View>
 
-          {/* Text Content */}
-          <View style={styles.textContainer}>
+          {/* 2. Text Content */}
+          <View style={[styles.textContainer, { marginBottom: verticalSpacing * 1.5 }]}>
             <Text style={styles.title}>So sad to see you go...</Text>
             <Text style={styles.subtitle}>
               Your account and all local data have been permanently deleted. We hope to see you
@@ -119,18 +128,22 @@ const AccountDeletedScreen = () => {
             </Text>
           </View>
 
-          {/* Action Buttons */}
+          {/* 3. Actions */}
           <View style={styles.actions}>
             <TouchableOpacity
               style={styles.primaryButton}
-              onPress={handleCreateAccount}
+              onPress={() => safeReset('Register')}
               activeOpacity={0.8}
             >
               <Text style={styles.primaryText}>Create New Account</Text>
               <MaterialCommunityIcons name="arrow-right" size={20} color="#fff" />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.ghostButton} onPress={handleSignIn} activeOpacity={0.7}>
+            <TouchableOpacity
+              style={styles.ghostButton}
+              onPress={() => safeReset('Login')}
+              activeOpacity={0.7}
+            >
               <Text style={styles.ghostText}>Sign In to Existing Account</Text>
             </TouchableOpacity>
           </View>
@@ -141,21 +154,19 @@ const AccountDeletedScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
     backgroundColor: '#FFFFFF',
   },
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    paddingVertical: 20,
+    paddingVertical: 40,
+    paddingHorizontal: 24,
   },
-  content: {
+  container: {
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 24, // Responsive padding
     width: '100%',
-    maxWidth: 600, // Tablet constraint
     alignSelf: 'center',
   },
 
@@ -164,7 +175,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF2F2', // Soft red background
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: SPACING_VERTICAL,
     borderWidth: 1,
     borderColor: '#FEE2E2',
     // Soft shadow
@@ -177,11 +187,11 @@ const styles = StyleSheet.create({
 
   /* Typography */
   textContainer: {
-    marginBottom: SPACING_VERTICAL * 1.5,
     alignItems: 'center',
+    width: '100%',
   },
   title: {
-    fontSize: width < 380 ? 20 : 24, // Responsive font size
+    fontSize: 26,
     fontWeight: '800',
     color: '#1F2937',
     marginBottom: 12,
@@ -189,7 +199,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
   subtitle: {
-    fontSize: width < 380 ? 14 : 16,
+    fontSize: 16,
     color: '#6B7280',
     textAlign: 'center',
     lineHeight: 24,
@@ -200,7 +210,6 @@ const styles = StyleSheet.create({
   actions: {
     width: '100%',
     gap: 16,
-    paddingBottom: Platform.OS === 'android' ? 20 : 0,
   },
   primaryButton: {
     backgroundColor: colors.primary || '#2563EB',

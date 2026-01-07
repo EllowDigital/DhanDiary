@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -26,7 +26,6 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import { getSession } from '../db/session';
 import { subscribeSession } from '../utils/sessionEvents';
 import { getBiometricEnabled, setBiometricEnabled } from '../utils/biometricSettings';
-import { performHardSignOut } from '../services/signOutFlow';
 import { useToast } from '../context/ToastContext';
 import { colors } from '../utils/design';
 import ScreenHeader from '../components/ScreenHeader';
@@ -129,7 +128,6 @@ const ExpandableCard = ({
 // --- MAIN SCREEN ---
 const AccountManagementScreen = () => {
   const { user, isLoaded } = useUser();
-  const { signOut: clerkSignOut } = useAuth();
   const [fallbackSession, setFallbackSession] = useState<any>(null);
   const navigation = useNavigation<any>();
   const { showToast } = useToast();
@@ -278,7 +276,7 @@ const AccountManagementScreen = () => {
     if (activeCard !== id) Keyboard.dismiss();
   };
 
-  const handlePasswordSave = useCallback(async () => {
+  const handlePasswordSave = async () => {
     if (!newPass || !confirmPass)
       return Alert.alert('Missing Fields', 'Please fill in the new password fields.');
     if (newPass !== confirmPass) return Alert.alert('Mismatch', 'New passwords do not match');
@@ -313,9 +311,9 @@ const AccountManagementScreen = () => {
     } finally {
       setSavingPasswordState(false);
     }
-  }, [curPass, newPass, confirmPass, hasPassword, user]);
+  };
 
-  const handleDelete = useCallback(async () => {
+  const handleDelete = async () => {
     Alert.alert(
       'Delete Account?',
       'This action is irreversible. All your data will be permanently wiped.',
@@ -400,7 +398,7 @@ const AccountManagementScreen = () => {
         },
       ]
     );
-  }, [user]);
+  };
 
   if (!isLoaded) {
     return (

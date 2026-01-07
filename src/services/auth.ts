@@ -326,13 +326,38 @@ export const logout = async (opts?: {
     }
     await safeRun(async () => {
       try {
-        const mod = require('@clerk/clerk-expo');
-        const clerk = (mod && (mod.clerk || mod.default || mod)) as any;
+        const mod = require('@clerk/clerk-expo') as
+          | {
+              clerk?: { signOut?: () => Promise<void> | void };
+              default?: { signOut?: () => Promise<void> | void };
+              signOut?: () => Promise<void> | void;
+            }
+          | null
+          | undefined;
+
+        let clerk: { signOut?: () => Promise<void> | void } | undefined;
+
+        if (mod) {
+          if ('clerk' in mod && mod.clerk) {
+            clerk = mod.clerk;
+          } else if ('default' in mod && mod.default) {
+            clerk = mod.default;
+          } else {
+            clerk = mod;
+          }
+        }
+
         if (clerk && typeof clerk.signOut === 'function') {
           await clerk.signOut();
+        } else if (typeof __DEV__ !== 'undefined' && __DEV__) {
+          console.warn(
+            '[Auth] logout(): Unable to locate clerk.signOut on @clerk/clerk-expo fallback module'
+          );
         }
       } catch (e) {
-        // ignore
+        if (typeof __DEV__ !== 'undefined' && __DEV__) {
+          console.warn('[Auth] logout(): Clerk fallback sign-out failed', e);
+        }
       }
     });
   }

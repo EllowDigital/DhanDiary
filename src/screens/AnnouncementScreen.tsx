@@ -1,5 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Animated, Pressable, StatusBar, Dimensions } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Animated,
+  Pressable,
+  StatusBar,
+  useWindowDimensions,
+  Easing,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useNavigation } from '@react-navigation/native';
@@ -16,13 +25,13 @@ import {
   getCurrentAnnouncementAsync,
 } from '../announcements/announcementState';
 
-const ENTRY_DURATION = 500;
-const EXIT_DURATION = 300;
-const { width } = Dimensions.get('window');
+const ENTRY_DURATION = 600;
+const EXIT_DURATION = 400;
 
 const AnnouncementScreen = () => {
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
 
   const [readyToShow, setReadyToShow] = useState(false);
   const [isDismissing, setIsDismissing] = useState(false);
@@ -31,29 +40,13 @@ const AnnouncementScreen = () => {
 
   // Animation Values
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.9)).current;
-  const slideAnim = useRef(new Animated.Value(20)).current;
+  const scaleAnim = useRef(new Animated.Value(0.95)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
 
-  const autoHideMs = useMemo(() => {
-    if (!announcement) return null;
-    if (announcement.type === 'critical') return null;
-
-    const v = announcement.autoHideMs;
-    return typeof v === 'number' && v > 0 ? v : null;
-  }, [announcement]);
-
-  const computeAutoHideMs = (a: AnnouncementConfig | null): number | null => {
-    if (!a) return null;
-    if (a.type === 'critical') return null;
-
-    const v = a.autoHideMs;
-    return typeof v === 'number' && v > 0 ? v : null;
-  };
-
+  // --- HELPERS ---
   const autoHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const goToMain = () => {
-    // Reset navigation stack to prevent going back to this screen
     navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
   };
 
@@ -66,15 +59,20 @@ const AnnouncementScreen = () => {
       autoHideTimer.current = null;
     }
 
-    // Exit Animation
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 0,
         duration: EXIT_DURATION,
         useNativeDriver: true,
+        easing: Easing.in(Easing.cubic),
       }),
       Animated.timing(scaleAnim, {
-        toValue: 0.95,
+        toValue: 0.9,
+        duration: EXIT_DURATION,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 20,
         duration: EXIT_DURATION,
         useNativeDriver: true,
       }),
@@ -89,25 +87,21 @@ const AnnouncementScreen = () => {
     setIsApplyingUpdate(true);
 
     try {
-      // Mark as seen so it doesn't re-show if reload fails.
       await markCurrentAnnouncementSeen();
-
-      // Fetch and reload into the new update.
       if (Updates.isEnabled) {
         await Updates.fetchUpdateAsync();
         await Updates.reloadAsync();
         return;
       }
     } catch (e) {
-      // Fall through to proceed into the app.
+      // Fallback
     } finally {
       setIsApplyingUpdate(false);
     }
-
-    // If updates are disabled or fetch/reload fails, continue to app.
     goToMain();
   };
 
+  // --- LIFECYCLE ---
   useEffect(() => {
     let mounted = true;
 
@@ -137,26 +131,27 @@ const AnnouncementScreen = () => {
           toValue: 1,
           duration: ENTRY_DURATION,
           useNativeDriver: true,
+          easing: Easing.out(Easing.cubic),
         }),
         Animated.spring(scaleAnim, {
           toValue: 1,
-          friction: 8,
+          friction: 7,
           tension: 40,
           useNativeDriver: true,
         }),
         Animated.spring(slideAnim, {
           toValue: 0,
           friction: 8,
-          tension: 40,
+          tension: 50,
           useNativeDriver: true,
         }),
       ]).start();
 
-      const hideAfterMs = computeAutoHideMs(current);
-      if (hideAfterMs) {
+      // Auto Hide Logic
+      if (current.autoHideMs && current.type !== 'critical') {
         autoHideTimer.current = setTimeout(() => {
           dismiss();
-        }, ENTRY_DURATION + hideAfterMs);
+        }, ENTRY_DURATION + current.autoHideMs);
       }
     };
 
@@ -164,18 +159,15 @@ const AnnouncementScreen = () => {
 
     return () => {
       mounted = false;
-      if (autoHideTimer.current) {
-        clearTimeout(autoHideTimer.current);
-      }
+      if (autoHideTimer.current) clearTimeout(autoHideTimer.current);
     };
   }, []);
 
-  if (!readyToShow) return null;
-
-  if (!announcement) return null;
+  if (!readyToShow || !announcement) return null;
 
   // Dynamic Styles
   const accentColor = announcement.accentColor || colors.primary || '#2563EB';
+  const isUpdate = announcement.id === OTA_UPDATE_ANNOUNCEMENT.id;
 
   return (
     <View style={styles.container}>
@@ -190,8 +182,9 @@ const AnnouncementScreen = () => {
           {
             opacity: fadeAnim,
             transform: [{ scale: scaleAnim }, { translateY: slideAnim }],
-            marginTop: insets.top, // Prevent overlapping status bar
+            marginTop: insets.top,
             marginBottom: insets.bottom,
+            width: Math.min(width * 0.9, 400), // Responsive width constraint
           },
         ]}
       >
@@ -217,7 +210,7 @@ const AnnouncementScreen = () => {
 
           {/* Action Button */}
           <Pressable
-            onPress={announcement.id === OTA_UPDATE_ANNOUNCEMENT.id ? applyOtaUpdate : dismiss}
+            onPress={isUpdate ? applyOtaUpdate : dismiss}
             style={({ pressed }) => [
               styles.button,
               {
@@ -229,18 +222,14 @@ const AnnouncementScreen = () => {
             disabled={isApplyingUpdate}
           >
             <Text style={styles.buttonText}>
-              {announcement.id === OTA_UPDATE_ANNOUNCEMENT.id
-                ? isApplyingUpdate
-                  ? 'Updating...'
-                  : 'Update Now'
-                : 'Got it!'}
+              {isUpdate ? (isApplyingUpdate ? 'Updating...' : 'Update Now') : 'Got it!'}
             </Text>
-            <MaterialIcon name="arrow-forward" size={18} color="#FFF" />
+            {!isApplyingUpdate && <MaterialIcon name="arrow-forward" size={18} color="#FFF" />}
           </Pressable>
 
-          {autoHideMs && (
+          {announcement.autoHideMs && !isUpdate && (
             <Text style={styles.autoCloseText}>
-              Closing automatically in {Math.ceil(autoHideMs / 1000)}s...
+              Closing automatically in {Math.ceil(announcement.autoHideMs / 1000)}s...
             </Text>
           )}
         </View>
@@ -254,22 +243,21 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.4)', // Dimmed background
+    backgroundColor: 'rgba(0, 0, 0, 0.5)', // Dimmed background
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
   },
   card: {
-    width: Math.min(width * 0.9, 400), // Responsive width
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: 24,
     overflow: 'hidden',
-    // Shadow
+    // Premium Shadow
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.3,
+    shadowRadius: 24,
+    elevation: 16,
   },
   accentLine: {
     height: 6,
@@ -281,7 +269,7 @@ const styles = StyleSheet.create({
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
   },
   iconContainer: {
     width: 56,
@@ -296,35 +284,36 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#9CA3AF', // Gray-400
-    letterSpacing: 1,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
     marginBottom: 4,
   },
   titleText: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '800',
-    color: '#1F2937', // Gray-800
-    lineHeight: 26,
+    color: '#111827', // Gray-900
+    lineHeight: 28,
   },
   messageText: {
     fontSize: 16,
     color: '#4B5563', // Gray-600
     lineHeight: 24,
-    marginBottom: 24,
+    marginBottom: 32,
   },
   button: {
     flexDirection: 'row',
-    height: 50,
-    borderRadius: 12,
+    height: 56,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
     width: '100%',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.15,
     shadowRadius: 8,
-    elevation: 2,
+    elevation: 4,
   },
   buttonText: {
     color: '#FFFFFF',
@@ -337,6 +326,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 12,
     color: '#9CA3AF',
+    fontWeight: '500',
   },
 });
 

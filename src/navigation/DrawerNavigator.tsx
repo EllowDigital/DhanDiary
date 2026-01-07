@@ -1,5 +1,5 @@
-import React from 'react';
-import { useWindowDimensions, Platform, View } from 'react-native';
+import React, { useMemo } from 'react';
+import { useWindowDimensions, View, Platform } from 'react-native';
 import { createDrawerNavigator, DrawerNavigationOptions } from '@react-navigation/drawer';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
@@ -19,8 +19,8 @@ import EulaScreen from '../screens/EulaScreen';
 
 // --- CUSTOM COMPONENTS ---
 import CustomDrawerContent from './CustomDrawerContent';
-import { colors } from '../utils/design';
 import SyncStatusBanner from '../components/SyncStatusBanner';
+import { colors } from '../utils/design';
 
 // --- TYPES ---
 export type DrawerParamList = {
@@ -42,103 +42,118 @@ const Drawer = createDrawerNavigator<DrawerParamList>();
 
 const DrawerNavigator = () => {
   const { width } = useWindowDimensions();
-
   const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
 
   // --- RESPONSIVE CONFIG ---
-  // Tablet breakpoint usually around 768px
-  const isLargeScreen = width >= 768;
+  const isTablet = width >= 768;
 
-  // On large screens, show drawer permanently on the left.
-  // On phones, it slides over as a modal.
-  const drawerType = isLargeScreen ? 'permanent' : 'front';
+  // Calculate Drawer Width:
+  // Tablets: Fixed 320px for a "sidebar" feel
+  // Phones: 78% of screen width, maxing out at 300px
+  const drawerWidth = isTablet ? 320 : Math.min(width * 0.78, 300);
 
-  // Cap width so it doesn't look ridiculous on landscape tablets
-  const drawerWidth = Math.min(280, width * 0.75);
+  // Memoize options to prevent re-renders
+  const screenOptions: DrawerNavigationOptions = useMemo(
+    () => ({
+      headerShown: false,
+      drawerType: isTablet ? 'front' : 'front', // 'slide' or 'permanent' can be used for tablets if preferred
 
-  const screenOptions: DrawerNavigationOptions = {
-    headerShown: false, // We usually handle headers inside the screens/stacks
+      // Layout Styles
+      drawerStyle: {
+        backgroundColor: colors.background || '#F8FAFC',
+        width: drawerWidth,
+        borderTopRightRadius: isTablet ? 0 : 20, // Rounded corner on mobile only
+        borderBottomRightRadius: isTablet ? 0 : 20,
+      },
 
-    // Layout
-    drawerType,
-    drawerStyle: {
-      backgroundColor: colors.background || '#F8FAFC',
-      width: drawerWidth,
-      borderRightWidth: isLargeScreen ? 1 : 0,
-      borderRightColor: 'rgba(0,0,0,0.06)',
-    },
+      // Item Styling
+      drawerActiveTintColor: colors.primary || '#2563EB',
+      drawerInactiveTintColor: colors.text || '#334155',
+      drawerActiveBackgroundColor: colors.primarySoft || '#EFF6FF', // Very light blue
 
-    // Item Styling
-    drawerActiveTintColor: colors.primary || '#2563EB',
-    drawerInactiveTintColor: colors.text || '#1E293B',
-    drawerActiveBackgroundColor: colors.primarySoft || 'rgba(37, 99, 235, 0.1)',
+      drawerItemStyle: {
+        borderRadius: 12,
+        paddingHorizontal: 8,
+        marginVertical: 4,
+        marginHorizontal: 12,
+      },
 
-    drawerLabelStyle: {
-      fontSize: 14,
-      fontWeight: '600',
-      marginLeft: -10,
-    },
+      drawerLabelStyle: {
+        fontSize: 15,
+        fontWeight: '600',
+        marginLeft: -12, // Pull text closer to icon
+      },
 
-    drawerItemStyle: {
-      borderRadius: 12,
-      paddingHorizontal: 8,
-      marginVertical: 4,
-    },
-
-    // Overlay (Mobile 'front' mode only)
-    overlayColor: 'rgba(0,0,0,0.5)',
-    swipeEdgeWidth: width * 0.25, // Wider grab area for better UX
-    swipeEnabled: !isLargeScreen, // Disable swipe on desktop/tablet permanent mode
-  };
+      // Overlay & Interaction
+      overlayColor: 'rgba(15, 23, 42, 0.4)', // Slate-900 with opacity
+      swipeEdgeWidth: 100,
+      swipeEnabled: true,
+    }),
+    [drawerWidth, isTablet]
+  );
 
   return (
     <View style={{ flex: 1 }}>
-      {/* Floating banner overlay (does not shift layout) */}
-      {!isDrawerOpen ? <SyncStatusBanner /> : null}
+      {/* Global Sync Banner 
+        Hidden when drawer is open to prevent visual clutter/overlap 
+      */}
+      {!isDrawerOpen && <SyncStatusBanner />}
 
       <Drawer.Navigator
         drawerContent={(props) => <CustomDrawerContent {...props} />}
         screenOptions={screenOptions}
-        screenListeners={
-          {
-            drawerOpen: () => setIsDrawerOpen(true),
-            drawerClose: () => setIsDrawerOpen(false),
-          } as any
-        }
+        screenListeners={{
+          state: (e) => {
+            // Check strictly if drawer is open to toggle banner visibility
+            try {
+              const state = (e.data as any)?.state;
+              const history = state?.history || [];
+              const isOpen =
+                Array.isArray(history) && history.some((it: any) => it?.type === 'drawer');
+              setIsDrawerOpen(Boolean(isOpen));
+            } catch (err) {
+              // If we can't determine state, keep banner visible.
+              setIsDrawerOpen(false);
+            }
+          },
+        }}
         initialRouteName="Dashboard"
       >
-        {/* --- 1. MAIN DASHBOARD --- */}
+        {/* =============================================
+            SECTION 1: CORE NAVIGATION
+        ============================================= */}
         <Drawer.Screen
           name="Dashboard"
           component={BottomTabNavigator}
           options={{
-            title: 'Home',
+            title: 'Overview',
             drawerIcon: ({ color, size }) => (
-              <MaterialCommunityIcons name="home-variant-outline" color={color} size={22} />
+              <MaterialCommunityIcons name="view-dashboard-outline" color={color} size={24} />
             ),
           }}
         />
 
-        {/* --- 2. CORE ACTIONS --- */}
         <Drawer.Screen
           name="AddEntry"
           component={AddEntryScreen}
           options={{
             title: 'New Transaction',
             drawerIcon: ({ color, size }) => (
-              <MaterialCommunityIcons name="plus-circle-outline" color={color} size={22} />
+              <MaterialCommunityIcons name="plus-circle-outline" color={color} size={24} />
             ),
           }}
         />
 
-        {/* --- 3. CATEGORIES & LISTS --- */}
+        {/* =============================================
+            SECTION 2: FINANCE MANAGEMENT
+        ============================================= */}
         <Drawer.Screen
           name="Income"
           component={CashInList}
           options={{
             title: 'Income',
             drawerIcon: ({ color, size }) => (
-              <MaterialCommunityIcons name="arrow-down-bold-box-outline" color={color} size={22} />
+              <MaterialCommunityIcons name="arrow-down-circle-outline" color={color} size={24} />
             ),
           }}
         />
@@ -149,42 +164,43 @@ const DrawerNavigator = () => {
           options={{
             title: 'Expenses',
             drawerIcon: ({ color, size }) => (
-              <MaterialCommunityIcons name="arrow-up-bold-box-outline" color={color} size={22} />
+              <MaterialCommunityIcons name="arrow-up-circle-outline" color={color} size={24} />
             ),
           }}
         />
 
-        {/* --- 4. DATA & ANALYTICS --- */}
         <Drawer.Screen
           name="Analytics"
           component={StatsScreen}
           options={{
-            title: 'Analytics & Charts',
+            title: 'Analytics',
             drawerIcon: ({ color, size }) => (
-              <MaterialCommunityIcons name="chart-bar" color={color} size={22} />
+              <MaterialCommunityIcons name="chart-box-outline" color={color} size={24} />
             ),
           }}
         />
 
+        {/* =============================================
+            SECTION 3: DATA & SETTINGS
+        ============================================= */}
         <Drawer.Screen
           name="Export"
           component={ExportScreen}
           options={{
             title: 'Export Data',
             drawerIcon: ({ color, size }) => (
-              <MaterialCommunityIcons name="file-export-outline" color={color} size={22} />
+              <MaterialCommunityIcons name="file-download-outline" color={color} size={24} />
             ),
           }}
         />
 
-        {/* --- 5. USER & SETTINGS --- */}
         <Drawer.Screen
           name="Account"
           component={AccountManagementScreen}
           options={{
             title: 'My Profile',
             drawerIcon: ({ color, size }) => (
-              <MaterialCommunityIcons name="account-circle-outline" color={color} size={22} />
+              <MaterialCommunityIcons name="account-outline" color={color} size={24} />
             ),
           }}
         />
@@ -193,9 +209,9 @@ const DrawerNavigator = () => {
           name="Settings"
           component={SettingsScreen}
           options={{
-            title: 'App Settings',
+            title: 'Settings',
             drawerIcon: ({ color, size }) => (
-              <MaterialCommunityIcons name="cog-outline" color={color} size={22} />
+              <MaterialCommunityIcons name="cog-outline" color={color} size={24} />
             ),
           }}
         />
@@ -204,39 +220,31 @@ const DrawerNavigator = () => {
           name="About"
           component={AboutScreen}
           options={{
-            title: 'About App',
+            title: 'About',
             drawerIcon: ({ color, size }) => (
-              <MaterialCommunityIcons name="information-outline" color={color} size={22} />
+              <MaterialCommunityIcons name="information-outline" color={color} size={24} />
             ),
           }}
         />
 
-        {/* --- HIDDEN SCREENS (Accessible via navigation, hidden from menu) --- */}
+        {/* =============================================
+            SECTION 4: HIDDEN SCREENS (Legal)
+            These are accessible via navigation but hidden from the menu
+        ============================================= */}
         <Drawer.Screen
           name="PrivacyPolicy"
           component={PrivacyPolicyScreen}
-          options={{
-            drawerItemStyle: { display: 'none' },
-            title: 'Privacy Policy',
-          }}
+          options={{ drawerItemStyle: { display: 'none' }, title: 'Privacy Policy' }}
         />
-
         <Drawer.Screen
           name="Terms"
           component={TermsScreen}
-          options={{
-            drawerItemStyle: { display: 'none' },
-            title: 'Terms of Use',
-          }}
+          options={{ drawerItemStyle: { display: 'none' }, title: 'Terms of Use' }}
         />
-
         <Drawer.Screen
           name="Eula"
           component={EulaScreen}
-          options={{
-            drawerItemStyle: { display: 'none' },
-            title: 'EULA',
-          }}
+          options={{ drawerItemStyle: { display: 'none' }, title: 'EULA' }}
         />
       </Drawer.Navigator>
     </View>

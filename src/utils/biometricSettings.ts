@@ -6,8 +6,10 @@ const BIOMETRIC_KEYS_INDEX = 'BIOMETRIC_KEYS_V1';
 
 // Serialize updates to the biometric keys index to avoid concurrent read-modify-write races.
 let biometricKeysIndexQueue: Promise<void> = Promise.resolve();
+let biometricKeysIndexInFlight = 0;
 
 const addBiometricKeyToIndex = async (key: string) => {
+  biometricKeysIndexInFlight += 1;
   biometricKeysIndexQueue = biometricKeysIndexQueue
     .then(async () => {
       try {
@@ -22,6 +24,13 @@ const addBiometricKeyToIndex = async (key: string) => {
     })
     .catch(() => {
       // keep chain intact
+    })
+    .finally(() => {
+      biometricKeysIndexInFlight -= 1;
+      // Break the long promise chain once the queue drains.
+      if (biometricKeysIndexInFlight === 0) {
+        biometricKeysIndexQueue = Promise.resolve();
+      }
     });
 
   return biometricKeysIndexQueue;

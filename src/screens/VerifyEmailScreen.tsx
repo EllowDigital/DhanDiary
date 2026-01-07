@@ -13,27 +13,34 @@ import {
   Dimensions,
   Animated,
   Easing,
+  useWindowDimensions,
+  ScrollView,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSignIn, useSignUp } from '@clerk/clerk-expo';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-// Sync banner is a floating overlay now; no per-screen layout adjustments needed.
 import NetInfo from '@react-native-community/netinfo';
 import OfflineNotice from '../components/OfflineNotice';
 
 // --- CUSTOM IMPORTS ---
-// Ensure these point to your actual file paths
 import { syncClerkUserToNeon } from '../services/clerkUserSync';
 import { saveSession } from '../db/session';
 import { colors } from '../utils/design';
 
-const { height } = Dimensions.get('window');
-
 const VerifyEmailScreen = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
+  const insets = useSafeAreaInsets();
+
+  // --- RESPONSIVE LAYOUT LOGIC ---
+  const { width, height } = useWindowDimensions();
+  const isLandscape = width > height;
+  const isTablet = width >= 600;
+
+  // Card Mode for Tablet or Landscape
+  const isCardLayout = isTablet || isLandscape;
 
   // Params
   const params = route?.params || {};
@@ -80,27 +87,17 @@ const VerifyEmailScreen = () => {
   }, []);
 
   // --- SMART PREPARE LOGIC ---
-  // Detects if we need to trigger a code send on arrival
   const prepareVerification = async () => {
-    if (mode === 'signup') {
-      // Signup usually prepares in the previous screen.
-      // We do nothing here to avoid double-sending, unless user hits Resend.
-      return;
-    }
+    if (mode === 'signup') return;
 
     if (mode === 'signin') {
       if (!signInLoaded || !signIn) return;
 
       try {
         const factorStrategy = 'email_code';
-
-        // CASE 1: 2FA (Password entered previously, now needs email code)
         if (signIn.status === 'needs_second_factor') {
           await signIn.prepareSecondFactor({ strategy: factorStrategy });
-        }
-        // CASE 2: First Factor (Passwordless or forced verification)
-        else if (signIn.status === 'needs_first_factor') {
-          // Robustly find the correct email ID to avoid "strategy not allowed" errors
+        } else if (signIn.status === 'needs_first_factor') {
           const factor = signIn.supportedFirstFactors?.find(
             (f: any) => f.strategy === 'email_code' && f.safeIdentifier === email
           );
@@ -114,22 +111,18 @@ const VerifyEmailScreen = () => {
               emailAddressId: emailAddressIdParam,
             } as any);
           } else {
-            // Fallback: call with minimal body and let Clerk infer (cast to any to satisfy TS)
             await signIn.prepareFirstFactor({ strategy: factorStrategy } as any);
           }
         }
       } catch (err: any) {
-        // Suppress "already prepared" errors
         console.log('Prepare Info:', err?.errors?.[0]?.message || err);
       }
     }
   };
 
-  // Trigger preparation ONCE on mount
   useEffect(() => {
     prepareVerification();
-    startResendCooldown(); // Start the timer immediately so user can't spam instantly
-
+    startResendCooldown();
     return () => {
       if (resendTimer.current) clearInterval(resendTimer.current);
     };
@@ -139,9 +132,7 @@ const VerifyEmailScreen = () => {
   const startResendCooldown = () => {
     setResendDisabled(true);
     setCountdown(30);
-
     if (resendTimer.current) clearInterval(resendTimer.current);
-
     resendTimer.current = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
@@ -155,10 +146,8 @@ const VerifyEmailScreen = () => {
   };
 
   // --- HANDLERS ---
-
   const onResend = async () => {
     if (resendDisabled) return;
-
     try {
       setLoading(true);
       setCode('');
@@ -167,22 +156,20 @@ const VerifyEmailScreen = () => {
         if (!signUpLoaded) return;
         await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
       } else {
-        await prepareVerification(); // Re-run smart logic
+        await prepareVerification();
       }
 
       Alert.alert('Code Sent', `A new verification code has been sent to ${email}`);
       startResendCooldown();
     } catch (err: any) {
       const msg = err?.errors?.[0]?.message || 'Failed to resend code.';
-      try {
-        const net = await NetInfo.fetch();
-        if (!net.isConnected) {
-          setLastOfflineAction('resend');
-          setOfflineAttemptsLeft(3);
-          setOfflineVisible(true);
-          return;
-        }
-      } catch (e) {}
+      const net = await NetInfo.fetch();
+      if (!net.isConnected) {
+        setLastOfflineAction('resend');
+        setOfflineAttemptsLeft(3);
+        setOfflineVisible(true);
+        return;
+      }
       Alert.alert('Error', msg);
     } finally {
       setLoading(false);
@@ -196,13 +183,9 @@ const VerifyEmailScreen = () => {
 
     try {
       if (mode === 'signup') {
-        // --- SIGN UP FLOW ---
         const result = await signUp?.attemptEmailAddressVerification({ code });
-
         if (result?.status === 'complete') {
           await setActiveSignUp?.({ session: result.createdSessionId });
-
-          // Background Sync: Create User in Neon DB
           const fullName = `${firstName || ''} ${lastName || ''}`.trim();
           try {
             const bridgeUser = await syncClerkUserToNeon({
@@ -210,7 +193,6 @@ const VerifyEmailScreen = () => {
               emailAddresses: [{ emailAddress: email }],
               fullName,
             });
-            // Save local session for offline access
             await saveSession(
               bridgeUser.uuid,
               bridgeUser.name || 'User',
@@ -222,16 +204,12 @@ const VerifyEmailScreen = () => {
           } catch (syncErr) {
             console.warn('Sync failed (non-fatal):', syncErr);
           }
-
           navigation.reset({ index: 0, routes: [{ name: 'Announcement' }] });
         } else {
           throw new Error('Verification status incomplete.');
         }
       } else {
-        // --- SIGN IN FLOW ---
         let result;
-
-        // Determine if we are verifying 1FA or 2FA
         if (signIn?.status === 'needs_second_factor') {
           result = await signIn.attemptSecondFactor({ strategy: 'email_code', code });
         } else {
@@ -240,35 +218,24 @@ const VerifyEmailScreen = () => {
 
         if (result?.status === 'complete') {
           await setActiveSignIn?.({ session: result.createdSessionId });
-          // LoginScreen logic will handle the sync on mount, but we reset here to be safe
           navigation.reset({ index: 0, routes: [{ name: 'Announcement' }] });
+        } else if (result?.status === 'needs_second_factor') {
+          Alert.alert('One More Step', 'Please check your email for the second verification code.');
+          await prepareVerification();
+          setCode('');
         } else {
-          // Edge case: If 1FA succeeds but 2FA is suddenly required
-          if (result?.status === 'needs_second_factor') {
-            Alert.alert(
-              'One More Step',
-              'Please check your email for the second verification code.'
-            );
-            await prepareVerification(); // Prepare next step
-            setCode('');
-          } else {
-            throw new Error(`Verification status: ${result?.status}`);
-          }
+          throw new Error(`Verification status: ${result?.status}`);
         }
       }
     } catch (err: any) {
-      console.error('Verify failed', err);
       const errCode = err?.errors?.[0]?.code;
-      try {
-        const net = await NetInfo.fetch();
-        if (!net.isConnected) {
-          setLastOfflineAction('verify');
-          setOfflineAttemptsLeft(3);
-          setOfflineVisible(true);
-          return;
-        }
-      } catch (e) {}
-
+      const net = await NetInfo.fetch();
+      if (!net.isConnected) {
+        setLastOfflineAction('verify');
+        setOfflineAttemptsLeft(3);
+        setOfflineVisible(true);
+        return;
+      }
       if (errCode === 'verification_failed') {
         Alert.alert('Incorrect Code', 'The code you entered is invalid. Please try again.');
       } else {
@@ -287,103 +254,111 @@ const VerifyEmailScreen = () => {
       if (net.isConnected) {
         setOfflineVisible(false);
         setOfflineRetrying(false);
-        if (lastOfflineAction === 'resend') {
-          await onResend();
-        } else if (lastOfflineAction === 'verify') {
-          await onVerify();
-        }
+        if (lastOfflineAction === 'resend') await onResend();
+        else if (lastOfflineAction === 'verify') await onVerify();
       }
     } catch (e) {
       setOfflineRetrying(false);
     }
   };
 
-  // --- RENDER ---
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
-
-      {/* Background Gradient */}
       <LinearGradient
         colors={['#E0F2FE', '#F0F9FF', '#FFFFFF']}
         style={StyleSheet.absoluteFill}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
       />
-
-      <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right'] as any}>
+      <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right', 'bottom']}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1 }}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
         >
-          <View style={styles.content}>
-            {/* Header */}
+          <ScrollView
+            contentContainerStyle={[
+              styles.scrollContent,
+              // If Card Layout, center content vertically
+              isCardLayout ? styles.centerContent : null,
+              { paddingBottom: Math.max(20, insets.bottom + 20) },
+            ]}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Header / Back Button */}
             <View style={styles.header}>
               <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
                 <Ionicons name="arrow-back" size={24} color="#0F172A" />
               </TouchableOpacity>
             </View>
 
-            {/* Main Content with Animation */}
-            <Animated.View
-              style={[
-                styles.mainBody,
-                { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
-              ]}
-            >
-              {/* Icon */}
-              <View style={styles.iconCircle}>
-                <Ionicons name="shield-checkmark" size={36} color={colors.primary || '#2563EB'} />
-              </View>
-
-              {/* Texts */}
-              <Text style={styles.title}>Verify it's you</Text>
-              <Text style={styles.subtitle}>
-                We sent a 6-digit code to{'\n'}
-                <Text style={styles.emailHighlight}>{email}</Text>
-              </Text>
-
-              {/* Code Input */}
-              <TextInput
-                style={styles.codeInput}
-                placeholder="000000"
-                placeholderTextColor="#CBD5E1"
-                keyboardType="number-pad"
-                value={code}
-                onChangeText={setCode}
-                maxLength={6}
-                autoFocus
-              />
-
-              {/* Verify Button */}
-              <TouchableOpacity
-                style={[styles.primaryBtn, loading && styles.disabled]}
-                onPress={onVerify}
-                disabled={loading}
-                activeOpacity={0.8}
+            {/* Main Content Area */}
+            <View style={[styles.responsiveContainer, isCardLayout && styles.cardContainer]}>
+              <Animated.View
+                style={[
+                  styles.mainBody,
+                  { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+                ]}
               >
-                {loading ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.primaryText}>Verify Code</Text>
-                )}
-              </TouchableOpacity>
+                {/* Icon */}
+                <View style={styles.iconCircle}>
+                  <Ionicons name="shield-checkmark" size={36} color={colors.primary || '#2563EB'} />
+                </View>
 
-              {/* Resend Link */}
-              <TouchableOpacity
-                onPress={onResend}
-                disabled={resendDisabled || loading}
-                style={styles.resendRow}
-                activeOpacity={0.6}
-              >
-                <Text style={[styles.resendText, resendDisabled && { opacity: 0.5 }]}>
-                  {resendDisabled ? `Resend code in ${countdown}s` : "Didn't receive code? Resend"}
+                {/* Texts */}
+                <Text style={styles.title}>Verify it's you</Text>
+                <Text style={styles.subtitle}>
+                  We sent a 6-digit code to{'\n'}
+                  <Text style={styles.emailHighlight}>{email}</Text>
                 </Text>
-              </TouchableOpacity>
-            </Animated.View>
-          </View>
+
+                {/* Code Input */}
+                <TextInput
+                  style={styles.codeInput}
+                  placeholder="000000"
+                  placeholderTextColor="#CBD5E1"
+                  keyboardType="number-pad"
+                  value={code}
+                  onChangeText={setCode}
+                  maxLength={6}
+                  autoFocus
+                />
+
+                {/* Verify Button */}
+                <TouchableOpacity
+                  style={[styles.primaryBtn, loading && styles.disabled]}
+                  onPress={onVerify}
+                  disabled={loading}
+                  activeOpacity={0.8}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.primaryText}>Verify Code</Text>
+                  )}
+                </TouchableOpacity>
+
+                {/* Resend Link */}
+                <TouchableOpacity
+                  onPress={onResend}
+                  disabled={resendDisabled || loading}
+                  style={styles.resendRow}
+                  activeOpacity={0.6}
+                >
+                  <Text style={[styles.resendText, resendDisabled && { opacity: 0.5 }]}>
+                    {resendDisabled
+                      ? `Resend code in ${countdown}s`
+                      : "Didn't receive code? Resend"}
+                  </Text>
+                </TouchableOpacity>
+              </Animated.View>
+            </View>
+          </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
+
       <OfflineNotice
         visible={offlineVisible}
         retrying={offlineRetrying}
@@ -399,18 +374,40 @@ const VerifyEmailScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  content: {
-    flex: 1,
+  container: { flex: 1 },
+  scrollContent: {
+    flexGrow: 1,
     padding: 24,
+  },
+
+  // Centers content vertically for Card Layout
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // Responsive Layout
+  responsiveContainer: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  cardContainer: {
+    maxWidth: 480,
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 32,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 8,
   },
 
   /* Header */
   header: {
-    marginBottom: 20,
+    width: '100%',
     alignItems: 'flex-start',
+    marginBottom: 20,
   },
   backBtn: {
     width: 44,
@@ -430,9 +427,8 @@ const styles = StyleSheet.create({
 
   /* Body */
   mainBody: {
-    flex: 1,
+    width: '100%',
     alignItems: 'center',
-    marginTop: height * 0.05,
   },
   iconCircle: {
     width: 80,
@@ -465,10 +461,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 24,
   },
-  emailHighlight: {
-    color: '#0F172A',
-    fontWeight: '700',
-  },
+  emailHighlight: { color: '#0F172A', fontWeight: '700' },
 
   /* Inputs */
   codeInput: {
@@ -506,22 +499,11 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 8,
   },
-  disabled: {
-    opacity: 0.7,
-  },
-  primaryText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 17,
-  },
-  resendRow: {
-    padding: 12,
-  },
-  resendText: {
-    color: '#64748B',
-    fontWeight: '600',
-    fontSize: 14,
-  },
+  disabled: { opacity: 0.7 },
+  primaryText: { color: '#fff', fontWeight: '700', fontSize: 17 },
+
+  resendRow: { padding: 12 },
+  resendText: { color: '#64748B', fontWeight: '600', fontSize: 14 },
 });
 
 export default VerifyEmailScreen;

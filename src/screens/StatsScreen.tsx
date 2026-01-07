@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState, memo, useCallback } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback, memo } from 'react';
 import {
   View,
   StyleSheet,
@@ -14,14 +14,14 @@ import {
   Platform,
   UIManager,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { PieChart } from 'react-native-chart-kit';
 import dayjs from 'dayjs';
 import { useNavigation } from '@react-navigation/native';
 
-// --- CUSTOM IMPORTS (Assumed based on your context) ---
+// --- CUSTOM IMPORTS ---
 import { useAuth } from '../hooks/useAuth';
 import { useInternetStatus } from '../hooks/useInternetStatus';
 import { colors } from '../utils/design';
@@ -34,7 +34,6 @@ import { subscribeSession } from '../utils/sessionEvents';
 import { executeSqlAsync } from '../db/sqlite';
 import { subscribeSyncStatus } from '../services/syncManager';
 
-// --- ANIMATION SETUP ---
 if (Platform.OS === 'android') {
   if (UIManager.setLayoutAnimationEnabledExperimental) {
     UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -49,7 +48,7 @@ const CHART_CONFIG = {
   backgroundGradientFromOpacity: 0,
   backgroundGradientTo: '#ffffff',
   backgroundGradientToOpacity: 0,
-  color: (opacity = 1) => `rgba(37, 99, 235, ${opacity})`, // Primary Blue color
+  color: (opacity = 1) => `rgba(37, 99, 235, ${opacity})`,
   strokeWidth: 2,
 };
 
@@ -61,10 +60,7 @@ const formatCompact = (val: number, currency: string = 'INR') => {
   const abs = Math.abs(num);
   const prefix = currency === 'USD' ? '$' : '₹';
 
-  // Explicitly handle zero
   if (abs === 0) return '0';
-
-  // Small fractional values: show two decimals (useful for avg/day)
   if (abs > 0 && abs < 1) return prefix + num.toFixed(2);
 
   if (currency === 'INR' || currency === '₹') {
@@ -153,11 +149,8 @@ const StatsScreen = () => {
   const maxContentWidth = 600;
   const contentWidth = Math.min(width - 32, maxContentWidth);
   const containerStyle: any = { width: contentWidth, alignSelf: 'center' };
-
-  // Chart Sizing
   const donutSize = Math.min(contentWidth * 0.55, 220);
 
-  // Load local fallback session and subscribe so Analytics works fully offline.
   useEffect(() => {
     let mounted = true;
     const load = async () => {
@@ -191,22 +184,9 @@ const StatsScreen = () => {
       const monthExpr = `strftime('%Y-%m', ${localDateExpr}, 'localtime')`;
       const yearExpr = `strftime('%Y', ${localDateExpr}, 'localtime')`;
 
-      const maxSql = `
-        SELECT COALESCE(MAX(COALESCE(updated_at, 0)), 0) AS max_updated
-        FROM transactions
-        WHERE user_id = ? AND deleted_at IS NULL;`;
-
-      const monthsSql = `
-        SELECT DISTINCT ${monthExpr} AS m
-        FROM transactions
-        WHERE user_id = ? AND deleted_at IS NULL
-        ORDER BY m DESC;`;
-
-      const yearsSql = `
-        SELECT DISTINCT ${yearExpr} AS y
-        FROM transactions
-        WHERE user_id = ? AND deleted_at IS NULL
-        ORDER BY y DESC;`;
+      const maxSql = `SELECT COALESCE(MAX(COALESCE(updated_at, 0)), 0) AS max_updated FROM transactions WHERE user_id = ? AND deleted_at IS NULL;`;
+      const monthsSql = `SELECT DISTINCT ${monthExpr} AS m FROM transactions WHERE user_id = ? AND deleted_at IS NULL ORDER BY m DESC;`;
+      const yearsSql = `SELECT DISTINCT ${yearExpr} AS y FROM transactions WHERE user_id = ? AND deleted_at IS NULL ORDER BY y DESC;`;
 
       const [[, maxRes], [, monthsRes], [, yearsRes]] = await Promise.all([
         executeSqlAsync(maxSql, [effectiveUserId]),
@@ -224,6 +204,7 @@ const StatsScreen = () => {
         const d = dayjs(`${m}-01`);
         months.push({ key: m, label: d.isValid() ? d.format('MMM YYYY') : m, date: d });
       }
+
       const years: number[] = [];
       for (let i = 0; i < yearsRes.rows.length; i++) {
         const yStr = String((yearsRes.rows.item(i) as any)?.y || '');
@@ -234,16 +215,13 @@ const StatsScreen = () => {
       setAvailableMonths(months);
       setAvailableYears(years);
     } catch (e) {
-      // If anything fails, keep UI usable; analysis will still fall back.
+      // ignore
     }
   }, [effectiveUserId]);
 
-  // Refresh period lists when screen focuses (covers new local entries).
   useEffect(() => {
     refreshPeriods();
-    const unsub = navigation.addListener('focus', () => {
-      refreshPeriods();
-    });
+    const unsub = navigation.addListener('focus', refreshPeriods);
     return () => {
       try {
         unsub();
@@ -251,21 +229,14 @@ const StatsScreen = () => {
     };
   }, [navigation, refreshPeriods]);
 
-  // Auto-refresh Analytics right after sync finishes.
   useEffect(() => {
     const unsub = subscribeSyncStatus((status) => {
       const prev = lastSyncStatusRef.current;
       lastSyncStatusRef.current = status;
-
-      // Only act on a real completion transition.
       if (prev === 'syncing' && status === 'idle') {
         const now = Date.now();
-        // De-dupe rapid consecutive idle transitions.
         if (now - lastAutoRefreshAtRef.current < 800) return;
         lastAutoRefreshAtRef.current = now;
-
-        // This updates the cache buster and period lists;
-        // analysis re-runs automatically via txCacheBuster dependency.
         refreshPeriods();
       }
     });
@@ -276,13 +247,12 @@ const StatsScreen = () => {
     };
   }, [refreshPeriods]);
 
-  // Sync Defaults
   useEffect(() => {
     if (availableMonths.length && !activeMonthKey) setActiveMonthKey(availableMonths[0].key);
     if (availableYears.length && activeYear === null) setActiveYear(availableYears[0]);
   }, [availableMonths, availableYears, activeMonthKey, activeYear]);
 
-  // --- 2. DATE RANGE LOGIC ---
+  // --- DATE RANGE LOGIC ---
   const { rangeStart, rangeEnd } = useMemo(() => {
     const current = dayjs();
     let start, end;
@@ -327,16 +297,13 @@ const StatsScreen = () => {
     return { rangeStart: start, rangeEnd: end };
   }, [filter, activeMonthKey, activeYear]);
 
-  // --- 3. ANALYSIS ENGINE ---
+  // --- ANALYSIS ENGINE ---
   const runAnalysis = async () => {
-    // 1. Cancel previous runs
     if (abortControllerRef.current) abortControllerRef.current.abort();
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
     setComputing(true);
-    // Note: We don't nullify stats immediately to prevent UI flashing, we let it be stale for a moment
-
     await new Promise((r) => InteractionManager.runAfterInteractions(() => r(null)));
 
     try {
@@ -357,9 +324,7 @@ const StatsScreen = () => {
         const savingsRate = totalIn > 0 ? ((totalIn - totalOut) / totalIn) * 100 : 0;
         const daysDiff = Math.max(1, rangeEnd.diff(rangeStart, 'day') + 1);
 
-        // --- Pie Chart Safe Data Construction ---
         let pieDataSafe = result.pieData || [];
-        // Limit to Top 4 categories + "Others"
         if (pieDataSafe.length > 4) {
           const top4 = pieDataSafe.slice(0, 4);
           const othersValue = pieDataSafe
@@ -408,22 +373,14 @@ const StatsScreen = () => {
     return () => {
       if (abortControllerRef.current) abortControllerRef.current.abort();
     };
-  }, [
-    filter,
-    rangeStart?.valueOf(),
-    rangeEnd?.valueOf(),
-    effectiveUserId,
-    txCacheBuster,
-    isOnline,
-  ]);
+  }, [filter, rangeStart.valueOf(), rangeEnd.valueOf(), effectiveUserId, txCacheBuster, isOnline]);
 
-  // --- RENDER HELPERS ---
   const currencySymbol = stats?.currency === 'USD' ? '$' : '₹';
   const isEmptyPeriod = Boolean(stats && Number(stats.count || 0) === 0);
   const showAuthGateLoading = authLoading && !effectiveUserId;
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right'] as any}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
 
       <View style={[styles.headerWrapper, containerStyle]}>
@@ -447,13 +404,9 @@ const StatsScreen = () => {
           showsVerticalScrollIndicator={false}
         >
           <Animated.View
-            style={{
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }],
-              ...containerStyle,
-            }}
+            style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }], ...containerStyle }}
           >
-            {/* --- 1. FILTERS --- */}
+            {/* FILTERS */}
             <View style={styles.filterSection}>
               <ScrollView
                 horizontal
@@ -475,7 +428,6 @@ const StatsScreen = () => {
                 </View>
               </ScrollView>
 
-              {/* Sub-filters for Month/Year */}
               {(filter === 'This Month' || filter === 'This Year') && (
                 <ScrollView
                   horizontal
@@ -503,14 +455,12 @@ const StatsScreen = () => {
                   })}
                 </ScrollView>
               )}
-
-              {/* Avoid double loaders on first load: show this only when refreshing existing stats */}
               {computing && stats ? (
                 <ActivityIndicator size="small" color={colors.primary} style={styles.loader} />
               ) : null}
             </View>
 
-            {/* --- 2. NET BALANCE CARD --- */}
+            {/* BALANCE CARD */}
             {!stats ? (
               <View style={[styles.card, { height: 200, justifyContent: 'center' }]}>
                 <ActivityIndicator color={colors.primary} />
@@ -542,14 +492,12 @@ const StatsScreen = () => {
                     </Text>
                   </View>
                 </View>
-
                 <Text
                   style={[styles.mainBalance, { color: stats.net >= 0 ? '#059669' : '#DC2626' }]}
                 >
                   {stats.net >= 0 ? '+' : ''}
                   {formatCompact(stats.net, stats.currency)}
                 </Text>
-
                 <View style={styles.balanceRow}>
                   <View>
                     <Text style={styles.subLabel}>INCOME</Text>
@@ -568,7 +516,7 @@ const StatsScreen = () => {
               </View>
             )}
 
-            {/* --- 3. KEY METRICS GRID --- */}
+            {/* METRICS GRID */}
             {stats && (
               <View style={styles.gridContainer}>
                 <MetricCard
@@ -601,7 +549,7 @@ const StatsScreen = () => {
               </View>
             )}
 
-            {/* --- 4. PERFORMANCE GRID --- */}
+            {/* PERFORMANCE GRID */}
             {stats && (
               <View style={styles.gridContainer}>
                 <MetricCard
@@ -625,10 +573,9 @@ const StatsScreen = () => {
               </View>
             )}
 
-            {/* --- 5. CHARTS --- */}
+            {/* CHARTS */}
             {stats && (
               <>
-                {/* Spending Trend */}
                 <View style={styles.card}>
                   <Text style={styles.sectionTitle}>Spending Trend</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -651,26 +598,23 @@ const StatsScreen = () => {
                   </ScrollView>
                 </View>
 
-                {/* Distribution & Top Expenses */}
                 <View style={styles.dualChartContainer}>
-                  {/* Donut Chart */}
                   <View style={styles.card}>
                     <Text style={styles.sectionTitle}>Distribution</Text>
                     {stats.pieData?.length > 0 ? (
                       <View style={styles.chartWrapper}>
                         <PieChart
                           data={stats.pieData}
-                          width={donutSize + 60} // Padding for labels
+                          width={donutSize + 60}
                           height={donutSize}
                           chartConfig={CHART_CONFIG}
                           accessor="population"
                           backgroundColor="transparent"
                           paddingLeft="15"
                           hasLegend={false}
-                          center={[donutSize / 4, 0]} // Correct centering for library
+                          center={[donutSize / 4, 0]}
                           absolute
                         />
-                        {/* Hole Overlay */}
                         <View
                           style={[
                             styles.donutHole,
@@ -678,7 +622,6 @@ const StatsScreen = () => {
                               width: donutSize * 0.6,
                               height: donutSize * 0.6,
                               borderRadius: (donutSize * 0.6) / 2,
-                              // Dynamic centering relative to the library's quirks
                               left: donutSize / 4 + donutSize * 0.2 + 15,
                             },
                           ]}
@@ -697,7 +640,6 @@ const StatsScreen = () => {
                     )}
                   </View>
 
-                  {/* Categories List */}
                   <View style={styles.card}>
                     <Text style={styles.sectionTitle}>Top Expenses</Text>
                     <View style={{ marginTop: 10 }}>
@@ -718,7 +660,6 @@ const StatsScreen = () => {
                 </View>
               </>
             )}
-
             <View style={{ height: 40 }} />
           </Animated.View>
         </ScrollView>
@@ -727,16 +668,15 @@ const StatsScreen = () => {
   );
 };
 
+// --- STYLES ---
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.background },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { marginTop: 10, color: '#94A3B8', fontWeight: '600' },
-
   headerWrapper: { marginBottom: 10, paddingHorizontal: 4 },
   container: { flex: 1 },
   scrollContent: { paddingBottom: 100, paddingTop: 8 },
 
-  // --- FILTERS ---
   filterSection: { marginBottom: 16 },
   tabScroll: { paddingHorizontal: 16, paddingBottom: 8 },
   tabContainer: {
@@ -754,7 +694,6 @@ const styles = StyleSheet.create({
   tabActive: { backgroundColor: colors.primary },
   tabText: { color: '#64748B', fontWeight: '700', fontSize: fontScale(12) },
   tabTextActive: { color: '#FFF' },
-
   subFilterScroll: { paddingHorizontal: 16, marginTop: 8 },
   chip: {
     borderWidth: 1,
@@ -770,7 +709,6 @@ const styles = StyleSheet.create({
   chipTextActive: { color: '#FFF' },
   loader: { marginTop: 10, alignSelf: 'center' },
 
-  // --- CARDS ---
   card: {
     backgroundColor: '#FFF',
     borderRadius: 24,
@@ -790,7 +728,6 @@ const styles = StyleSheet.create({
     marginVertical: 12,
     letterSpacing: -1,
   },
-
   balanceRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -803,11 +740,9 @@ const styles = StyleSheet.create({
   subLabel: { fontSize: fontScale(10), fontWeight: '700', color: '#94A3B8', marginBottom: 4 },
   incomeValue: { fontSize: fontScale(18), fontWeight: '800', color: '#10B981' },
   expenseValue: { fontSize: fontScale(18), fontWeight: '800', color: '#EF4444' },
-
   badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
   badgeText: { fontSize: fontScale(10), fontWeight: '800', textTransform: 'uppercase' },
 
-  // --- GRIDS ---
   gridContainer: { flexDirection: 'row', gap: 12, marginBottom: 16 },
   gridCard: {
     backgroundColor: '#FFF',
@@ -837,7 +772,6 @@ const styles = StyleSheet.create({
   gridValue: { fontSize: fontScale(14), fontWeight: '900', color: '#1E293B', marginTop: 2 },
   gridSubLabel: { fontSize: fontScale(9), color: '#64748B', marginTop: 2 },
 
-  // --- CHARTS & CATS ---
   sectionTitle: { fontSize: fontScale(16), fontWeight: '800', color: '#1E293B', marginBottom: 12 },
   dualChartContainer: { gap: 16 },
   chartWrapper: { alignItems: 'center', justifyContent: 'center', position: 'relative' },
@@ -853,7 +787,6 @@ const styles = StyleSheet.create({
   },
   holeLabel: { fontSize: fontScale(9), fontWeight: '800', color: '#94A3B8' },
   holeValue: { fontSize: fontScale(16), fontWeight: '900', color: '#1E293B' },
-
   catRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -866,7 +799,6 @@ const styles = StyleSheet.create({
   catIndicator: { width: 10, height: 10, borderRadius: 5, marginRight: 12 },
   catName: { fontSize: fontScale(14), color: '#475569', fontWeight: '600' },
   catVal: { fontSize: fontScale(14), fontWeight: '800', color: '#1E293B' },
-
   emptyState: { padding: 30, alignItems: 'center', justifyContent: 'center' },
   emptyText: { color: '#CBD5E1', fontStyle: 'italic', fontSize: fontScale(13) },
   emptySubText: {

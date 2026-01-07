@@ -11,7 +11,6 @@ import {
   Easing,
   StatusBar,
   useWindowDimensions,
-  Platform,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
@@ -25,7 +24,6 @@ import appConfig from '../../app.json';
 // --- SAFE PACKAGE IMPORT ---
 let pkg: { version?: string } = {};
 try {
-  // Safe require for Metro bundler
   pkg = require('../../package.json');
 } catch (e) {
   pkg = { version: '1.0.0' };
@@ -78,7 +76,6 @@ const MoreScreen: React.FC = () => {
   const { width } = useWindowDimensions();
 
   // --- RESPONSIVE LAYOUT ---
-  // Cap content width on tablets, full width with margins on phones
   const contentWidth = Math.min(width - spacing(4), 600);
   const bottomPadding = spacing(10) + insets.bottom + 20;
 
@@ -109,7 +106,7 @@ const MoreScreen: React.FC = () => {
   }, []);
 
   const handleRoadmap = useCallback(() => {
-    Linking.openURL('https://www.ellowdigital.space');
+    Linking.openURL('https://dhandiary.netlify.app/roadmap');
   }, []);
 
   const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -208,8 +205,9 @@ const MoreScreen: React.FC = () => {
                       <Stop offset="1" stopColor={colors.secondary || '#1D4ED8'} />
                     </LinearGradient>
                   </Defs>
-                  <Rect width="100%" height="100%" rx={24} fill="url(#heroGrad)" />
+                  <Rect width="100%" height="100%" fill="url(#heroGrad)" />
                   <Circle cx="85%" cy="15%" r="80" fill="white" fillOpacity="0.1" />
+                  <Circle cx="10%" cy="90%" r="50" fill="white" fillOpacity="0.08" />
                 </Svg>
 
                 <View style={styles.heroContent}>

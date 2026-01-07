@@ -1,4 +1,4 @@
-import React, { useRef, useState, useMemo } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -73,32 +73,30 @@ const OnboardingItem = ({
 }) => {
   const { width, height } = useWindowDimensions();
 
-  // Responsive sizing logic
-  const isSmallScreen = width < 380 || height < 700;
-  const isTablet = width > 700;
+  const isLandscape = width > height;
+  const isSmallHeight = height < 600;
 
-  // Circle Sizing
-  const circleSize = isTablet ? 360 : isSmallScreen ? 220 : 280;
-  const iconSize = isTablet ? 80 : isSmallScreen ? 48 : 56;
+  // Dynamic Sizing
+  const calculatedSize = isLandscape ? height * 0.45 : width * 0.7;
+  const circleSize = Math.min(calculatedSize, 340);
+  const iconSize = circleSize * 0.25;
 
-  // ANIMATION: Input Range based on current scroll position
+  // ANIMATION: Input Range regenerates whenever 'width' changes
+  // This ensures animations stay synced even after rotation
   const inputRange = [(index - 1) * width, index * width, (index + 1) * width];
 
-  // 1. Image Scale Animation (Bounces slightly)
   const imageScale = scrollX.interpolate({
     inputRange,
     outputRange: [0.6, 1, 0.6],
     extrapolate: 'clamp',
   });
 
-  // 2. Text Opacity (Fades out when scrolling)
   const textOpacity = scrollX.interpolate({
     inputRange,
     outputRange: [0, 1, 0],
     extrapolate: 'clamp',
   });
 
-  // 3. Text Translate (Moves slightly to the side for parallax effect)
   const textTranslate = scrollX.interpolate({
     inputRange,
     outputRange: [50, 0, -50],
@@ -106,9 +104,9 @@ const OnboardingItem = ({
   });
 
   return (
-    <View style={[styles.slideContainer, { width }]}>
+    <View style={[styles.slideContainer, { width, flexDirection: isLandscape ? 'row' : 'column' }]}>
       {/* Animated Image Section */}
-      <View style={[styles.imageContainer, { flex: isTablet ? 0.5 : 0.6 }]}>
+      <View style={[styles.imageContainer, { flex: isLandscape ? 0.5 : 0.6 }]}>
         <Animated.View
           style={[
             styles.circleBackground,
@@ -116,7 +114,7 @@ const OnboardingItem = ({
               width: circleSize,
               height: circleSize,
               borderRadius: circleSize / 2,
-              backgroundColor: `${item.accent}15`, // Very light opacity
+              backgroundColor: `${item.accent}15`,
               borderColor: `${item.accent}30`,
               transform: [{ scale: imageScale }],
             },
@@ -139,12 +137,23 @@ const OnboardingItem = ({
       </View>
 
       {/* Animated Text Section */}
-      <View style={styles.textContainer}>
+      <View
+        style={[
+          styles.textContainer,
+          {
+            flex: isLandscape ? 0.5 : 0.4,
+            alignItems: isLandscape ? 'flex-start' : 'center',
+            paddingHorizontal: isLandscape ? 20 : 32,
+            justifyContent: isLandscape ? 'center' : 'flex-start',
+          },
+        ]}
+      >
         <Animated.Text
           style={[
             styles.title,
             {
-              fontSize: isSmallScreen ? 22 : 26,
+              fontSize: isSmallHeight && isLandscape ? 20 : 26,
+              textAlign: isLandscape ? 'left' : 'center',
               opacity: textOpacity,
               transform: [{ translateX: textTranslate }],
             },
@@ -156,7 +165,8 @@ const OnboardingItem = ({
           style={[
             styles.description,
             {
-              fontSize: isSmallScreen ? 14 : 16,
+              fontSize: isSmallHeight ? 14 : 16,
+              textAlign: isLandscape ? 'left' : 'center',
               opacity: textOpacity,
               transform: [{ translateX: textTranslate }],
             },
@@ -180,7 +190,7 @@ const Paginator = ({ data, scrollX }: { data: typeof SLIDES; scrollX: Animated.V
 
         const dotWidth = scrollX.interpolate({
           inputRange,
-          outputRange: [8, 24, 8], // Expands width when active
+          outputRange: [8, 24, 8],
           extrapolate: 'clamp',
         });
 
@@ -202,12 +212,39 @@ const Paginator = ({ data, scrollX }: { data: typeof SLIDES; scrollX: Animated.V
 const OnboardingScreen = () => {
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
   const [currentIndex, setCurrentIndex] = useState(0);
   const scrollX = useRef(new Animated.Value(0)).current;
   const listRef = useRef<FlatList>(null);
   const [completing, setCompleting] = useState(false);
 
-  // Optimizing FlatList updates with useMemo
+  const isLandscape = width > height;
+
+  // --- FIX: Handle Rotation / Orientation Change ---
+  // When device rotates, the pixel offset of the FlatList becomes invalid.
+  // We must immediately snap to the correct index based on the new width.
+  useEffect(() => {
+    if (listRef.current) {
+      // We use a small timeout to allow the layout to settle slightly
+      const timer = setTimeout(() => {
+        listRef.current?.scrollToIndex({
+          index: currentIndex,
+          animated: false, // Instant snap to prevent visual gliding
+        });
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [width]); // Re-run whenever width changes
+
+  // --- OPTIMIZATION: GetItemLayout ---
+  // This is crucial for rotation. It tells FlatList exactly where each item is
+  // without having to render them first.
+  const getItemLayout = (_: any, index: number) => ({
+    length: width,
+    offset: width * index,
+    index,
+  });
+
   const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
     if (viewableItems && viewableItems.length > 0) {
       setCurrentIndex(viewableItems[0].index);
@@ -220,7 +257,6 @@ const OnboardingScreen = () => {
     if (completing) return;
     setCompleting(true);
     await markOnboardingComplete();
-    // Use root reset to prevent going back to onboarding
     try {
       const { resetRoot } = await import('../utils/rootNavigation');
       resetRoot({ index: 0, routes: [{ name: 'Auth' }] });
@@ -241,7 +277,6 @@ const OnboardingScreen = () => {
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom'] as any}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background || '#F9FAFB'} />
 
-      {/* Header: Skip Button */}
       <View style={styles.header}>
         <TouchableOpacity
           onPress={completeOnboarding}
@@ -251,8 +286,7 @@ const OnboardingScreen = () => {
         </TouchableOpacity>
       </View>
 
-      {/* Main Slides */}
-      <View style={{ flex: 3 }}>
+      <View style={{ flex: 1 }}>
         <FlatList
           ref={listRef}
           data={SLIDES}
@@ -264,29 +298,38 @@ const OnboardingScreen = () => {
           pagingEnabled
           showsHorizontalScrollIndicator={false}
           bounces={false}
+          // Pass getItemLayout to ensure accurate scrolling on rotation
+          getItemLayout={getItemLayout}
+          // Pass width as extraData so FlatList knows to re-render when orientation changes
+          extraData={width}
           onScroll={Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], {
             useNativeDriver: false,
           })}
-          scrollEventThrottle={32}
+          scrollEventThrottle={16} // Increased frequency for smoother animation
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewConfig}
         />
       </View>
 
-      {/* Footer: Dots & Button */}
       <View
         style={[
           styles.footer,
           {
-            // Keep CTA above gesture/navigation bar across Android devices
-            paddingBottom: Math.max(insets.bottom, Platform.OS === 'android' ? 16 : 10) + 12,
+            flexDirection: isLandscape ? 'row' : 'column',
+            justifyContent: isLandscape ? 'space-between' : 'flex-end',
+            alignItems: 'center',
+            paddingBottom: Math.max(insets.bottom, Platform.OS === 'android' ? 16 : 10),
+            paddingHorizontal: 24,
+            paddingTop: isLandscape ? 10 : 0,
+            gap: isLandscape ? 0 : 30,
+            minHeight: isLandscape ? 60 : 120,
           },
         ]}
       >
         <Paginator data={SLIDES} scrollX={scrollX} />
 
         <TouchableOpacity
-          style={styles.button}
+          style={[styles.button, { width: isLandscape ? 160 : '100%' }]}
           onPress={handleNext}
           activeOpacity={0.8}
           disabled={completing}
@@ -303,19 +346,16 @@ const OnboardingScreen = () => {
   );
 };
 
-// --- STYLES ---
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background || '#F9FAFB',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   header: {
     width: '100%',
     paddingHorizontal: 24,
     paddingTop: 10,
-    height: 50,
+    height: 40,
     flexDirection: 'row',
     justifyContent: 'flex-end',
     alignItems: 'center',
@@ -326,9 +366,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
   },
-  // Slide Styles
   slideContainer: {
-    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -349,34 +387,23 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.2,
     shadowRadius: 16,
-    elevation: 10, // Android Shadow
+    elevation: 10,
   },
-  textContainer: {
-    flex: 0.4,
-    paddingHorizontal: 32,
-    alignItems: 'center',
-    justifyContent: 'flex-start', // Align text to top of container
-  },
+  textContainer: {},
   title: {
     fontWeight: '800',
     color: colors.text || '#111827',
-    textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
     includeFontPadding: false,
   },
   description: {
     color: colors.muted || '#6B7280',
-    textAlign: 'center',
     lineHeight: 24,
-    paddingHorizontal: 10,
+    paddingHorizontal: 4,
   },
-  // Footer Styles
   footer: {
-    flex: 1, // Takes up remaining space
     width: '100%',
-    justifyContent: 'flex-end',
-    paddingHorizontal: 24,
-    gap: 30, // Space between dots and button
+    backgroundColor: 'transparent',
   },
   dotsContainer: {
     flexDirection: 'row',
@@ -402,7 +429,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 10,
     elevation: 8,
-    marginBottom: 0,
   },
   buttonText: {
     color: '#fff',

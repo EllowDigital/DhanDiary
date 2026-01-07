@@ -14,10 +14,9 @@ import { Text } from '@rneui/themed';
 import { useAuth, useUser } from '@clerk/clerk-expo';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
-import Constants from 'expo-constants'; // Standard way to access version
+import Constants from 'expo-constants';
 
 // --- CUSTOM IMPORTS ---
-// Ensure these paths are correct in your project
 import { colors } from '../utils/design';
 import UserAvatar from '../components/UserAvatar';
 import { performHardSignOut } from '../services/signOutFlow';
@@ -26,10 +25,10 @@ import { getSession } from '../db/session';
 import { subscribeSession } from '../utils/sessionEvents';
 
 // --- CONSTANTS ---
-const ACTIVE_COLOR = (colors as any).primary || '#2563EB';
+const ACTIVE_COLOR = colors.primary || '#2563EB';
 const INACTIVE_COLOR = '#64748B';
-const BACKGROUND_COLOR = (colors as any).background || '#F8FAFC';
-const DANGER_COLOR = (colors as any).danger || '#EF4444';
+const BACKGROUND_COLOR = colors.background || '#F8FAFC';
+const DANGER_COLOR = colors.accentRed || '#EF4444';
 const TEXT_SUB_COLOR = INACTIVE_COLOR;
 
 // --- DRAWER COMPONENT ---
@@ -44,7 +43,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
 
-  // Entrance Animation
+  // Entrance Animation & Session Sync
   useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim, {
@@ -60,19 +59,16 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
         stiffness: 90,
       }),
     ]).start();
+
     let mounted = true;
-    // Load persisted fallback session (used when Clerk user isn't available, e.g., offline)
-    const load = async () => {
+    const loadSession = async () => {
       try {
         const s = await getSession();
         if (mounted) setFallbackSession(s);
-      } catch (e) {
-        // ignore
-      }
+      } catch (e) {}
     };
-    load();
+    loadSession();
 
-    // Subscribe to session changes so UI updates when login/logout/saveSession runs
     const unsub = subscribeSession((s) => {
       if (mounted) setFallbackSession(s);
     });
@@ -85,8 +81,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
     };
   }, []);
 
-  // Sync banner is a floating overlay now; drawer layout never needs adjusting.
-
+  // --- HELPER: Find Deepest Route for Active Tab Check ---
   const getDeepestActiveRouteName = (route: any): string => {
     try {
       let current = route;
@@ -107,15 +102,11 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   const closeDrawerSafely = () => {
     try {
       (props.navigation as any).closeDrawer?.();
-    } catch (e) {
-      // ignore
-    }
+    } catch (e) {}
   };
 
   const goToDashboardTab = (screen: 'Home' | 'History') => {
     closeDrawerSafely();
-    // DrawerContentComponentProps is typed with ParamListBase here, which makes
-    // `navigate` route params resolve to `never`. Use a narrow runtime-safe cast.
     (props.navigation as any).navigate('Dashboard', { screen });
   };
 
@@ -124,7 +115,6 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
       goToDashboardTab('Home');
       return;
     }
-
     closeDrawerSafely();
     (props.navigation as any).navigate(routeName);
   };
@@ -163,44 +153,36 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
     ]);
   };
 
-  // Icon Helper
+  // --- ICON MAPPER ---
   const getIconName = (routeName: string, label?: string): string => {
     const key = (routeName || '').toString();
+    const lbl = (label || '').toLowerCase();
+
     const lookup: Record<string, string> = {
       Dashboard: 'dashboard',
-      DashboardStack: 'dashboard',
       Home: 'home',
-      HomeStack: 'home',
       History: 'history',
       Income: 'arrow-downward',
       Expenses: 'arrow-upward',
       Analytics: 'bar-chart',
       Account: 'person',
-      Profile: 'person',
       Settings: 'settings',
       About: 'info',
       Export: 'file-download',
-      ExportData: 'file-download',
-      PrivacyPolicy: 'shield',
-      AddEntry: 'add',
+      PrivacyPolicy: 'security',
+      Terms: 'description',
+      Eula: 'gavel',
+      AddEntry: 'add-circle-outline',
     };
 
     if (lookup[key]) return lookup[key];
-
-    const labelKey = (label || '').toLowerCase();
-    if (labelKey.includes('export') || labelKey.includes('backup')) return 'file-download';
-    if (labelKey.includes('history')) return 'history';
-    if (labelKey.includes('income')) return 'arrow-downward';
-    if (labelKey.includes('expense') || labelKey.includes('expenses')) return 'arrow-upward';
-    if (labelKey.includes('analytics') || labelKey.includes('stats')) return 'bar-chart';
-    if (labelKey.includes('account') || labelKey.includes('profile')) return 'person';
-    if (labelKey.includes('settings')) return 'settings';
-    if (labelKey.includes('about')) return 'info';
+    if (lbl.includes('export')) return 'file-download';
+    if (lbl.includes('profile')) return 'person';
+    if (lbl.includes('policy')) return 'security';
 
     return 'circle';
   };
 
-  // Safe Version Access
   const appVersion = Constants.expoConfig?.version || '1.0.0';
   const buildVersion =
     Constants.expoConfig?.android?.versionCode || Constants.expoConfig?.ios?.buildNumber || '1';
@@ -208,48 +190,38 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
 
   return (
     <View style={styles.container}>
-      {/* 1. SCROLLABLE CONTENT */}
       <DrawerContentScrollView
         {...props}
-        contentContainerStyle={{
-          paddingTop: 0, // We handle padding manually for full control
-        }}
+        contentContainerStyle={{ paddingTop: 0 }}
         showsVerticalScrollIndicator={false}
       >
         <Animated.View
           style={{
             opacity: fadeAnim,
             transform: [{ translateX: slideAnim }],
-            paddingTop: Platform.OS === 'ios' ? 0 : insets.top, // Handle Android StatusBar
+            paddingTop: Platform.OS === 'ios' ? 0 : insets.top,
           }}
         >
-          {/* USER PROFILE SECTION */}
+          {/* --- PROFILE HEADER --- */}
           <TouchableOpacity
             style={styles.profileHeader}
             activeOpacity={0.8}
             onPress={() => props.navigation.navigate('Account')}
           >
-            {/* Prefer Clerk user when available, otherwise fall back to locally persisted session */}
             <View style={styles.avatarWrap}>
               <UserAvatar
                 size={56}
                 name={user?.fullName || user?.firstName || fallbackSession?.name}
                 imageUrl={user?.imageUrl || fallbackSession?.imageUrl || fallbackSession?.image}
               />
-              {(() => {
-                // Show local badge only when there is no active Clerk `user` and
-                // we have a persisted fallback session. This avoids showing both
-                // the verified badge (which belongs to a live Clerk user) and
-                // the local badge at the same time.
-                const usingLocal = Boolean(fallbackSession && !user);
-                if (!usingLocal) return null;
-                return (
-                  <View style={styles.localBadge}>
-                    <MaterialIcon name="cloud-off" size={12} color="#B91C1C" />
-                  </View>
-                );
-              })()}
+              {/* Local Session Indicator (when offline/no clerk user yet) */}
+              {Boolean(fallbackSession && !user) && (
+                <View style={styles.localBadge}>
+                  <MaterialIcon name="cloud-off" size={12} color="#B91C1C" />
+                </View>
+              )}
             </View>
+
             <View style={styles.profileInfo}>
               <Text style={styles.profileName} numberOfLines={1}>
                 {user?.fullName || user?.firstName || fallbackSession?.name || 'Guest User'}
@@ -265,23 +237,19 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
 
           <View style={styles.divider} />
 
-          {/* NAVIGATION MENU */}
+          {/* --- MENU ITEMS --- */}
           <View style={styles.menuSection}>
             <Text style={styles.sectionTitle}>MENU</Text>
-            {/* Home tab */}
+
+            {/* 1. Dashboard (Home) */}
             {(() => {
               const focused =
                 drawerFocusedRoute.name === 'Dashboard' &&
                 (nestedFocusedRouteName === 'Home' || !nestedFocusedRouteName);
-              const iconName = getIconName('Home', 'Home');
               return (
                 <TouchableOpacity
-                  key="__drawer_home"
-                  onPress={() => goToDashboardTab('Home')}
                   style={[styles.menuItem, focused && styles.menuItemActive]}
-                  activeOpacity={0.7}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: focused }}
+                  onPress={() => goToDashboardTab('Home')}
                 >
                   <View style={styles.iconWrapper}>
                     <View
@@ -293,7 +261,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
                       ]}
                     >
                       <MaterialIcon
-                        name={iconName as any}
+                        name="home"
                         size={18}
                         color={focused ? '#fff' : INACTIVE_COLOR}
                       />
@@ -305,19 +273,14 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
               );
             })()}
 
-            {/* History tab */}
+            {/* 2. History */}
             {(() => {
               const focused =
                 drawerFocusedRoute.name === 'Dashboard' && nestedFocusedRouteName === 'History';
-              const iconName = getIconName('History', 'History');
               return (
                 <TouchableOpacity
-                  key="__drawer_history"
-                  onPress={() => goToDashboardTab('History')}
                   style={[styles.menuItem, focused && styles.menuItemActive]}
-                  activeOpacity={0.7}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: focused }}
+                  onPress={() => goToDashboardTab('History')}
                 >
                   <View style={styles.iconWrapper}>
                     <View
@@ -329,7 +292,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
                       ]}
                     >
                       <MaterialIcon
-                        name={iconName as any}
+                        name="history"
                         size={18}
                         color={focused ? '#fff' : INACTIVE_COLOR}
                       />
@@ -343,15 +306,12 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
               );
             })()}
 
-            {/* All other drawer routes */}
+            {/* 3. Dynamic Routes */}
             {props.state.routes.map((route, index) => {
               if (route.name === 'Dashboard' || route.name === 'History') return null;
 
-              const isDrawerFocused = props.state.index === index;
-              const focused = isDrawerFocused;
+              const focused = props.state.index === index;
               const { options } = props.descriptors[route.key];
-
-              // Filter hidden routes
               const isHidden = (options.drawerItemStyle as ViewStyle)?.display === 'none';
               if (isHidden) return null;
 
@@ -361,11 +321,8 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
               return (
                 <TouchableOpacity
                   key={route.key}
-                  onPress={() => handleNavigate(route.name)}
                   style={[styles.menuItem, focused && styles.menuItemActive]}
-                  activeOpacity={0.7}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: focused }}
+                  onPress={() => handleNavigate(route.name)}
                 >
                   <View style={styles.iconWrapper}>
                     <View
@@ -392,7 +349,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
         </Animated.View>
       </DrawerContentScrollView>
 
-      {/* 2. STICKY FOOTER */}
+      {/* --- FOOTER --- */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
         <TouchableOpacity style={styles.footerItem} onPress={handleLogout} activeOpacity={0.7}>
           <View style={styles.iconWrapper}>
@@ -400,19 +357,14 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
           </View>
           <Text style={[styles.footerText, { color: DANGER_COLOR }]}>Sign Out</Text>
         </TouchableOpacity>
-
         <Text style={styles.versionText}>{versionLabel}</Text>
       </View>
     </View>
   );
 };
 
-// --- STYLES ---
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: BACKGROUND_COLOR,
-  },
+  container: { flex: 1, backgroundColor: BACKGROUND_COLOR },
 
   /* HEADER */
   profileHeader: {
@@ -422,33 +374,6 @@ const styles = StyleSheet.create({
     paddingVertical: 24,
     marginTop: 8,
   },
-  profileInfo: {
-    flex: 1,
-    marginLeft: 14,
-    justifyContent: 'center',
-  },
-  profileName: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.text || '#0F172A',
-    marginBottom: 2,
-    letterSpacing: 0.3,
-  },
-  profileEmail: {
-    fontSize: 12,
-    color: TEXT_SUB_COLOR,
-    fontWeight: '500',
-  },
-
-  divider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: colors.border || '#E2E8F0',
-    width: '100%',
-    alignSelf: 'stretch',
-    marginVertical: 10,
-    opacity: 0.6,
-  },
-
   avatarWrap: {
     width: 56,
     height: 56,
@@ -456,7 +381,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     position: 'relative',
   },
-
   localBadge: {
     position: 'absolute',
     right: -6,
@@ -467,12 +391,26 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(185,28,28,0.12)',
   },
+  profileInfo: { flex: 1, marginLeft: 14, justifyContent: 'center' },
+  profileName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text || '#0F172A',
+    marginBottom: 2,
+    letterSpacing: 0.3,
+  },
+  profileEmail: { fontSize: 12, color: TEXT_SUB_COLOR, fontWeight: '500' },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.border || '#E2E8F0',
+    width: '100%',
+    alignSelf: 'stretch',
+    marginVertical: 10,
+    opacity: 0.6,
+  },
 
   /* MENU */
-  menuSection: {
-    paddingHorizontal: 12,
-    marginTop: 6,
-  },
+  menuSection: { paddingHorizontal: 12, marginTop: 6 },
   sectionTitle: {
     fontSize: 11,
     fontWeight: '800',
@@ -490,9 +428,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 4,
   },
-  menuItemActive: {
-    backgroundColor: colors.primarySoft || 'rgba(37, 99, 235, 0.08)',
-  },
+  menuItemActive: { backgroundColor: colors.primarySoft || 'rgba(37, 99, 235, 0.08)' },
   iconWrapper: { width: 40, alignItems: 'center', marginRight: 12 },
   iconCircle: {
     width: 36,
@@ -501,16 +437,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  menuText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: INACTIVE_COLOR,
-    flex: 1,
-  },
-  menuTextActive: {
-    color: ACTIVE_COLOR,
-    fontWeight: '700',
-  },
+  menuText: { fontSize: 15, fontWeight: '600', color: INACTIVE_COLOR, flex: 1 },
+  menuTextActive: { color: ACTIVE_COLOR, fontWeight: '700' },
   activeIndicator: {
     width: 4,
     height: 4,
@@ -523,7 +451,6 @@ const styles = StyleSheet.create({
   footer: {
     paddingHorizontal: 12,
     backgroundColor: BACKGROUND_COLOR,
-    // Ensure footer sits above content if minimal scrolling
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border || 'rgba(0,0,0,0.08)',
     paddingTop: 8,
@@ -535,11 +462,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 12,
   },
-  footerText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text || '#334155',
-  },
+  footerText: { fontSize: 14, fontWeight: '600', color: colors.text || '#334155' },
   versionText: {
     marginTop: 8,
     fontSize: 10,

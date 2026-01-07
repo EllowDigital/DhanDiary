@@ -1,6 +1,7 @@
 import AsyncStorage from '../src/utils/AsyncStorageWrapper';
 import {
   __TESTING__ as CONFIG_TESTING,
+  getActiveAnnouncement,
   type AnnouncementConfig,
 } from '../src/announcements/announcementConfig';
 import {
@@ -118,5 +119,35 @@ describe('announcement types/date rules', () => {
 
     CONFIG_TESTING.setAnnouncements([critical]);
     expect(await shouldShowCurrentAnnouncement(NOW_IN_RANGE)).toBe(false);
+  });
+
+  it('keeps list order when active announcements tie on priority', () => {
+    const a1: AnnouncementConfig = {
+      id: 'a1',
+      type: 'festival',
+      title: 'A1',
+      message: 'First',
+      startDate: '2025-12-30',
+      endDate: '2026-01-07',
+      priority: 10,
+      isActive: true,
+    };
+
+    const a2: AnnouncementConfig = {
+      id: 'a2',
+      type: 'festival',
+      title: 'A2',
+      message: 'Second',
+      startDate: '2025-12-30',
+      endDate: '2026-01-07',
+      priority: 10,
+      isActive: true,
+    };
+
+    CONFIG_TESTING.setAnnouncements([a1, a2]);
+    expect(getActiveAnnouncement(NOW_IN_RANGE)?.id).toBe('a1');
+
+    CONFIG_TESTING.setAnnouncements([a2, a1]);
+    expect(getActiveAnnouncement(NOW_IN_RANGE)?.id).toBe('a2');
   });
 });

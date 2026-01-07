@@ -5,8 +5,10 @@ const TOKEN_KEYS_INDEX = 'TOKEN_CACHE_KEYS_V1';
 
 // Serialize updates to the token keys index to avoid concurrent read-modify-write races.
 let tokenKeysIndexQueue: Promise<void> = Promise.resolve();
+let tokenKeysIndexInFlight = 0;
 
 const addKeyToIndex = async (key: string) => {
+  tokenKeysIndexInFlight += 1;
   tokenKeysIndexQueue = tokenKeysIndexQueue
     .then(async () => {
       try {
@@ -21,6 +23,13 @@ const addKeyToIndex = async (key: string) => {
     })
     .catch(() => {
       // keep chain intact
+    })
+    .finally(() => {
+      tokenKeysIndexInFlight -= 1;
+      // Break the long promise chain once the queue drains.
+      if (tokenKeysIndexInFlight === 0) {
+        tokenKeysIndexQueue = Promise.resolve();
+      }
     });
 
   return tokenKeysIndexQueue;

@@ -135,7 +135,7 @@ const DEFAULT_ANNOUNCEMENTS: AnnouncementConfig[] = [
     autoHideMs: CURRENT_ANNOUNCEMENT.autoHideMs,
     accentColor: CURRENT_ANNOUNCEMENT.accentColor,
     startDate: '2025-12-31',
-    endDate: '2026-01-12',
+    endDate: '2026-01-11',
     isActive: true,
   },
 ];
