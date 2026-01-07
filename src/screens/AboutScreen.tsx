@@ -9,13 +9,11 @@ import {
   ScrollView,
   Share,
   Alert,
-  Modal,
   Animated,
   Easing,
   StatusBar,
   useWindowDimensions,
   Clipboard,
-  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Text } from '@rneui/themed';
@@ -23,45 +21,155 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Updates from 'expo-updates';
 import NetInfo from '@react-native-community/netinfo';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
+
+// --- CUSTOM HOOKS & UTILS ---
+// Ensure these paths do not create circular dependencies
 import { useInternetStatus } from '../hooks/useInternetStatus';
 import { useNeonStatus, describeNeonHealth } from '../hooks/useNeonStatus';
 import { colors } from '../utils/design';
 import { useToast } from '../context/ToastContext';
-
-// --- PLACEHOLDERS ---
 import ScreenHeader from '../components/ScreenHeader';
-
-// --- MOCK UTILS (Replace with actual imports if available) ---
-const getLatestShareLink = async () => 'https://www.ellowdigital.space';
-
-// Safe package import
-let pkg: { version: string } = { version: '1.0.0' };
-try {
-  pkg = require('../../package.json');
-} catch (e) {
-  console.warn('Failed to load package.json', e);
-}
-
-// --- THEME ---
-const theme = {
-  background: colors.background,
-  surface: colors.card,
-  primary: colors.primary,
-  primarySoft: colors.primarySoft,
-  text: colors.text,
-  textSecondary: colors.muted,
-  accentGreen: colors.accentGreen,
-  accentRed: colors.accentRed,
-  heroBg: '#0F172A',
-  border: colors.border,
-};
 
 // --- CONSTANTS ---
 const ELLOW_URL = 'https://www.ellowdigital.space';
 const BRAND_NAME = 'EllowDigital';
-const BUILD_TYPE =
-  Constants.expoConfig?.extra?.BUILD_TYPE || (pkg.version.includes('beta') ? 'Beta' : 'Release');
 
+// Safe Version Access using Expo Constants instead of require('package.json')
+const APP_VERSION = Constants.expoConfig?.version || Constants.manifest?.version || '1.0.0';
+const BUILD_TYPE = Constants.expoConfig?.extra?.BUILD_TYPE || (__DEV__ ? 'Development' : 'Release');
+
+// Mock Share Link (Replace with your actual dynamic link logic if needed)
+const getLatestShareLink = async () => ELLOW_URL;
+
+// --- THEME ---
+const theme = {
+  background: colors.background || '#F8FAFC',
+  surface: colors.card || '#FFFFFF',
+  primary: colors.primary || '#2563EB',
+  primarySoft: colors.primarySoft || 'rgba(37, 99, 235, 0.1)',
+  text: colors.text || '#1E293B',
+  textSecondary: colors.muted || '#64748B',
+  accentGreen: colors.accentGreen || '#10B981',
+  accentRed: colors.accentRed || '#EF4444',
+  heroBg: '#0F172A', // Dark Slate for premium contrast
+  border: colors.border || '#E2E8F0',
+};
+
+// --- COMPONENT: SYSTEM STATUS PILL ---
+const SystemStatus: React.FC = () => {
+  const isOnline = useInternetStatus();
+  const health = useNeonStatus(5000);
+  const desc = describeNeonHealth(health);
+
+  // Decide visual state
+  let dotColor = '#10B981';
+  let label = 'System Operational';
+  let tone: 'positive' | 'warning' | 'neutral' = 'positive';
+
+  if (!isOnline) {
+    label = 'You are offline';
+    dotColor = '#EF4444';
+    tone = 'warning';
+  } else {
+    if (desc.tone === 'positive') {
+      label = 'System Operational';
+      dotColor = '#10B981';
+      tone = 'positive';
+      if (desc.label && desc.label !== 'Cloud good') label = `Operational · ${desc.label}`;
+    } else if (desc.tone === 'warning') {
+      label = desc.label || 'Reconnecting…';
+      dotColor = '#F59E0B';
+      tone = 'warning';
+    } else {
+      label = desc.label || 'Checking link…';
+      dotColor = '#94A3B8';
+      tone = 'neutral';
+    }
+  }
+
+  return (
+    <View
+      style={[
+        styles.activePill,
+        tone === 'positive'
+          ? styles.pillPositive
+          : tone === 'warning'
+            ? styles.pillWarning
+            : styles.pillNeutral,
+      ]}
+    >
+      <View style={[styles.activeDot, { backgroundColor: dotColor }]} />
+      <Text
+        style={[
+          styles.activeText,
+          tone === 'positive'
+            ? { color: '#065F46' }
+            : tone === 'warning'
+              ? { color: '#92400E' }
+              : { color: '#475569' },
+        ]}
+      >
+        {label}
+      </Text>
+    </View>
+  );
+};
+
+// --- COMPONENT: GRID ITEM ---
+const GridItem = ({
+  label,
+  value,
+  isBadge,
+  borderRight,
+  onPress,
+  actionIcon,
+}: {
+  label: string;
+  value: string;
+  isBadge?: boolean;
+  borderRight?: boolean;
+  onPress?: () => void;
+  actionIcon?: any;
+}) => (
+  <TouchableOpacity
+    style={[
+      styles.gridItem,
+      borderRight && { borderRightWidth: 1, borderRightColor: theme.border },
+    ]}
+    onPress={onPress}
+    activeOpacity={onPress ? 0.6 : 1}
+    disabled={!onPress}
+  >
+    <Text style={styles.gridLabel}>{label}</Text>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+      {isBadge ? (
+        <View
+          style={[
+            styles.badge,
+            {
+              backgroundColor:
+                value === 'Production' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(37, 99, 235, 0.15)',
+            },
+          ]}
+        >
+          <Text
+            style={[
+              styles.badgeText,
+              { color: value === 'Production' ? theme.accentGreen : theme.primary },
+            ]}
+          >
+            {value}
+          </Text>
+        </View>
+      ) : (
+        <Text style={styles.gridValue}>{value}</Text>
+      )}
+      {actionIcon && <MaterialIcon name={actionIcon} size={14} color={theme.primary} />}
+    </View>
+  </TouchableOpacity>
+);
+
+// --- MAIN SCREEN ---
 const AboutScreen: React.FC = () => {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -70,7 +178,7 @@ const AboutScreen: React.FC = () => {
   const { showToast, showActionToast } = useToast();
   const [scrollOffset, setScrollOffset] = useState(0);
 
-  // --- ANIMATIONS ---
+  // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
 
@@ -91,7 +199,7 @@ const AboutScreen: React.FC = () => {
     ]).start();
   }, [fadeAnim, slideAnim]);
 
-  // --- STATE ---
+  // Update State
   const [checking, setChecking] = useState(false);
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [failureCount, setFailureCount] = useState(0);
@@ -104,20 +212,16 @@ const AboutScreen: React.FC = () => {
 
   const isOfflineNow = useCallback(async (): Promise<boolean> => {
     if (!isOnline) return true;
-
     try {
       const state = await NetInfo.fetch();
       return state.isConnected === false || state.isInternetReachable === false;
     } catch {
-      // If NetInfo fails, fall back to the latest hook value.
       return !isOnline;
     }
   }, [isOnline]);
 
-  // --- UPDATE LOGIC ---
   const applyUpdate = useCallback(async () => {
     if (isExpoGo) return;
-
     if (!isOnline) {
       showToast('You are offline.', 'info');
       return;
@@ -131,7 +235,7 @@ const AboutScreen: React.FC = () => {
       if (await isOfflineNow()) {
         showToast('You are offline.', 'info');
       } else {
-        showToast(err?.message || 'Update failed. Please try again.', 'error');
+        showToast(err?.message || 'Update failed.', 'error');
         const newCount = failureCount + 1;
         setFailureCount(newCount);
         AsyncStorage.setItem('UPDATE_FAIL_COUNT', String(newCount));
@@ -139,14 +243,13 @@ const AboutScreen: React.FC = () => {
     } finally {
       setChecking(false);
     }
-  }, [failureCount, isExpoGo, isOfflineNow, showToast]);
+  }, [failureCount, isExpoGo, isOfflineNow, isOnline, showToast]);
 
   const checkForUpdates = useCallback(async () => {
     if (isExpoGo) {
-      showToast('Over-the-air updates are disabled in Expo Go.', 'error');
+      showToast('Updates are managed by Expo Go.', 'info');
       return;
     }
-
     if (!isOnline) {
       showToast('You are offline.', 'info');
       return;
@@ -157,32 +260,24 @@ const AboutScreen: React.FC = () => {
       const result = await Updates.checkForUpdateAsync();
       if (result.isAvailable) {
         setUpdateAvailable(true);
-        showActionToast('Update available.', 'Install', () => {
-          applyUpdate();
-        });
+        showActionToast('Update available.', 'Install', applyUpdate);
       } else {
         setUpdateAvailable(false);
         showToast("You're up to date.", 'success');
       }
     } catch (err: any) {
-      if (await isOfflineNow()) {
-        showToast('You are offline.', 'info');
-      } else {
-        showToast(err?.message || 'Unable to check for updates.', 'error');
-      }
+      showToast('Check failed. Try again later.', 'error');
     } finally {
       setChecking(false);
     }
-  }, [applyUpdate, isExpoGo, isOfflineNow, isOnline, showActionToast, showToast]);
+  }, [applyUpdate, isExpoGo, isOnline, showActionToast, showToast]);
 
   const clearRetryState = async () => {
     await AsyncStorage.removeItem('UPDATE_FAIL_COUNT');
     setFailureCount(0);
-    showToast('Update retry count cleared.', 'success');
+    showToast('Retry count cleared.', 'success');
   };
 
-  // --- ACTIONS ---
-  // In development/Expo Go, updateId might be null
   const updateId = Updates.updateId || 'Embedded';
   const shortId = updateId === 'Embedded' ? updateId : updateId.substring(0, 8);
 
@@ -193,33 +288,20 @@ const AboutScreen: React.FC = () => {
 
   const handleShare = async () => {
     try {
-      const link = await getLatestShareLink().catch(() => ELLOW_URL);
+      const link = await getLatestShareLink();
       Share.share({
         title: 'DhanDiary',
-        message: `Track your expenses smartly with DhanDiary! Download here: ${link}`,
+        message: `Check out DhanDiary! ${link}`,
       });
-    } catch (e) {
-      // ignore share dismissal
-    }
+    } catch (e) {}
   };
 
   const infoGrid = useMemo(
     () => [
-      { label: 'Version', value: `v${pkg.version}`, icon: 'tag' as const },
-      { label: 'Channel', value: BUILD_TYPE, icon: 'layers' as const },
-      {
-        label: 'Environment',
-        value: __DEV__ ? 'Development' : 'Production',
-        icon: 'code' as const,
-        isBadge: true,
-      },
-      {
-        label: 'Build ID',
-        value: shortId,
-        icon: 'fingerprint' as const,
-        onPress: copyUpdateId,
-        actionIcon: 'content-copy' as const,
-      },
+      { label: 'Version', value: `v${APP_VERSION}` },
+      { label: 'Channel', value: BUILD_TYPE },
+      { label: 'Environment', value: __DEV__ ? 'Development' : 'Production', isBadge: true },
+      { label: 'Build ID', value: shortId, onPress: copyUpdateId, actionIcon: 'content-copy' },
     ],
     [shortId]
   );
@@ -228,13 +310,7 @@ const AboutScreen: React.FC = () => {
     <View style={styles.mainContainer}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
-      <View
-        style={{
-          paddingTop: insets.top,
-          paddingHorizontal: 20,
-          backgroundColor: theme.background,
-        }}
-      >
+      <View style={[styles.headerContainer, { paddingTop: insets.top }]}>
         <ScreenHeader
           title="About"
           subtitle="System status & info"
@@ -255,7 +331,6 @@ const AboutScreen: React.FC = () => {
           <View style={styles.heroCard}>
             <View style={styles.heroContent}>
               <View style={styles.heroIconContainer}>
-                {/* Ensure asset exists or use placeholder logic */}
                 <Image
                   source={require('../../assets/splash-icon.png')}
                   style={styles.heroIcon}
@@ -265,8 +340,6 @@ const AboutScreen: React.FC = () => {
               <View style={styles.heroText}>
                 <Text style={styles.heroTitle}>DhanDiary</Text>
                 <Text style={styles.heroSubtitle}>Smart Finance Tracker</Text>
-
-                {/* System status: depends on internet + Neon health */}
                 <SystemStatus />
               </View>
             </View>
@@ -284,17 +357,17 @@ const AboutScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* 2. SYSTEM INFO GRID */}
+          {/* 2. SYSTEM INFO */}
           <Text style={styles.sectionHeader}>System Information</Text>
           <View style={styles.denseGrid}>
             <View style={styles.gridRow}>
-              <GridItem item={infoGrid[0]} borderRight />
-              <GridItem item={infoGrid[1]} />
+              <GridItem {...infoGrid[0]} borderRight />
+              <GridItem {...infoGrid[1]} />
             </View>
             <View style={styles.gridDivider} />
             <View style={styles.gridRow}>
-              <GridItem item={infoGrid[2]} borderRight />
-              <GridItem item={infoGrid[3]} />
+              <GridItem {...infoGrid[2]} borderRight />
+              <GridItem {...infoGrid[3]} />
             </View>
           </View>
 
@@ -358,7 +431,7 @@ const AboutScreen: React.FC = () => {
             )}
           </View>
 
-          {/* 4. SUPPORT LINKS */}
+          {/* 4. FOOTER BUTTONS */}
           <View style={styles.buttonRow}>
             <TouchableOpacity style={styles.halfBtn} onPress={handleShare}>
               <MaterialIcon name="share" size={20} color={theme.primary} />
@@ -383,124 +456,10 @@ const AboutScreen: React.FC = () => {
   );
 };
 
-// --- GRID ITEM COMPONENT ---
-interface GridItemProps {
-  label: string;
-  value: string;
-  icon?: any;
-  isBadge?: boolean;
-  onPress?: () => void;
-  actionIcon?: any;
-}
-
-const GridItem = ({ item, borderRight }: { item: GridItemProps; borderRight?: boolean }) => (
-  <TouchableOpacity
-    style={[
-      styles.gridItem,
-      borderRight && { borderRightWidth: 1, borderRightColor: theme.border },
-    ]}
-    onPress={item.onPress}
-    activeOpacity={item.onPress ? 0.6 : 1}
-    disabled={!item.onPress}
-  >
-    <Text style={styles.gridLabel}>{item.label}</Text>
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-      {item.isBadge ? (
-        <View
-          style={[
-            styles.badge,
-            {
-              backgroundColor:
-                item.value === 'Production'
-                  ? 'rgba(16, 185, 129, 0.15)'
-                  : 'rgba(37, 99, 235, 0.15)',
-            },
-          ]}
-        >
-          <Text
-            style={[
-              styles.badgeText,
-              { color: item.value === 'Production' ? theme.accentGreen : theme.primary },
-            ]}
-          >
-            {item.value}
-          </Text>
-        </View>
-      ) : (
-        <Text style={styles.gridValue}>{item.value}</Text>
-      )}
-      {item.actionIcon && <MaterialIcon name={item.actionIcon} size={14} color={theme.primary} />}
-    </View>
-  </TouchableOpacity>
-);
-
-export default AboutScreen;
-
-/* ------------------------- System Status Component ------------------------- */
-const SystemStatus: React.FC = () => {
-  const isOnline = useInternetStatus();
-  const health = useNeonStatus(5000);
-  const desc = describeNeonHealth(health);
-
-  // Decide visual state
-  let dotColor = '#10B981';
-  let label = 'System Operational';
-  let tone: 'positive' | 'warning' | 'neutral' = 'positive';
-
-  if (!isOnline) {
-    label = 'You are offline';
-    dotColor = '#EF4444';
-    tone = 'warning';
-  } else {
-    // Online — inspect neon health
-    if (desc.tone === 'positive') {
-      label = 'System Operational';
-      dotColor = '#10B981';
-      tone = 'positive';
-      // append latency if available
-      if (desc.label && desc.label !== 'Cloud good') label = `Operational · ${desc.label}`;
-    } else if (desc.tone === 'warning') {
-      label = desc.label || 'Reconnecting…';
-      dotColor = '#F59E0B';
-      tone = 'warning';
-    } else {
-      label = desc.label || 'Checking link…';
-      dotColor = '#94A3B8';
-      tone = 'neutral';
-    }
-  }
-
-  return (
-    <View
-      style={[
-        styles.activePill,
-        tone === 'positive'
-          ? styles.pillPositive
-          : tone === 'warning'
-            ? styles.pillWarning
-            : styles.pillNeutral,
-      ]}
-    >
-      <View style={[styles.activeDot, { backgroundColor: dotColor }]} />
-      <Text
-        style={[
-          styles.activeText,
-          tone === 'positive'
-            ? { color: '#065F46' }
-            : tone === 'warning'
-              ? { color: '#92400E' }
-              : { color: '#475569' },
-        ]}
-      >
-        {label}
-      </Text>
-    </View>
-  );
-};
-
 // --- STYLES ---
 const styles = StyleSheet.create({
   mainContainer: { flex: 1, backgroundColor: theme.background },
+  headerContainer: { paddingHorizontal: 20, backgroundColor: theme.background },
   scrollContent: { paddingHorizontal: 20, paddingTop: 10, flexGrow: 1 },
   sectionHeader: {
     fontSize: 13,
@@ -513,7 +472,7 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
 
-  /* HERO CARD */
+  // Hero Card
   heroCard: {
     backgroundColor: theme.heroBg,
     borderRadius: 24,
@@ -531,6 +490,12 @@ const styles = StyleSheet.create({
   heroText: { marginLeft: 16, flex: 1, justifyContent: 'center' },
   heroTitle: { fontSize: 24, fontWeight: '800', color: '#fff', letterSpacing: -0.5 },
   heroSubtitle: { fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
+  heroDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.1)', marginVertical: 20 },
+  heroFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  heroFooterText: { color: 'rgba(255,255,255,0.5)', fontSize: 12 },
+  heroBrand: { color: '#fff', fontWeight: '700' },
+
+  // Status Pill
   activePill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -541,15 +506,9 @@ const styles = StyleSheet.create({
     marginTop: 10,
     alignSelf: 'flex-start',
   },
-  pillPositive: {
-    backgroundColor: 'rgba(16,185,129,0.08)',
-  },
-  pillWarning: {
-    backgroundColor: 'rgba(245,158,11,0.08)',
-  },
-  pillNeutral: {
-    backgroundColor: 'rgba(148,163,184,0.06)',
-  },
+  pillPositive: { backgroundColor: 'rgba(16,185,129,0.08)' },
+  pillWarning: { backgroundColor: 'rgba(245,158,11,0.08)' },
+  pillNeutral: { backgroundColor: 'rgba(148,163,184,0.06)' },
   activeDot: {
     width: 6,
     height: 6,
@@ -558,10 +517,8 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   activeText: { color: theme.accentGreen, fontSize: 11, fontWeight: '700' },
-  heroDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.1)', marginVertical: 20 },
-  heroFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  heroFooterText: { color: 'rgba(255,255,255,0.5)', fontSize: 12 },
-  heroBrand: { color: '#fff', fontWeight: '700' },
+
+  // Visit Btn
   visitBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -573,7 +530,7 @@ const styles = StyleSheet.create({
   },
   visitText: { color: '#fff', fontSize: 12, fontWeight: '600' },
 
-  /* GRID */
+  // Grid
   denseGrid: {
     backgroundColor: theme.surface,
     borderRadius: 20,
@@ -600,7 +557,7 @@ const styles = StyleSheet.create({
   badge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
   badgeText: { fontSize: 12, fontWeight: '700' },
 
-  /* ACTIONS */
+  // Action Card
   actionCard: {
     backgroundColor: theme.surface,
     borderRadius: 20,
@@ -633,7 +590,7 @@ const styles = StyleSheet.create({
   },
   errorText: { fontSize: 12, color: theme.accentRed, fontWeight: '500' },
 
-  /* BUTTONS */
+  // Footer Buttons
   buttonRow: { flexDirection: 'row', gap: 12, marginTop: 24, marginBottom: 30 },
   halfBtn: {
     flex: 1,
@@ -655,35 +612,6 @@ const styles = StyleSheet.create({
     opacity: 0.5,
     paddingBottom: 20,
   },
-
-  /* MODAL */
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  modalContent: {
-    backgroundColor: theme.surface,
-    borderRadius: 24,
-    padding: 24,
-    alignItems: 'center',
-    elevation: 24,
-  },
-  modalIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  modalTitle: { fontSize: 20, fontWeight: '800', color: theme.text, marginBottom: 8 },
-  modalText: {
-    textAlign: 'center',
-    color: theme.textSecondary,
-    fontSize: 15,
-    lineHeight: 22,
-    marginBottom: 24,
-  },
 });
+
+export default AboutScreen;
