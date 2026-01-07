@@ -22,12 +22,12 @@ export default ({ config }) => {
     android: {
       ...config.android,
       package: 'com.ellowdigital.dhandiary',
-      versionCode: 242,
+      versionCode: 250,
     },
 
     ios: {
       ...config.ios,
-      buildNumber: '242',
+      buildNumber: '250',
     },
 
     extra: {
