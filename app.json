@@ -17,12 +17,12 @@
     },
     "ios": {
       "bundleIdentifier": "com.ellowdigital.dhandiary",
-      "buildNumber": "242",
+      "buildNumber": "250",
       "supportsTablet": true
     },
     "android": {
       "package": "com.ellowdigital.dhandiary",
-      "versionCode": 242,
+      "versionCode": 250,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
