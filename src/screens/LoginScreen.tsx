@@ -17,6 +17,7 @@ import {
   useWindowDimensions,
   Animated,
   Easing,
+  Keyboard,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSignIn, useOAuth, useUser, useAuth } from '@clerk/clerk-expo';
@@ -26,16 +27,15 @@ import * as AuthSession from 'expo-auth-session';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import NetInfo from '@react-native-community/netinfo';
-import OfflineNotice from '../components/OfflineNotice';
 
 // --- CUSTOM IMPORTS ---
-// Ensure these paths match your project structure
+import OfflineNotice from '../components/OfflineNotice';
 import { syncClerkUserToNeon } from '../services/clerkUserSync';
 import { saveSession } from '../db/session';
 import { warmNeonConnection } from '../services/auth';
 import { colors } from '../utils/design';
 
-// Warm up browser for smoother OAuth transitions
+// Warm up browser
 WebBrowser.maybeCompleteAuthSession();
 
 const useWarmUpBrowser = () => {
@@ -49,19 +49,16 @@ const useWarmUpBrowser = () => {
 
 const LoginScreen = () => {
   useWarmUpBrowser();
-
-  const { height: windowHeight } = useWindowDimensions();
-
-  const insets = useSafeAreaInsets();
-  const isCompactHeight = windowHeight < 700;
-  const isVeryCompactHeight = windowHeight < 650;
-  const brandTopSpacing = Math.min(
-    72,
-    Math.max(16, (insets?.top || 0) + (isCompactHeight ? 12 : 24))
-  );
-  const sheetBottomPadding = Math.max(12, (insets?.bottom || 0) + 12);
-
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
+
+  // --- RESPONSIVE DIMENSIONS ---
+  const { width, height } = useWindowDimensions();
+  const isLandscape = width > height;
+  const isTablet = width >= 768;
+  const isSmallScreen = height < 700;
+
+  // --- CLERK HOOKS ---
   const { signIn, setActive, isLoaded } = useSignIn();
   const { user: clerkUser, isLoaded: clerkLoaded } = useUser();
   const { isSignedIn } = useAuth();
@@ -70,30 +67,31 @@ const LoginScreen = () => {
   const { startOAuthFlow: startGoogleFlow } = useOAuth({ strategy: 'oauth_google' });
   const { startOAuthFlow: startGithubFlow } = useOAuth({ strategy: 'oauth_github' });
 
-  // App State Management (for Android background handling)
-  const isActiveRef = useRef(true);
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
-      isActiveRef.current = next === 'active';
-    });
-    return () => sub.remove();
-  }, []);
-
   // --- STATE ---
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
+
+  // Offline State
   const [offlineVisible, setOfflineVisible] = useState(false);
   const [offlineRetrying, setOfflineRetrying] = useState(false);
   const [offlineAttemptsLeft, setOfflineAttemptsLeft] = useState<number | undefined>(undefined);
 
   // --- ANIMATIONS ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(50)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+
+  // App State (Android Background Fix)
+  const isActiveRef = useRef(true);
 
   useEffect(() => {
+    // App State Listener
+    const sub = AppState.addEventListener('change', (next) => {
+      isActiveRef.current = next === 'active';
+    });
+
     // Entrance Animation
     Animated.parallel([
       Animated.timing(fadeAnim, {
@@ -104,55 +102,48 @@ const LoginScreen = () => {
       Animated.timing(slideAnim, {
         toValue: 0,
         duration: 800,
-        easing: Easing.out(Easing.exp),
+        easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
     ]).start();
 
-    // Pre-warm DB connection
+    // DB Warmup
     warmNeonConnection().catch(() => {});
+    return () => sub.remove();
   }, []);
 
-  // --- AUTO-SYNC LOGIC ---
+  // --- AUTO SYNC LOGIC ---
   useEffect(() => {
     if (!isSignedIn || !clerkLoaded || !clerkUser) return;
-
     const processSession = async () => {
       setSyncing(true);
       try {
         const id = clerkUser.id;
         const userEmail = clerkUser.primaryEmailAddress?.emailAddress || '';
-        const fullName = clerkUser.fullName;
-
         if (id && userEmail) {
           await handleSyncAndNavigate(
             id,
             userEmail,
-            fullName,
-            (clerkUser as any)?.imageUrl || null
+            clerkUser.fullName,
+            (clerkUser as any)?.imageUrl
           );
         } else {
           navigation.reset({ index: 0, routes: [{ name: 'Announcement' }] });
         }
       } catch (e) {
-        console.error('Session restore failed', e);
         setSyncing(false);
       }
     };
-
     processSession();
   }, [isSignedIn, clerkLoaded, clerkUser]);
 
-  // --- CORE HANDLERS ---
-
+  // --- HANDLERS ---
   const handleSyncAndNavigate = async (
     userId: string,
     userEmail: string,
     userName?: string | null,
     userImageUrl?: string | null
   ) => {
-    // IMPORTANT: our local DB + Neon sync expect the internal UUID from Neon,
-    // not Clerk's user id. Bridge Clerk -> internal UUID first.
     let bridged = null as any;
     try {
       bridged = await syncClerkUserToNeon({
@@ -164,23 +155,19 @@ const LoginScreen = () => {
       bridged = null;
     }
 
-    const internalUserId = bridged?.uuid || null;
-    const effectiveEmail = bridged?.email || userEmail;
-    const effectiveName = bridged?.name || userName || 'User';
-
     try {
-      if (internalUserId) {
+      if (bridged?.uuid) {
         await saveSession(
-          internalUserId,
-          effectiveName,
-          effectiveEmail,
+          bridged.uuid,
+          bridged.name || userName || 'User',
+          bridged.email || userEmail,
           userImageUrl ?? undefined,
           userImageUrl ?? undefined,
           userId
         );
       }
     } catch (e) {
-      console.warn('Local session save failed', e);
+      console.warn('Session save failed', e);
     }
 
     setSyncing(false);
@@ -188,187 +175,90 @@ const LoginScreen = () => {
     navigation.reset({ index: 0, routes: [{ name: 'Announcement' }] });
   };
 
-  const offlineManualRetry = async () => {
-    setOfflineRetrying(true);
-    setOfflineAttemptsLeft((v) => (typeof v === 'number' ? Math.max(0, v - 1) : undefined));
+  const onSignInPress = async () => {
+    if (!isLoaded || !email || !password) return;
+    setLoading(true);
+    Keyboard.dismiss();
+
     try {
-      const net = await NetInfo.fetch();
-      if (net.isConnected) {
-        setOfflineVisible(false);
-        setOfflineRetrying(false);
-        setLoading(true);
-        try {
-          if (!signIn) {
-            setLoading(false);
-            return;
-          }
-          const result = await signIn.create({ identifier: email, password });
-          if (result.status === 'complete') {
-            await setActive({ session: result.createdSessionId });
-          } else if (
-            result.status === 'needs_first_factor' ||
-            result.status === 'needs_second_factor'
-          ) {
-            navigation.navigate('VerifyEmail', { email, mode: 'signin' });
-          } else {
-            Alert.alert(
-              'Verification Required',
-              `Status: ${result.status}. Please check your email.`
-            );
-            setLoading(false);
-          }
-        } catch (err: any) {
-          const msg = err.errors?.[0]?.message || 'Invalid credentials.';
-          try {
-            const net = await NetInfo.fetch();
-            if (!net.isConnected) {
-              setOfflineAttemptsLeft(3);
-              setOfflineVisible(true);
-              setLoading(false);
-              return false;
-            }
-          } catch (e) {}
-          Alert.alert('Login Failed', msg);
-          setLoading(false);
-        }
+      const result = await signIn.create({ identifier: email, password });
+      if (result.status === 'complete') {
+        await setActive({ session: result.createdSessionId });
+      } else {
+        // Handle 2FA or other statuses
+        Alert.alert('Verification', 'Please check your email for verification.');
+        setLoading(false);
       }
-    } catch (e) {
-      setOfflineRetrying(false);
+    } catch (err: any) {
+      handleLoginError(err);
     }
   };
 
-  const onSignInPress = async () => {
-    if (!isLoaded) return;
-    if (!email || !password)
-      return Alert.alert('Missing Info', 'Please enter both email and password.');
+  const handleLoginError = async (err: any) => {
+    const code = err.errors?.[0]?.code;
+    const msg = err.errors?.[0]?.message || 'Invalid credentials.';
 
-    setLoading(true);
-
-    const MAX_ATTEMPTS = 3;
-
-    const doSignIn = async () => {
-      try {
-        if (!signIn) {
-          setLoading(false);
-          return false;
-        }
-        const result = await signIn.create({ identifier: email, password });
-
-        if (result.status === 'complete') {
-          await setActive({ session: result.createdSessionId });
-          return true;
-        }
-
-        if (result.status === 'needs_first_factor' || result.status === 'needs_second_factor') {
-          navigation.navigate('VerifyEmail', { email, mode: 'signin' });
-          setLoading(false);
-          return true;
-        }
-
-        Alert.alert('Verification Required', `Status: ${result.status}. Please check your email.`);
-        setLoading(false);
-        return false;
-      } catch (err: any) {
-        const msg = err.errors?.[0]?.message || 'Invalid credentials.';
-        const code = err.errors?.[0]?.code;
-        try {
-          const net = await NetInfo.fetch();
-          if (!net.isConnected) {
-            setOfflineAttemptsLeft(3);
-            setOfflineVisible(true);
-            setLoading(false);
-            return false;
-          }
-        } catch (e) {}
-
-        if (code === 'strategy_for_user_invalid') {
-          Alert.alert(
-            'Wrong Method',
-            'This email uses social login. Please click the Google or GitHub button below.'
-          );
-        } else if (code === 'form_identifier_not_found') {
-          Alert.alert(
-            'Account Not Found',
-            'No account found with this email. Please create an account.'
-          );
-        } else {
-          Alert.alert('Login Failed', msg);
-        }
-        setLoading(false);
-        return false;
-      }
-    };
-
-    try {
-      const net = await NetInfo.fetch();
-      if (net.isConnected) {
-        await doSignIn();
-        return;
-      }
-    } catch (e) {
-      // ignore net check error
+    // Check Offline
+    const net = await NetInfo.fetch();
+    if (!net.isConnected) {
+      setOfflineVisible(true);
+      setLoading(false);
+      return;
     }
 
-    // Offline: show OfflineNotice and attempt exponential backoff retries
-    setOfflineVisible(true);
-    setOfflineRetrying(true);
-    setOfflineAttemptsLeft(MAX_ATTEMPTS);
-
-    let attemptsLeft = MAX_ATTEMPTS;
-    while (attemptsLeft > 0) {
-      const waitMs = Math.pow(2, MAX_ATTEMPTS - attemptsLeft) * 1000; // 1s,2s,4s
-      await new Promise((r) => setTimeout(r, waitMs));
-      try {
-        const net = await NetInfo.fetch();
-        if (net.isConnected) {
-          setOfflineVisible(false);
-          setOfflineRetrying(false);
-          await doSignIn();
-          return;
-        }
-      } catch (e) {
-        // continue
-      }
-      attemptsLeft -= 1;
-      setOfflineAttemptsLeft(attemptsLeft);
+    if (code === 'strategy_for_user_invalid') {
+      Alert.alert('Social Login Required', 'Please use Google or GitHub to sign in.');
+    } else if (code === 'form_identifier_not_found') {
+      Alert.alert('Account Not Found', 'Please create an account first.');
+    } else {
+      Alert.alert('Login Failed', msg);
     }
-
-    // exhausted
-    setOfflineRetrying(false);
     setLoading(false);
   };
 
   const onSocialLogin = async (strategy: 'google' | 'github') => {
     if (!isLoaded || loading) return;
     if (Platform.OS === 'android' && !isActiveRef.current) return;
-
     setLoading(true);
     try {
       const startFlow = strategy === 'google' ? startGoogleFlow : startGithubFlow;
       const { createdSessionId, setActive: setSession } = await startFlow({
-        // Use the app scheme so Android can route back into the app.
-        // If running inside Expo Go, custom schemes won't work reliably.
         redirectUrl: AuthSession.makeRedirectUri({ scheme: 'dhandiary', path: 'oauth-callback' }),
       });
-
       if (createdSessionId && setSession) {
         await setSession({ session: createdSessionId });
       } else {
         setLoading(false);
       }
     } catch (err: any) {
-      if (!err.message?.includes('cancelled')) {
-        Alert.alert('Social Login Failed', 'Please try again.');
-      }
+      if (!err.message?.includes('cancelled')) Alert.alert('Error', 'Social login failed.');
       setLoading(false);
     }
   };
+
+  // --- RENDER HELPERS ---
+  const renderBrand = () => (
+    <Animated.View style={[styles.brandContainer, { opacity: fadeAnim }]}>
+      <View style={[styles.logoCircle, isLandscape && styles.logoCircleSmall]}>
+        <Image
+          source={require('../../assets/splash-icon.png')}
+          style={styles.logo}
+          resizeMode="contain"
+        />
+      </View>
+      <View>
+        <Text style={[styles.brandTitle, isLandscape && styles.brandTitleSmall]}>DhanDiary</Text>
+        <Text style={[styles.brandSubtitle, isLandscape && styles.brandSubtitleSmall]}>
+          Master your finances
+        </Text>
+      </View>
+    </Animated.View>
+  );
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
-      {/* Background Gradient */}
       <LinearGradient
         colors={['#E0F2FE', '#F0F9FF', '#FFFFFF']}
         style={StyleSheet.absoluteFill}
@@ -376,192 +266,183 @@ const LoginScreen = () => {
         end={{ x: 1, y: 1 }}
       />
 
-      {/* Avoid double bottom padding: we apply bottom inset via ScrollView paddingBottom */}
-      <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right'] as any}>
+      <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right', 'bottom']}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1 }}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
         >
           <ScrollView
             contentContainerStyle={[
               styles.scrollContent,
-              // Bottom safe-area is handled by the sheet itself.
-              { paddingBottom: 0 },
+              // Landscape: Center the row. Portrait: Space between.
+              isLandscape
+                ? { justifyContent: 'center', paddingVertical: 20 }
+                : { justifyContent: 'space-between' },
             ]}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            {/* Top Brand Section */}
-            <Animated.View
+            {/* CONTAINER: Switches between Column (Portrait) and Row (Landscape) */}
+            <View
               style={[
-                styles.brandSection,
-                {
-                  opacity: fadeAnim,
-                  marginTop: brandTopSpacing,
-                  marginBottom: isCompactHeight ? 24 : 40,
-                },
+                styles.responsiveContainer,
+                isLandscape ? styles.rowLayout : styles.columnLayout,
+                isTablet && styles.tabletLayout,
               ]}
             >
+              {/* BRAND SECTION */}
               <View
                 style={[
-                  styles.logoCircle,
-                  isCompactHeight && { width: 72, height: 72, borderRadius: 20 },
+                  styles.brandWrapper,
+                  isLandscape
+                    ? {
+                        flex: 0.45,
+                        paddingRight: 20,
+                        alignItems: 'flex-start',
+                        justifyContent: 'center',
+                      }
+                    : {
+                        alignItems: 'center',
+                        marginTop: isSmallScreen ? 20 : 60,
+                        marginBottom: 40,
+                      },
                 ]}
               >
-                <Image
-                  source={require('../../assets/splash-icon.png')}
-                  style={[styles.logo, isCompactHeight && { width: 44, height: 44 }]}
-                  resizeMode="contain"
-                />
+                {renderBrand()}
               </View>
-              <Text style={[styles.brandTitle, isVeryCompactHeight && { fontSize: 24 }]}>
-                DhanDiary
-              </Text>
-              <Text style={[styles.brandSubtitle, isVeryCompactHeight && { fontSize: 14 }]}>
-                Master your finances
-              </Text>
-            </Animated.View>
 
-            {/* Bottom Sheet Form */}
-            <Animated.View
-              style={[
-                styles.formSheet,
-                {
-                  opacity: fadeAnim,
-                  transform: [{ translateY: slideAnim }],
-                  paddingTop: isCompactHeight ? 24 : 32,
-                  paddingBottom: sheetBottomPadding,
-                },
-              ]}
-            >
-              <Text style={styles.welcomeText}>Welcome Back!</Text>
-              <Text style={styles.promptText}>Please sign in to continue</Text>
+              {/* FORM SECTION */}
+              <Animated.View
+                style={[
+                  styles.formCard,
+                  {
+                    opacity: fadeAnim,
+                    transform: [{ translateY: slideAnim }],
+                  },
+                  // Responsive Widths
+                  isLandscape ? { flex: 0.55, minWidth: 350 } : { width: '100%' },
+                  // Responsive Padding/Radius
+                  isLandscape
+                    ? { borderRadius: 24, padding: 24 }
+                    : {
+                        borderTopLeftRadius: 32,
+                        borderTopRightRadius: 32,
+                        padding: 32,
+                        paddingBottom: Math.max(insets.bottom + 20, 32),
+                      },
+                ]}
+              >
+                <Text style={styles.welcomeText}>Welcome Back!</Text>
+                <Text style={styles.promptText}>Please sign in to continue</Text>
 
-              {/* Inputs */}
-              <View style={styles.inputGroup}>
-                <View style={styles.inputContainer}>
-                  <Ionicons
-                    name="mail"
-                    size={20}
-                    color={colors.muted || '#94A3B8'}
-                    style={styles.inputIcon}
+                {/* Input Fields */}
+                <View style={styles.inputGroup}>
+                  <View style={styles.inputContainer}>
+                    <Ionicons name="mail" size={20} color={colors.muted} style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Email Address"
+                      placeholderTextColor="#94A3B8"
+                      value={email}
+                      onChangeText={setEmail}
+                      autoCapitalize="none"
+                      keyboardType="email-address"
+                    />
+                  </View>
+
+                  <View style={styles.inputContainer}>
+                    <Ionicons
+                      name="lock-closed"
+                      size={20}
+                      color={colors.muted}
+                      style={styles.inputIcon}
+                    />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Password"
+                      placeholderTextColor="#94A3B8"
+                      value={password}
+                      onChangeText={setPassword}
+                      secureTextEntry={!showPassword}
+                      autoCapitalize="none"
+                    />
+                    <TouchableOpacity
+                      onPress={() => setShowPassword(!showPassword)}
+                      style={styles.eyeBtn}
+                    >
+                      <Ionicons name={showPassword ? 'eye' : 'eye-off'} size={20} color="#94A3B8" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.primaryBtn, loading && styles.disabledBtn]}
+                  onPress={onSignInPress}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.primaryBtnText}>Sign In</Text>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.forgotBtn}
+                  onPress={() => navigation.navigate('ForgotPassword', { email })}
+                >
+                  <Text style={styles.forgotText}>Forgot Password?</Text>
+                </TouchableOpacity>
+
+                <View style={styles.divider}>
+                  <View style={styles.line} />
+                  <Text style={styles.dividerText}>or continue with</Text>
+                  <View style={styles.line} />
+                </View>
+
+                <View style={styles.socialRow}>
+                  <SocialButton
+                    label="Google"
+                    icon="https://cdn-icons-png.flaticon.com/512/300/300221.png"
+                    onPress={() => onSocialLogin('google')}
                   />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Email Address"
-                    placeholderTextColor="#94A3B8"
-                    value={email}
-                    onChangeText={setEmail}
-                    autoCapitalize="none"
-                    keyboardType="email-address"
+                  <SocialButton
+                    label="GitHub"
+                    icon="https://cdn-icons-png.flaticon.com/512/25/25231.png"
+                    onPress={() => onSocialLogin('github')}
                   />
                 </View>
 
-                <View style={styles.inputContainer}>
-                  <Ionicons
-                    name="lock-closed"
-                    size={20}
-                    color={colors.muted || '#94A3B8'}
-                    style={styles.inputIcon}
-                  />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Password"
-                    placeholderTextColor="#94A3B8"
-                    value={password}
-                    onChangeText={setPassword}
-                    secureTextEntry={!showPassword}
-                    autoCapitalize="none"
-                  />
-                  <TouchableOpacity
-                    onPress={() => setShowPassword(!showPassword)}
-                    style={styles.eyeBtn}
-                  >
-                    <Ionicons name={showPassword ? 'eye' : 'eye-off'} size={20} color="#94A3B8" />
+                <View style={styles.footer}>
+                  <Text style={styles.footerText}>New user? </Text>
+                  <TouchableOpacity onPress={() => navigation.navigate('Register')}>
+                    <Text style={styles.linkText}>Create Account</Text>
                   </TouchableOpacity>
                 </View>
-              </View>
-
-              {/* Login Button */}
-              <TouchableOpacity
-                style={[styles.primaryBtn, loading && styles.disabledBtn]}
-                onPress={onSignInPress}
-                disabled={loading}
-                activeOpacity={0.8}
-              >
-                {loading ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.primaryBtnText}>Sign In</Text>
-                )}
-              </TouchableOpacity>
-
-              {/* Forgot Password Link - ADDED HERE */}
-              <TouchableOpacity
-                style={styles.forgotPasswordContainer}
-                onPress={() => navigation.navigate('ForgotPassword', { email })}
-              >
-                <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-              </TouchableOpacity>
-
-              {/* Divider */}
-              <View style={styles.dividerContainer}>
-                <View style={styles.line} />
-                <Text style={styles.dividerText}>or continue with</Text>
-                <View style={styles.line} />
-              </View>
-
-              {/* Social Buttons */}
-              <View style={styles.socialRow}>
-                <TouchableOpacity style={styles.socialBtn} onPress={() => onSocialLogin('google')}>
-                  <Image
-                    source={{ uri: 'https://cdn-icons-png.flaticon.com/512/300/300221.png' }}
-                    style={styles.socialIcon}
-                  />
-                  <Text style={styles.socialBtnText}>Google</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.socialBtn} onPress={() => onSocialLogin('github')}>
-                  <Image
-                    source={{ uri: 'https://cdn-icons-png.flaticon.com/512/25/25231.png' }}
-                    style={styles.socialIcon}
-                    resizeMode="contain"
-                  />
-                  <Text style={styles.socialBtnText}>GitHub</Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Footer */}
-              <View style={styles.footer}>
-                <Text style={styles.footerText}>New user? </Text>
-                <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-                  <Text style={styles.linkText}>Create Account</Text>
-                </TouchableOpacity>
-              </View>
-            </Animated.View>
+              </Animated.View>
+            </View>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
 
-      {/* Offline Notice */}
       <OfflineNotice
         visible={offlineVisible}
-        retrying={offlineRetrying}
-        attemptsLeft={offlineAttemptsLeft}
-        onRetry={offlineManualRetry}
-        onClose={() => {
+        onRetry={() => {
           setOfflineVisible(false);
-          setOfflineRetrying(false);
-          setLoading(false);
+          setLoading(true);
+          onSignInPress();
         }}
+        onClose={() => setOfflineVisible(false)}
+        retrying={false}
+        attemptsLeft={undefined}
       />
 
-      {/* Sync Overlay */}
       {syncing && (
         <View style={styles.overlay}>
           <View style={styles.syncBox}>
             <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={styles.syncText}>Syncing your vault...</Text>
+            <Text style={styles.syncText}>Syncing vault...</Text>
           </View>
         </View>
       )}
@@ -569,17 +450,42 @@ const LoginScreen = () => {
   );
 };
 
+// Sub-component for Social Button
+const SocialButton = ({ label, icon, onPress }: any) => (
+  <TouchableOpacity style={styles.socialBtn} onPress={onPress}>
+    <Image source={{ uri: icon }} style={styles.socialIcon} resizeMode="contain" />
+    <Text style={styles.socialBtnText}>{label}</Text>
+  </TouchableOpacity>
+);
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'space-between',
+  scrollContent: { flexGrow: 1 },
+
+  // Layout Containers
+  responsiveContainer: {
+    flex: 1,
+    width: '100%',
+  },
+  columnLayout: {
+    flexDirection: 'column',
+  },
+  rowLayout: {
+    flexDirection: 'row',
+    paddingHorizontal: 40, // Gutter for landscape
+    alignItems: 'center',
+    maxWidth: 900,
+    alignSelf: 'center',
+  },
+  tabletLayout: {
+    maxWidth: 600,
+    alignSelf: 'center',
+    width: '100%',
   },
 
-  /* BRAND SECTION */
-  brandSection: {
-    alignItems: 'center',
-  },
+  // Brand Styles
+  brandWrapper: {},
+  brandContainer: { alignItems: 'center', flexDirection: 'column' },
   logoCircle: {
     width: 80,
     height: 80,
@@ -591,56 +497,36 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.15,
     shadowRadius: 20,
-    marginBottom: 16,
     elevation: 10,
+    marginBottom: 16,
   },
-  logo: {
-    width: 50,
-    height: 50,
-  },
-  brandTitle: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#0F172A',
-    letterSpacing: -0.5,
-  },
+  logoCircleSmall: { width: 60, height: 60, borderRadius: 16, marginBottom: 12 },
+  logo: { width: 50, height: 50 },
+  brandTitle: { fontSize: 28, fontWeight: '800', color: '#0F172A', textAlign: 'center' },
+  brandTitleSmall: { fontSize: 24 },
   brandSubtitle: {
     fontSize: 16,
     color: '#64748B',
     marginTop: 4,
     fontWeight: '500',
+    textAlign: 'center',
   },
+  brandSubtitleSmall: { fontSize: 14 },
 
-  /* FORM SHEET */
-  formSheet: {
+  // Form Card/Sheet
+  formCard: {
     backgroundColor: '#fff',
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    paddingHorizontal: 24,
-    paddingTop: 32,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.05,
     shadowRadius: 16,
     elevation: 20,
   },
-  welcomeText: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#0F172A',
-    marginBottom: 8,
-  },
-  promptText: {
-    fontSize: 14,
-    color: '#64748B',
-    marginBottom: 24,
-  },
+  welcomeText: { fontSize: 24, fontWeight: '700', color: '#0F172A', marginBottom: 8 },
+  promptText: { fontSize: 14, color: '#64748B', marginBottom: 24 },
 
-  /* INPUTS */
-  inputGroup: {
-    gap: 16,
-    marginBottom: 24,
-  },
+  // Inputs
+  inputGroup: { gap: 16, marginBottom: 24 },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -651,21 +537,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
-  inputIcon: {
-    marginRight: 12,
-  },
-  input: {
-    flex: 1,
-    height: '100%',
-    color: '#0F172A',
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  eyeBtn: {
-    padding: 8,
-  },
+  inputIcon: { marginRight: 12 },
+  input: { flex: 1, height: '100%', color: '#0F172A', fontSize: 16, fontWeight: '500' },
+  eyeBtn: { padding: 8 },
 
-  /* BUTTONS */
+  // Buttons
   primaryBtn: {
     backgroundColor: '#2563EB',
     height: 56,
@@ -678,38 +554,15 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 6,
   },
-  disabledBtn: {
-    opacity: 0.7,
-  },
-  primaryBtnText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
+  disabledBtn: { opacity: 0.7 },
+  primaryBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
 
-  /* FORGOT PASSWORD */
-  forgotPasswordContainer: {
-    alignItems: 'center',
-    marginTop: 12,
-    marginBottom: 8,
-  },
-  forgotPasswordText: {
-    color: '#64748B',
-    fontSize: 14,
-    fontWeight: '600',
-  },
+  forgotBtn: { alignItems: 'center', marginTop: 16, marginBottom: 8 },
+  forgotText: { color: '#64748B', fontSize: 14, fontWeight: '600' },
 
-  /* DIVIDER */
-  dividerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 24,
-  },
-  line: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#E2E8F0',
-  },
+  // Divider
+  divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 24 },
+  line: { flex: 1, height: 1, backgroundColor: '#E2E8F0' },
   dividerText: {
     marginHorizontal: 16,
     color: '#94A3B8',
@@ -718,12 +571,8 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
 
-  /* SOCIAL */
-  socialRow: {
-    flexDirection: 'row',
-    gap: 16,
-    marginBottom: 32,
-  },
+  // Social
+  socialRow: { flexDirection: 'row', gap: 16, marginBottom: 32 },
   socialBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -740,34 +589,15 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 1,
   },
-  socialIcon: {
-    width: 20,
-    height: 20,
-    marginRight: 8,
-  },
-  socialBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1E293B',
-  },
+  socialIcon: { width: 20, height: 20, marginRight: 8 },
+  socialBtnText: { fontSize: 14, fontWeight: '600', color: '#1E293B' },
 
-  /* FOOTER */
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  footerText: {
-    color: '#64748B',
-    fontSize: 14,
-  },
-  linkText: {
-    color: '#2563EB',
-    fontWeight: '700',
-    fontSize: 14,
-  },
+  // Footer
+  footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
+  footerText: { color: '#64748B', fontSize: 14 },
+  linkText: { color: '#2563EB', fontWeight: '700', fontSize: 14 },
 
-  /* OVERLAY */
+  // Overlay
   overlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(255,255,255,0.95)',
@@ -786,12 +616,7 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     elevation: 10,
   },
-  syncText: {
-    color: '#0F172A',
-    marginTop: 16,
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  syncText: { color: '#0F172A', marginTop: 16, fontSize: 16, fontWeight: '600' },
 });
 
 export default LoginScreen;
