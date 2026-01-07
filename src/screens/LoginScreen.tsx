@@ -59,7 +59,6 @@ const LoginScreen = () => {
 
   // Specific check for Tablet Portrait vs Phone Portrait
   const isTabletPortrait = isTablet && !isLandscape;
-  const isPhonePortrait = !isTablet && !isLandscape;
 
   // --- CLERK HOOKS ---
   const { signIn, setActive, isLoaded } = useSignIn();

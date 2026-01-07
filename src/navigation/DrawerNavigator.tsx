@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { useWindowDimensions, View, Platform } from 'react-native';
+import { useWindowDimensions, View } from 'react-native';
 import { createDrawerNavigator, DrawerNavigationOptions } from '@react-navigation/drawer';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
