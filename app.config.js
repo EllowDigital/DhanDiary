@@ -11,7 +11,7 @@ export default ({ config }) => {
   return {
     ...config,
     // App versioning (kept in sync with app.json / package.json)
-    version: '2.4.2',
+    version: '2.5.0',
 
     // 🔗 REQUIRED for Clerk + Google OAuth (NO proxy)
     scheme: 'dhandiary',
