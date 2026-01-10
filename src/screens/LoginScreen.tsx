@@ -35,6 +35,7 @@ import { warmNeonConnection } from '../services/auth';
 import { colors } from '../utils/design';
 import { validateEmail } from '../utils/emailValidation';
 import { useToast } from '../context/ToastContext';
+import { mapLoginErrorToUi, mapSocialLoginErrorToUi } from '../utils/authUi';
 
 // Warm up browser
 WebBrowser.maybeCompleteAuthSession();
@@ -115,7 +116,7 @@ const LoginScreen = () => {
       }),
     ]).start();
 
-    warmNeonConnection().catch(() => {});
+    warmNeonConnection().catch(() => { });
     return () => sub.remove();
   }, []);
 
@@ -238,10 +239,6 @@ const LoginScreen = () => {
   };
 
   const handleLoginError = async (err: any) => {
-    const code = err.errors?.[0]?.code;
-    const rawMsg = err.errors?.[0]?.message || err?.message;
-    const msg = String(rawMsg || 'Invalid credentials.');
-    const lower = msg.toLowerCase();
     const net = await NetInfo.fetch();
     if (!net.isConnected) {
       setOfflineVisible(true);
@@ -249,13 +246,12 @@ const LoginScreen = () => {
       return;
     }
 
-    if (
-      code === 'form_password_incorrect' ||
-      (lower.includes('password') && lower.includes('incorrect'))
-    ) {
-      setPasswordError('Incorrect password. Please try again.');
-    } else if (code === 'form_identifier_not_found') {
-      setEmailError('Account not found. Please register first.');
+    const ui = mapLoginErrorToUi(err);
+    if (ui.field === 'password') setPasswordError(ui.message);
+    else if (ui.field === 'email') setEmailError(ui.message);
+    else setFormError(ui.message);
+
+    if (ui.action?.type === 'go_register') {
       showActionToast(
         'Account not found. Please register first.',
         'Register',
@@ -263,25 +259,16 @@ const LoginScreen = () => {
         'info',
         7000
       );
-    } else if (code === 'strategy_for_user_invalid') {
-      setEmailError(
-        'This email is already registered using social login. Please sign in using Google/GitHub.'
-      );
-    } else if (lower.includes('verify') || lower.includes('verification')) {
+    } else if (ui.action?.type === 'go_verify_email') {
       showActionToast(
         'Please verify your email before logging in.',
         'Verify',
-        () =>
-          navigation.navigate('VerifyEmail', {
-            email: validateEmail(email).normalized,
-            mode: 'signin',
-          }),
+        () => navigation.navigate('VerifyEmail', { email: validateEmail(email).normalized, mode: 'signin' }),
         'info',
         7000
       );
-    } else {
-      setFormError('Something went wrong. Please try again later.');
     }
+
     setLoading(false);
   };
 
@@ -317,20 +304,11 @@ const LoginScreen = () => {
         setLoading(false);
       }
     } catch (err: any) {
-      const code = err?.errors?.[0]?.code;
-      const m = String(err?.errors?.[0]?.message || err?.message || '');
-      const lower = m.toLowerCase();
-      if (!lower.includes('cancelled')) {
-        if ((code && String(code).includes('oauth')) || lower.includes('oauth')) {
-          // Common edge: email is already registered via email/password.
-          showToast(
-            'This email is already registered with email and password. Please log in using email.',
-            'info',
-            6000
-          );
-        } else {
-          showToast('Something went wrong. Please try again later.', 'error', 5000);
-        }
+      const ui = mapSocialLoginErrorToUi(err);
+      if (ui) {
+        const lower = ui.message.toLowerCase();
+        const type = lower.includes('please log in using email') ? 'info' : 'error';
+        showToast(ui.message, type, 6000);
       }
       setLoading(false);
     } finally {
@@ -446,11 +424,11 @@ const LoginScreen = () => {
                   isCardStyle
                     ? { borderRadius: 24, padding: 32 } // Card Look
                     : {
-                        borderTopLeftRadius: 32,
-                        borderTopRightRadius: 32,
-                        padding: 32,
-                        paddingBottom: Math.max(insets.bottom + 20, 32),
-                      }, // Sheet Look
+                      borderTopLeftRadius: 32,
+                      borderTopRightRadius: 32,
+                      padding: 32,
+                      paddingBottom: Math.max(insets.bottom + 20, 32),
+                    }, // Sheet Look
                 ]}
               >
                 <Text style={styles.welcomeText}>Welcome Back!</Text>
