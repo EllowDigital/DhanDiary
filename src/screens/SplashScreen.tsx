@@ -15,6 +15,8 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
+import NetInfo from '@react-native-community/netinfo';
+import { useAuth } from '@clerk/clerk-expo';
 
 // --- CUSTOM IMPORTS ---
 import { RootStackParamList } from '../types/navigation';
@@ -31,9 +33,12 @@ const MIN_SPLASH_TIME_MS = 2500;
 const SplashScreen = () => {
   const navigation = useNavigation<SplashNavProp>();
   const { showToast } = useToast();
+  const { isSignedIn, isLoaded: authLoaded } = useAuth();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const isLandscape = width > height;
+
+  const decidedRef = useRef(false);
 
   // --- RESPONSIVE VALUES ---
   // Use the smaller dimension to calculate logo size ensures it fits on Landscape
@@ -140,6 +145,8 @@ const SplashScreen = () => {
 
     const navigateToNextScreen = (routeName: keyof RootStackParamList) => {
       if (!mounted) return;
+      if (decidedRef.current) return;
+      decidedRef.current = true;
 
       // Per UX spec: explain redirects triggered by auth state.
       try {
@@ -189,7 +196,28 @@ const SplashScreen = () => {
         const user = session.status === 'fulfilled' ? session.value : null;
         const isExitingUser = onboarding.status === 'fulfilled' ? !!onboarding.value : false;
 
+        // Determine online/offline (needed for offline-first session gating)
+        let online = true;
+        try {
+          const net = await NetInfo.fetch();
+          online = !!net.isConnected && net.isInternetReachable !== false;
+        } catch (e) {
+          online = true;
+        }
+
         if (user) {
+          const hasClerkIdentity = !!(user as any)?.clerk_id;
+          // If this session is tied to Clerk but Clerk is not signed in (and we are online),
+          // force re-auth instead of silently letting a stale local session through.
+          if (online && hasClerkIdentity) {
+            // Wait for Clerk auth state to load before deciding.
+            if (!authLoaded) return;
+            if (!isSignedIn) {
+              showToast('Your session has expired. Please log in again.', 'error', 3500);
+              navigateToNextScreen('Auth');
+              return;
+            }
+          }
           navigateToNextScreen('Announcement'); // Or Home/Main
         } else if (isExitingUser) {
           navigateToNextScreen('Auth');
@@ -208,7 +236,7 @@ const SplashScreen = () => {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [authLoaded, isSignedIn, showToast]);
 
   return (
     <View style={styles.container}>

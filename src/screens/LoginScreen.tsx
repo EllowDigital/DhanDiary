@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -220,26 +219,14 @@ const LoginScreen = () => {
         await setActive({ session: result.createdSessionId });
       } else {
         // Requires verification (email code flow)
-        showActionToast(
-          'Please verify your email before logging in.',
-          'Verify',
-          () => {
-            // Try to pass emailAddressId for a smoother prepare step.
-            const factor = (result as any)?.supportedFirstFactors?.find(
-              (f: any) => f?.strategy === 'email_code' && f?.safeIdentifier === v.normalized
-            );
-            navigation.navigate('VerifyEmail', {
-              email: v.normalized,
-              mode: 'signin',
-              emailAddressId: factor?.emailAddressId,
-            });
-          },
-          'info',
-          7000
+        const factor = (result as any)?.supportedFirstFactors?.find(
+          (f: any) => f?.strategy === 'email_code' && f?.safeIdentifier === v.normalized
         );
+        showToast('Please verify your email before logging in.', 'info', 3500);
         navigation.navigate('VerifyEmail', {
           email: v.normalized,
           mode: 'signin',
+          emailAddressId: factor?.emailAddressId,
         });
         setLoading(false);
       }
