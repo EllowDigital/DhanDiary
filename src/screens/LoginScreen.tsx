@@ -34,6 +34,8 @@ import { syncClerkUserToNeon } from '../services/clerkUserSync';
 import { saveSession } from '../db/session';
 import { warmNeonConnection } from '../services/auth';
 import { colors } from '../utils/design';
+import { validateEmail } from '../utils/emailValidation';
+import { useToast } from '../context/ToastContext';
 
 // Warm up browser
 WebBrowser.maybeCompleteAuthSession();
@@ -51,6 +53,7 @@ const LoginScreen = () => {
   useWarmUpBrowser();
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
+  const { showToast, showActionToast } = useToast();
 
   // --- RESPONSIVE DIMENSIONS ---
   const { width, height } = useWindowDimensions();
@@ -75,6 +78,14 @@ const LoginScreen = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
+
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [emailSuggestion, setEmailSuggestion] = useState<string | null>(null);
+
+  const inFlightRef = useRef(false);
+  const didShowRedirectRef = useRef(false);
 
   // Offline State
   const [offlineVisible, setOfflineVisible] = useState(false);
@@ -105,7 +116,7 @@ const LoginScreen = () => {
       }),
     ]).start();
 
-    warmNeonConnection().catch(() => {});
+    warmNeonConnection().catch(() => { });
     return () => sub.remove();
   }, []);
 
@@ -169,63 +180,165 @@ const LoginScreen = () => {
 
     setSyncing(false);
     setLoading(false);
+    if (!didShowRedirectRef.current) {
+      didShowRedirectRef.current = true;
+      showToast('Signed in successfully. Redirecting…', 'success', 2500);
+    }
     navigation.reset({ index: 0, routes: [{ name: 'Announcement' }] });
   };
 
   const onSignInPress = async () => {
-    if (!isLoaded || !email || !password) return;
+    if (!isLoaded) return;
+    if (loading || inFlightRef.current) return;
+
+    setEmailError(null);
+    setPasswordError(null);
+    setFormError(null);
+
+    const v = validateEmail(email);
+    if (!v.isValidFormat) {
+      setEmailError('Please enter a valid email address.');
+      return;
+    }
+    if (!v.isSupportedDomain) {
+      setEmailError('This email domain is not supported. Please use a valid email provider.');
+      return;
+    }
+    if (!password) {
+      setPasswordError('Please enter your password.');
+      return;
+    }
+
     setLoading(true);
+    inFlightRef.current = true;
     Keyboard.dismiss();
 
     try {
-      const result = await signIn.create({ identifier: email, password });
+      const result = await signIn.create({ identifier: v.normalized, password });
       if (result.status === 'complete') {
+        showToast('Welcome back! Signed in successfully.', 'success', 2500);
         await setActive({ session: result.createdSessionId });
       } else {
-        Alert.alert('Verification', 'Please check your email for verification.');
+        // Requires verification (email code flow)
+        showActionToast(
+          'Please verify your email before logging in.',
+          'Verify',
+          () => {
+            // Try to pass emailAddressId for a smoother prepare step.
+            const factor = (result as any)?.supportedFirstFactors?.find(
+              (f: any) => f?.strategy === 'email_code' && f?.safeIdentifier === v.normalized
+            );
+            navigation.navigate('VerifyEmail', {
+              email: v.normalized,
+              mode: 'signin',
+              emailAddressId: factor?.emailAddressId,
+            });
+          },
+          'info',
+          7000
+        );
+        navigation.navigate('VerifyEmail', {
+          email: v.normalized,
+          mode: 'signin',
+        });
         setLoading(false);
       }
     } catch (err: any) {
       handleLoginError(err);
+    } finally {
+      inFlightRef.current = false;
     }
   };
 
   const handleLoginError = async (err: any) => {
     const code = err.errors?.[0]?.code;
-    const msg = err.errors?.[0]?.message || 'Invalid credentials.';
+    const rawMsg = err.errors?.[0]?.message || err?.message;
+    const msg = String(rawMsg || 'Invalid credentials.');
+    const lower = msg.toLowerCase();
     const net = await NetInfo.fetch();
     if (!net.isConnected) {
       setOfflineVisible(true);
       setLoading(false);
       return;
     }
-    if (code === 'strategy_for_user_invalid') {
-      Alert.alert('Social Login Required', 'Please use Google or GitHub to sign in.');
+
+    if (code === 'form_password_incorrect' || lower.includes('password') && lower.includes('incorrect')) {
+      setPasswordError('Incorrect password. Please try again.');
     } else if (code === 'form_identifier_not_found') {
-      Alert.alert('Account Not Found', 'Please create an account first.');
+      setEmailError('Account not found. Please register first.');
+      showActionToast(
+        'Account not found. Please register first.',
+        'Register',
+        () => navigation.navigate('Register', { email: validateEmail(email).normalized }),
+        'info',
+        7000
+      );
+    } else if (code === 'strategy_for_user_invalid') {
+      setEmailError('This email is already registered using social login. Please sign in using Google/GitHub.');
+    } else if (lower.includes('verify') || lower.includes('verification')) {
+      showActionToast(
+        'Please verify your email before logging in.',
+        'Verify',
+        () => navigation.navigate('VerifyEmail', { email: validateEmail(email).normalized, mode: 'signin' }),
+        'info',
+        7000
+      );
     } else {
-      Alert.alert('Login Failed', msg);
+      setFormError('Something went wrong. Please try again later.');
     }
     setLoading(false);
   };
 
   const onSocialLogin = async (strategy: 'google' | 'github') => {
-    if (!isLoaded || loading) return;
+    if (!isLoaded) return;
+    if (loading || inFlightRef.current) return;
     if (Platform.OS === 'android' && !isActiveRef.current) return;
     setLoading(true);
+    inFlightRef.current = true;
     try {
       const startFlow = strategy === 'google' ? startGoogleFlow : startGithubFlow;
-      const { createdSessionId, setActive: setSession } = await startFlow({
+      const res: any = await startFlow({
         redirectUrl: AuthSession.makeRedirectUri({ scheme: 'dhandiary', path: 'oauth-callback' }),
       });
+      const createdSessionId = res?.createdSessionId;
+      const setSession = res?.setActive;
+
+      // Best-effort heuristic: if Clerk provided a SignUp resource with createdUserId, treat as first-time.
+      const createdUserId = res?.signUp?.createdUserId || res?.signUp?.createdUser?.id || null;
+      if (createdUserId) {
+        showToast(
+          `Account created successfully using ${strategy === 'google' ? 'Google' : 'GitHub'}.`,
+          'success',
+          3000
+        );
+      } else {
+        showToast('Welcome back! Signed in successfully.', 'success', 2500);
+      }
+
       if (createdSessionId && setSession) {
         await setSession({ session: createdSessionId });
       } else {
         setLoading(false);
       }
     } catch (err: any) {
-      if (!err.message?.includes('cancelled')) Alert.alert('Error', 'Social login failed.');
+      const code = err?.errors?.[0]?.code;
+      const m = String(err?.errors?.[0]?.message || err?.message || '');
+      const lower = m.toLowerCase();
+      if (!lower.includes('cancelled')) {
+        if ((code && String(code).includes('oauth')) || lower.includes('oauth')) {
+          // Common edge: email is already registered via email/password.
+          showToast(
+            'This email is already registered with email and password. Please log in using email.',
+            'info',
+            6000
+          );
+        } else {
+          showToast('Something went wrong. Please try again later.', 'error', 5000);
+        }
+      }
       setLoading(false);
+    } finally {
+      inFlightRef.current = false;
     }
   };
 
@@ -337,11 +450,11 @@ const LoginScreen = () => {
                   isCardStyle
                     ? { borderRadius: 24, padding: 32 } // Card Look
                     : {
-                        borderTopLeftRadius: 32,
-                        borderTopRightRadius: 32,
-                        padding: 32,
-                        paddingBottom: Math.max(insets.bottom + 20, 32),
-                      }, // Sheet Look
+                      borderTopLeftRadius: 32,
+                      borderTopRightRadius: 32,
+                      padding: 32,
+                      paddingBottom: Math.max(insets.bottom + 20, 32),
+                    }, // Sheet Look
                 ]}
               >
                 <Text style={styles.welcomeText}>Welcome Back!</Text>
@@ -355,11 +468,34 @@ const LoginScreen = () => {
                       placeholder="Email Address"
                       placeholderTextColor="#94A3B8"
                       value={email}
-                      onChangeText={setEmail}
+                      onChangeText={(t) => {
+                        const v = validateEmail(t);
+                        setEmail(v.normalized);
+                        setEmailSuggestion(v.suggestion || null);
+                        setEmailError(null);
+                        setFormError(null);
+                      }}
                       autoCapitalize="none"
                       keyboardType="email-address"
                     />
                   </View>
+
+                  {(emailError || emailSuggestion) && (
+                    <View style={{ marginTop: 6 }}>
+                      {!!emailError && <Text style={styles.fieldError}>{emailError}</Text>}
+                      {!!emailSuggestion && (
+                        <TouchableOpacity
+                          onPress={() => {
+                            setEmail(emailSuggestion);
+                            setEmailSuggestion(null);
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.suggestionText}>Did you mean {emailSuggestion}?</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
 
                   <View style={styles.inputContainer}>
                     <Ionicons
@@ -373,7 +509,11 @@ const LoginScreen = () => {
                       placeholder="Password"
                       placeholderTextColor="#94A3B8"
                       value={password}
-                      onChangeText={setPassword}
+                      onChangeText={(t) => {
+                        setPassword(t);
+                        setPasswordError(null);
+                        setFormError(null);
+                      }}
                       secureTextEntry={!showPassword}
                       autoCapitalize="none"
                     />
@@ -384,12 +524,19 @@ const LoginScreen = () => {
                       <Ionicons name={showPassword ? 'eye' : 'eye-off'} size={20} color="#94A3B8" />
                     </TouchableOpacity>
                   </View>
+
+                  {!!passwordError && <Text style={styles.fieldError}>{passwordError}</Text>}
                 </View>
 
                 <TouchableOpacity
                   style={[styles.primaryBtn, loading && styles.disabledBtn]}
                   onPress={onSignInPress}
-                  disabled={loading}
+                  disabled={
+                    loading ||
+                    !password ||
+                    !validateEmail(email).isValidFormat ||
+                    !validateEmail(email).isSupportedDomain
+                  }
                 >
                   {loading ? (
                     <ActivityIndicator color="#fff" />
@@ -397,6 +544,8 @@ const LoginScreen = () => {
                     <Text style={styles.primaryBtnText}>Sign In</Text>
                   )}
                 </TouchableOpacity>
+
+                {!!formError && <Text style={styles.formError}>{formError}</Text>}
 
                 <TouchableOpacity
                   style={styles.forgotBtn}
