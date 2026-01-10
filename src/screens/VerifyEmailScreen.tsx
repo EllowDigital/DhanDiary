@@ -28,11 +28,13 @@ import OfflineNotice from '../components/OfflineNotice';
 import { syncClerkUserToNeon } from '../services/clerkUserSync';
 import { saveSession } from '../db/session';
 import { colors } from '../utils/design';
+import { useToast } from '../context/ToastContext';
 
 const VerifyEmailScreen = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const insets = useSafeAreaInsets();
+  const { showToast } = useToast();
 
   // --- RESPONSIVE LAYOUT LOGIC ---
   const { width, height } = useWindowDimensions();
@@ -147,7 +149,10 @@ const VerifyEmailScreen = () => {
 
   // --- HANDLERS ---
   const onResend = async () => {
-    if (resendDisabled) return;
+    if (resendDisabled) {
+      showToast('Please wait before requesting another verification email.', 'info', 3500);
+      return;
+    }
     try {
       setLoading(true);
       setCode('');
@@ -238,6 +243,8 @@ const VerifyEmailScreen = () => {
       }
       if (errCode === 'verification_failed') {
         Alert.alert('Incorrect Code', 'The code you entered is invalid. Please try again.');
+      } else if (errCode === 'verification_expired' || String(err?.errors?.[0]?.message || '').toLowerCase().includes('expired')) {
+        Alert.alert('Expired Code', 'Verification link expired. Please request a new one.');
       } else {
         Alert.alert('Error', err?.errors?.[0]?.message || 'Verification failed. Please try again.');
       }
@@ -343,7 +350,7 @@ const VerifyEmailScreen = () => {
                 {/* Resend Link */}
                 <TouchableOpacity
                   onPress={onResend}
-                  disabled={resendDisabled || loading}
+                  disabled={loading}
                   style={styles.resendRow}
                   activeOpacity={0.6}
                 >
