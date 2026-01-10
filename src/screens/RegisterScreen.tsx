@@ -27,6 +27,7 @@ import OfflineNotice from '../components/OfflineNotice';
 // --- CUSTOM IMPORTS ---
 import { colors } from '../utils/design';
 import { validateEmail } from '../utils/emailValidation';
+import { mapRegisterErrorToUi } from '../utils/authUi';
 
 const RegisterScreen = () => {
   const navigation = useNavigation<any>();
@@ -146,38 +147,19 @@ const RegisterScreen = () => {
   };
 
   const handleSignUpError = (err: any) => {
-    const errors = err?.errors || [];
-    const code = errors?.[0]?.code;
-    const rawMsg = errors.length > 0 ? errors[0].message : err?.message;
-    const msg = String(rawMsg || '').trim();
-    const lower = msg.toLowerCase();
+    const ui = mapRegisterErrorToUi(err);
 
-    // Clerk: identifier already exists (email taken)
-    if (
-      code === 'form_identifier_exists' ||
-      lower.includes('already exists') ||
-      lower.includes('already in use')
-    ) {
-      const looksLikeSocial =
-        lower.includes('oauth') || lower.includes('google') || lower.includes('github');
-      const body = looksLikeSocial
-        ? 'This email is already registered using social login. Please sign in using Google/GitHub.'
-        : 'You are already registered. Please log in.';
-      Alert.alert('Already Registered', body, [
+    if (ui.kind === 'already_registered') {
+      Alert.alert('Already Registered', ui.message, [
         {
           text: 'OK',
           onPress: () => navigation.navigate('Login', { email: validateEmail(email).normalized }),
         },
       ]);
-    } else if (
-      code?.includes('password') ||
-      lower.includes('password') ||
-      code === 'form_password_pwned' ||
-      code === 'form_password_length_too_short'
-    ) {
-      Alert.alert('Weak Password', 'Please choose a stronger password.');
+    } else if (ui.kind === 'weak_password') {
+      setPasswordError(ui.message);
     } else {
-      Alert.alert('Registration Failed', 'Something went wrong. Please try again later.');
+      Alert.alert('Registration Failed', ui.message);
     }
     setLoading(false);
   };
