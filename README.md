@@ -1,68 +1,60 @@
-# 📘 DhanDiary – Personal Finance Tracker
+# 📘 DhanDiary — Personal Finance Made Simple
 
-**DhanDiary** is a robust, offline-first **income & expense manager** built using **React Native (Expo)**. Designed for simplicity and performance, it allows users to manage daily finances effortlessly through an intuitive dashboard, comprehensive history tracking, and secure cloud synchronization.
+**DhanDiary** is a simple, offline-first app to track your daily **income and expenses**
+without clutter, ads, or complexity. It’s built to be fast, reliable, and easy to use,
+so you can focus on managing money—not learning an app.
 
 <div align="center">
 
-[![Download on Indus Appstore](https://img.shields.io/badge/Download_on-Indus_Appstore-orange?style=for-the-badge&logo=android)](https://www.indusappstore.com/apps/finance/dhandiary/com.ellowdigital.dhandiary/?page=details&id=com.ellowdigital.dhandiary)
+[![Download on Indus Appstore](https://img.shields.io/badge/Download-Indus_Appstore-orange?style=for-the-badge&logo=android)](https://www.indusappstore.com/apps/finance/dhandiary/com.ellowdigital.dhandiary/?page=details&id=com.ellowdigital.dhandiary)
 
 </div>
 
 ---
 
-## ✨ Key Features
+## ✨ What DhanDiary Offers
 
-- **🧾 Smart Transaction Tracking:** Easily record income and expenses with detailed notes.
-- **📊 Insightful Analytics:** Visualize spending habits with clean charts and overviews.
-- **💾 Offline Capability:** Full functionality without internet access; auto-syncs when online.
-- **🔐 Secure Cloud Backup:** Optional, encrypted cloud backups powered by NeonDB.
-- **📚 Comprehensive History:** Access detailed logs of all past transactions.
-- **⚡ Optimized Performance:** Lightweight architecture ensuring a smooth user experience.
-
----
-
-## 🛠️ Technical Stack
-
-- **Framework:** React Native (Expo)
-- **Routing:** Expo Router
-- **Database (Cloud):** NeonDB (PostgreSQL)
-- **Local Storage:** SQLite / Async Storage
-- **Language:** TypeScript / JavaScript
+- 🧾 **Easy income & expense tracking**
+- 📊 **Clear charts** to understand spending
+- 💾 **Works fully offline** (syncs when online)
+- 🔐 **Optional secure cloud backup**
+- 📚 **Complete transaction history**
+- 🚫 **No ads, no trackers**
+- ⚡ **Fast and lightweight**
 
 ---
 
-## 🔒 Privacy & Security
+## 🔒 Privacy First
 
-User privacy is the cornerstone of DhanDiary:
-
-- **End-to-End Encryption:** User data is encrypted for maximum security.
-- **Ad-Free Experience:** No advertisements or third-party trackers.
-- **Optional Cloud Sync:** Users retain full control over whether their data is backed up to the cloud.
-
----
-
-## 📥 Installation
-
-You can download the latest stable version of DhanDiary directly from the Indus Appstore or access the APK via GitHub.
-
-### **[👉 Download on Indus Appstore](https://www.indusappstore.com/apps/finance/dhandiary/com.ellowdigital.dhandiary/?page=details&id=com.ellowdigital.dhandiary)**
-
-_Alternative:_
-[Download APK via GitHub](https://github.com/EllowDigital/DhanDiary/blob/master/shareapp-link.txt)
+- Your data stays **private and secure**
+- No unnecessary personal information collected
+- Cloud backup is **optional and encrypted**
+- You’re always in control of your data
 
 ---
 
-## 👨‍💻 Contact & Support
+## 📥 Get the App
 
-**Developed by Sarwan – EllowDigital**
+👉 **Indus Appstore**  
+https://www.indusappstore.com/apps/finance/dhandiary/com.ellowdigital.dhandiary/
 
-For inquiries, feedback, or support, please reach out via email:
-
-- **Developer:** [sarwanyadav6174@gmail.com](mailto:sarwanyadav6174@gmail.com)
-- **Team:** [ellowdigitalindia@gmail.com](mailto:ellowdigitalindia@gmail.com)
+👉 **APK (GitHub)**  
+https://github.com/EllowDigital/DhanDiary/blob/master/shareapp-link.txt
 
 ---
 
-## ⭐ Contribute & Support
+## 👨‍💻 About
 
-If you find this project useful, please consider giving it a ⭐ **star on GitHub** to support development!
+Built and maintained by **Sarwan (EllowDigital)** as an independent project.
+
+📧 Contact:
+
+- sarwanyadav6174@gmail.com
+- ellowdigitalindia@gmail.com
+
+---
+
+## ⭐ Support
+
+If DhanDiary helps you, please **star the repo** ⭐  
+It helps keep the project growing and improving.
