@@ -417,6 +417,12 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 8,
   },
+  fieldError: {
+    color: '#B91C1C',
+    fontSize: 13,
+    marginTop: 10,
+    textAlign: 'center',
+  },
 
   /* Header */
   header: {
