@@ -155,7 +155,7 @@ const SplashScreen = () => {
         } else if (routeName === 'Auth') {
           showToast('Please sign in to continue.', 'info', 2500);
         }
-      } catch (e) { }
+      } catch (e) {}
 
       // Exit Animation
       Animated.parallel([

@@ -115,7 +115,7 @@ const LoginScreen = () => {
       }),
     ]).start();
 
-    warmNeonConnection().catch(() => { });
+    warmNeonConnection().catch(() => {});
     return () => sub.remove();
   }, []);
 
@@ -249,7 +249,10 @@ const LoginScreen = () => {
       return;
     }
 
-    if (code === 'form_password_incorrect' || lower.includes('password') && lower.includes('incorrect')) {
+    if (
+      code === 'form_password_incorrect' ||
+      (lower.includes('password') && lower.includes('incorrect'))
+    ) {
       setPasswordError('Incorrect password. Please try again.');
     } else if (code === 'form_identifier_not_found') {
       setEmailError('Account not found. Please register first.');
@@ -261,12 +264,18 @@ const LoginScreen = () => {
         7000
       );
     } else if (code === 'strategy_for_user_invalid') {
-      setEmailError('This email is already registered using social login. Please sign in using Google/GitHub.');
+      setEmailError(
+        'This email is already registered using social login. Please sign in using Google/GitHub.'
+      );
     } else if (lower.includes('verify') || lower.includes('verification')) {
       showActionToast(
         'Please verify your email before logging in.',
         'Verify',
-        () => navigation.navigate('VerifyEmail', { email: validateEmail(email).normalized, mode: 'signin' }),
+        () =>
+          navigation.navigate('VerifyEmail', {
+            email: validateEmail(email).normalized,
+            mode: 'signin',
+          }),
         'info',
         7000
       );
@@ -437,11 +446,11 @@ const LoginScreen = () => {
                   isCardStyle
                     ? { borderRadius: 24, padding: 32 } // Card Look
                     : {
-                      borderTopLeftRadius: 32,
-                      borderTopRightRadius: 32,
-                      padding: 32,
-                      paddingBottom: Math.max(insets.bottom + 20, 32),
-                    }, // Sheet Look
+                        borderTopLeftRadius: 32,
+                        borderTopRightRadius: 32,
+                        padding: 32,
+                        paddingBottom: Math.max(insets.bottom + 20, 32),
+                      }, // Sheet Look
                 ]}
               >
                 <Text style={styles.welcomeText}>Welcome Back!</Text>

@@ -153,8 +153,13 @@ const RegisterScreen = () => {
     const lower = msg.toLowerCase();
 
     // Clerk: identifier already exists (email taken)
-    if (code === 'form_identifier_exists' || lower.includes('already exists') || lower.includes('already in use')) {
-      const looksLikeSocial = lower.includes('oauth') || lower.includes('google') || lower.includes('github');
+    if (
+      code === 'form_identifier_exists' ||
+      lower.includes('already exists') ||
+      lower.includes('already in use')
+    ) {
+      const looksLikeSocial =
+        lower.includes('oauth') || lower.includes('google') || lower.includes('github');
       const body = looksLikeSocial
         ? 'This email is already registered using social login. Please sign in using Google/GitHub.'
         : 'You are already registered. Please log in.';
@@ -330,9 +335,7 @@ const RegisterScreen = () => {
                           }}
                           activeOpacity={0.7}
                         >
-                          <Text style={styles.suggestionText}>
-                            Did you mean {emailSuggestion}?
-                          </Text>
+                          <Text style={styles.suggestionText}>Did you mean {emailSuggestion}?</Text>
                         </TouchableOpacity>
                       )}
                     </View>

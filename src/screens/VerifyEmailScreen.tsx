@@ -243,7 +243,12 @@ const VerifyEmailScreen = () => {
       }
       if (errCode === 'verification_failed') {
         Alert.alert('Incorrect Code', 'The code you entered is invalid. Please try again.');
-      } else if (errCode === 'verification_expired' || String(err?.errors?.[0]?.message || '').toLowerCase().includes('expired')) {
+      } else if (
+        errCode === 'verification_expired' ||
+        String(err?.errors?.[0]?.message || '')
+          .toLowerCase()
+          .includes('expired')
+      ) {
         Alert.alert('Expired Code', 'Verification link expired. Please request a new one.');
       } else {
         Alert.alert('Error', err?.errors?.[0]?.message || 'Verification failed. Please try again.');
