@@ -668,6 +668,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center', // Centers in middle (Tablet)
   },
+
+  fieldError: {
+    color: '#B91C1C',
+    fontSize: 13,
+    marginTop: 6,
+    marginLeft: 4,
+  },
+  formError: {
+    color: '#B91C1C',
+    fontSize: 13,
+    marginTop: 12,
+    textAlign: 'center',
+  },
+  suggestionText: {
+    color: '#1D4ED8',
+    fontSize: 13,
+    marginTop: 6,
+    marginLeft: 4,
+  },
   formWrapperSplit: {
     flex: 1,
     alignItems: 'center',
