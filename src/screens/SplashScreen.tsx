@@ -21,6 +21,7 @@ import { RootStackParamList } from '../types/navigation';
 import { getSession } from '../db/session';
 import { hasCompletedOnboarding } from '../utils/onboarding';
 import { colors } from '../utils/design';
+import { useToast } from '../context/ToastContext';
 
 type SplashNavProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -29,6 +30,7 @@ const MIN_SPLASH_TIME_MS = 2500;
 
 const SplashScreen = () => {
   const navigation = useNavigation<SplashNavProp>();
+  const { showToast } = useToast();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const isLandscape = width > height;
@@ -138,6 +140,15 @@ const SplashScreen = () => {
 
     const navigateToNextScreen = (routeName: keyof RootStackParamList) => {
       if (!mounted) return;
+
+      // Per UX spec: explain redirects triggered by auth state.
+      try {
+        if (routeName === 'Announcement') {
+          showToast('Welcome back! Loading your dashboard…', 'info', 2500);
+        } else if (routeName === 'Auth') {
+          showToast('Please sign in to continue.', 'info', 2500);
+        }
+      } catch (e) { }
 
       // Exit Animation
       Animated.parallel([
