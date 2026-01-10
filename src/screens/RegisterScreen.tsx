@@ -26,6 +26,7 @@ import OfflineNotice from '../components/OfflineNotice';
 
 // --- CUSTOM IMPORTS ---
 import { colors } from '../utils/design';
+import { validateEmail } from '../utils/emailValidation';
 
 const RegisterScreen = () => {
   const navigation = useNavigation<any>();
@@ -51,6 +52,13 @@ const RegisterScreen = () => {
   const [offlineRetrying, setOfflineRetrying] = useState(false);
   const [offlineAttemptsLeft, setOfflineAttemptsLeft] = useState<number | undefined>(undefined);
 
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [emailSuggestion, setEmailSuggestion] = useState<string | null>(null);
+
+  const inFlightRef = useRef(false);
+
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
@@ -74,31 +82,64 @@ const RegisterScreen = () => {
 
   const onSignUpPress = async () => {
     if (!isLoaded) return;
+    if (loading || inFlightRef.current) return;
+
+    setFormError(null);
+    setEmailError(null);
+    setPasswordError(null);
+
     if (!firstName || !lastName || !email || !password) {
-      return Alert.alert('Missing Fields', 'Please fill in all fields to continue.');
-    }
-
-    setLoading(true);
-    Keyboard.dismiss();
-
-    // Check connection before starting
-    const net = await NetInfo.fetch();
-    if (!net.isConnected) {
-      startOfflineFlow();
+      setFormError('Please fill in all fields to continue.');
       return;
     }
 
-    await attemptSignUp();
+    const v = validateEmail(email);
+    if (!v.isValidFormat) {
+      setEmailError('Please enter a valid email address.');
+      return;
+    }
+    if (!v.isSupportedDomain) {
+      setEmailError('This email domain is not supported. Please use a valid email provider.');
+      return;
+    }
+
+    if (password.length < 8) {
+      setPasswordError('Password must be at least 8 characters.');
+      return;
+    }
+
+    setLoading(true);
+    inFlightRef.current = true;
+    Keyboard.dismiss();
+
+    try {
+      // Check connection before starting
+      const net = await NetInfo.fetch();
+      if (!net.isConnected) {
+        startOfflineFlow();
+        return;
+      }
+
+      await attemptSignUp();
+    } finally {
+      inFlightRef.current = false;
+    }
   };
 
   const attemptSignUp = async () => {
     try {
       if (!signUp) return;
-      await signUp.create({ firstName, lastName, emailAddress: email, password });
+      const normalizedEmail = validateEmail(email).normalized;
+      await signUp.create({ firstName, lastName, emailAddress: normalizedEmail, password });
       await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
 
       setLoading(false);
-      navigation.navigate('VerifyEmail', { email, mode: 'signup', firstName, lastName });
+      navigation.navigate('VerifyEmail', {
+        email: normalizedEmail,
+        mode: 'signup',
+        firstName,
+        lastName,
+      });
     } catch (err: any) {
       handleSignUpError(err);
     }
@@ -106,17 +147,32 @@ const RegisterScreen = () => {
 
   const handleSignUpError = (err: any) => {
     const errors = err?.errors || [];
-    const errorMsg = errors.length > 0 ? errors[0].message : err.message;
+    const code = errors?.[0]?.code;
+    const rawMsg = errors.length > 0 ? errors[0].message : err?.message;
+    const msg = String(rawMsg || '').trim();
+    const lower = msg.toLowerCase();
 
-    if (errorMsg.includes('already exists')) {
-      Alert.alert('Account Exists', 'That email is already in use. Please log in instead.');
-    } else if (errorMsg.includes('password')) {
-      Alert.alert(
-        'Weak Password',
-        'Please choose a stronger password (min 8 chars, mixed case/numbers).'
-      );
+    // Clerk: identifier already exists (email taken)
+    if (code === 'form_identifier_exists' || lower.includes('already exists') || lower.includes('already in use')) {
+      const looksLikeSocial = lower.includes('oauth') || lower.includes('google') || lower.includes('github');
+      const body = looksLikeSocial
+        ? 'This email is already registered using social login. Please sign in using Google/GitHub.'
+        : 'You are already registered. Please log in.';
+      Alert.alert('Already Registered', body, [
+        {
+          text: 'OK',
+          onPress: () => navigation.navigate('Login', { email: validateEmail(email).normalized }),
+        },
+      ]);
+    } else if (
+      code?.includes('password') ||
+      lower.includes('password') ||
+      code === 'form_password_pwned' ||
+      code === 'form_password_length_too_short'
+    ) {
+      Alert.alert('Weak Password', 'Please choose a stronger password.');
     } else {
-      Alert.alert('Registration Failed', errorMsg);
+      Alert.alert('Registration Failed', 'Something went wrong. Please try again later.');
     }
     setLoading(false);
   };
@@ -250,12 +306,37 @@ const RegisterScreen = () => {
                       placeholder="Email Address"
                       placeholderTextColor="#94A3B8"
                       value={email}
-                      onChangeText={setEmail}
+                      onChangeText={(t) => {
+                        const v = validateEmail(t);
+                        setEmail(v.normalized);
+                        setEmailSuggestion(v.suggestion || null);
+                        setEmailError(null);
+                        setFormError(null);
+                      }}
                       autoCapitalize="none"
                       keyboardType="email-address"
                       autoComplete="email"
                     />
                   </View>
+
+                  {(emailError || emailSuggestion) && (
+                    <View style={{ marginTop: -6 }}>
+                      {!!emailError && <Text style={styles.fieldError}>{emailError}</Text>}
+                      {!!emailSuggestion && (
+                        <TouchableOpacity
+                          onPress={() => {
+                            setEmail(emailSuggestion);
+                            setEmailSuggestion(null);
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.suggestionText}>
+                            Did you mean {emailSuggestion}?
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
 
                   {/* Password */}
                   <View style={styles.inputContainer}>
@@ -270,7 +351,11 @@ const RegisterScreen = () => {
                       placeholder="Create Password"
                       placeholderTextColor="#94A3B8"
                       value={password}
-                      onChangeText={setPassword}
+                      onChangeText={(t) => {
+                        setPassword(t);
+                        setPasswordError(null);
+                        setFormError(null);
+                      }}
                       secureTextEntry={!showPassword}
                       autoCapitalize="none"
                     />
@@ -282,11 +367,20 @@ const RegisterScreen = () => {
                     </TouchableOpacity>
                   </View>
 
+                  {!!passwordError && <Text style={styles.fieldError}>{passwordError}</Text>}
+
                   {/* Action Button */}
                   <TouchableOpacity
                     style={[styles.primaryBtn, loading && styles.disabledBtn]}
                     onPress={onSignUpPress}
-                    disabled={loading}
+                    disabled={
+                      loading ||
+                      !firstName ||
+                      !lastName ||
+                      !password ||
+                      !validateEmail(email).isValidFormat ||
+                      !validateEmail(email).isSupportedDomain
+                    }
                     activeOpacity={0.8}
                   >
                     {loading ? (
@@ -295,6 +389,8 @@ const RegisterScreen = () => {
                       <Text style={styles.primaryBtnText}>Continue</Text>
                     )}
                   </TouchableOpacity>
+
+                  {!!formError && <Text style={styles.formError}>{formError}</Text>}
                 </View>
 
                 {/* Footer */}
@@ -425,6 +521,24 @@ const styles = StyleSheet.create({
   formContainer: {
     gap: 16,
     marginBottom: 24,
+  },
+  fieldError: {
+    color: '#B91C1C',
+    fontSize: 13,
+    marginTop: 6,
+    marginLeft: 4,
+  },
+  formError: {
+    color: '#B91C1C',
+    fontSize: 13,
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  suggestionText: {
+    color: '#1D4ED8',
+    fontSize: 13,
+    marginTop: 6,
+    marginLeft: 4,
   },
   row: {
     flexDirection: 'row',
