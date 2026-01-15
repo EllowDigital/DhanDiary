@@ -25,6 +25,7 @@ import * as AuthSession from 'expo-auth-session';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import NetInfo from '@react-native-community/netinfo';
+import Constants from 'expo-constants';
 
 // --- CUSTOM IMPORTS ---
 // Ensure these paths match your project structure
@@ -188,7 +189,10 @@ const LoginScreen = () => {
   };
 
   const onSignInPress = async () => {
-    if (!isLoaded) return;
+    if (!isLoaded || !signIn) {
+      showToast('Auth is not ready yet. Check Clerk publishable key.', 'info', 3500);
+      return;
+    }
     if (loading || inFlightRef.current) return;
 
     setEmailError(null);
@@ -273,15 +277,22 @@ const LoginScreen = () => {
   };
 
   const onSocialLogin = async (strategy: 'google' | 'github') => {
-    if (!isLoaded) return;
+    if (!isLoaded) {
+      showToast('Auth is not ready yet. Check Clerk publishable key.', 'info', 3500);
+      return;
+    }
     if (loading || inFlightRef.current) return;
     if (Platform.OS === 'android' && !isActiveRef.current) return;
     setLoading(true);
     inFlightRef.current = true;
     try {
       const startFlow = strategy === 'google' ? startGoogleFlow : startGithubFlow;
+      const scheme =
+        (Constants.expoConfig as any)?.scheme || (Constants.expoConfig as any)?.android?.scheme || 'dhandiary';
       const res: any = await startFlow({
-        redirectUrl: AuthSession.makeRedirectUri({ scheme: 'dhandiary', path: 'oauth-callback' }),
+        // Keep a stable native redirect URL for dev builds and production builds.
+        // Ensure this matches the redirect URL configured in your Clerk OAuth settings.
+        redirectUrl: AuthSession.makeRedirectUri({ scheme, path: 'oauth-callback' }),
       });
       const createdSessionId = res?.createdSessionId;
       const setSession = res?.setActive;
@@ -537,13 +548,15 @@ const LoginScreen = () => {
                 <View style={styles.socialRow}>
                   <SocialButton
                     label="Google"
-                    icon="https://cdn-icons-png.flaticon.com/512/300/300221.png"
+                    iconName="logo-google"
                     onPress={() => onSocialLogin('google')}
+                    disabled={!isLoaded || loading}
                   />
                   <SocialButton
                     label="GitHub"
-                    icon="https://cdn-icons-png.flaticon.com/512/25/25231.png"
+                    iconName="logo-github"
                     onPress={() => onSocialLogin('github')}
+                    disabled={!isLoaded || loading}
                   />
                 </View>
 
@@ -583,10 +596,15 @@ const LoginScreen = () => {
   );
 };
 
-const SocialButton = ({ label, icon, onPress }: any) => (
-  <TouchableOpacity style={styles.socialBtn} onPress={onPress}>
-    <Image source={{ uri: icon }} style={styles.socialIcon} resizeMode="contain" />
-    <Text style={styles.socialBtnText}>{label}</Text>
+const SocialButton = ({ label, iconName, onPress, disabled }: any) => (
+  <TouchableOpacity
+    style={[styles.socialBtn, disabled && styles.disabledBtn]}
+    onPress={onPress}
+    disabled={disabled}
+    activeOpacity={0.8}
+  >
+    <Ionicons name={iconName} size={18} color={disabled ? '#94A3B8' : '#0F172A'} />
+    <Text style={[styles.socialBtnText, disabled && { color: '#94A3B8' }]}>{label}</Text>
   </TouchableOpacity>
 );
 
