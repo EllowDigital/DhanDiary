@@ -14,7 +14,6 @@ import {
   Keyboard,
   useWindowDimensions,
   Animated,
-  UIManager,
   LayoutAnimation,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -40,6 +39,9 @@ import { DEFAULT_CATEGORY, ensureCategory, getIconForCategory } from '../constan
 import ScreenHeader from '../components/ScreenHeader';
 import { formatDate } from '../utils/date';
 import { isIncome } from '../utils/transactionType';
+import { enableLegacyLayoutAnimations } from '../utils/layoutAnimation';
+
+enableLegacyLayoutAnimations();
 
 // --- TYPES ---
 interface TransactionEntry {
@@ -466,7 +468,7 @@ const HistoryScreen = () => {
   const dismissSwipeTip = useCallback(() => {
     const key = `history_swipe_tip_dismissed:${user?.id || 'anon'}`;
     setSwipeTipVisible(false);
-    AsyncStorage.setItem(key, '1').catch(() => {});
+    AsyncStorage.setItem(key, '1').catch(() => { });
   }, [user?.id]);
 
   const toggleFilter = useCallback((f: 'ALL' | 'WEEK' | 'MONTH') => {

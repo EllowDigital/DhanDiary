@@ -9,7 +9,6 @@ import {
   LayoutAnimation,
   InteractionManager,
   PixelRatio,
-  UIManager,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text, Button } from '@rneui/themed';
@@ -24,13 +23,9 @@ import { useAuth } from '../hooks/useAuth';
 import { colors } from '../utils/design';
 import { exportToFile, shareFile } from '../utils/reportExporter';
 import FullScreenSpinner from '../components/FullScreenSpinner';
+import { enableLegacyLayoutAnimations } from '../utils/layoutAnimation';
 
-// Enable LayoutAnimation for Android
-if (Platform.OS === 'android') {
-  if (UIManager.setLayoutAnimationEnabledExperimental) {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
-  }
-}
+enableLegacyLayoutAnimations();
 
 // --- TYPES & CONFIG ---
 const FILTERS = ['Today', 'Daily', 'Weekly', 'Monthly', 'Custom', 'All'] as const;
@@ -129,13 +124,13 @@ const ExportScreen = () => {
           setResolvedUserId(id);
           return;
         }
-      } catch (e) {}
+      } catch (e) { }
 
       try {
         const t = await import('../db/transactions');
         const anyId = await t.getAnyUserWithTransactions?.();
         if (mounted && anyId) setResolvedUserId(anyId);
-      } catch (e) {}
+      } catch (e) { }
     })();
 
     return () => {
