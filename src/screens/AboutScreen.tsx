@@ -126,6 +126,7 @@ const GridItem = ({
   value,
   isBadge,
   borderRight,
+  borderBottom,
   onPress,
   actionIcon,
 }: {
@@ -133,6 +134,7 @@ const GridItem = ({
   value: string;
   isBadge?: boolean;
   borderRight?: boolean;
+  borderBottom?: boolean;
   onPress?: () => void;
   actionIcon?: any;
 }) => (
@@ -140,6 +142,7 @@ const GridItem = ({
     style={[
       styles.gridItem,
       borderRight && { borderRightWidth: 1, borderRightColor: theme.border },
+      borderBottom && { borderBottomWidth: 1, borderBottomColor: theme.border },
     ]}
     onPress={onPress}
     activeOpacity={onPress ? 0.6 : 1}
@@ -178,6 +181,8 @@ const GridItem = ({
 const AboutScreen: React.FC = () => {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const isCompact = width < 360;
+  const isVeryCompact = width < 330;
   const isExpoGo = Constants.appOwnership === 'expo';
   const isOnline = useInternetStatus();
   const { showToast, showActionToast } = useToast();
@@ -298,7 +303,7 @@ const AboutScreen: React.FC = () => {
         title: 'DhanDiary',
         message: `Check out DhanDiary! ${link}`,
       });
-    } catch (e) {}
+    } catch (e) { }
   };
 
   const infoGrid = useMemo(
@@ -315,7 +320,12 @@ const AboutScreen: React.FC = () => {
     <View style={styles.mainContainer}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
-      <View style={[styles.headerContainer, { paddingTop: insets.top }]}>
+      <View
+        style={[
+          styles.headerContainer,
+          { paddingTop: insets.top, paddingHorizontal: isCompact ? 16 : 20 },
+        ]}
+      >
         <ScreenHeader
           title="About"
           subtitle="System status & info"
@@ -327,14 +337,25 @@ const AboutScreen: React.FC = () => {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 40 }]}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingBottom: insets.bottom + 40,
+            paddingHorizontal: isCompact ? 16 : 20,
+          },
+        ]}
         onScroll={(e) => setScrollOffset(e.nativeEvent.contentOffset.y)}
         scrollEventThrottle={16}
       >
         <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
           {/* 1. HERO CARD */}
-          <View style={styles.heroCard}>
-            <View style={styles.heroContent}>
+          <View style={[styles.heroCard, isCompact && styles.heroCardCompact]}>
+            <View
+              style={[
+                styles.heroContent,
+                isVeryCompact && styles.heroContentStack,
+              ]}
+            >
               <View style={styles.heroIconContainer}>
                 <Image
                   source={require('../../assets/splash-icon.png')}
@@ -342,7 +363,7 @@ const AboutScreen: React.FC = () => {
                   resizeMode="contain"
                 />
               </View>
-              <View style={styles.heroText}>
+              <View style={[styles.heroText, isVeryCompact && styles.heroTextStack]}>
                 <Text style={styles.heroTitle}>DhanDiary</Text>
                 <Text style={styles.heroSubtitle}>Smart Finance Tracker</Text>
                 <SystemStatus />
@@ -351,13 +372,13 @@ const AboutScreen: React.FC = () => {
 
             <View style={styles.heroDivider} />
 
-            <View style={styles.heroFooter}>
+            <View style={[styles.heroFooter, isCompact && styles.heroFooterStack]}>
               <Text style={styles.heroFooterText}>
                 Designed by <Text style={styles.heroBrand}>{BRAND_NAME}</Text>
               </Text>
-              <View style={styles.visitBtnRow}>
+              <View style={[styles.visitBtnRow, isCompact && styles.visitBtnRowWrap]}>
                 <TouchableOpacity
-                  style={styles.visitBtn}
+                  style={[styles.visitBtn, isCompact && styles.visitBtnWrapItem]}
                   onPress={() => Linking.openURL(ELLOW_URL)}
                 >
                   <Text style={styles.visitText}>EllowDigital</Text>
@@ -365,7 +386,7 @@ const AboutScreen: React.FC = () => {
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={styles.visitBtn}
+                  style={[styles.visitBtn, isCompact && styles.visitBtnWrapItem]}
                   onPress={() => Linking.openURL(APP_WEBSITE_URL)}
                 >
                   <Text style={styles.visitText}>App Website</Text>
@@ -378,21 +399,32 @@ const AboutScreen: React.FC = () => {
           {/* 2. SYSTEM INFO */}
           <Text style={styles.sectionHeader}>System Information</Text>
           <View style={styles.denseGrid}>
-            <View style={styles.gridRow}>
-              <GridItem {...infoGrid[0]} borderRight />
-              <GridItem {...infoGrid[1]} />
-            </View>
-            <View style={styles.gridDivider} />
-            <View style={styles.gridRow}>
-              <GridItem {...infoGrid[2]} borderRight />
-              <GridItem {...infoGrid[3]} />
-            </View>
+            {isVeryCompact ? (
+              <>
+                <GridItem {...infoGrid[0]} borderBottom />
+                <GridItem {...infoGrid[1]} borderBottom />
+                <GridItem {...infoGrid[2]} borderBottom />
+                <GridItem {...infoGrid[3]} />
+              </>
+            ) : (
+              <>
+                <View style={styles.gridRow}>
+                  <GridItem {...infoGrid[0]} borderRight />
+                  <GridItem {...infoGrid[1]} />
+                </View>
+                <View style={styles.gridDivider} />
+                <View style={styles.gridRow}>
+                  <GridItem {...infoGrid[2]} borderRight />
+                  <GridItem {...infoGrid[3]} />
+                </View>
+              </>
+            )}
           </View>
 
           {/* 3. UPDATE CENTER */}
           <Text style={styles.sectionHeader}>Update Center</Text>
           <View style={styles.actionCard}>
-            <View style={styles.actionRow}>
+            <View style={[styles.actionRow, isVeryCompact && styles.actionRowStack]}>
               <View
                 style={[
                   styles.iconBoxLarge,
@@ -450,14 +482,14 @@ const AboutScreen: React.FC = () => {
           </View>
 
           {/* 4. FOOTER BUTTONS */}
-          <View style={styles.buttonRow}>
-            <TouchableOpacity style={styles.halfBtn} onPress={handleShare}>
+          <View style={[styles.buttonRow, isCompact && styles.buttonRowStack]}>
+            <TouchableOpacity style={[styles.halfBtn, isCompact && styles.halfBtnFull]} onPress={handleShare}>
               <MaterialIcon name="share" size={20} color={theme.primary} />
               <Text style={styles.halfBtnText}>Share App</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.halfBtn}
+              style={[styles.halfBtn, isCompact && styles.halfBtnFull]}
               onPress={() => Linking.openURL('mailto:ellowdigitalindia@gmail.com')}
             >
               <MaterialIcon name="mail-outline" size={20} color={theme.primary} />
@@ -502,15 +534,22 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 10,
   },
+  heroCardCompact: {
+    padding: 18,
+    borderRadius: 20,
+  },
   heroContent: { flexDirection: 'row', alignItems: 'center' },
+  heroContentStack: { flexDirection: 'column', alignItems: 'flex-start' },
   heroIconContainer: { padding: 4, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 20 },
   heroIcon: { width: 56, height: 56 },
   heroText: { marginLeft: 16, flex: 1, justifyContent: 'center' },
+  heroTextStack: { marginLeft: 0, marginTop: 12, width: '100%' },
   heroTitle: { fontSize: 24, fontWeight: '800', color: '#fff', letterSpacing: -0.5 },
   heroSubtitle: { fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
   heroDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.1)', marginVertical: 20 },
   heroFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  heroFooterText: { color: 'rgba(255,255,255,0.5)', fontSize: 12 },
+  heroFooterStack: { flexDirection: 'column', alignItems: 'flex-start' },
+  heroFooterText: { color: 'rgba(255,255,255,0.5)', fontSize: 12, flexShrink: 1 },
   heroBrand: { color: '#fff', fontWeight: '700' },
 
   // Status Pill
@@ -542,6 +581,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  visitBtnRowWrap: {
+    flexWrap: 'wrap',
+    marginTop: 10,
+  },
   visitBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -551,7 +594,11 @@ const styles = StyleSheet.create({
     borderRadius: 100,
     gap: 4,
   },
-  visitText: { color: '#fff', fontSize: 12, fontWeight: '600' },
+  visitBtnWrapItem: {
+    marginRight: 8,
+    marginTop: 8,
+  },
+  visitText: { color: '#fff', fontSize: 12, fontWeight: '600', flexShrink: 1 },
 
   // Grid
   denseGrid: {
@@ -594,6 +641,7 @@ const styles = StyleSheet.create({
     borderColor: theme.border,
   },
   actionRow: { flexDirection: 'row', gap: 16, marginBottom: 16 },
+  actionRowStack: { flexDirection: 'column', gap: 12 },
   iconBoxLarge: {
     width: 48,
     height: 48,
@@ -615,6 +663,7 @@ const styles = StyleSheet.create({
 
   // Footer Buttons
   buttonRow: { flexDirection: 'row', gap: 12, marginTop: 24, marginBottom: 30 },
+  buttonRowStack: { flexDirection: 'column' },
   halfBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -626,6 +675,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.border,
     gap: 8,
+  },
+  halfBtnFull: {
+    flex: 0,
+    width: '100%',
   },
   halfBtnText: { fontSize: 14, fontWeight: '600', color: theme.text },
   copyright: {
