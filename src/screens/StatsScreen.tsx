@@ -12,7 +12,6 @@ import {
   InteractionManager,
   PixelRatio,
   Platform,
-  UIManager,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
@@ -33,12 +32,9 @@ import { getSession } from '../db/session';
 import { subscribeSession } from '../utils/sessionEvents';
 import { executeSqlAsync } from '../db/sqlite';
 import { subscribeSyncStatus } from '../services/syncManager';
+import { enableLegacyLayoutAnimations } from '../utils/layoutAnimation';
 
-if (Platform.OS === 'android') {
-  if (UIManager.setLayoutAnimationEnabledExperimental) {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
-  }
-}
+enableLegacyLayoutAnimations();
 
 // --- CONSTANTS ---
 const FILTERS = ['Day', 'Week', '7 Days', '30 Days', 'This Month', 'This Year', 'All'];
@@ -157,7 +153,7 @@ const StatsScreen = () => {
       try {
         const s = await getSession();
         if (mounted) setFallbackSession(s);
-      } catch (e) {}
+      } catch (e) { }
     };
     load();
     const unsub = subscribeSession((s) => {
@@ -167,7 +163,7 @@ const StatsScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -225,7 +221,7 @@ const StatsScreen = () => {
     return () => {
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, [navigation, refreshPeriods]);
 
@@ -243,7 +239,7 @@ const StatsScreen = () => {
     return () => {
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, [refreshPeriods]);
 

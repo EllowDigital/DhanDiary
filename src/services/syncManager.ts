@@ -471,7 +471,7 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
     if (!realId) {
       try {
         const created = await safeQ(
-          "INSERT INTO users (clerk_id, email, name, password_hash, status) VALUES ($1, $2, $3, 'clerk_managed', 'active') RETURNING id",
+          "INSERT INTO users (clerk_id, email, name, password_hash, status) VALUES ($1, $2, $3, 'clerk_managed', 'active') ON CONFLICT (email) DO NOTHING RETURNING id",
           [clerkId, String(email || ''), String(name || '')]
         );
         const v = created && created.length ? String((created as any)[0]?.id || '') : '';

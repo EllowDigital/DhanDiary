@@ -10,7 +10,6 @@ import {
   LayoutAnimation,
   Platform,
   ActivityIndicator,
-  NativeModules,
   RefreshControl,
   Image,
 } from 'react-native';
@@ -34,13 +33,9 @@ import { subscribeSyncStatus } from '../services/syncManager';
 import { isExpense as isExpenseType, isIncome as isIncomeType } from '../utils/transactionType';
 import { getIconForCategory } from '../constants/categories';
 import { colors as themeColors } from '../utils/design';
+import { enableLegacyLayoutAnimations } from '../utils/layoutAnimation';
 
-// Enable LayoutAnimation on Android
-if (Platform.OS === 'android') {
-  if (NativeModules.UIManager?.setLayoutAnimationEnabledExperimental) {
-    NativeModules.UIManager.setLayoutAnimationEnabledExperimental(true);
-  }
-}
+enableLegacyLayoutAnimations();
 
 // --- CONSTANTS ---
 const COLORS = {
@@ -293,7 +288,7 @@ const HomeScreen = () => {
     return () => {
       try {
         unsub?.();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, [fadeAnim]);
 
@@ -304,7 +299,7 @@ const HomeScreen = () => {
       try {
         const s = await getSession();
         if (mounted) setFallbackSession(s);
-      } catch (e) {}
+      } catch (e) { }
     };
     load();
     const unsub = subscribeSession((s) => {

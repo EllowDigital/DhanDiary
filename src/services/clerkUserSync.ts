@@ -67,35 +67,29 @@ export const syncClerkUserToNeon = async (clerkUser: {
       // We do NOT use email as an identity key. The user boundary is clerk_id.
       // However, for legacy accounts that may exist by email-only, we allow
       // attaching clerk_id ONLY when the existing row has clerk_id NULL.
-      try {
-        const insertSql = `
-          INSERT INTO users (clerk_id, email, name, password_hash, status)
-          VALUES ($1, $2, $3, 'clerk_managed', 'active')
-          RETURNING id, clerk_id, email, name
-        `;
-        await query(insertSql, [clerkUser.id, email, name]);
-      } catch (e: any) {
-        const msg = String(e?.message || e || '').toLowerCase();
-        const isEmailConflict =
-          msg.includes('email') && (msg.includes('unique') || msg.includes('duplicate'));
-        if (!isEmailConflict) throw e;
+      const upsertSql = `
+        INSERT INTO users (clerk_id, email, name, password_hash, status)
+        VALUES ($1, $2, $3, 'clerk_managed', 'active')
+        ON CONFLICT (email)
+        DO UPDATE SET
+          clerk_id = EXCLUDED.clerk_id,
+          name = COALESCE(users.name, EXCLUDED.name),
+          updated_at = NOW()
+        WHERE users.clerk_id IS NULL OR users.clerk_id = EXCLUDED.clerk_id
+        RETURNING id, clerk_id, email, name
+      `;
 
-        // Legacy safe-link: email exists, but only allow taking it if clerk_id is NULL.
+      const upserted = await query<DbUser>(upsertSql, [clerkUser.id, email, name]);
+      if (!upserted || upserted.length === 0) {
+        // Conflict existed but could not be claimed (clerk_id owned by another account)
         const legacy = await query<DbUser>(
           'SELECT id, clerk_id, email, name FROM users WHERE lower(email) = $1 LIMIT 1',
           [email]
         );
         const row = legacy && legacy.length ? legacy[0] : null;
-        if (!row) throw e;
-
-        if (row.clerk_id && String(row.clerk_id) !== String(clerkUser.id)) {
+        if (row?.clerk_id && String(row.clerk_id) !== String(clerkUser.id)) {
           throw new Error('Email is already linked to another account');
         }
-
-        await query(
-          'UPDATE users SET clerk_id = $1, updated_at = NOW() WHERE id = $2 AND (clerk_id IS NULL OR clerk_id = $1)',
-          [clerkUser.id, row.id]
-        );
       }
 
       // Read authoritative record back by clerk_id.
@@ -115,6 +109,11 @@ export const syncClerkUserToNeon = async (clerkUser: {
         isOfflineFallback: false,
       };
     } catch (err: any) {
+      // Auth/identity conflicts are not connectivity issues; do not create offline fallbacks.
+      if (String(err?.message || '').includes('Email is already linked to another account')) {
+        throw err;
+      }
+
       // Determine if error is transient
       const msg = String(err?.message || err || '').toLowerCase();
       const isTransient =
