@@ -56,6 +56,9 @@ const LoginScreen = () => {
   const insets = useSafeAreaInsets();
   const { showToast, showActionToast } = useToast();
 
+  const clerkPublishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
+  const isClerkConfigured = !!clerkPublishableKey && clerkPublishableKey.startsWith('pk_');
+
   // --- RESPONSIVE DIMENSIONS ---
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
@@ -445,6 +448,15 @@ const LoginScreen = () => {
                 <Text style={styles.welcomeText}>Welcome Back!</Text>
                 <Text style={styles.promptText}>Please sign in to continue</Text>
 
+                {!isClerkConfigured && (
+                  <View style={styles.configBanner}>
+                    <Ionicons name="warning-outline" size={16} color="#B45309" />
+                    <Text style={styles.configBannerText}>
+                      Clerk is not configured. Set EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY and rebuild.
+                    </Text>
+                  </View>
+                )}
+
                 <View style={styles.inputGroup}>
                   <View style={styles.inputContainer}>
                     <Ionicons name="mail" size={20} color={colors.muted} style={styles.inputIcon} />
@@ -514,10 +526,11 @@ const LoginScreen = () => {
                 </View>
 
                 <TouchableOpacity
-                  style={[styles.primaryBtn, loading && styles.disabledBtn]}
+                  style={[styles.primaryBtn, (loading || !isLoaded) && styles.disabledBtn]}
                   onPress={onSignInPress}
                   disabled={
                     loading ||
+                    !isLoaded ||
                     !password ||
                     !validateEmail(email).isValidFormat ||
                     !validateEmail(email).isSupportedDomain
