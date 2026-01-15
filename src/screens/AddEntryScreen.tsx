@@ -12,7 +12,6 @@ import {
   StatusBar,
   TextInput,
   LayoutAnimation,
-  UIManager,
   Keyboard,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -34,13 +33,9 @@ import { ALLOWED_CATEGORIES, DEFAULT_CATEGORY, ensureCategory } from '../constan
 import ScreenHeader from '../components/ScreenHeader';
 import { isIncome, toCanonical } from '../utils/transactionType';
 import { getTransactionByLocalId } from '../db/transactions';
+import { enableLegacyLayoutAnimations } from '../utils/layoutAnimation';
 
-// Enable LayoutAnimation for Android
-if (Platform.OS === 'android') {
-  if (UIManager.setLayoutAnimationEnabledExperimental) {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
-  }
-}
+enableLegacyLayoutAnimations();
 
 // --- TYPES ---
 type RootStackParamList = {
