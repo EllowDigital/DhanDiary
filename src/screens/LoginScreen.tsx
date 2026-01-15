@@ -743,6 +743,20 @@ const styles = StyleSheet.create({
   welcomeText: { fontSize: 24, fontWeight: '700', color: '#0F172A', marginBottom: 8 },
   promptText: { fontSize: 14, color: '#64748B', marginBottom: 24 },
 
+  configBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    marginBottom: 16,
+  },
+  configBannerText: { flex: 1, color: '#92400E', fontSize: 12, fontWeight: '600' },
+
   inputGroup: { gap: 16, marginBottom: 24 },
   inputContainer: {
     flexDirection: 'row',

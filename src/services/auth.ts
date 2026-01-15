@@ -62,6 +62,8 @@ export const isOnline = async (): Promise<boolean> => {
 
 let neonWarmPromise: Promise<boolean> | null = null;
 let lastNeonWarm = 0;
+let lastNeonWarmWarn = 0;
+const NEON_WARM_WARN_INTERVAL_MS = 60_000;
 
 export const warmNeonConnection = async (opts: { force?: boolean; timeoutMs?: number } = {}) => {
   const NEON_URL = resolveNeonUrl();
@@ -83,7 +85,11 @@ export const warmNeonConnection = async (opts: { force?: boolean; timeoutMs?: nu
         return true;
       })
       .catch((err) => {
-        console.warn('[Auth] Neon warm-up failed:', err?.message || err);
+        const nowWarn = Date.now();
+        if (nowWarn - lastNeonWarmWarn > NEON_WARM_WARN_INTERVAL_MS) {
+          lastNeonWarmWarn = nowWarn;
+          console.warn('[Auth] Neon warm-up failed:', err?.message || err);
+        }
         return false;
       })
       .finally(() => {
