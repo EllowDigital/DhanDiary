@@ -73,12 +73,6 @@ interface EditModalProps {
 }
 
 // --- SETUP ---
-if (Platform.OS === 'android') {
-  if (UIManager.setLayoutAnimationEnabledExperimental) {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
-  }
-}
-
 const resolveEntryMoment = (entry: TransactionEntry) => {
   const v = entry?.date || entry?.created_at;
   if (v === null || v === undefined) return dayjs();
