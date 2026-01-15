@@ -56,8 +56,7 @@ const LoginScreen = () => {
   const insets = useSafeAreaInsets();
   const { showToast, showActionToast } = useToast();
 
-  const clerkPublishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
-  const isClerkConfigured = !!clerkPublishableKey && clerkPublishableKey.startsWith('pk_');
+  const [didWaitForClerk, setDidWaitForClerk] = useState(false);
 
   // --- RESPONSIVE DIMENSIONS ---
   const { width, height } = useWindowDimensions();
@@ -102,6 +101,7 @@ const LoginScreen = () => {
   const isActiveRef = useRef(true);
 
   useEffect(() => {
+    const t = setTimeout(() => setDidWaitForClerk(true), 1500);
     const sub = AppState.addEventListener('change', (next) => {
       isActiveRef.current = next === 'active';
     });
@@ -121,7 +121,10 @@ const LoginScreen = () => {
     ]).start();
 
     warmNeonConnection().catch(() => { });
-    return () => sub.remove();
+    return () => {
+      clearTimeout(t);
+      sub.remove();
+    };
   }, []);
 
   // --- AUTO SYNC LOGIC ---
@@ -448,11 +451,12 @@ const LoginScreen = () => {
                 <Text style={styles.welcomeText}>Welcome Back!</Text>
                 <Text style={styles.promptText}>Please sign in to continue</Text>
 
-                {!isClerkConfigured && (
+                {didWaitForClerk && !isLoaded && (
                   <View style={styles.configBanner}>
                     <Ionicons name="warning-outline" size={16} color="#B45309" />
                     <Text style={styles.configBannerText}>
-                      Clerk is not configured. Set EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY and rebuild.
+                      Auth is still loading or not configured. If this persists, set
+                      EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY and rebuild.
                     </Text>
                   </View>
                 )}
