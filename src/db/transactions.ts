@@ -266,10 +266,14 @@ export async function getTransactionsByUser(userId: string) {
   `;
 
   const [, res] = await executeSqlAsync(sql, [userId]);
-  const rows: TransactionRow[] = [];
-  for (let i = 0; i < res.rows.length; i++) {
-    rows.push(res.rows.item(i) as TransactionRow);
+  try {
+    const arr = (res as any)?.rows?._array;
+    if (Array.isArray(arr)) return arr as TransactionRow[];
+  } catch (e) {
+    // fall back
   }
+  const rows: TransactionRow[] = [];
+  for (let i = 0; i < res.rows.length; i++) rows.push(res.rows.item(i) as TransactionRow);
   return rows;
 }
 
@@ -284,10 +288,14 @@ export async function getUnsyncedTransactions() {
   // NOTE: do NOT include sync_status=2 when need_sync=0, or we'll re-push already-synced tombstones.
   const sql = `SELECT * FROM transactions WHERE need_sync = 1 OR sync_status = 0;`;
   const [, res] = await executeSqlAsync(sql, []);
-  const rows: TransactionRow[] = [];
-  for (let i = 0; i < res.rows.length; i++) {
-    rows.push(res.rows.item(i) as TransactionRow);
+  try {
+    const arr = (res as any)?.rows?._array;
+    if (Array.isArray(arr)) return arr as TransactionRow[];
+  } catch (e) {
+    // fall back
   }
+  const rows: TransactionRow[] = [];
+  for (let i = 0; i < res.rows.length; i++) rows.push(res.rows.item(i) as TransactionRow);
   return rows;
 }
 
