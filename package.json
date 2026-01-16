@@ -20,7 +20,7 @@
     "lint": "eslint ./ --ext .js,.jsx,.ts,.tsx",
     "lint:fix": "eslint ./ --ext .js,.jsx,.ts,.tsx --fix",
     "check": "npm run format && npm run lint --silent && npx tsc --noEmit",
-    "build:apk-local": "npm install && npx expo prebuild --platform android && cd android && gradlew.bat assembleDebug --no-daemon --parallel -Dorg.gradle.workers.max=4 -Dorg.gradle.vfs.watch=false -Dfile.encoding=UTF-8"
+    "build:apk-local": "npm install && npx expo prebuild --platform android && cd android && gradlew.bat assembleRelease --no-daemon --parallel -Dorg.gradle.workers.max=4 -Dorg.gradle.vfs.watch=false -Dfile.encoding=UTF-8"
   },
   "dependencies": {
     "@clerk/clerk-expo": "^2.19.14",
