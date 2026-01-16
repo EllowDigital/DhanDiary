@@ -19,7 +19,8 @@
     "format": "prettier --write .",
     "lint": "eslint ./ --ext .js,.jsx,.ts,.tsx",
     "lint:fix": "eslint ./ --ext .js,.jsx,.ts,.tsx --fix",
-    "check": "npm run format && npm run lint --silent && npx tsc --noEmit"
+    "check": "npm run format && npm run lint --silent && npx tsc --noEmit",
+    "build:apk-local": "npm install && npx expo prebuild --platform android && cd android && gradlew.bat assembleDebug --no-daemon"
   },
   "dependencies": {
     "@clerk/clerk-expo": "^2.19.14",
@@ -73,8 +74,8 @@
     "react-native-worklets-core": "^1.6.2",
     "text-encoding": "^0.7.0",
     "uuid": "^13.0.0",
-    "xlsx-js-style": "^1.2.0",
-    "xlsx": "https://cdn.sheetjs.com/xlsx-latest/xlsx-latest.tgz"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-latest/xlsx-latest.tgz",
+    "xlsx-js-style": "^1.2.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
