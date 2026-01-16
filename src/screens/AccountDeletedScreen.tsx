@@ -55,22 +55,29 @@ const AccountDeletedScreen = () => {
 
   // --- NAVIGATION HANDLERS ---
 
-  // Helper to safely reset navigation stack to a specific route
-  const safeReset = useCallback(
+  // Prefer navigating within the current Auth stack so the user can go back
+  // to this screen from Register/Login. If the screen is ever shown outside
+  // the Auth stack, fall back to a root reset.
+  const goToAuthScreen = useCallback(
     async (targetScreen: 'Register' | 'Login') => {
-      // 1. Try importing the root navigation helper if available
+      try {
+        navigation.navigate(targetScreen);
+        return;
+      } catch (e) {
+        // ignore
+      }
+
       try {
         const { resetRoot } = await import('../utils/rootNavigation');
         resetRoot({
           index: 0,
-          routes: [{ name: 'Auth', state: { routes: [{ name: targetScreen }] } }],
+          routes: [{ name: 'Auth', state: { routes: [{ name: 'AccountDeleted' }, { name: targetScreen }] } }],
         });
         return;
       } catch (e) {
         // ignore
       }
 
-      // 2. Fallback to standard navigation reset
       navigation.reset({
         index: 0,
         routes: [{ name: 'Auth', params: { screen: targetScreen } }],
@@ -132,7 +139,7 @@ const AccountDeletedScreen = () => {
           <View style={styles.actions}>
             <TouchableOpacity
               style={styles.primaryButton}
-              onPress={() => safeReset('Register')}
+              onPress={() => goToAuthScreen('Register')}
               activeOpacity={0.8}
             >
               <Text style={styles.primaryText}>Create New Account</Text>
@@ -141,7 +148,7 @@ const AccountDeletedScreen = () => {
 
             <TouchableOpacity
               style={styles.ghostButton}
-              onPress={() => safeReset('Login')}
+              onPress={() => goToAuthScreen('Login')}
               activeOpacity={0.7}
             >
               <Text style={styles.ghostText}>Sign In to Existing Account</Text>
