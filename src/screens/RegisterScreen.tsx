@@ -20,19 +20,41 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient';
 import NetInfo from '@react-native-community/netinfo';
 import { Ionicons } from '@expo/vector-icons';
-import { useSignUp } from '@clerk/clerk-expo';
+import { useOAuth, useSignUp } from '@clerk/clerk-expo';
 import { useNavigation } from '@react-navigation/native';
+import * as WebBrowser from 'expo-web-browser';
+import * as AuthSession from 'expo-auth-session';
+import Constants from 'expo-constants';
 import OfflineNotice from '../components/OfflineNotice';
 
 // --- CUSTOM IMPORTS ---
 import { colors } from '../utils/design';
 import { validateEmail } from '../utils/emailValidation';
-import { mapRegisterErrorToUi } from '../utils/authUi';
+import { mapRegisterErrorToUi, mapSocialLoginErrorToUi } from '../utils/authUi';
+import { useToast } from '../context/ToastContext';
+
+// Warm up browser (OAuth)
+WebBrowser.maybeCompleteAuthSession();
+
+const useWarmUpBrowser = () => {
+  useEffect(() => {
+    void WebBrowser.warmUpAsync();
+    return () => {
+      void WebBrowser.coolDownAsync();
+    };
+  }, []);
+};
 
 const RegisterScreen = () => {
+  useWarmUpBrowser();
   const navigation = useNavigation<any>();
   const { isLoaded, signUp } = useSignUp();
   const insets = useSafeAreaInsets();
+  const { showToast } = useToast();
+
+  // OAuth Strategies
+  const { startOAuthFlow: startGoogleFlow } = useOAuth({ strategy: 'oauth_google' });
+  const { startOAuthFlow: startGithubFlow } = useOAuth({ strategy: 'oauth_github' });
 
   // --- RESPONSIVE LAYOUT LOGIC ---
   const { width, height } = useWindowDimensions();
@@ -123,6 +145,76 @@ const RegisterScreen = () => {
 
       await attemptSignUp();
     } finally {
+      inFlightRef.current = false;
+    }
+  };
+
+  const onSocialSignUp = async (strategy: 'google' | 'github') => {
+    if (!isLoaded) {
+      showToast('Auth is not ready yet. Check Clerk publishable key.', 'info', 3500);
+      return;
+    }
+    if (loading || inFlightRef.current) return;
+
+    setFormError(null);
+    setEmailError(null);
+    setPasswordError(null);
+
+    setLoading(true);
+    inFlightRef.current = true;
+    Keyboard.dismiss();
+
+    try {
+      const net = await NetInfo.fetch();
+      if (!net.isConnected) {
+        setOfflineVisible(true);
+        return;
+      }
+
+      const startFlow = strategy === 'google' ? startGoogleFlow : startGithubFlow;
+      const scheme =
+        (Constants.expoConfig as any)?.scheme ||
+        (Constants.expoConfig as any)?.android?.scheme ||
+        'dhandiary';
+
+      const res: any = await startFlow({
+        redirectUrl: AuthSession.makeRedirectUri({ scheme, path: 'oauth-callback' }),
+      });
+
+      const createdSessionId = res?.createdSessionId;
+      const setSession = res?.setActive;
+      const createdUserId = res?.signUp?.createdUserId || res?.signUp?.createdUser?.id || null;
+
+      if (createdUserId) {
+        showToast(
+          `Account created successfully using ${strategy === 'google' ? 'Google' : 'GitHub'}.`,
+          'success',
+          3000
+        );
+      } else {
+        showToast('Signed in successfully. Redirecting…', 'success', 2500);
+      }
+
+      if (createdSessionId && setSession) {
+        await setSession({ session: createdSessionId });
+      }
+
+      // Leave Auth stack after OAuth.
+      try {
+        const { resetRoot } = await import('../utils/rootNavigation');
+        resetRoot({ index: 0, routes: [{ name: 'Announcement' }] });
+      } catch (e) {
+        // ignore
+      }
+    } catch (err: any) {
+      const ui = mapSocialLoginErrorToUi(err);
+      if (ui) {
+        const lower = ui.message.toLowerCase();
+        const type = lower.includes('please log in using email') ? 'info' : 'error';
+        showToast(ui.message, type as any, 6000);
+      }
+    } finally {
+      setLoading(false);
       inFlightRef.current = false;
     }
   };
@@ -253,6 +345,29 @@ const RegisterScreen = () => {
               >
                 <Text style={styles.title}>Create Account</Text>
                 <Text style={styles.subtitle}>Start your financial journey today.</Text>
+
+                <View style={styles.divider}>
+                  <View style={styles.line} />
+                  <Text style={styles.dividerText}>or continue with</Text>
+                  <View style={styles.line} />
+                </View>
+
+                <View style={styles.socialRow}>
+                  <SocialButton
+                    label="Google"
+                    iconName="logo-google"
+                    onPress={() => onSocialSignUp('google')}
+                    disabled={!isLoaded || loading}
+                  />
+                  <SocialButton
+                    label="GitHub"
+                    iconName="logo-github"
+                    onPress={() => onSocialSignUp('github')}
+                    disabled={!isLoaded || loading}
+                  />
+                </View>
+
+                <Text style={styles.emailAltText}>Or create your account with email</Text>
 
                 <View style={styles.formContainer}>
                   {/* Name Row */}
@@ -414,6 +529,18 @@ const RegisterScreen = () => {
   );
 };
 
+const SocialButton = ({ label, iconName, onPress, disabled }: any) => (
+  <TouchableOpacity
+    style={[styles.socialBtn, disabled && styles.disabledBtn]}
+    onPress={onPress}
+    disabled={disabled}
+    activeOpacity={0.8}
+  >
+    <Ionicons name={iconName} size={18} color={disabled ? '#94A3B8' : '#0F172A'} />
+    <Text style={[styles.socialBtnText, disabled && { color: '#94A3B8' }]}>{label}</Text>
+  </TouchableOpacity>
+);
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
 
@@ -508,6 +635,45 @@ const styles = StyleSheet.create({
     color: '#64748B',
     marginBottom: 32,
     lineHeight: 24,
+  },
+
+  divider: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  line: { flex: 1, height: 1, backgroundColor: '#E2E8F0' },
+  dividerText: {
+    marginHorizontal: 16,
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+
+  socialRow: { flexDirection: 'row', gap: 16, marginBottom: 16 },
+  socialBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    height: 50,
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  socialBtnText: { fontSize: 14, fontWeight: '600', color: '#1E293B', marginLeft: 8 },
+
+  emailAltText: {
+    marginTop: -4,
+    marginBottom: 16,
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    textAlign: 'center',
   },
 
   /* Inputs */
