@@ -365,7 +365,7 @@ const flushPendingProfileUpdates = async () => {
         processed++;
       }
     } catch (err) {
-      console.error('Profile update failed', p.id, err);
+      if (__DEV__) console.warn('[sync] Profile update failed', p.id, err);
     }
   }
   return { processed };

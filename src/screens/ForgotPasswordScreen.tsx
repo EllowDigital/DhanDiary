@@ -35,7 +35,7 @@ const ForgotPasswordScreen = () => {
   const route = useRoute<any>();
   const { signIn, isLoaded, setActive } = useSignIn();
   const insets = useSafeAreaInsets();
-  const { showToast } = useToast();
+  const { showToast, showActionToast } = useToast();
 
   // --- RESPONSIVE LAYOUT LOGIC ---
   const { width, height } = useWindowDimensions();
@@ -110,6 +110,28 @@ const ForgotPasswordScreen = () => {
     return null;
   };
 
+  const getFriendlyResetConfirmMessage = (err: any): string | null => {
+    const msg = getErrorMessage(err);
+    const lower = msg.toLowerCase();
+
+    if (
+      lower.includes('code') &&
+      (lower.includes('incorrect') || lower.includes('invalid') || lower.includes('expired'))
+    ) {
+      return 'That code is not valid anymore. Please request a new code and try again.';
+    }
+
+    if (lower.includes('password') && (lower.includes('weak') || lower.includes('too short'))) {
+      return 'Please choose a stronger password (at least 8 characters).';
+    }
+
+    if (lower.includes('too many') || lower.includes('rate limit')) {
+      return 'Too many attempts. Please wait a bit and try again.';
+    }
+
+    return null;
+  };
+
   const startCooldown = (seconds = 30) => {
     setResendDisabled(true);
     setCountdown(seconds);
@@ -151,9 +173,12 @@ const ForgotPasswordScreen = () => {
       );
 
       if (!factor) {
-        showToast(
+        showActionToast(
           'We couldn’t start a password reset for that email. Double-check the address, or try signing in with the method you used when creating the account.',
-          'error'
+          'Try sign in',
+          () => navigation.navigate('Login', { email }),
+          'error',
+          8000
         );
         return;
       }
@@ -171,14 +196,21 @@ const ForgotPasswordScreen = () => {
     } catch (err: any) {
       const friendly = getFriendlyResetRequestMessage(err);
       if (friendly) {
-        showToast(friendly, 'error');
+        showActionToast(
+          friendly,
+          'Create account',
+          () => navigation.navigate('Register', { email }),
+          'info',
+          9000
+        );
         return;
       }
 
       if (typeof __DEV__ !== 'undefined' && __DEV__) {
-        console.error('Reset request error:', err);
+        console.warn('[ForgotPassword] reset request failed', err);
       }
-      const msg = err.errors?.[0]?.message || err.message || 'Failed to send reset code.';
+
+      const msg = getErrorMessage(err) || 'Failed to send reset code.';
 
       const net = await NetInfo.fetch();
       if (!net.isConnected) {
@@ -187,7 +219,13 @@ const ForgotPasswordScreen = () => {
         setOfflineVisible(true);
         return;
       }
-      Alert.alert('Error', msg);
+      showToast(
+        typeof __DEV__ !== 'undefined' && __DEV__
+          ? msg
+          : 'We couldn’t send the reset code. Please try again.',
+        'error',
+        6000
+      );
     } finally {
       setLoading(false);
     }
@@ -219,8 +257,17 @@ const ForgotPasswordScreen = () => {
         navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
       }
     } catch (err: any) {
-      console.error('Reset confirm error:', err);
-      const msg = err.errors?.[0]?.message || 'Failed to reset password.';
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.warn('[ForgotPassword] reset confirm failed', err);
+      }
+
+      const friendly = getFriendlyResetConfirmMessage(err);
+      if (friendly) {
+        showToast(friendly, 'error', 7000);
+        return;
+      }
+
+      const msg = getErrorMessage(err) || 'Failed to reset password.';
 
       const net = await NetInfo.fetch();
       if (!net.isConnected) {
@@ -229,7 +276,11 @@ const ForgotPasswordScreen = () => {
         setOfflineVisible(true);
         return;
       }
-      Alert.alert('Error', msg);
+      showToast(
+        typeof __DEV__ !== 'undefined' && __DEV__ ? msg : 'Password reset failed. Please try again.',
+        'error',
+        6000
+      );
     } finally {
       setLoading(false);
     }
