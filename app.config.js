@@ -48,6 +48,13 @@ export default ({ config }) => {
       EXPO_ENABLE_NEON_CLIENT: process.env.EXPO_ENABLE_NEON_CLIENT ?? '0',
 
       NEON_URL: process.env.EXPO_ENABLE_NEON_CLIENT === '1' ? (process.env.NEON_URL ?? null) : null,
+
+      /**
+       * Clerk account deletion (recommended: call a backend endpoint that uses Clerk Admin API).
+       * NOTE: Do NOT ship admin secrets in the app. If you use a shared key, treat it as low-security.
+       */
+      CLERK_DELETE_URL: process.env.CLERK_DELETE_URL ?? null,
+      CLERK_DELETE_API_KEY: process.env.CLERK_DELETE_API_KEY ?? process.env.DELETE_API_KEY ?? null,
     },
   };
 };

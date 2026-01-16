@@ -321,39 +321,15 @@ const AccountManagementScreen = () => {
             if (!user) return;
             setDeletingAccount(true);
             try {
-              // Try to delete Clerk user, but don't block local cleanup if it fails.
-              try {
-                if (typeof (user as any).delete === 'function') {
-                  await (user as any).delete();
-                }
-              } catch (clerkErr) {
-                console.warn(
-                  '[Account] Clerk user.delete() failed, continuing with local cleanup',
-                  clerkErr
-                );
-              }
-
-              // Ensure local cleanup runs even if Clerk deletion failed.
               console.info('[Account] deletion initiated', { userId: (user as any)?.id || null });
-              let deletionResult: any = {};
-              try {
-                deletionResult = await deleteAccount({ clerkUserId: (user as any)?.id });
-              } catch (localErr) {
-                console.warn('[Account] deleteAccount() failed', localErr);
-              }
+              const deletionResult = await deleteAccount({
+                clerkUserId: (user as any)?.id,
+                clerkUser: user,
+                strict: true,
+              });
               console.info('[Account] deletion completed', deletionResult || {});
 
-              // Re-initialize a fresh empty DB so the app resumes from a clean state
-              try {
-                const { initDB } = await import('../db/sqlite');
-                if (typeof initDB === 'function') {
-                  await initDB();
-                }
-              } catch (dbErr) {
-                console.warn('[Account] initDB after delete failed', dbErr);
-              }
-
-              showToast('Account deleted');
+              showToast('Account deleted', 'success');
               // Navigate via root navigation so nested stacks are targeted reliably
               try {
                 const { resetRoot } = await import('../utils/rootNavigation');
@@ -377,15 +353,11 @@ const AccountManagementScreen = () => {
             } catch (err: any) {
               // Catch-all: surface message but still attempt to navigate to Auth so app isn't left in broken state
               console.warn('[Account] unexpected error during delete flow', err);
-              try {
-                const { resetRoot } = await import('../utils/rootNavigation');
-                resetRoot({ index: 0, routes: [{ name: 'Auth' }] });
-              } catch (navErr) {
-                try {
-                  navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
-                } catch (e) { }
-              }
-              Alert.alert('Error', err?.message || 'Failed to delete account');
+              Alert.alert(
+                'Delete failed',
+                err?.message ||
+                'We could not delete your account from the cloud. Please check your internet connection and try again.'
+              );
             } finally {
               setDeletingAccount(false);
             }
