@@ -654,7 +654,12 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
 
     try {
       const { notifyEntriesChanged } = require('../utils/dbEvents');
-      notifyEntriesChanged();
+      // UI-first: defer refresh work until after current interactions.
+      InteractionManager.runAfterInteractions(() => {
+        try {
+          notifyEntriesChanged();
+        } catch (e) {}
+      });
     } catch (e) {}
 
     // success -> clear any previous error state
