@@ -120,7 +120,7 @@ const LoginScreen = () => {
       }),
     ]).start();
 
-    warmNeonConnection().catch(() => { });
+    warmNeonConnection().catch(() => {});
     return () => {
       clearTimeout(t);
       sub.remove();
@@ -273,7 +273,11 @@ const LoginScreen = () => {
       showActionToast(
         'Please verify your email before logging in.',
         'Verify',
-        () => navigation.navigate('VerifyEmail', { email: validateEmail(email).normalized, mode: 'signin' }),
+        () =>
+          navigation.navigate('VerifyEmail', {
+            email: validateEmail(email).normalized,
+            mode: 'signin',
+          }),
         'info',
         7000
       );
@@ -294,7 +298,9 @@ const LoginScreen = () => {
     try {
       const startFlow = strategy === 'google' ? startGoogleFlow : startGithubFlow;
       const scheme =
-        (Constants.expoConfig as any)?.scheme || (Constants.expoConfig as any)?.android?.scheme || 'dhandiary';
+        (Constants.expoConfig as any)?.scheme ||
+        (Constants.expoConfig as any)?.android?.scheme ||
+        'dhandiary';
       const res: any = await startFlow({
         // Keep a stable native redirect URL for dev builds and production builds.
         // Ensure this matches the redirect URL configured in your Clerk OAuth settings.
@@ -441,11 +447,11 @@ const LoginScreen = () => {
                   isCardStyle
                     ? { borderRadius: 24, padding: 32 } // Card Look
                     : {
-                      borderTopLeftRadius: 32,
-                      borderTopRightRadius: 32,
-                      padding: 32,
-                      paddingBottom: Math.max(insets.bottom + 20, 32),
-                    }, // Sheet Look
+                        borderTopLeftRadius: 32,
+                        borderTopRightRadius: 32,
+                        padding: 32,
+                        paddingBottom: Math.max(insets.bottom + 20, 32),
+                      }, // Sheet Look
                 ]}
               >
                 <Text style={styles.welcomeText}>Welcome Back!</Text>

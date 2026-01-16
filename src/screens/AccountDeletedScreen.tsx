@@ -71,7 +71,12 @@ const AccountDeletedScreen = () => {
         const { resetRoot } = await import('../utils/rootNavigation');
         resetRoot({
           index: 0,
-          routes: [{ name: 'Auth', state: { routes: [{ name: 'AccountDeleted' }, { name: targetScreen }] } }],
+          routes: [
+            {
+              name: 'Auth',
+              state: { routes: [{ name: 'AccountDeleted' }, { name: targetScreen }] },
+            },
+          ],
         });
         return;
       } catch (e) {
@@ -80,7 +85,9 @@ const AccountDeletedScreen = () => {
 
       navigation.reset({
         index: 0,
-        routes: [{ name: 'Auth', state: { routes: [{ name: 'AccountDeleted' }, { name: targetScreen }] } }],
+        routes: [
+          { name: 'Auth', state: { routes: [{ name: 'AccountDeleted' }, { name: targetScreen }] } },
+        ],
       });
     },
     [navigation]

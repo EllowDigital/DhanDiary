@@ -153,7 +153,7 @@ const StatsScreen = () => {
       try {
         const s = await getSession();
         if (mounted) setFallbackSession(s);
-      } catch (e) { }
+      } catch (e) {}
     };
     load();
     const unsub = subscribeSession((s) => {
@@ -163,7 +163,7 @@ const StatsScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, []);
 
@@ -221,7 +221,7 @@ const StatsScreen = () => {
     return () => {
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, [navigation, refreshPeriods]);
 
@@ -239,7 +239,7 @@ const StatsScreen = () => {
     return () => {
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, [refreshPeriods]);
 

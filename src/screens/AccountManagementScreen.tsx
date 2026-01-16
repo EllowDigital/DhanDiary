@@ -171,7 +171,7 @@ const AccountManagementScreen = () => {
       try {
         const s = await getSession();
         if (mounted) setFallbackSession(s);
-      } catch (e) { }
+      } catch (e) {}
     };
     load();
     const unsub = subscribeSession((s) => {
@@ -181,7 +181,7 @@ const AccountManagementScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, []);
 
@@ -356,7 +356,7 @@ const AccountManagementScreen = () => {
               Alert.alert(
                 'Delete failed',
                 err?.message ||
-                'We could not delete your account from the cloud. Please check your internet connection and try again.'
+                  'We could not delete your account from the cloud. Please check your internet connection and try again.'
               );
             } finally {
               setDeletingAccount(false);
@@ -433,10 +433,10 @@ const AccountManagementScreen = () => {
                   {(user as any)?.emailAddresses?.some(
                     (e: any) => e.verification?.status === 'verified'
                   ) && (
-                      <View style={styles.verifiedBadge}>
-                        <MaterialIcon name="check" size={12} color="white" />
-                      </View>
-                    )}
+                    <View style={styles.verifiedBadge}>
+                      <MaterialIcon name="check" size={12} color="white" />
+                    </View>
+                  )}
                 </View>
 
                 <View style={styles.heroInfo}>

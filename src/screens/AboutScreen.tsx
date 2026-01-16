@@ -303,7 +303,7 @@ const AboutScreen: React.FC = () => {
         title: 'DhanDiary',
         message: `Check out DhanDiary! ${link}`,
       });
-    } catch (e) { }
+    } catch (e) {}
   };
 
   const infoGrid = useMemo(
@@ -350,12 +350,7 @@ const AboutScreen: React.FC = () => {
         <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
           {/* 1. HERO CARD */}
           <View style={[styles.heroCard, isCompact && styles.heroCardCompact]}>
-            <View
-              style={[
-                styles.heroContent,
-                isVeryCompact && styles.heroContentStack,
-              ]}
-            >
+            <View style={[styles.heroContent, isVeryCompact && styles.heroContentStack]}>
               <View style={styles.heroIconContainer}>
                 <Image
                   source={require('../../assets/splash-icon.png')}
@@ -483,7 +478,10 @@ const AboutScreen: React.FC = () => {
 
           {/* 4. FOOTER BUTTONS */}
           <View style={[styles.buttonRow, isCompact && styles.buttonRowStack]}>
-            <TouchableOpacity style={[styles.halfBtn, isCompact && styles.halfBtnFull]} onPress={handleShare}>
+            <TouchableOpacity
+              style={[styles.halfBtn, isCompact && styles.halfBtnFull]}
+              onPress={handleShare}
+            >
               <MaterialIcon name="share" size={20} color={theme.primary} />
               <Text style={styles.halfBtnText}>Share App</Text>
             </TouchableOpacity>
