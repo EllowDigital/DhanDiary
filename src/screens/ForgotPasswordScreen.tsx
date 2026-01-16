@@ -424,7 +424,13 @@ const ForgotPasswordScreen = () => {
           >
             {/* Header / Back Button */}
             <View style={styles.header}>
-              <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+              <TouchableOpacity
+                onPress={() => {
+                  if (navigation.canGoBack()) navigation.goBack();
+                  else navigation.navigate('Login');
+                }}
+                style={styles.backBtn}
+              >
                 <Ionicons name="arrow-back" size={24} color="#0F172A" />
               </TouchableOpacity>
             </View>

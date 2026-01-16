@@ -123,6 +123,14 @@ const VerifyEmailScreen = () => {
     }
   };
 
+  const onBack = React.useCallback(() => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    navigation.navigate('Login');
+  }, [navigation]);
+
   useEffect(() => {
     prepareVerification();
     startResendCooldown();
@@ -299,7 +307,7 @@ const VerifyEmailScreen = () => {
           >
             {/* Header / Back Button */}
             <View style={styles.header}>
-              <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+              <TouchableOpacity onPress={onBack} style={styles.backBtn}>
                 <Ionicons name="arrow-back" size={24} color="#0F172A" />
               </TouchableOpacity>
             </View>

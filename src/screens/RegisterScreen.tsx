@@ -191,6 +191,14 @@ const RegisterScreen = () => {
     }
   };
 
+  const onBack = React.useCallback(() => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    navigation.navigate('Login');
+  }, [navigation]);
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
@@ -225,7 +233,7 @@ const RegisterScreen = () => {
             <View style={[styles.responsiveContainer, isCardLayout && styles.cardContainer]}>
               {/* Header */}
               <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+                <TouchableOpacity onPress={onBack} style={styles.backBtn}>
                   <Ionicons name="arrow-back" size={24} color="#0F172A" />
                 </TouchableOpacity>
 

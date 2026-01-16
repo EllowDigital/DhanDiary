@@ -80,7 +80,7 @@ const AccountDeletedScreen = () => {
 
       navigation.reset({
         index: 0,
-        routes: [{ name: 'Auth', params: { screen: targetScreen } }],
+        routes: [{ name: 'Auth', state: { routes: [{ name: 'AccountDeleted' }, { name: targetScreen }] } }],
       });
     },
     [navigation]
