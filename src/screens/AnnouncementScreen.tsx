@@ -77,7 +77,11 @@ const AnnouncementScreen = () => {
         useNativeDriver: true,
       }),
     ]).start(async () => {
-      await markCurrentAnnouncementSeen();
+      try {
+        await markCurrentAnnouncementSeen();
+      } catch (e) {
+        // ignore
+      }
       goToMain();
     });
   };
@@ -106,52 +110,57 @@ const AnnouncementScreen = () => {
     let mounted = true;
 
     const init = async () => {
-      const current = await getCurrentAnnouncementAsync();
-      if (!mounted) return;
+      try {
+        const current = await getCurrentAnnouncementAsync();
+        if (!mounted) return;
 
-      if (!current) {
+        if (!current) {
+          goToMain();
+          return;
+        }
+
+        const shouldShow = await shouldShowCurrentAnnouncement();
+        if (!mounted) return;
+
+        if (!shouldShow) {
+          goToMain();
+          return;
+        }
+
+        setAnnouncement(current);
+        setReadyToShow(true);
+
+        // Entrance Animation
+        Animated.parallel([
+          Animated.timing(fadeAnim, {
+            toValue: 1,
+            duration: ENTRY_DURATION,
+            useNativeDriver: true,
+            easing: Easing.out(Easing.cubic),
+          }),
+          Animated.spring(scaleAnim, {
+            toValue: 1,
+            friction: 7,
+            tension: 40,
+            useNativeDriver: true,
+          }),
+          Animated.spring(slideAnim, {
+            toValue: 0,
+            friction: 8,
+            tension: 50,
+            useNativeDriver: true,
+          }),
+        ]).start();
+
+        // Auto Hide Logic
+        if (current.autoHideMs && current.type !== 'critical') {
+          autoHideTimer.current = setTimeout(() => {
+            dismiss();
+          }, ENTRY_DURATION + current.autoHideMs);
+        }
+      } catch (e) {
+        // Fail safe: never block the user at the announcement gate.
         goToMain();
-        return;
-      }
-
-      const shouldShow = await shouldShowCurrentAnnouncement();
-      if (!mounted) return;
-
-      if (!shouldShow) {
-        goToMain();
-        return;
-      }
-
-      setAnnouncement(current);
-      setReadyToShow(true);
-
-      // Entrance Animation
-      Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: ENTRY_DURATION,
-          useNativeDriver: true,
-          easing: Easing.out(Easing.cubic),
-        }),
-        Animated.spring(scaleAnim, {
-          toValue: 1,
-          friction: 7,
-          tension: 40,
-          useNativeDriver: true,
-        }),
-        Animated.spring(slideAnim, {
-          toValue: 0,
-          friction: 8,
-          tension: 50,
-          useNativeDriver: true,
-        }),
-      ]).start();
-
-      // Auto Hide Logic
-      if (current.autoHideMs && current.type !== 'critical') {
-        autoHideTimer.current = setTimeout(() => {
-          dismiss();
-        }, ENTRY_DURATION + current.autoHideMs);
       }
     };
 
