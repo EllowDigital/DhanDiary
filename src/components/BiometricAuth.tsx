@@ -37,8 +37,8 @@ export const BiometricAuth = (props: {
   useEffect(() => {
     const backAction = () => {
       if (locked && enabled) {
-        // If locked, prevent back button from doing anything (or minimize app)
-        BackHandler.exitApp();
+        // If locked, prevent bypassing the lock screen.
+        // Do NOT call exitApp() here — it looks like a crash/force-close.
         return true;
       }
       return false;
