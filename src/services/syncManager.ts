@@ -890,6 +890,26 @@ export const startBackgroundFetch = async () => {
   await loadSyncPrefsOnce();
   if (_syncPaused) return;
 
+  // New Architecture / Bridgeless builds can be unstable with some native background
+  // modules. If users report force-closes shortly after login/startup, this is a prime
+  // suspect. Keep foreground sync instead.
+  try {
+    const g: any = globalThis as any;
+    const isNewArch =
+      !!g?.RN$Bridgeless ||
+      typeof g?.nativeFabricUIManager !== 'undefined' ||
+      typeof g?.__turboModuleProxy !== 'undefined';
+    if (Platform.OS === 'android' && isNewArch) {
+      if (__DEV__ && !_backgroundFetchWarned) {
+        console.warn('[BackgroundFetch] disabled on New Architecture Android build');
+        _backgroundFetchWarned = true;
+      }
+      return;
+    }
+  } catch (e) {
+    // ignore
+  }
+
   // Expo Go check
   const isExpoGo = Constants.appOwnership === 'expo';
   if (isExpoGo) return;
