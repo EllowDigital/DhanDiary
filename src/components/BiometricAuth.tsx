@@ -105,7 +105,11 @@ export const BiometricAuth = (props: {
         const err = String((result as any)?.error || '').toLowerCase();
 
         // If the user cancelled, do NOT immediately re-prompt (professional apps never loop here).
-        if (err.includes('user_cancel') || err.includes('system_cancel') || err.includes('app_cancel')) {
+        if (
+          err.includes('user_cancel') ||
+          err.includes('system_cancel') ||
+          err.includes('app_cancel')
+        ) {
           cooldownUntilRef.current = Date.now() + 15000;
           setStatusText('Unlock cancelled. Tap “Unlock Vault” to try again.');
           return;

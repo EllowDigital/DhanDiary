@@ -277,7 +277,9 @@ const ForgotPasswordScreen = () => {
         return;
       }
       showToast(
-        typeof __DEV__ !== 'undefined' && __DEV__ ? msg : 'Password reset failed. Please try again.',
+        typeof __DEV__ !== 'undefined' && __DEV__
+          ? msg
+          : 'Password reset failed. Please try again.',
         'error',
         6000
       );
