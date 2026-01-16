@@ -32,7 +32,7 @@ import ScreenHeader from '../components/ScreenHeader';
 
 // --- CONSTANTS ---
 const ELLOW_URL = 'https://www.ellowdigital.space';
-const APP_WEBSITE_URL = 'https://dhandiary.netlify.app/roadmap';
+const APP_WEBSITE_URL = 'https://dhandiary.netlify.app';
 const BRAND_NAME = 'EllowDigital';
 
 // Safe Version Access using Expo Constants instead of require('package.json')
