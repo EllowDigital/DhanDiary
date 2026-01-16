@@ -277,3 +277,4 @@ export const __TESTING__ = {
 
 // Normalize defaults once at module load (cheap) to avoid surprises in production.
 announcements = normalizeAnnouncements(DEFAULT_ANNOUNCEMENTS);
+a

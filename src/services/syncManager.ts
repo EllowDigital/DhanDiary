@@ -1,5 +1,5 @@
 import NetInfo from '@react-native-community/netinfo';
-import { InteractionManager } from 'react-native';
+import { InteractionManager, Platform } from 'react-native';
 import Constants from 'expo-constants';
 import AsyncStorage from '../utils/AsyncStorageWrapper';
 import { getPendingProfileUpdates, markPendingProfileProcessed } from '../db/localDb';
