@@ -585,6 +585,19 @@ const LoginScreen = () => {
                   {!!passwordError && <Text style={styles.fieldError}>{passwordError}</Text>}
                 </View>
 
+                {isOnline === false && (
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    style={styles.offlineInline}
+                    onPress={() => setOfflineVisible(true)}
+                  >
+                    <Ionicons name="cloud-offline-outline" size={16} color="#B91C1C" />
+                    <Text style={styles.offlineInlineText}>
+                      You are offline. Connect to the internet to sign in.
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
                 <TouchableOpacity
                   style={[styles.primaryBtn, (loading || !isLoaded) && styles.disabledBtn]}
                   onPress={onSignInPress}
@@ -684,6 +697,25 @@ const SocialButton = ({ label, iconName, onPress, disabled }: any) => (
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollBase: { flexGrow: 1 },
+
+  offlineInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FEF2F2',
+    borderColor: 'rgba(185, 28, 28, 0.18)',
+    borderWidth: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    marginBottom: 12,
+  },
+  offlineInlineText: {
+    flex: 1,
+    color: '#7F1D1D',
+    fontSize: 13,
+    fontWeight: '600',
+  },
 
   // --- SCROLL CONTENT LAYOUTS ---
   columnContentContainer: {

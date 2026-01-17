@@ -32,6 +32,7 @@ import { colors } from '../utils/design';
 import { validateEmail } from '../utils/emailValidation';
 import { mapRegisterErrorToUi, mapSocialLoginErrorToUi } from '../utils/authUi';
 import { useToast } from '../context/ToastContext';
+import { isNetOnline } from '../utils/netState';
 
 // Warm up browser (OAuth)
 WebBrowser.maybeCompleteAuthSession();
@@ -138,7 +139,7 @@ const RegisterScreen = () => {
     try {
       // Check connection before starting
       const net = await NetInfo.fetch();
-      if (!net.isConnected) {
+      if (!isNetOnline(net)) {
         startOfflineFlow();
         return;
       }
@@ -166,7 +167,7 @@ const RegisterScreen = () => {
 
     try {
       const net = await NetInfo.fetch();
-      if (!net.isConnected) {
+      if (!isNetOnline(net)) {
         setOfflineVisible(true);
         return;
       }
@@ -273,7 +274,7 @@ const RegisterScreen = () => {
   const offlineManualRetry = async () => {
     setOfflineRetrying(true);
     const net = await NetInfo.fetch();
-    if (net.isConnected) {
+    if (isNetOnline(net)) {
       setOfflineVisible(false);
       setOfflineRetrying(false);
       setLoading(true);
