@@ -44,6 +44,7 @@ import ScreenHeader from '../components/ScreenHeader';
 import { getNeonHealth } from '../api/neonClient';
 import appConfig from '../../app.json';
 import { wipeLocalData, initDB } from '../db/sqlite';
+import { tryShowNativeConfirm } from '../utils/nativeConfirm';
 
 // Safe Package Import for Version
 let pkg: { version?: string } = {};
@@ -217,46 +218,51 @@ const SettingsScreen = () => {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     if (isSigningOut) return;
 
-    // Avoid native Alert on Android (can fail with "not attached to an Activity").
-    showActionToast(
-      'Sign out now?',
-      'Sign Out',
-      async () => {
-        if (isSigningOut) return;
-        setIsSigningOut(true);
+    const doSignOut = async () => {
+      if (isSigningOut) return;
+      setIsSigningOut(true);
+      try {
+        await performHardSignOut({
+          clerkSignOut: async () => {
+            await clerkSignOut();
+          },
+          navigateToAuth: () => {
+            try {
+              const { resetRoot } = require('../utils/rootNavigation');
+              resetRoot({ index: 0, routes: [{ name: 'Auth' }] });
+            } catch (e) {
+              navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
+            }
+          },
+        });
+
         try {
-          await performHardSignOut({
-            clerkSignOut: async () => {
-              await clerkSignOut();
-            },
-            navigateToAuth: () => {
-              try {
-                const { resetRoot } = require('../utils/rootNavigation');
-                resetRoot({ index: 0, routes: [{ name: 'Auth' }] });
-              } catch (e) {
-                navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
-              }
-            },
-          });
+          query.clear();
+        } catch (e) { }
 
-          try {
-            query.clear();
-          } catch (e) { }
+        showToast('Signed out successfully');
+      } catch (e) {
+        console.warn('[Settings] logout failed', e);
+        showToast('Sign out failed. Please try again.', 'error');
+      } finally {
+        setIsSigningOut(false);
+      }
+    };
 
-          showToast('Signed out successfully');
-        } catch (e) {
-          console.warn('[Settings] logout failed', e);
-          showToast('Sign out failed. Please try again.', 'error');
-        } finally {
-          setIsSigningOut(false);
-        }
-      },
-      'info',
-      7000
-    );
+    const usedNative = await tryShowNativeConfirm({
+      title: 'Sign Out',
+      message: 'Are you sure you want to log out?',
+      confirmText: 'Sign Out',
+      destructive: true,
+      onConfirm: doSignOut,
+    });
+
+    if (!usedNative) {
+      showActionToast('Sign out now?', 'Sign Out', doSignOut, 'info', 7000);
+    }
   };
 
   const handleResetApp = () => {

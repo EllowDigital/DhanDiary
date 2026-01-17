@@ -23,6 +23,7 @@ import { resetRoot } from '../utils/rootNavigation';
 import { getSession } from '../db/session';
 import { subscribeSession } from '../utils/sessionEvents';
 import { useToast } from '../context/ToastContext';
+import { tryShowNativeConfirm } from '../utils/nativeConfirm';
 
 // --- CONSTANTS ---
 const ACTIVE_COLOR = colors.primary || '#2563EB';
@@ -120,41 +121,47 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
     (props.navigation as any).navigate(routeName);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     if (isSigningOut) return;
 
-    // Avoid native Alert on Android (can fail with "not attached to an Activity").
-    // Use an in-app action toast confirmation instead.
+    const doSignOut = async () => {
+      if (isSigningOut) return;
+      setIsSigningOut(true);
+      try {
+        await performHardSignOut({
+          clerkSignOut: async () => {
+            await clerkSignOut();
+          },
+          navigateToAuth: () => {
+            try {
+              resetRoot({ index: 0, routes: [{ name: 'Auth' }] });
+            } catch (e) {
+              props.navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
+            }
+          },
+        });
+      } catch (e) {
+        console.error('[Drawer] Logout failed', e);
+        showToast('Failed to sign out. Please try again.', 'error');
+      } finally {
+        setIsSigningOut(false);
+      }
+    };
+
     closeDrawerSafely();
-    showActionToast(
-      'Sign out now?',
-      'Sign Out',
-      async () => {
-        if (isSigningOut) return;
-        setIsSigningOut(true);
-        try {
-          await performHardSignOut({
-            clerkSignOut: async () => {
-              await clerkSignOut();
-            },
-            navigateToAuth: () => {
-              try {
-                resetRoot({ index: 0, routes: [{ name: 'Auth' }] });
-              } catch (e) {
-                props.navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
-              }
-            },
-          });
-        } catch (e) {
-          console.error('[Drawer] Logout failed', e);
-          showToast('Failed to sign out. Please try again.', 'error');
-        } finally {
-          setIsSigningOut(false);
-        }
-      },
-      'info',
-      7000
-    );
+
+    // Prefer native confirm; fall back to in-app confirm when Android Activity isn't ready.
+    const usedNative = await tryShowNativeConfirm({
+      title: 'Sign Out',
+      message: 'Are you sure you want to sign out?',
+      confirmText: 'Sign Out',
+      destructive: true,
+      onConfirm: doSignOut,
+    });
+
+    if (!usedNative) {
+      showActionToast('Sign out now?', 'Sign Out', doSignOut, 'info', 7000);
+    }
   };
 
   // --- ICON MAPPER ---
