@@ -38,7 +38,10 @@ type Props = {
   loading?: boolean;
 };
 
-const defaults: Record<AuthGateVariant, { title: string; description: string; icon: keyof typeof MaterialIcon.glyphMap }> = {
+const defaults: Record<
+  AuthGateVariant,
+  { title: string; description: string; icon: keyof typeof MaterialIcon.glyphMap }
+> = {
   offline: {
     title: 'No Internet Connection',
     description: 'It looks like you are offline. Please check your connection and try again.',
@@ -46,7 +49,8 @@ const defaults: Record<AuthGateVariant, { title: string; description: string; ic
   },
   service: {
     title: 'Server Unavailable',
-    description: 'We are having trouble connecting to our services right now. Please try again later.',
+    description:
+      'We are having trouble connecting to our services right now. Please try again later.',
     icon: 'cloud-off',
   },
 };
@@ -63,7 +67,7 @@ export const AuthGateScreen: React.FC<Props> = ({
 }) => {
   const { width } = useWindowDimensions();
   const d = defaults[variant];
-  
+
   // Responsive Logic
   const isTablet = width >= 768;
   const cardMaxWidth = isTablet ? 480 : '100%';
@@ -72,20 +76,19 @@ export const AuthGateScreen: React.FC<Props> = ({
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={THEME.bg} />
-      
+
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right', 'bottom']}>
         <View style={styles.centerContent}>
-          
           {/* Main Card Container */}
           <View style={[styles.card, { width: cardMaxWidth }]}>
-            
             {/* Icon Section */}
-            <View style={[styles.iconContainer, { backgroundColor: variant === 'offline' ? '#FEF2F2' : THEME.surface }]}>
-              <MaterialIcon
-                name={d.icon}
-                size={40}
-                color={iconColor}
-              />
+            <View
+              style={[
+                styles.iconContainer,
+                { backgroundColor: variant === 'offline' ? '#FEF2F2' : THEME.surface },
+              ]}
+            >
+              <MaterialIcon name={d.icon} size={40} color={iconColor} />
             </View>
 
             {/* Text Content */}
@@ -123,7 +126,6 @@ export const AuthGateScreen: React.FC<Props> = ({
               )}
             </View>
           </View>
-
         </View>
       </SafeAreaView>
     </View>
