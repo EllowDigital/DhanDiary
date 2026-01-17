@@ -1,7 +1,7 @@
 import { colors } from '../utils/design';
 
 // IMPORTANT: Change this ID for every new announcement delivered via Expo Updates.
-export const ANNOUNCEMENT_ID = 'jan_festivals_2026';
+export const ANNOUNCEMENT_ID = 'q1_festivals_2026_v2';
 
 export type AnnouncementType = 'festival' | 'one_day' | 'critical';
 
@@ -19,15 +19,13 @@ export type AnnouncementConfig = AnnouncementContent & {
   type: AnnouncementType;
   /**
    * Optional priority when multiple announcements are active.
-   * Higher wins. If equal/undefined, list order wins (backward-compatible).
+   * Higher wins. If equal/undefined, list order wins.
+   * Standard One-Day: 10, Standard Festival: 5.
    */
   priority?: number;
   /**
    * Optional local-date window.
    * Format: YYYY-MM-DD
-   * - festival: typically provide start+end (inclusive)
-   * - one_day: typically provide start (or start=end)
-   * - critical: optional
    */
   startDate?: string;
   endDate?: string;
@@ -44,33 +42,169 @@ export const CURRENT_ANNOUNCEMENT: AnnouncementContent = {
 };
 
 // OTA update announcement (shown only when an update is actually available).
-// Configure via Expo Updates by changing its id, dates, type, and content.
 export const OTA_UPDATE_ANNOUNCEMENT: AnnouncementConfig = {
-  id: 'ota_update_prompt_2026_01',
-  // Use 'critical' if you want it to show every launch until disabled.
+  id: 'ota_update_prompt_2026_q1',
   type: 'festival',
   title: 'Update Available',
   message: 'A new version is ready. Tap Update to install now.',
   emoji: '⬆️',
   autoHideMs: null,
   accentColor: colors.primary,
-  // Optional window; keep empty to allow any day.
-  // startDate: '2026-01-01',
-  // endDate: '2026-01-31',
   isActive: true,
 };
 
 const DEFAULT_ANNOUNCEMENTS: AnnouncementConfig[] = [
-  // Priority rule: when multiple announcements are active, we show the first one
-  // in this list (unless a 'critical' announcement is active).
-  // Put specific one-day events first so they override broader festival ranges.
+  // ============================================================
+  // PRIORITY 1: Specific One-Day Events (High Priority: 10)
+  // These override broader windows.
+  // ============================================================
 
-  // --- PRIORITY 1: Specific One-Day Events ---
+  // --- MARCH 2026 ---
+
+  // Ram Navami (Mar 27)
+  {
+    id: 'ram_navami_2026',
+    type: 'one_day',
+    priority: 10,
+    title: 'Happy Ram Navami',
+    message: 'Celebrating the birth of Lord Rama. May your life be filled with righteousness.',
+    emoji: '🏹',
+    autoHideMs: 5000,
+    accentColor: colors.primary,
+    startDate: '2026-03-27',
+    endDate: '2026-03-27',
+    isActive: true,
+  },
+
+  // Shaheed Diwas (Mar 23)
+  {
+    id: 'shaheed_diwas_2026',
+    type: 'one_day',
+    priority: 10,
+    title: 'Shaheed Diwas',
+    message: 'Paying tribute to Bhagat Singh, Rajguru, and Sukhdev.',
+    emoji: '🇮🇳',
+    autoHideMs: 5000,
+    accentColor: colors.primary,
+    startDate: '2026-03-23',
+    endDate: '2026-03-23',
+    isActive: true,
+  },
+
+  // Gudi Padwa / Ugadi / Cheti Chand (Mar 19)
+  {
+    id: 'hindu_new_year_2026',
+    type: 'one_day',
+    priority: 10,
+    title: 'Happy New Year',
+    message: 'Wishing you prosperity on Gudi Padwa, Ugadi, and Cheti Chand.',
+    emoji: '🌾',
+    autoHideMs: 5000,
+    accentColor: colors.primary,
+    startDate: '2026-03-19',
+    endDate: '2026-03-19',
+    isActive: true,
+  },
+
+  // International Women's Day (Mar 8)
+  {
+    id: 'womens_day_2026',
+    type: 'one_day',
+    priority: 10,
+    title: 'Happy Women’s Day',
+    message: 'Celebrating the strength, grace, and power of women everywhere.',
+    emoji: '👩',
+    autoHideMs: 5000,
+    accentColor: colors.primary,
+    startDate: '2026-03-08',
+    endDate: '2026-03-08',
+    isActive: true,
+  },
+
+  // --- FEBRUARY 2026 ---
+
+  // Chhatrapati Shivaji Maharaj Jayanti (Feb 19)
+  {
+    id: 'shivaji_jayanti_2026',
+    type: 'one_day',
+    priority: 10,
+    title: 'Shivaji Maharaj Jayanti',
+    message: 'Honoring the great Maratha warrior king. Jai Bhavani, Jai Shivaji!',
+    emoji: '⚔️',
+    autoHideMs: 5000,
+    accentColor: colors.primary,
+    startDate: '2026-02-19',
+    endDate: '2026-02-19',
+    isActive: true,
+  },
+
+  // Ramadan Begins (Approx Feb 18 - depending on moon)
+  {
+    id: 'ramadan_start_2026',
+    type: 'one_day',
+    priority: 10,
+    title: 'Ramadan Mubarak',
+    message: 'Wishing you a blessed month of fasting and prayer.',
+    emoji: '🌙',
+    autoHideMs: 5000,
+    accentColor: colors.primary,
+    startDate: '2026-02-18',
+    endDate: '2026-02-18',
+    isActive: true,
+  },
+
+  // Maha Shivaratri (Feb 15)
+  {
+    id: 'shivaratri_2026',
+    type: 'one_day',
+    priority: 10,
+    title: 'Happy Maha Shivaratri',
+    message: 'May Lord Shiva bring peace and prosperity to your life. Har Har Mahadev!',
+    emoji: '🕉️',
+    autoHideMs: 5000,
+    accentColor: colors.primary,
+    startDate: '2026-02-15',
+    endDate: '2026-02-15',
+    isActive: true,
+  },
+
+  // Valentine's Day (Feb 14)
+  {
+    id: 'valentines_2026',
+    type: 'one_day',
+    priority: 10,
+    title: 'Happy Valentine’s Day',
+    message: 'Spread love and kindness today and every day.',
+    emoji: '❤️',
+    autoHideMs: 5000,
+    accentColor: '#E91E63', // Pink
+    startDate: '2026-02-14',
+    endDate: '2026-02-14',
+    isActive: true,
+  },
+
+  // Guru Ravidas Jayanti (Feb 2)
+  {
+    id: 'ravidas_jayanti_2026',
+    type: 'one_day',
+    priority: 10,
+    title: 'Guru Ravidas Jayanti',
+    message: 'Remembering the teachings of equality and brotherhood.',
+    emoji: '🙏',
+    autoHideMs: 5000,
+    accentColor: colors.primary,
+    startDate: '2026-02-02',
+    endDate: '2026-02-02',
+    isActive: true,
+  },
+
+  // --- JANUARY 2026 ---
 
   // Republic Day (Jan 26)
   {
     id: 'republic_day_2026',
     type: 'one_day',
+    priority: 10,
     title: 'Happy Republic Day',
     message: 'Celebrating the spirit of India and our Constitution. Jai Hind!',
     emoji: '🇮🇳',
@@ -81,10 +215,41 @@ const DEFAULT_ANNOUNCEMENTS: AnnouncementConfig[] = [
     isActive: true,
   },
 
+  // Vasant Panchami / Saraswati Puja (Jan 24)
+  {
+    id: 'vasant_panchami_2026',
+    type: 'one_day',
+    priority: 10,
+    title: 'Happy Vasant Panchami',
+    message: 'May Goddess Saraswati bless you with knowledge and wisdom.',
+    emoji: '🌼',
+    autoHideMs: 5000,
+    accentColor: colors.primary,
+    startDate: '2026-01-24',
+    endDate: '2026-01-24',
+    isActive: true,
+  },
+
+  // Netaji Subhas Chandra Bose Jayanti (Jan 23)
+  {
+    id: 'netaji_jayanti_2026',
+    type: 'one_day',
+    priority: 10,
+    title: 'Parakram Diwas',
+    message: 'Saluting the courage of Netaji Subhas Chandra Bose.',
+    emoji: '🫡',
+    autoHideMs: 5000,
+    accentColor: colors.primary,
+    startDate: '2026-01-23',
+    endDate: '2026-01-23',
+    isActive: true,
+  },
+
   // Lohri (Jan 13)
   {
     id: 'lohri_2026',
     type: 'one_day',
+    priority: 10,
     title: 'Happy Lohri',
     message: 'May the bonfire of Lohri burn all sadness and bring warmth and joy.',
     emoji: '🔥',
@@ -99,6 +264,7 @@ const DEFAULT_ANNOUNCEMENTS: AnnouncementConfig[] = [
   {
     id: 'youth_day_2026',
     type: 'one_day',
+    priority: 10,
     title: 'National Youth Day',
     message: 'Arise, awake, and stop not till the goal is reached. - Swami Vivekananda',
     emoji: '📚',
@@ -109,12 +275,31 @@ const DEFAULT_ANNOUNCEMENTS: AnnouncementConfig[] = [
     isActive: true,
   },
 
-  // --- PRIORITY 2: Festival Windows / Multi-Day Events ---
+  // ============================================================
+  // PRIORITY 2: Festival Windows / Multi-Day Events (Priority: 5)
+  // ============================================================
 
-  // Makar Sankranti / Pongal / Harvest Festivals Window (Jan 14 - Jan 17)
+  // Holi Window (March 3 - 4)
+  // Mar 3: Holika Dahan, Mar 4: Rangwali Holi
+  {
+    id: 'holi_2026',
+    type: 'festival',
+    priority: 5,
+    title: 'Happy Holi',
+    message: 'Wishing you a vibrant festival of colors and joy.',
+    emoji: '🎨',
+    autoHideMs: 5000,
+    accentColor: colors.primary,
+    startDate: '2026-03-03',
+    endDate: '2026-03-04',
+    isActive: true,
+  },
+
+  // Makar Sankranti / Pongal / Harvest Festivals (Jan 14 - Jan 17)
   {
     id: 'harvest_festivals_2026',
     type: 'festival',
+    priority: 5,
     title: 'Happy Makar Sankranti & Pongal',
     message: 'Celebrating the harvest season with joy, kites, and sweet beginnings.',
     emoji: '🪁',
@@ -125,16 +310,21 @@ const DEFAULT_ANNOUNCEMENTS: AnnouncementConfig[] = [
     isActive: true,
   },
 
-  // New Year (Dec 31 - Jan 12)
+  // ============================================================
+  // PRIORITY 3: Background Events (Priority: 1)
+  // ============================================================
+
+  // New Year Hangover (Jan 1 - Jan 11)
   {
     id: ANNOUNCEMENT_ID,
     type: 'festival',
+    priority: 1,
     title: CURRENT_ANNOUNCEMENT.title,
     message: CURRENT_ANNOUNCEMENT.message,
     emoji: CURRENT_ANNOUNCEMENT.emoji,
     autoHideMs: CURRENT_ANNOUNCEMENT.autoHideMs,
     accentColor: CURRENT_ANNOUNCEMENT.accentColor,
-    startDate: '2025-12-31',
+    startDate: '2026-01-01',
     endDate: '2026-01-11',
     isActive: true,
   },
@@ -143,6 +333,8 @@ const DEFAULT_ANNOUNCEMENTS: AnnouncementConfig[] = [
 let announcements: AnnouncementConfig[] = DEFAULT_ANNOUNCEMENTS;
 
 export const getAnnouncements = (): AnnouncementConfig[] => announcements.slice();
+
+// --- Helper Logic ---
 
 const isValidYmd = (s: string): boolean => /^\d{4}-\d{2}-\d{2}$/.test(s);
 
