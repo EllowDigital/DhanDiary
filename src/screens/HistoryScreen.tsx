@@ -486,6 +486,8 @@ const HistoryScreen = () => {
   const [quickFilter, setQuickFilter] = useState<'ALL' | 'WEEK' | 'MONTH'>('ALL');
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
 
+  const closeEditModal = useCallback(() => setEditingEntryId(null), []);
+
   useEffect(() => {
     let mounted = true;
     const key = `history_swipe_tip_dismissed:${user?.id || 'anon'}`;
@@ -698,7 +700,7 @@ const HistoryScreen = () => {
       <EditTransactionModal
         visible={!!editingEntryId}
         entryId={editingEntryId}
-        onClose={() => setEditingEntryId(null)}
+        onClose={closeEditModal}
         onSave={handleSaveEdit}
       />
     </SafeAreaView>
