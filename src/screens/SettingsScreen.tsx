@@ -20,8 +20,8 @@ import { useAuth as useClerkAuth } from '@clerk/clerk-expo';
 
 // Optional Haptics: prefer runtime require so builds without expo-haptics still work.
 let Haptics: any = {
-  impactAsync: async () => {},
-  notificationAsync: async () => {},
+  impactAsync: async () => { },
+  notificationAsync: async () => { },
   ImpactFeedbackStyle: { Medium: 'medium' },
   NotificationFeedbackType: { Warning: 'warning' },
 };
@@ -83,7 +83,7 @@ const SettingsRow = ({
 const SettingsScreen = () => {
   const navigation = useNavigation<any>();
   const query = useQueryClient();
-  const { showToast } = useToast();
+  const { showToast, showActionToast } = useToast();
   const { signOut: clerkSignOut } = useClerkAuth();
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [scrollOffset, setScrollOffset] = useState(0);
@@ -131,13 +131,13 @@ const SettingsScreen = () => {
         const d = new Date(last);
         setLastSyncTime(`${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`);
       }
-    } catch (e) {}
+    } catch (e) { }
 
     return () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -167,7 +167,7 @@ const SettingsScreen = () => {
         showToast('Cloud sync is disabled in this build.', 'error');
         return;
       }
-    } catch (e) {}
+    } catch (e) { }
 
     // Haptic feedback
     if (Platform.OS !== 'web') {
@@ -219,43 +219,44 @@ const SettingsScreen = () => {
 
   const handleLogout = () => {
     if (isSigningOut) return;
-    Alert.alert('Sign Out', 'Are you sure you want to log out?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign Out',
-        style: 'destructive',
-        onPress: async () => {
-          if (isSigningOut) return;
-          setIsSigningOut(true);
+
+    // Avoid native Alert on Android (can fail with "not attached to an Activity").
+    showActionToast(
+      'Sign out now?',
+      'Sign Out',
+      async () => {
+        if (isSigningOut) return;
+        setIsSigningOut(true);
+        try {
+          await performHardSignOut({
+            clerkSignOut: async () => {
+              await clerkSignOut();
+            },
+            navigateToAuth: () => {
+              try {
+                const { resetRoot } = require('../utils/rootNavigation');
+                resetRoot({ index: 0, routes: [{ name: 'Auth' }] });
+              } catch (e) {
+                navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
+              }
+            },
+          });
+
           try {
-            await performHardSignOut({
-              clerkSignOut: async () => {
-                await clerkSignOut();
-              },
-              navigateToAuth: () => {
-                try {
-                  const { resetRoot } = require('../utils/rootNavigation');
-                  resetRoot({ index: 0, routes: [{ name: 'Auth' }] });
-                } catch (e) {
-                  navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
-                }
-              },
-            });
+            query.clear();
+          } catch (e) { }
 
-            try {
-              query.clear();
-            } catch (e) {}
-
-            showToast('Signed out successfully');
-          } catch (e) {
-            console.warn('[Settings] logout failed', e);
-            showToast('Sign out failed. Please try again.', 'error');
-          } finally {
-            setIsSigningOut(false);
-          }
-        },
+          showToast('Signed out successfully');
+        } catch (e) {
+          console.warn('[Settings] logout failed', e);
+          showToast('Sign out failed. Please try again.', 'error');
+        } finally {
+          setIsSigningOut(false);
+        }
       },
-    ]);
+      'info',
+      7000
+    );
   };
 
   const handleResetApp = () => {
@@ -278,11 +279,11 @@ const SettingsScreen = () => {
               await initDB();
               try {
                 query.clear();
-              } catch (e) {}
+              } catch (e) { }
               try {
                 const { notifyEntriesChanged } = require('../utils/dbEvents');
                 notifyEntriesChanged();
-              } catch (e) {}
+              } catch (e) { }
               showToast('Local data cleared');
             } catch (e) {
               console.warn('[Settings] reset local data failed', e);
