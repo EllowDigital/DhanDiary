@@ -37,6 +37,7 @@ import { colors } from '../utils/design';
 import { validateEmail } from '../utils/emailValidation';
 import { useToast } from '../context/ToastContext';
 import { mapLoginErrorToUi, mapSocialLoginErrorToUi } from '../utils/authUi';
+import { isNetOnline } from '../utils/netState';
 
 // Warm up browser
 WebBrowser.maybeCompleteAuthSession();
@@ -92,6 +93,7 @@ const LoginScreen = () => {
 
   // Offline State
   const [offlineVisible, setOfflineVisible] = useState(false);
+  const [isOnline, setIsOnline] = useState<boolean | null>(null);
 
   // --- ANIMATIONS ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -120,10 +122,33 @@ const LoginScreen = () => {
       }),
     ]).start();
 
-    warmNeonConnection().catch(() => {});
+    warmNeonConnection().catch(() => { });
     return () => {
       clearTimeout(t);
       sub.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    NetInfo.fetch()
+      .then((s) => {
+        if (!mounted) return;
+        setIsOnline(isNetOnline(s));
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setIsOnline(null);
+      });
+    const unsub = NetInfo.addEventListener((s) => {
+      if (!mounted) return;
+      setIsOnline(isNetOnline(s));
+    });
+    return () => {
+      mounted = false;
+      try {
+        unsub();
+      } catch (e) { }
     };
   }, []);
 
@@ -201,6 +226,18 @@ const LoginScreen = () => {
     }
     if (loading || inFlightRef.current) return;
 
+    // Sign-in requires internet (Clerk + Neon).
+    try {
+      const net = await NetInfo.fetch();
+      if (!isNetOnline(net)) {
+        setOfflineVisible(true);
+        setLoading(false);
+        return;
+      }
+    } catch (e) {
+      // If we can't determine connectivity, allow the request to proceed and fail gracefully.
+    }
+
     setEmailError(null);
     setPasswordError(null);
     setFormError(null);
@@ -250,7 +287,7 @@ const LoginScreen = () => {
 
   const handleLoginError = async (err: any) => {
     const net = await NetInfo.fetch();
-    if (!net.isConnected) {
+    if (!isNetOnline(net)) {
       setOfflineVisible(true);
       setLoading(false);
       return;
@@ -293,6 +330,19 @@ const LoginScreen = () => {
     }
     if (loading || inFlightRef.current) return;
     if (Platform.OS === 'android' && !isActiveRef.current) return;
+
+    // OAuth requires internet.
+    try {
+      const net = await NetInfo.fetch();
+      if (!isNetOnline(net)) {
+        setOfflineVisible(true);
+        setLoading(false);
+        return;
+      }
+    } catch (e) {
+      // allow flow to proceed if NetInfo fails
+    }
+
     setLoading(true);
     inFlightRef.current = true;
     try {
@@ -447,11 +497,11 @@ const LoginScreen = () => {
                   isCardStyle
                     ? { borderRadius: 24, padding: 32 } // Card Look
                     : {
-                        borderTopLeftRadius: 32,
-                        borderTopRightRadius: 32,
-                        padding: 32,
-                        paddingBottom: Math.max(insets.bottom + 20, 32),
-                      }, // Sheet Look
+                      borderTopLeftRadius: 32,
+                      borderTopRightRadius: 32,
+                      padding: 32,
+                      paddingBottom: Math.max(insets.bottom + 20, 32),
+                    }, // Sheet Look
                 ]}
               >
                 <Text style={styles.welcomeText}>Welcome Back!</Text>
