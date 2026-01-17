@@ -21,6 +21,7 @@ import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useAuth, useUser } from '@clerk/clerk-expo';
 import { useNavigation } from '@react-navigation/native';
 import * as LocalAuthentication from 'expo-local-authentication';
+import NetInfo from '@react-native-community/netinfo';
 
 import { getSession } from '../db/session';
 import { subscribeSession } from '../utils/sessionEvents';
@@ -31,6 +32,7 @@ import ScreenHeader from '../components/ScreenHeader';
 import { deleteAccount } from '../services/auth';
 import UserAvatar from '../components/UserAvatar';
 import { enableLegacyLayoutAnimations } from '../utils/layoutAnimation';
+import { isNetOnline } from '../utils/netState';
 
 enableLegacyLayoutAnimations();
 
@@ -126,6 +128,7 @@ const AccountManagementScreen = () => {
   const [fallbackSession, setFallbackSession] = useState<any>(null);
   const navigation = useNavigation<any>();
   const { showToast } = useToast();
+  const [isOnline, setIsOnline] = useState<boolean | null>(null);
 
   // State
   const [activeCard, setActiveCard] = useState<string | null>(null);
@@ -167,11 +170,36 @@ const AccountManagementScreen = () => {
 
   useEffect(() => {
     let mounted = true;
+    NetInfo.fetch()
+      .then((s) => {
+        if (!mounted) return;
+        setIsOnline(isNetOnline(s));
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setIsOnline(null);
+      });
+
+    const unsub = NetInfo.addEventListener((s) => {
+      if (!mounted) return;
+      setIsOnline(isNetOnline(s));
+    });
+
+    return () => {
+      mounted = false;
+      try {
+        unsub();
+      } catch (e) { }
+    };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
     const load = async () => {
       try {
         const s = await getSession();
         if (mounted) setFallbackSession(s);
-      } catch (e) {}
+      } catch (e) { }
     };
     load();
     const unsub = subscribeSession((s) => {
@@ -181,7 +209,7 @@ const AccountManagementScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -356,7 +384,7 @@ const AccountManagementScreen = () => {
               Alert.alert(
                 'Delete failed',
                 err?.message ||
-                  'We could not delete your account from the cloud. Please check your internet connection and try again.'
+                'We could not delete your account from the cloud. Please check your internet connection and try again.'
               );
             } finally {
               setDeletingAccount(false);
@@ -371,6 +399,83 @@ const AccountManagementScreen = () => {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (isOnline === false) {
+    return (
+      <View style={styles.mainContainer}>
+        <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+        <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right'] as any}>
+          <ScreenHeader
+            title="Account"
+            subtitle="Offline"
+            showScrollHint={false}
+            useSafeAreaPadding={false}
+          />
+
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.offlineCard}>
+              <View style={styles.offlineIconCircle}>
+                <MaterialIcon name="wifi-off" size={28} color="#B91C1C" />
+              </View>
+              <Text style={styles.offlineTitle}>You are offline</Text>
+              <Text style={styles.offlineDesc}>
+                Account management (password, profile, deletion) requires an internet connection.
+              </Text>
+
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={styles.offlineBackBtn}
+                onPress={() => {
+                  try {
+                    navigation.goBack();
+                  } catch (e) { }
+                }}
+              >
+                <MaterialIcon name="arrow-back" size={18} color={colors.text || '#1E293B'} />
+                <Text style={styles.offlineBackText}>Go back</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Allow local app security settings even while offline */}
+            {!isLoadingBiometrics && hasBiometricHardware && (
+              <ExpandableCard
+                item={{
+                  id: 'app_security',
+                  title: 'App Security',
+                  description: `Secure using ${biometricType}`,
+                  icon: 'fingerprint',
+                  bgColor: '#EFF6FF',
+                  iconColor: colors.primary || '#3B82F6',
+                }}
+                isExpanded={activeCard === 'app_security'}
+                onToggle={() => toggleCard('app_security')}
+              >
+                <View style={styles.switchRow}>
+                  <View style={{ flex: 1, paddingRight: 10 }}>
+                    <Text style={styles.switchLabel}>Enable {biometricType}</Text>
+                    <Text style={styles.switchDesc}>
+                      Require {biometricType} authentication to open the app.
+                    </Text>
+                  </View>
+                  <Switch
+                    value={biometricsEnabled}
+                    onValueChange={toggleBiometrics}
+                    trackColor={{ false: '#E2E8F0', true: colors.primary || '#3B82F6' }}
+                    thumbColor={'#fff'}
+                  />
+                </View>
+              </ExpandableCard>
+            )}
+
+            <View style={{ height: 100 }} />
+          </ScrollView>
+        </SafeAreaView>
       </View>
     );
   }
@@ -433,10 +538,10 @@ const AccountManagementScreen = () => {
                   {(user as any)?.emailAddresses?.some(
                     (e: any) => e.verification?.status === 'verified'
                   ) && (
-                    <View style={styles.verifiedBadge}>
-                      <MaterialIcon name="check" size={12} color="white" />
-                    </View>
-                  )}
+                      <View style={styles.verifiedBadge}>
+                        <MaterialIcon name="check" size={12} color="white" />
+                      </View>
+                    )}
                 </View>
 
                 <View style={styles.heroInfo}>
@@ -629,6 +734,53 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 20,
     paddingTop: 10,
+  },
+
+  offlineCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(185, 28, 28, 0.14)',
+    marginBottom: 18,
+  },
+  offlineIconCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#FEF2F2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(185, 28, 28, 0.12)',
+    marginBottom: 10,
+  },
+  offlineTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.text || '#1E293B',
+    marginBottom: 6,
+  },
+  offlineDesc: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.muted || '#64748B',
+    marginBottom: 14,
+  },
+  offlineBackBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    alignSelf: 'flex-start',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
+  },
+  offlineBackText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.text || '#1E293B',
   },
 
   /* HERO ROW */
