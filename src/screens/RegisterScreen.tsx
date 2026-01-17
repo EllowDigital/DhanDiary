@@ -247,6 +247,7 @@ const RegisterScreen = () => {
 
       await attemptSignUp();
     } finally {
+      setLoading(false);
       inFlightRef.current = false;
     }
   };
