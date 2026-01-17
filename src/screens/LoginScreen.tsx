@@ -130,7 +130,7 @@ const LoginScreen = () => {
       }),
     ]).start();
 
-    warmNeonConnection().catch(() => { });
+    warmNeonConnection({ soft: true, timeoutMs: 3000 }).catch(() => { });
     return () => {
       clearTimeout(t);
       sub.remove();
@@ -188,7 +188,7 @@ const LoginScreen = () => {
       try {
         const health = getNeonHealth();
         if (health.isConfigured) {
-          const warmed = await warmNeonConnection({ force: true, timeoutMs: 8000 });
+          const warmed = await warmNeonConnection({ force: true, timeoutMs: 3000, soft: true });
           if (!warmed) {
             setGate('service');
             return;
@@ -292,7 +292,7 @@ const LoginScreen = () => {
     try {
       const health = getNeonHealth();
       if (health.isConfigured) {
-        const warmed = await warmNeonConnection({ force: true, timeoutMs: 8000 });
+        const warmed = await warmNeonConnection({ force: true, timeoutMs: 3000, soft: true });
         if (!warmed) {
           setGate('service');
           setLoading(false);

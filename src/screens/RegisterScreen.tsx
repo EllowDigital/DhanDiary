@@ -162,7 +162,7 @@ const RegisterScreen = () => {
       try {
         const health = getNeonHealth();
         if (health.isConfigured) {
-          const warmed = await warmNeonConnection({ force: true, timeoutMs: 8000 });
+          const warmed = await warmNeonConnection({ force: true, timeoutMs: 3000, soft: true });
           if (!warmed) {
             setGate('service');
             return;
@@ -246,7 +246,7 @@ const RegisterScreen = () => {
       try {
         const health = getNeonHealth();
         if (health.isConfigured) {
-          const warmed = await warmNeonConnection({ force: true, timeoutMs: 8000 });
+          const warmed = await warmNeonConnection({ force: true, timeoutMs: 3000, soft: true });
           if (!warmed) {
             setGate('service');
             return;
