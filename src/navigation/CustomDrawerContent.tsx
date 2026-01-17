@@ -14,6 +14,7 @@ import { useAuth, useUser } from '@clerk/clerk-expo';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import Constants from 'expo-constants';
+import NetInfo from '@react-native-community/netinfo';
 
 // --- CUSTOM IMPORTS ---
 import { colors } from '../utils/design';
@@ -24,6 +25,7 @@ import { getSession } from '../db/session';
 import { subscribeSession } from '../utils/sessionEvents';
 import { useToast } from '../context/ToastContext';
 import { tryShowNativeConfirm } from '../utils/nativeConfirm';
+import { isNetOnline } from '../utils/netState';
 
 // --- CONSTANTS ---
 const ACTIVE_COLOR = colors.primary || '#2563EB';
@@ -67,7 +69,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
       try {
         const s = await getSession();
         if (mounted) setFallbackSession(s);
-      } catch (e) {}
+      } catch (e) { }
     };
     loadSession();
 
@@ -79,7 +81,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -104,7 +106,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   const closeDrawerSafely = () => {
     try {
       (props.navigation as any).closeDrawer?.();
-    } catch (e) {}
+    } catch (e) { }
   };
 
   const goToDashboardTab = (screen: 'Home' | 'History') => {
@@ -123,6 +125,17 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
 
   const handleLogout = async () => {
     if (isSigningOut) return;
+
+    // Sign-out must be done online so we can sync pending changes first.
+    try {
+      const net = await NetInfo.fetch();
+      if (!isNetOnline(net)) {
+        showToast('Please go online to sign out and sync your data to cloud.', 'info', 5000);
+        return;
+      }
+    } catch (e) {
+      // If NetInfo fails, allow the user to proceed.
+    }
 
     const doSignOut = async () => {
       if (isSigningOut) return;

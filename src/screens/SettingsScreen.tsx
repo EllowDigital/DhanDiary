@@ -20,8 +20,8 @@ import { useAuth as useClerkAuth } from '@clerk/clerk-expo';
 
 // Optional Haptics: prefer runtime require so builds without expo-haptics still work.
 let Haptics: any = {
-  impactAsync: async () => {},
-  notificationAsync: async () => {},
+  impactAsync: async () => { },
+  notificationAsync: async () => { },
   ImpactFeedbackStyle: { Medium: 'medium' },
   NotificationFeedbackType: { Warning: 'warning' },
 };
@@ -34,6 +34,7 @@ try {
 
 // Logic
 import { performHardSignOut } from '../services/signOutFlow';
+import { isNetOnline } from '../utils/netState';
 import { syncBothWays, getLastSuccessfulSyncAt } from '../services/syncManager';
 import NetInfo from '@react-native-community/netinfo';
 import { useNavigation } from '@react-navigation/native';
@@ -132,13 +133,13 @@ const SettingsScreen = () => {
         const d = new Date(last);
         setLastSyncTime(`${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`);
       }
-    } catch (e) {}
+    } catch (e) { }
 
     return () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -168,7 +169,7 @@ const SettingsScreen = () => {
         showToast('Cloud sync is disabled in this build.', 'error');
         return;
       }
-    } catch (e) {}
+    } catch (e) { }
 
     // Haptic feedback
     if (Platform.OS !== 'web') {
@@ -221,6 +222,17 @@ const SettingsScreen = () => {
   const handleLogout = async () => {
     if (isSigningOut) return;
 
+    // Sign-out must be done online so we can sync pending changes first.
+    try {
+      const net = await NetInfo.fetch();
+      if (!isNetOnline(net)) {
+        showToast('Please go online to sign out and sync your data to cloud.', 'info', 5000);
+        return;
+      }
+    } catch (e) {
+      // If NetInfo fails, allow the user to proceed.
+    }
+
     const doSignOut = async () => {
       if (isSigningOut) return;
       setIsSigningOut(true);
@@ -241,7 +253,7 @@ const SettingsScreen = () => {
 
         try {
           query.clear();
-        } catch (e) {}
+        } catch (e) { }
 
         showToast('Signed out successfully');
       } catch (e) {
@@ -285,11 +297,11 @@ const SettingsScreen = () => {
               await initDB();
               try {
                 query.clear();
-              } catch (e) {}
+              } catch (e) { }
               try {
                 const { notifyEntriesChanged } = require('../utils/dbEvents');
                 notifyEntriesChanged();
-              } catch (e) {}
+              } catch (e) { }
               showToast('Local data cleared');
             } catch (e) {
               console.warn('[Settings] reset local data failed', e);

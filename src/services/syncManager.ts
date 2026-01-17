@@ -4,6 +4,7 @@ import Constants from 'expo-constants';
 import AsyncStorage from '../utils/AsyncStorageWrapper';
 import { getPendingProfileUpdates, markPendingProfileProcessed } from '../db/localDb';
 import { getSession, saveSession } from '../db/session';
+import { getIsSigningOut } from '../utils/authBoundary';
 // Legacy entry-related DB helpers moved to `src/services/legacySync` to keep
 // `syncManager` free of direct Neon/SQLite logic. Import from legacy module
 // only when needed.
@@ -165,6 +166,19 @@ export const stopSyncEngine = async () => {
 // Public: schedule a sync to run after interactions (UI-first) and de-dupe rapid triggers.
 export const scheduleSync = (options?: { force?: boolean; source?: 'manual' | 'auto' }) => {
   try {
+    // Hard boundary: never start/queue sync while a hard sign-out is in progress.
+    // This prevents crashes caused by reading storage/DB while it is being wiped.
+    try {
+      if (getIsSigningOut()) {
+        return Promise.resolve({
+          ok: false,
+          reason: 'no_session',
+          upToDate: true,
+          counts: { pushed: 0, pulled: 0 },
+        } as any);
+      }
+    } catch (e) {}
+
     // Non-blocking: load persisted paused flag in background.
     void loadSyncPrefsOnce();
     if (_syncPaused) {
@@ -403,6 +417,19 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
       counts: { pushed: 0, pulled: 0 },
     } satisfies SyncResult;
   }
+
+  // Hard boundary: never run sync while a hard sign-out is in progress.
+  // This avoids races with storage/DB wiping that can cause fatal crashes.
+  try {
+    if (getIsSigningOut()) {
+      return {
+        ok: false,
+        reason: 'no_session',
+        upToDate: true,
+        counts: { pushed: 0, pulled: 0 },
+      } satisfies SyncResult;
+    }
+  } catch (e) {}
 
   // Starting a new sync implies we want to clear any previous cancel request.
   try {
@@ -855,6 +882,9 @@ export const startForegroundSyncScheduler = (intervalMs: number = 15000) => {
   void loadSyncPrefsOnce();
   _foregroundTimer = setInterval(() => {
     try {
+      try {
+        if (getIsSigningOut()) return;
+      } catch (e) {}
       if (_syncPaused) return;
       // Throttle frequent runs: if we recently synced successfully, skip until MIN_SCHEDULE_MS
       const MIN_SCHEDULE_MS = Math.max(60000, intervalMs); // at least 60s
