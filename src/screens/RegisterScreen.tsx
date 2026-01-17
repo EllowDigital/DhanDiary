@@ -3,6 +3,7 @@ import {
   View,
   Text,
   TextInput,
+  Image,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
@@ -40,6 +41,9 @@ import { warmNeonConnection } from '../services/auth';
 
 // Warm up browser (OAuth)
 WebBrowser.maybeCompleteAuthSession();
+
+const GOOGLE_ICON = require('../../assets/google0-icon.png');
+const GITHUB_ICON = require('../../assets/github-icon.png');
 
 const useWarmUpBrowser = () => {
   useEffect(() => {
@@ -135,7 +139,7 @@ const RegisterScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -159,7 +163,7 @@ const RegisterScreen = () => {
             return;
           }
         }
-      } catch (e) {}
+      } catch (e) { }
 
       setGate(null);
     } finally {
@@ -339,7 +343,7 @@ const RegisterScreen = () => {
         if (isNetOnline(net) && isLikelyServiceDownError(err)) {
           setGate('service');
         }
-      } catch (e) {}
+      } catch (e) { }
     } finally {
       setLoading(false);
       inFlightRef.current = false;
@@ -469,13 +473,13 @@ const RegisterScreen = () => {
                 <View style={styles.socialRow}>
                   <SocialButton
                     label="Google"
-                    iconName="logo-google"
+                    imageSource={GOOGLE_ICON}
                     onPress={() => onSocialSignUp('google')}
                     disabled={!isLoaded || loading}
                   />
                   <SocialButton
                     label="GitHub"
-                    iconName="logo-github"
+                    imageSource={GITHUB_ICON}
                     onPress={() => onSocialSignUp('github')}
                     disabled={!isLoaded || loading}
                   />
@@ -631,14 +635,22 @@ const RegisterScreen = () => {
   );
 };
 
-const SocialButton = ({ label, iconName, onPress, disabled }: any) => (
+const SocialButton = ({ label, iconName, imageSource, onPress, disabled }: any) => (
   <TouchableOpacity
     style={[styles.socialBtn, disabled && styles.disabledBtn]}
     onPress={onPress}
     disabled={disabled}
     activeOpacity={0.8}
   >
-    <Ionicons name={iconName} size={18} color={disabled ? '#94A3B8' : '#0F172A'} />
+    {imageSource ? (
+      <Image
+        source={imageSource}
+        style={[styles.socialIcon, disabled && { opacity: 0.55 }]}
+        resizeMode="contain"
+      />
+    ) : (
+      <Ionicons name={iconName} size={18} color={disabled ? '#94A3B8' : '#0F172A'} />
+    )}
     <Text style={[styles.socialBtnText, disabled && { color: '#94A3B8' }]}>{label}</Text>
   </TouchableOpacity>
 );
@@ -771,6 +783,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 1,
   },
+  socialIcon: { width: 18, height: 18 },
   socialBtnText: { fontSize: 14, fontWeight: '600', color: '#1E293B', marginLeft: 8 },
 
   emailAltText: {
