@@ -395,14 +395,6 @@ const AccountManagementScreen = () => {
     );
   };
 
-  if (!isLoaded) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
-  }
-
   if (isOnline === false) {
     return (
       <View style={styles.mainContainer}>
@@ -476,6 +468,14 @@ const AccountManagementScreen = () => {
             <View style={{ height: 100 }} />
           </ScrollView>
         </SafeAreaView>
+      </View>
+    );
+  }
+
+  if (!isLoaded) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
