@@ -31,7 +31,8 @@
     "neon:migrate": "node ./scripts/run-neon-migrations.js",
     "/* --- Build Scripts --- */": "",
     "prebuild": "npm run lint && npm test && npx tsc --noEmit",
-    "build:apk-local": "npm install && npx expo prebuild --platform android && cd android && gradlew.bat assembleRelease --no-daemon --parallel -Dorg.gradle.workers.max=6 -Dorg.gradle.vfs.watch=false -Dfile.encoding=UTF-8"
+    "build:apk-local": "npm install && npx expo prebuild --platform android && cd android && gradlew.bat assembleRelease --parallel --build-cache"
+
   },
   "dependencies": {
     "@clerk/clerk-expo": "^2.19.14",
