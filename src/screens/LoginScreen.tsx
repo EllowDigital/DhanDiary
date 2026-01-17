@@ -130,7 +130,7 @@ const LoginScreen = () => {
       }),
     ]).start();
 
-    warmNeonConnection().catch(() => {});
+    warmNeonConnection().catch(() => { });
     return () => {
       clearTimeout(t);
       sub.remove();
@@ -140,32 +140,38 @@ const LoginScreen = () => {
   useEffect(() => {
     let mounted = true;
 
-    NetInfo.fetch()
-      .then((s) => {
-        if (!mounted) return;
-        const ok = isNetOnline(s);
-        setIsOnline(ok);
-        setGate((prev) => (!ok ? 'offline' : prev === 'offline' ? null : prev));
-      })
-      .catch(() => {
-        if (!mounted) return;
-        setIsOnline(null);
-      });
-
-    const unsub = NetInfo.addEventListener((s) => {
+    const handleState = (ok: boolean | null) => {
       if (!mounted) return;
-      const ok = isNetOnline(s);
       setIsOnline(ok);
-      setGate((prev) => (!ok ? 'offline' : prev === 'offline' ? null : prev));
-    });
+
+      if (ok === false) {
+        // If connectivity drops during an auth attempt, stop the spinner and show gate.
+        if (loading || inFlightRef.current) {
+          setLoading(false);
+          inFlightRef.current = false;
+          showToast('Connection lost. Please try again.', 'error', 3500);
+        }
+        setGate('offline');
+        return;
+      }
+
+      // Restore from offline gate when back online.
+      setGate((prev) => (prev === 'offline' ? null : prev));
+    };
+
+    NetInfo.fetch()
+      .then((s) => handleState(isNetOnline(s)))
+      .catch(() => handleState(null));
+
+    const unsub = NetInfo.addEventListener((s) => handleState(isNetOnline(s)));
 
     return () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
-  }, []);
+  }, [loading, showToast]);
 
   const retryGate = async () => {
     setGateLoading(true);
@@ -188,7 +194,7 @@ const LoginScreen = () => {
             return;
           }
         }
-      } catch (e) {}
+      } catch (e) { }
 
       setGate(null);
     } finally {
@@ -491,7 +497,7 @@ const LoginScreen = () => {
         if (isNetOnline(net) && isLikelyServiceDownError(err)) {
           setGate('service');
         }
-      } catch (e) {}
+      } catch (e) { }
       setLoading(false);
     } finally {
       inFlightRef.current = false;
@@ -641,11 +647,11 @@ const LoginScreen = () => {
                   isCardStyle
                     ? { borderRadius: 24, padding: 32 } // Card Look
                     : {
-                        borderTopLeftRadius: 32,
-                        borderTopRightRadius: 32,
-                        padding: 32,
-                        paddingBottom: Math.max(insets.bottom + 20, 32),
-                      }, // Sheet Look
+                      borderTopLeftRadius: 32,
+                      borderTopRightRadius: 32,
+                      padding: 32,
+                      paddingBottom: Math.max(insets.bottom + 20, 32),
+                    }, // Sheet Look
                 ]}
               >
                 <Text style={styles.welcomeText}>Welcome Back!</Text>
