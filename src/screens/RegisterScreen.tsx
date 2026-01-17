@@ -143,7 +143,7 @@ const RegisterScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, [loading, showToast]);
 
@@ -167,7 +167,7 @@ const RegisterScreen = () => {
             return;
           }
         }
-      } catch (e) { }
+      } catch (e) {}
 
       setGate(null);
     } finally {
@@ -185,7 +185,9 @@ const RegisterScreen = () => {
       : 'We are facing issues. We will keep retrying in background.';
 
     return (
-      <View style={[styles.gateBanner, isOffline ? styles.gateBannerOffline : styles.gateBannerService]}>
+      <View
+        style={[styles.gateBanner, isOffline ? styles.gateBannerOffline : styles.gateBannerService]}
+      >
         <View style={styles.gateBannerLeft}>
           <Ionicons
             name={isOffline ? 'wifi-off' : 'alert-circle'}
@@ -368,7 +370,7 @@ const RegisterScreen = () => {
         if (isNetOnline(net) && isLikelyServiceDownError(err)) {
           setGate('service');
         }
-      } catch (e) { }
+      } catch (e) {}
     } finally {
       setLoading(false);
       inFlightRef.current = false;
@@ -488,6 +490,8 @@ const RegisterScreen = () => {
               >
                 <Text style={styles.title}>Create Account</Text>
                 <Text style={styles.subtitle}>Start your financial journey today.</Text>
+
+                {renderGateBanner()}
 
                 <View style={styles.divider}>
                   <View style={styles.line} />
@@ -780,6 +784,37 @@ const styles = StyleSheet.create({
     marginBottom: 32,
     lineHeight: 24,
   },
+
+  gateBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 16,
+    gap: 12,
+  },
+  gateBannerOffline: {
+    backgroundColor: '#FFF7ED',
+    borderColor: '#FDBA74',
+  },
+  gateBannerService: {
+    backgroundColor: '#FFF1F2',
+    borderColor: '#FDA4AF',
+  },
+  gateBannerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
+  gateBannerTextWrap: { flex: 1 },
+  gateBannerTitle: { color: '#0F172A', fontSize: 13, fontWeight: '700' },
+  gateBannerText: { color: '#475569', fontSize: 12, marginTop: 2 },
+  gateBannerAction: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: '#E0E7FF',
+  },
+  gateBannerActionText: { color: '#1D4ED8', fontSize: 12, fontWeight: '700' },
 
   divider: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   line: { flex: 1, height: 1, backgroundColor: '#E2E8F0' },
