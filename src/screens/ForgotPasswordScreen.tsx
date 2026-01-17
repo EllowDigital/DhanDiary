@@ -124,7 +124,7 @@ const ForgotPasswordScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, []);
 
@@ -312,7 +312,7 @@ const ForgotPasswordScreen = () => {
           setGate('offline');
           return;
         }
-      } catch (e) { }
+      } catch (e) {}
 
       if (isLikelyServiceDownError(err)) {
         setGate('service');
@@ -386,7 +386,7 @@ const ForgotPasswordScreen = () => {
           setGate('offline');
           return;
         }
-      } catch (e) { }
+      } catch (e) {}
 
       if (isLikelyServiceDownError(err)) {
         setGate('service');

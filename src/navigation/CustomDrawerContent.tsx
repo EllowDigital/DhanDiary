@@ -69,7 +69,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
       try {
         const s = await getSession();
         if (mounted) setFallbackSession(s);
-      } catch (e) { }
+      } catch (e) {}
     };
     loadSession();
 
@@ -81,7 +81,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
       mounted = false;
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, []);
 
@@ -106,7 +106,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   const closeDrawerSafely = () => {
     try {
       (props.navigation as any).closeDrawer?.();
-    } catch (e) { }
+    } catch (e) {}
   };
 
   const goToDashboardTab = (screen: 'Home' | 'History') => {
