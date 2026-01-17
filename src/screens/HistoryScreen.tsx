@@ -214,6 +214,15 @@ const EditTransactionModal = React.memo(({ visible, entryId, onClose, onSave }: 
   const [showCatPicker, setShowCatPicker] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const isSubmittingRef = useRef(false);
+  const pendingPromptShowingRef = useRef(false);
+  const allowUnsyncedEditForIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!visible) {
+      pendingPromptShowingRef.current = false;
+      allowUnsyncedEditForIdRef.current = null;
+    }
+  }, [visible]);
 
   useEffect(() => {
     let cancelled = false;
@@ -258,10 +267,43 @@ const EditTransactionModal = React.memo(({ visible, entryId, onClose, onSave }: 
 
         // Warn if pending sync
         if (Number((row as any).need_sync) === 1) {
-          Alert.alert('Pending changes', 'This entry is waiting to sync. Edit anyway?', [
-            { text: 'Cancel', style: 'cancel', onPress: onClose },
-            { text: 'Edit', onPress: applyRowToState },
-          ]);
+          const id = String(entryId);
+          if (allowUnsyncedEditForIdRef.current === id) {
+            applyRowToState();
+            return;
+          }
+          if (!pendingPromptShowingRef.current) {
+            pendingPromptShowingRef.current = true;
+            Alert.alert(
+              'Pending changes',
+              'This entry is waiting to sync. Edit anyway?',
+              [
+                {
+                  text: 'Cancel',
+                  style: 'cancel',
+                  onPress: () => {
+                    pendingPromptShowingRef.current = false;
+                    onClose();
+                  },
+                },
+                {
+                  text: 'Edit',
+                  onPress: () => {
+                    pendingPromptShowingRef.current = false;
+                    allowUnsyncedEditForIdRef.current = id;
+                    applyRowToState();
+                  },
+                },
+              ],
+              {
+                cancelable: true,
+                onDismiss: () => {
+                  pendingPromptShowingRef.current = false;
+                  onClose();
+                },
+              }
+            );
+          }
           return;
         }
 
@@ -462,7 +504,7 @@ const HistoryScreen = () => {
   const dismissSwipeTip = useCallback(() => {
     const key = `history_swipe_tip_dismissed:${user?.id || 'anon'}`;
     setSwipeTipVisible(false);
-    AsyncStorage.setItem(key, '1').catch(() => {});
+    AsyncStorage.setItem(key, '1').catch(() => { });
   }, [user?.id]);
 
   const toggleFilter = useCallback((f: 'ALL' | 'WEEK' | 'MONTH') => {
