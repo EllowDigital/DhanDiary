@@ -34,7 +34,6 @@ import { validateEmail } from '../utils/emailValidation';
 import { mapRegisterErrorToUi, mapSocialLoginErrorToUi } from '../utils/authUi';
 import { useToast } from '../context/ToastContext';
 import { isNetOnline } from '../utils/netState';
-import { AuthGateScreen } from '../components/AuthGateScreen';
 import { debugAuthError, isLikelyServiceDownError } from '../utils/serviceIssue';
 import { getNeonHealth } from '../api/neonClient';
 import { warmNeonConnection } from '../services/auth';
@@ -176,31 +175,42 @@ const RegisterScreen = () => {
     }
   };
 
-  if (gate === 'offline') {
-    return (
-      <AuthGateScreen
-        variant="offline"
-        description="Sign up requires internet."
-        primaryLabel="Try Again"
-        onPrimary={retryGate}
-        loading={gateLoading}
-      />
-    );
-  }
+  const renderGateBanner = () => {
+    if (!gate) return null;
 
-  if (gate === 'service') {
+    const isOffline = gate === 'offline';
+    const title = isOffline ? 'You are offline' : 'Service issue';
+    const description = isOffline
+      ? 'Sign up needs internet. We will keep retrying in background.'
+      : 'We are facing issues. We will keep retrying in background.';
+
     return (
-      <AuthGateScreen
-        variant="service"
-        description="Sorry, we are facing some issue. Try again after some time."
-        primaryLabel="Try Again"
-        onPrimary={retryGate}
-        secondaryLabel="Back to Sign Up"
-        onSecondary={() => setGate(null)}
-        loading={gateLoading}
-      />
+      <View style={[styles.gateBanner, isOffline ? styles.gateBannerOffline : styles.gateBannerService]}>
+        <View style={styles.gateBannerLeft}>
+          <Ionicons
+            name={isOffline ? 'wifi-off' : 'alert-circle'}
+            size={18}
+            color={isOffline ? '#9A3412' : '#9F1239'}
+          />
+          <View style={styles.gateBannerTextWrap}>
+            <Text style={styles.gateBannerTitle}>{title}</Text>
+            <Text style={styles.gateBannerText}>{description}</Text>
+          </View>
+        </View>
+        <TouchableOpacity
+          onPress={retryGate}
+          disabled={gateLoading}
+          style={styles.gateBannerAction}
+        >
+          {gateLoading ? (
+            <ActivityIndicator size="small" color="#2563EB" />
+          ) : (
+            <Text style={styles.gateBannerActionText}>Retry</Text>
+          )}
+        </TouchableOpacity>
+      </View>
     );
-  }
+  };
 
   const onSignUpPress = async () => {
     if (!isLoaded) return;

@@ -38,7 +38,6 @@ import { validateEmail } from '../utils/emailValidation';
 import { useToast } from '../context/ToastContext';
 import { mapLoginErrorToUi, mapSocialLoginErrorToUi } from '../utils/authUi';
 import { isNetOnline } from '../utils/netState';
-import { AuthGateScreen } from '../components/AuthGateScreen';
 import { debugAuthError, isLikelyServiceDownError } from '../utils/serviceIssue';
 import { getNeonHealth } from '../api/neonClient';
 
@@ -504,31 +503,42 @@ const LoginScreen = () => {
     }
   };
 
-  if (gate === 'offline') {
-    return (
-      <AuthGateScreen
-        variant="offline"
-        description="Sign in requires internet."
-        primaryLabel="Try Again"
-        onPrimary={retryGate}
-        loading={gateLoading}
-      />
-    );
-  }
+  const renderGateBanner = () => {
+    if (!gate) return null;
 
-  if (gate === 'service') {
+    const isOffline = gate === 'offline';
+    const title = isOffline ? 'You are offline' : 'Service issue';
+    const description = isOffline
+      ? 'Sign in needs internet. We will keep retrying in background.'
+      : 'We are facing issues. We will keep retrying in background.';
+
     return (
-      <AuthGateScreen
-        variant="service"
-        description="Sorry, we are facing some issue. Try again after some time."
-        primaryLabel="Try Again"
-        onPrimary={retryGate}
-        secondaryLabel="Back to Sign In"
-        onSecondary={() => setGate(null)}
-        loading={gateLoading}
-      />
+      <View style={[styles.gateBanner, isOffline ? styles.gateBannerOffline : styles.gateBannerService]}>
+        <View style={styles.gateBannerLeft}>
+          <Ionicons
+            name={isOffline ? 'wifi-off' : 'alert-circle'}
+            size={18}
+            color={isOffline ? '#9A3412' : '#9F1239'}
+          />
+          <View style={styles.gateBannerTextWrap}>
+            <Text style={styles.gateBannerTitle}>{title}</Text>
+            <Text style={styles.gateBannerText}>{description}</Text>
+          </View>
+        </View>
+        <TouchableOpacity
+          onPress={retryGate}
+          disabled={gateLoading}
+          style={styles.gateBannerAction}
+        >
+          {gateLoading ? (
+            <ActivityIndicator size="small" color="#2563EB" />
+          ) : (
+            <Text style={styles.gateBannerActionText}>Retry</Text>
+          )}
+        </TouchableOpacity>
+      </View>
     );
-  }
+  };
 
   const renderBrand = () => (
     <Animated.View style={[styles.brandContainer, { opacity: fadeAnim }]}>
@@ -656,6 +666,8 @@ const LoginScreen = () => {
               >
                 <Text style={styles.welcomeText}>Welcome Back!</Text>
                 <Text style={styles.promptText}>Please sign in to continue</Text>
+
+                {renderGateBanner()}
 
                 {didWaitForClerk && !isLoaded && (
                   <View style={styles.configBanner}>
@@ -962,6 +974,37 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   configBannerText: { flex: 1, color: '#92400E', fontSize: 12, fontWeight: '600' },
+
+  gateBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 16,
+    gap: 12,
+  },
+  gateBannerOffline: {
+    backgroundColor: '#FFF7ED',
+    borderColor: '#FDBA74',
+  },
+  gateBannerService: {
+    backgroundColor: '#FFF1F2',
+    borderColor: '#FDA4AF',
+  },
+  gateBannerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
+  gateBannerTextWrap: { flex: 1 },
+  gateBannerTitle: { color: '#0F172A', fontSize: 13, fontWeight: '700' },
+  gateBannerText: { color: '#475569', fontSize: 12, marginTop: 2 },
+  gateBannerAction: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: '#E0E7FF',
+  },
+  gateBannerActionText: { color: '#1D4ED8', fontSize: 12, fontWeight: '700' },
 
   inputGroup: { gap: 16, marginBottom: 24 },
   inputContainer: {
