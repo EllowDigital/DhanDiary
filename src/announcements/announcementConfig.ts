@@ -444,7 +444,8 @@ const normalizeAnnouncements = (list: AnnouncementConfig[]): AnnouncementConfig[
   }
 
   // In dev, warn if the config likely has mistakes.
-  if (__DEV__) {
+  // Guard __DEV__ for non-RN runtimes (e.g., Node scripts importing this file).
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
     const inputCount = Array.isArray(list) ? list.length : 0;
     if (out.length !== inputCount) {
       console.warn(
