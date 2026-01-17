@@ -38,6 +38,9 @@ import { validateEmail } from '../utils/emailValidation';
 import { useToast } from '../context/ToastContext';
 import { mapLoginErrorToUi, mapSocialLoginErrorToUi } from '../utils/authUi';
 import { isNetOnline } from '../utils/netState';
+import { AuthGateScreen } from '../components/AuthGateScreen';
+import { debugAuthError, isLikelyServiceDownError } from '../utils/serviceIssue';
+import { getNeonHealth } from '../api/neonClient';
 
 // Warm up browser
 WebBrowser.maybeCompleteAuthSession();
@@ -94,6 +97,8 @@ const LoginScreen = () => {
   // Offline State
   const [offlineVisible, setOfflineVisible] = useState(false);
   const [isOnline, setIsOnline] = useState<boolean | null>(null);
+  const [gate, setGate] = useState<null | 'offline' | 'service'>(null);
+  const [gateLoading, setGateLoading] = useState(false);
 
   // --- ANIMATIONS ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -122,7 +127,7 @@ const LoginScreen = () => {
       }),
     ]).start();
 
-    warmNeonConnection().catch(() => {});
+    warmNeonConnection().catch(() => { });
     return () => {
       clearTimeout(t);
       sub.remove();
@@ -134,7 +139,9 @@ const LoginScreen = () => {
     NetInfo.fetch()
       .then((s) => {
         if (!mounted) return;
-        setIsOnline(isNetOnline(s));
+        const ok = isNetOnline(s);
+        setIsOnline(ok);
+        if (!ok) setGate('offline');
       })
       .catch(() => {
         if (!mounted) return;
@@ -142,15 +149,47 @@ const LoginScreen = () => {
       });
     const unsub = NetInfo.addEventListener((s) => {
       if (!mounted) return;
-      setIsOnline(isNetOnline(s));
+      const ok = isNetOnline(s);
+      setIsOnline(ok);
+      if (!ok) setGate('offline');
+      else if (gate === 'offline') setGate(null);
     });
     return () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
-  }, []);
+  }, [gate]);
+
+  const retryGate = async () => {
+    setGateLoading(true);
+    try {
+      const net = await NetInfo.fetch();
+      const ok = isNetOnline(net);
+      setIsOnline(ok);
+      if (!ok) {
+        setGate('offline');
+        return;
+      }
+
+      // If Neon is configured in this build, ensure it's reachable.
+      try {
+        const health = getNeonHealth();
+        if (health.isConfigured) {
+          const warmed = await warmNeonConnection({ force: true, timeoutMs: 8000 });
+          if (!warmed) {
+            setGate('service');
+            return;
+          }
+        }
+      } catch (e) { }
+
+      setGate(null);
+    } finally {
+      setGateLoading(false);
+    }
+  };
 
   // --- AUTO SYNC LOGIC ---
   useEffect(() => {
@@ -230,12 +269,30 @@ const LoginScreen = () => {
     try {
       const net = await NetInfo.fetch();
       if (!isNetOnline(net)) {
-        setOfflineVisible(true);
+        setGate('offline');
         setLoading(false);
         return;
       }
     } catch (e) {
       // If we can't determine connectivity, allow the request to proceed and fail gracefully.
+    }
+
+    // If Neon is configured, fail fast with a friendly screen when DB is down.
+    try {
+      const health = getNeonHealth();
+      if (health.isConfigured) {
+        const warmed = await warmNeonConnection({ force: true, timeoutMs: 8000 });
+        if (!warmed) {
+          setGate('service');
+          setLoading(false);
+          return;
+        }
+      }
+    } catch (e) {
+      // If warm-up logic throws, treat as service issue.
+      setGate('service');
+      setLoading(false);
+      return;
     }
 
     setEmailError(null);
@@ -286,9 +343,17 @@ const LoginScreen = () => {
   };
 
   const handleLoginError = async (err: any) => {
+    debugAuthError('[Login] sign-in failed', err);
     const net = await NetInfo.fetch();
     if (!isNetOnline(net)) {
-      setOfflineVisible(true);
+      setGate('offline');
+      setLoading(false);
+      return;
+    }
+
+    // Online but upstream failing
+    if (isLikelyServiceDownError(err)) {
+      setGate('service');
       setLoading(false);
       return;
     }
@@ -335,12 +400,29 @@ const LoginScreen = () => {
     try {
       const net = await NetInfo.fetch();
       if (!isNetOnline(net)) {
-        setOfflineVisible(true);
+        setGate('offline');
         setLoading(false);
         return;
       }
     } catch (e) {
       // allow flow to proceed if NetInfo fails
+    }
+
+    // If Neon is configured, ensure DB is reachable before OAuth.
+    try {
+      const health = getNeonHealth();
+      if (health.isConfigured) {
+        const warmed = await warmNeonConnection({ force: true, timeoutMs: 8000 });
+        if (!warmed) {
+          setGate('service');
+          setLoading(false);
+          return;
+        }
+      }
+    } catch (e) {
+      setGate('service');
+      setLoading(false);
+      return;
     }
 
     setLoading(true);
@@ -377,17 +459,51 @@ const LoginScreen = () => {
         setLoading(false);
       }
     } catch (err: any) {
+      debugAuthError(`[Login] OAuth failed (${strategy})`, err);
       const ui = mapSocialLoginErrorToUi(err);
       if (ui) {
         const lower = ui.message.toLowerCase();
         const type = lower.includes('please log in using email') ? 'info' : 'error';
         showToast(ui.message, type, 6000);
       }
+
+      try {
+        const net = await NetInfo.fetch();
+        if (isNetOnline(net) && isLikelyServiceDownError(err)) {
+          setGate('service');
+        }
+      } catch (e) { }
       setLoading(false);
     } finally {
       inFlightRef.current = false;
     }
   };
+
+  if (gate === 'offline') {
+    return (
+      <AuthGateScreen
+        variant="offline"
+        description="Sign in requires internet (Clerk + Neon)."
+        primaryLabel="Try Again"
+        onPrimary={retryGate}
+        loading={gateLoading}
+      />
+    );
+  }
+
+  if (gate === 'service') {
+    return (
+      <AuthGateScreen
+        variant="service"
+        description="Sorry, we are facing some issue. Try again after some time."
+        primaryLabel="Try Again"
+        onPrimary={retryGate}
+        secondaryLabel="Back to Sign In"
+        onSecondary={() => setGate(null)}
+        loading={gateLoading}
+      />
+    );
+  }
 
   const renderBrand = () => (
     <Animated.View style={[styles.brandContainer, { opacity: fadeAnim }]}>
@@ -497,11 +613,11 @@ const LoginScreen = () => {
                   isCardStyle
                     ? { borderRadius: 24, padding: 32 } // Card Look
                     : {
-                        borderTopLeftRadius: 32,
-                        borderTopRightRadius: 32,
-                        padding: 32,
-                        paddingBottom: Math.max(insets.bottom + 20, 32),
-                      }, // Sheet Look
+                      borderTopLeftRadius: 32,
+                      borderTopRightRadius: 32,
+                      padding: 32,
+                      paddingBottom: Math.max(insets.bottom + 20, 32),
+                    }, // Sheet Look
                 ]}
               >
                 <Text style={styles.welcomeText}>Welcome Back!</Text>
