@@ -15,6 +15,7 @@ import {
   useWindowDimensions,
   Animated,
   Easing,
+  InteractionManager,
   Keyboard,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -408,26 +409,20 @@ const LoginScreen = () => {
       // allow flow to proceed if NetInfo fails
     }
 
-    // If Neon is configured, ensure DB is reachable before OAuth.
+    setLoading(true);
+    inFlightRef.current = true;
+    Keyboard.dismiss();
     try {
-      const health = getNeonHealth();
-      if (health.isConfigured) {
-        const warmed = await warmNeonConnection({ force: true, timeoutMs: 8000 });
-        if (!warmed) {
-          setGate('service');
+      // On Android, launching the Custom Tab while the Activity is transitioning
+      // can fail with "current activity is no longer available".
+      if (Platform.OS === 'android') {
+        await new Promise<void>((resolve) => InteractionManager.runAfterInteractions(() => resolve()));
+        if (!isActiveRef.current) {
           setLoading(false);
           return;
         }
       }
-    } catch (e) {
-      setGate('service');
-      setLoading(false);
-      return;
-    }
 
-    setLoading(true);
-    inFlightRef.current = true;
-    try {
       const startFlow = strategy === 'google' ? startGoogleFlow : startGithubFlow;
       const scheme =
         (Constants.expoConfig as any)?.scheme ||
@@ -459,6 +454,14 @@ const LoginScreen = () => {
         setLoading(false);
       }
     } catch (err: any) {
+      const msg = String(err?.message || '');
+      if (msg.toLowerCase().includes('current activity is no longer available')) {
+        console.warn(`[Login] OAuth failed (${strategy}): activity unavailable`, err);
+        showToast('Please try again. (App was busy switching screens)', 'info', 4000);
+        setLoading(false);
+        return;
+      }
+
       debugAuthError(`[Login] OAuth failed (${strategy})`, err);
       const ui = mapSocialLoginErrorToUi(err);
       if (ui) {

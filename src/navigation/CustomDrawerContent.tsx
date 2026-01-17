@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   StyleSheet,
-  Alert,
   TouchableOpacity,
   Animated,
   Easing,
@@ -23,6 +22,7 @@ import { performHardSignOut } from '../services/signOutFlow';
 import { resetRoot } from '../utils/rootNavigation';
 import { getSession } from '../db/session';
 import { subscribeSession } from '../utils/sessionEvents';
+import { useToast } from '../context/ToastContext';
 
 // --- CONSTANTS ---
 const ACTIVE_COLOR = colors.primary || '#2563EB';
@@ -36,6 +36,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   const insets = useSafeAreaInsets();
   const { signOut: clerkSignOut } = useAuth();
   const { user } = useUser();
+  const { showToast, showActionToast } = useToast();
   const [fallbackSession, setFallbackSession] = useState<any>(null);
   const [isSigningOut, setIsSigningOut] = useState(false);
 
@@ -65,7 +66,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
       try {
         const s = await getSession();
         if (mounted) setFallbackSession(s);
-      } catch (e) {}
+      } catch (e) { }
     };
     loadSession();
 
@@ -77,7 +78,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -102,7 +103,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   const closeDrawerSafely = () => {
     try {
       (props.navigation as any).closeDrawer?.();
-    } catch (e) {}
+    } catch (e) { }
   };
 
   const goToDashboardTab = (screen: 'Home' | 'History') => {
@@ -121,36 +122,39 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
 
   const handleLogout = () => {
     if (isSigningOut) return;
-    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign Out',
-        style: 'destructive',
-        onPress: async () => {
-          if (isSigningOut) return;
-          setIsSigningOut(true);
-          try {
-            await performHardSignOut({
-              clerkSignOut: async () => {
-                await clerkSignOut();
-              },
-              navigateToAuth: () => {
-                try {
-                  resetRoot({ index: 0, routes: [{ name: 'Auth' }] });
-                } catch (e) {
-                  props.navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
-                }
-              },
-            });
-          } catch (e) {
-            console.error('[Drawer] Logout failed', e);
-            Alert.alert('Error', 'Failed to sign out. Please try again.');
-          } finally {
-            setIsSigningOut(false);
-          }
-        },
+
+    // Avoid native Alert on Android (can fail with "not attached to an Activity").
+    // Use an in-app action toast confirmation instead.
+    closeDrawerSafely();
+    showActionToast(
+      'Sign out now?',
+      'Sign Out',
+      async () => {
+        if (isSigningOut) return;
+        setIsSigningOut(true);
+        try {
+          await performHardSignOut({
+            clerkSignOut: async () => {
+              await clerkSignOut();
+            },
+            navigateToAuth: () => {
+              try {
+                resetRoot({ index: 0, routes: [{ name: 'Auth' }] });
+              } catch (e) {
+                props.navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
+              }
+            },
+          });
+        } catch (e) {
+          console.error('[Drawer] Logout failed', e);
+          showToast('Failed to sign out. Please try again.', 'error');
+        } finally {
+          setIsSigningOut(false);
+        }
       },
-    ]);
+      'info',
+      7000
+    );
   };
 
   // --- ICON MAPPER ---

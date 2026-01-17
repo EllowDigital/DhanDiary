@@ -14,6 +14,7 @@ import {
   useWindowDimensions,
   Animated,
   Easing,
+  InteractionManager,
   Keyboard,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -274,18 +275,8 @@ const RegisterScreen = () => {
         return;
       }
 
-      try {
-        const health = getNeonHealth();
-        if (health.isConfigured) {
-          const warmed = await warmNeonConnection({ force: true, timeoutMs: 8000 });
-          if (!warmed) {
-            setGate('service');
-            return;
-          }
-        }
-      } catch (e) {
-        setGate('service');
-        return;
+      if (Platform.OS === 'android') {
+        await new Promise<void>((resolve) => InteractionManager.runAfterInteractions(() => resolve()));
       }
 
       const startFlow = strategy === 'google' ? startGoogleFlow : startGithubFlow;
@@ -324,6 +315,13 @@ const RegisterScreen = () => {
         // ignore
       }
     } catch (err: any) {
+      const msg = String(err?.message || '');
+      if (msg.toLowerCase().includes('current activity is no longer available')) {
+        console.warn(`[Register] OAuth failed (${strategy}): activity unavailable`, err);
+        showToast('Please try again. (App was busy switching screens)', 'info', 4000);
+        return;
+      }
+
       debugAuthError(`[Register] OAuth failed (${strategy})`, err);
       const ui = mapSocialLoginErrorToUi(err);
       if (ui) {
