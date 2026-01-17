@@ -132,7 +132,7 @@ const AppContent = () => {
     return () => {
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -150,7 +150,7 @@ const AppContent = () => {
           try {
             const del = await s.getAccountDeletedAt();
             setAccountDeletedAt(del);
-          } catch (e) {}
+          } catch (e) { }
         }
       } catch (e) {
         if (__DEV__) console.warn('[AppContent] failed to load local session', e);
@@ -170,16 +170,16 @@ const AppContent = () => {
             if (mod && typeof mod.getAccountDeletedAt === 'function') {
               mod.getAccountDeletedAt().then((v: any) => setAccountDeletedAt(v));
             }
-          } catch (e) {}
-        } catch (e) {}
+          } catch (e) { }
+        } catch (e) { }
       });
-    } catch (e) {}
+    } catch (e) { }
 
     return () => {
       mounted = false;
       try {
         if (unsub) unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -195,12 +195,12 @@ const AppContent = () => {
       .then((state) => {
         if (mounted) setIsOnline(!!state.isConnected);
       })
-      .catch(() => {});
+      .catch(() => { });
     return () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -306,15 +306,37 @@ const AppContent = () => {
   const biometricLocked =
     bioState.isBiometricEnabled && isAuthenticated && !bioState.isBiometricUnlocked;
 
+  // Some native modules (network/update/sync) can be unstable during the OS biometric prompt
+  // on certain Android devices in release builds. Treat the biometric overlay as a hard gate:
+  // - do not run background sync/OTA checks while locked
+  // - wait a short moment after unlocking before kicking off deferred work
+  const biometricGateRef = React.useRef({ locked: biometricLocked, lastUnlockAt: 0 });
+  useEffect(() => {
+    biometricGateRef.current = {
+      locked: biometricLocked,
+      lastUnlockAt: bioState.lastUnlockTimestamp || 0,
+    };
+  }, [biometricLocked, bioState.lastUnlockTimestamp]);
+
   // Background OTA updates: fetch quietly, then show a toast to install.
   // - No banners
   // - Never blocks core flows
   useEffect(() => {
     let cancelled = false;
 
+    // Don't run while biometric gate is active.
+    if (biometricLocked) return;
+
     InteractionManager.runAfterInteractions(() => {
       (async () => {
         try {
+          // Avoid running during biometric prompt / immediately after unlock.
+          if (cancelled) return;
+          if (AppState.currentState !== 'active') return;
+          const gate = biometricGateRef.current;
+          if (gate.locked) return;
+          if (gate.lastUnlockAt && Date.now() - gate.lastUnlockAt < 1500) return;
+
           const res = await runBackgroundUpdateCheckWithResult();
           if (cancelled) return;
 
@@ -323,7 +345,7 @@ const AppContent = () => {
               'Update ready to install.',
               'Install',
               () => {
-                Updates.reloadAsync().catch(() => {});
+                Updates.reloadAsync().catch(() => { });
               },
               'info',
               8000
@@ -331,7 +353,7 @@ const AppContent = () => {
           }
         } catch (e) {
           // Fallback to silent behavior
-          runBackgroundUpdateCheck().catch(() => {});
+          runBackgroundUpdateCheck().catch(() => { });
         }
       })();
     });
@@ -339,16 +361,23 @@ const AppContent = () => {
     return () => {
       cancelled = true;
     };
-  }, [showActionToast]);
+  }, [biometricLocked, showActionToast]);
 
   // 1. Setup Offline Sync Hook
+  // IMPORTANT: pause sync while biometric lock is active (release crash guard).
   // Prefer Clerk user id when available; otherwise use persisted local session id.
-  useOfflineSync(user?.id || localSessionId);
+  useOfflineSync(biometricLocked ? null : user?.id || localSessionId);
 
   // 2. Health Check (Neon)
   useEffect(() => {
-    checkNeonConnection().catch(() => {});
-  }, []);
+    // Avoid running during biometric prompt or immediately after unlock.
+    if (biometricLocked) return;
+    if (AppState.currentState !== 'active') return;
+    const gate = biometricGateRef.current;
+    if (gate.lastUnlockAt && Date.now() - gate.lastUnlockAt < 1500) return;
+
+    checkNeonConnection().catch(() => { });
+  }, [biometricLocked]);
 
   // 3. User Synchronization
   useEffect(() => {
@@ -409,13 +438,13 @@ const AppContent = () => {
             try {
               const { notifyEntriesChanged } = require('./src/utils/dbEvents');
               notifyEntriesChanged();
-            } catch (e) {}
+            } catch (e) { }
             try {
               const holder = require('./src/utils/queryClientHolder');
               if (holder && typeof holder.clearQueryCache === 'function') {
                 await holder.clearQueryCache();
               }
-            } catch (e) {}
+            } catch (e) { }
           };
 
           // Crash-safety: mark owner as pending before wiping so a mid-wipe crash
@@ -531,7 +560,7 @@ function AppWithDb() {
     try {
       const holder = require('./src/utils/queryClientHolder');
       if (holder?.setQueryClient) holder.setQueryClient(queryClient);
-    } catch (e) {}
+    } catch (e) { }
   }, [queryClient]);
 
   const initializeDatabase = useCallback(async () => {
@@ -557,7 +586,7 @@ function AppWithDb() {
     if (!dbReady) return;
 
     if (AppState.currentState === 'active') {
-      runFullSync().catch(() => {});
+      runFullSync().catch(() => { });
     }
 
     startForegroundSyncScheduler(15000);
@@ -565,13 +594,13 @@ function AppWithDb() {
     // device/ROM/new-architecture/native module combinations. Keep the app stable
     // by relying on foreground sync on Android.
     if (Platform.OS !== 'android') {
-      startBackgroundFetch().catch(() => {});
+      startBackgroundFetch().catch(() => { });
     }
 
     // Background Expo Updates: fetch quietly, apply on next restart.
     // Never block app launch.
     InteractionManager.runAfterInteractions(() => {
-      runBackgroundUpdateCheck().catch(() => {});
+      runBackgroundUpdateCheck().catch(() => { });
     });
 
     return () => {
@@ -586,7 +615,7 @@ function AppWithDb() {
     const handleAppStateChange = (nextState: AppStateStatus) => {
       if (nextState === 'active' && !isSyncRunning) {
         setTimeout(() => {
-          runFullSync().catch(() => {});
+          runFullSync().catch(() => { });
         }, 500);
       }
     };
@@ -662,11 +691,11 @@ export default function App() {
                 '[App] JS Error suppressed in production:',
                 error && error.message ? error.message : error
               );
-            } catch (e) {}
+            } catch (e) { }
             // Optionally send to analytics here
           });
         }
-      } catch (e) {}
+      } catch (e) { }
 
       // Catch unhandled promise rejections
       try {
@@ -677,9 +706,9 @@ export default function App() {
               '[App] Unhandled Promise Rejection suppressed in production:',
               reason && reason.message ? reason.message : reason
             );
-          } catch (e) {}
+          } catch (e) { }
         };
-      } catch (e) {}
+      } catch (e) { }
     }
     // Warn if CLERK_SECRET exists in runtime config — this is insecure for clients
     try {
@@ -690,8 +719,8 @@ export default function App() {
           '[App] SECURITY WARNING: CLERK_SECRET is present in client runtime. Do NOT ship admin secrets to mobile clients. Prefer a server-side deletion endpoint.'
         );
       }
-    } catch (e) {}
-  } catch (e) {}
+    } catch (e) { }
+  } catch (e) { }
   if (!CLERK_PUBLISHABLE_KEY) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
