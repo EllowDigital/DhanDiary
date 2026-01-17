@@ -130,7 +130,7 @@ const LoginScreen = () => {
       }),
     ]).start();
 
-    warmNeonConnection().catch(() => {});
+    warmNeonConnection().catch(() => { });
     return () => {
       clearTimeout(t);
       sub.remove();
@@ -163,7 +163,7 @@ const LoginScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -188,7 +188,7 @@ const LoginScreen = () => {
             return;
           }
         }
-      } catch (e) {}
+      } catch (e) { }
 
       setGate(null);
     } finally {
@@ -325,8 +325,8 @@ const LoginScreen = () => {
     try {
       const result = await signIn.create({ identifier: v.normalized, password });
       if (result.status === 'complete') {
-        showToast('Welcome back! Signed in successfully.', 'success', 2500);
         await setActive({ session: result.createdSessionId });
+        showToast('Welcome back! Signed in successfully.', 'success', 2500);
       } else {
         // Requires verification (email code flow)
         const factor = (result as any)?.supportedFirstFactors?.find(
@@ -442,6 +442,22 @@ const LoginScreen = () => {
       const createdSessionId = res?.createdSessionId;
       const setSession = res?.setActive;
 
+      const authSessionType = String(res?.authSessionResult?.type || '').toLowerCase();
+      const isCancelled = authSessionType === 'cancel' || authSessionType === 'dismiss';
+      if (isCancelled || !createdSessionId || !setSession) {
+        // User cancelled/closed the browser, or Clerk didn't finish creating a session.
+        // Do not show a success message.
+        if (isCancelled) {
+          showToast('Sign in cancelled.', 'info', 2500);
+        } else {
+          showToast('Could not complete sign in. Please try again.', 'error', 4000);
+        }
+        setLoading(false);
+        return;
+      }
+
+      await setSession({ session: createdSessionId });
+
       // Best-effort heuristic: if Clerk provided a SignUp resource with createdUserId, treat as first-time.
       const createdUserId = res?.signUp?.createdUserId || res?.signUp?.createdUser?.id || null;
       if (createdUserId) {
@@ -452,12 +468,6 @@ const LoginScreen = () => {
         );
       } else {
         showToast('Welcome back! Signed in successfully.', 'success', 2500);
-      }
-
-      if (createdSessionId && setSession) {
-        await setSession({ session: createdSessionId });
-      } else {
-        setLoading(false);
       }
     } catch (err: any) {
       const msg = String(err?.message || '');
@@ -481,7 +491,7 @@ const LoginScreen = () => {
         if (isNetOnline(net) && isLikelyServiceDownError(err)) {
           setGate('service');
         }
-      } catch (e) {}
+      } catch (e) { }
       setLoading(false);
     } finally {
       inFlightRef.current = false;
@@ -631,11 +641,11 @@ const LoginScreen = () => {
                   isCardStyle
                     ? { borderRadius: 24, padding: 32 } // Card Look
                     : {
-                        borderTopLeftRadius: 32,
-                        borderTopRightRadius: 32,
-                        padding: 32,
-                        paddingBottom: Math.max(insets.bottom + 20, 32),
-                      }, // Sheet Look
+                      borderTopLeftRadius: 32,
+                      borderTopRightRadius: 32,
+                      padding: 32,
+                      paddingBottom: Math.max(insets.bottom + 20, 32),
+                    }, // Sheet Look
                 ]}
               >
                 <Text style={styles.welcomeText}>Welcome Back!</Text>

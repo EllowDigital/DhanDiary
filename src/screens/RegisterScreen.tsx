@@ -139,7 +139,7 @@ const RegisterScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -163,7 +163,7 @@ const RegisterScreen = () => {
             return;
           }
         }
-      } catch (e) {}
+      } catch (e) { }
 
       setGate(null);
     } finally {
@@ -301,6 +301,20 @@ const RegisterScreen = () => {
       const setSession = res?.setActive;
       const createdUserId = res?.signUp?.createdUserId || res?.signUp?.createdUser?.id || null;
 
+      const authSessionType = String(res?.authSessionResult?.type || '').toLowerCase();
+      const isCancelled = authSessionType === 'cancel' || authSessionType === 'dismiss';
+      if (isCancelled || !createdSessionId || !setSession) {
+        // User cancelled/closed the browser, or Clerk didn't finish creating a session.
+        if (isCancelled) {
+          showToast('Sign up cancelled.', 'info', 2500);
+        } else {
+          showToast('Could not complete sign up. Please try again.', 'error', 4000);
+        }
+        return;
+      }
+
+      await setSession({ session: createdSessionId });
+
       if (createdUserId) {
         showToast(
           `Account created successfully using ${strategy === 'google' ? 'Google' : 'GitHub'}.`,
@@ -308,11 +322,7 @@ const RegisterScreen = () => {
           3000
         );
       } else {
-        showToast('Signed in successfully. Redirecting…', 'success', 2500);
-      }
-
-      if (createdSessionId && setSession) {
-        await setSession({ session: createdSessionId });
+        showToast('Welcome back! Signed in successfully.', 'success', 2500);
       }
 
       // Leave Auth stack after OAuth.
@@ -343,7 +353,7 @@ const RegisterScreen = () => {
         if (isNetOnline(net) && isLikelyServiceDownError(err)) {
           setGate('service');
         }
-      } catch (e) {}
+      } catch (e) { }
     } finally {
       setLoading(false);
       inFlightRef.current = false;
