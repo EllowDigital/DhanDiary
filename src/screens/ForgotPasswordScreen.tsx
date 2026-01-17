@@ -23,12 +23,14 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import NetInfo from '@react-native-community/netinfo';
-import OfflineNotice from '../components/OfflineNotice';
 
 import { useToast } from '../context/ToastContext';
 
 // --- CUSTOM IMPORTS ---
 import { colors } from '../utils/design';
+import { isNetOnline } from '../utils/netState';
+import { AuthGateScreen } from '../components/AuthGateScreen';
+import { debugAuthError, isLikelyServiceDownError } from '../utils/serviceIssue';
 
 const ForgotPasswordScreen = () => {
   const navigation = useNavigation<any>();
@@ -57,10 +59,10 @@ const ForgotPasswordScreen = () => {
   const [resendDisabled, setResendDisabled] = useState(false);
   const [countdown, setCountdown] = useState(0);
 
-  // Offline Handling
-  const [offlineVisible, setOfflineVisible] = useState(false);
-  const [offlineRetrying, setOfflineRetrying] = useState(false);
-  const [offlineAttemptsLeft, setOfflineAttemptsLeft] = useState<number | undefined>(undefined);
+  // Gate Handling (Password reset requires internet)
+  const [isOnline, setIsOnline] = useState<boolean | null>(null);
+  const [gate, setGate] = useState<null | 'offline' | 'service'>(null);
+  const [gateLoading, setGateLoading] = useState(false);
   const [lastOfflineAction, setLastOfflineAction] = useState<'request' | 'reset' | null>(null);
 
   // Animations
@@ -92,6 +94,85 @@ const ForgotPasswordScreen = () => {
   }, []);
 
   // --- LOGIC ---
+
+  useEffect(() => {
+    let mounted = true;
+
+    NetInfo.fetch()
+      .then((s) => {
+        if (!mounted) return;
+        const ok = isNetOnline(s);
+        setIsOnline(ok);
+        setGate((prev) => (!ok ? 'offline' : prev === 'offline' ? null : prev));
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setIsOnline(null);
+      });
+
+    const unsub = NetInfo.addEventListener((s) => {
+      if (!mounted) return;
+      const ok = isNetOnline(s);
+      setIsOnline(ok);
+      setGate((prev) => (!ok ? 'offline' : prev === 'offline' ? null : prev));
+    });
+
+    return () => {
+      mounted = false;
+      try {
+        unsub();
+      } catch (e) { }
+    };
+  }, []);
+
+  const retryGate = async () => {
+    setGateLoading(true);
+    try {
+      const net = await NetInfo.fetch();
+      const ok = isNetOnline(net);
+      setIsOnline(ok);
+      if (!ok) {
+        setGate('offline');
+        return;
+      }
+
+      setGate(null);
+
+      // Helpful: retry the last attempted action after connectivity returns.
+      if (lastOfflineAction === 'request') await onRequestReset();
+      else if (lastOfflineAction === 'reset') await onResetPassword();
+    } finally {
+      setGateLoading(false);
+    }
+  };
+
+  if (gate === 'offline') {
+    return (
+      <AuthGateScreen
+        variant="offline"
+        description="Password reset requires internet (Clerk)."
+        primaryLabel="Try Again"
+        onPrimary={retryGate}
+        secondaryLabel="Back to Sign In"
+        onSecondary={() => navigation.navigate('Login', { email })}
+        loading={gateLoading}
+      />
+    );
+  }
+
+  if (gate === 'service') {
+    return (
+      <AuthGateScreen
+        variant="service"
+        description="Sorry, we are facing some issue. Try again after some time."
+        primaryLabel="Try Again"
+        onPrimary={retryGate}
+        secondaryLabel="Back to Sign In"
+        onSecondary={() => navigation.navigate('Login', { email })}
+        loading={gateLoading}
+      />
+    );
+  }
 
   const getErrorMessage = (err: any) => {
     const clerkMessage = err?.errors?.[0]?.message;
@@ -153,6 +234,18 @@ const ForgotPasswordScreen = () => {
     if (!isLoaded) return;
     if (!email) return Alert.alert('Missing Email', 'Please enter your email address.');
 
+    // Password reset requires internet.
+    try {
+      const net = await NetInfo.fetch();
+      if (!isNetOnline(net)) {
+        setLastOfflineAction('request');
+        setGate('offline');
+        return;
+      }
+    } catch (e) {
+      // allow flow to proceed if NetInfo fails
+    }
+
     setLoading(true);
     Keyboard.dismiss();
 
@@ -194,6 +287,7 @@ const ForgotPasswordScreen = () => {
       startCooldown(30);
       Alert.alert('Code Sent', `Check ${email} for your recovery code.`);
     } catch (err: any) {
+      debugAuthError('[ForgotPassword] reset request failed', err);
       const friendly = getFriendlyResetRequestMessage(err);
       if (friendly) {
         showActionToast(
@@ -206,19 +300,22 @@ const ForgotPasswordScreen = () => {
         return;
       }
 
-      if (typeof __DEV__ !== 'undefined' && __DEV__) {
-        console.warn('[ForgotPassword] reset request failed', err);
-      }
-
       const msg = getErrorMessage(err) || 'Failed to send reset code.';
 
-      const net = await NetInfo.fetch();
-      if (!net.isConnected) {
-        setLastOfflineAction('request');
-        setOfflineAttemptsLeft(3);
-        setOfflineVisible(true);
+      try {
+        const net = await NetInfo.fetch();
+        if (!isNetOnline(net)) {
+          setLastOfflineAction('request');
+          setGate('offline');
+          return;
+        }
+      } catch (e) { }
+
+      if (isLikelyServiceDownError(err)) {
+        setGate('service');
         return;
       }
+
       showToast(
         typeof __DEV__ !== 'undefined' && __DEV__
           ? msg
@@ -237,6 +334,18 @@ const ForgotPasswordScreen = () => {
       return Alert.alert('Invalid Code', 'Please enter the 6-digit code.');
     if (!newPassword || newPassword.length < 8)
       return Alert.alert('Weak Password', 'Password must be at least 8 characters.');
+
+    // Password reset requires internet.
+    try {
+      const net = await NetInfo.fetch();
+      if (!isNetOnline(net)) {
+        setLastOfflineAction('reset');
+        setGate('offline');
+        return;
+      }
+    } catch (e) {
+      // allow flow to proceed if NetInfo fails
+    }
 
     setLoading(true);
     Keyboard.dismiss();
@@ -257,9 +366,7 @@ const ForgotPasswordScreen = () => {
         navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
       }
     } catch (err: any) {
-      if (typeof __DEV__ !== 'undefined' && __DEV__) {
-        console.warn('[ForgotPassword] reset confirm failed', err);
-      }
+      debugAuthError('[ForgotPassword] reset confirm failed', err);
 
       const friendly = getFriendlyResetConfirmMessage(err);
       if (friendly) {
@@ -269,13 +376,20 @@ const ForgotPasswordScreen = () => {
 
       const msg = getErrorMessage(err) || 'Failed to reset password.';
 
-      const net = await NetInfo.fetch();
-      if (!net.isConnected) {
-        setLastOfflineAction('reset');
-        setOfflineAttemptsLeft(3);
-        setOfflineVisible(true);
+      try {
+        const net = await NetInfo.fetch();
+        if (!isNetOnline(net)) {
+          setLastOfflineAction('reset');
+          setGate('offline');
+          return;
+        }
+      } catch (e) { }
+
+      if (isLikelyServiceDownError(err)) {
+        setGate('service');
         return;
       }
+
       showToast(
         typeof __DEV__ !== 'undefined' && __DEV__
           ? msg
@@ -288,21 +402,7 @@ const ForgotPasswordScreen = () => {
     }
   };
 
-  const offlineManualRetry = async () => {
-    setOfflineRetrying(true);
-    setOfflineAttemptsLeft((v) => (typeof v === 'number' ? Math.max(0, v - 1) : undefined));
-    try {
-      const net = await NetInfo.fetch();
-      if (net.isConnected) {
-        setOfflineVisible(false);
-        setOfflineRetrying(false);
-        if (lastOfflineAction === 'request') await onRequestReset();
-        else if (lastOfflineAction === 'reset') await onResetPassword();
-      }
-    } catch (e) {
-      setOfflineRetrying(false);
-    }
-  };
+  // Offline retry is handled by the full-screen gate.
 
   // --- SUB-COMPONENTS ---
 
@@ -532,16 +632,6 @@ const ForgotPasswordScreen = () => {
         </KeyboardAvoidingView>
       </SafeAreaView>
 
-      <OfflineNotice
-        visible={offlineVisible}
-        retrying={offlineRetrying}
-        attemptsLeft={offlineAttemptsLeft}
-        onRetry={offlineManualRetry}
-        onClose={() => {
-          setOfflineVisible(false);
-          setOfflineRetrying(false);
-        }}
-      />
     </View>
   );
 };
