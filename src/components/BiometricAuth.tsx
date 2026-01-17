@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { View, StyleSheet, Text, BackHandler } from 'react-native';
+import { View, StyleSheet, Text, BackHandler, AppState } from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { Button } from '@rneui/themed';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -70,6 +70,9 @@ export const BiometricAuth = (props: {
   const authenticate = useCallback(async (opts?: { auto?: boolean }) => {
     if (isAuthInProgress.current) return;
     if (!enabledRef.current || !lockedRef.current) return;
+
+    // Avoid launching the native prompt while app is background/inactive.
+    if (AppState.currentState !== 'active') return;
 
     const now = Date.now();
     if (cooldownUntilRef.current && now < cooldownUntilRef.current) {
@@ -153,7 +156,9 @@ export const BiometricAuth = (props: {
     if (didAutoPromptRef.current) return;
     didAutoPromptRef.current = true;
     // Fire-and-forget; overlay stays visible.
-    void authenticate({ auto: true });
+    if (AppState.currentState === 'active') {
+      void authenticate({ auto: true });
+    }
   }, [enabled, locked, authenticate]);
 
   // If feature disabled or unlocked, render nothing
