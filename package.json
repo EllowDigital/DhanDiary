@@ -8,14 +8,12 @@
     "postinstall": "node ./scripts/postinstall-fixes.js",
     "postprebuild": "node ./scripts/postprebuild-fixes.js",
     "check": "npm run format && npm run lint --silent && npx tsc --noEmit",
-
     "/* --- Development Scripts --- */": "",
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
     "clean": "npx expo prebuild --clean",
-
     "/* --- Testing & Linting --- */": "",
     "test": "jest",
     "test:integration": "node ./scripts/integration/test_summaries.js",
@@ -23,11 +21,9 @@
     "lint:fix": "eslint ./ --ext .js,.jsx,.ts,.tsx --fix",
     "format": "prettier --write .",
     "depcheck:run": "depcheck",
-
     "/* --- Database Scripts --- */": "",
     "migrate": "node ./scripts/migrate.js",
     "neon:migrate": "node ./scripts/run-neon-migrations.js",
-
     "/* --- Build Scripts --- */": "",
     "prebuild": "npm run lint && npm test && npx tsc --noEmit",
     "build:apk-local": "npm install && npx expo prebuild --platform android && cd android && gradlew.bat assembleRelease --no-daemon --parallel -Dorg.gradle.workers.max=6 -Dorg.gradle.vfs.watch=false -Dfile.encoding=UTF-8"
