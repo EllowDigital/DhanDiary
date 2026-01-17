@@ -65,7 +65,9 @@ let lastNeonWarm = 0;
 let lastNeonWarmWarn = 0;
 const NEON_WARM_WARN_INTERVAL_MS = 60_000;
 
-export const warmNeonConnection = async (opts: { force?: boolean; timeoutMs?: number } = {}) => {
+export const warmNeonConnection = async (
+  opts: { force?: boolean; timeoutMs?: number; soft?: boolean } = {}
+) => {
   const NEON_URL = resolveNeonUrl();
   if (!NEON_URL) return false;
 
@@ -78,13 +80,21 @@ export const warmNeonConnection = async (opts: { force?: boolean; timeoutMs?: nu
   }
 
   if (!neonWarmPromise) {
-    const timeoutMs = opts.timeoutMs ?? TIMEOUT_DEFAULT_MS;
+    const timeoutMs = opts.timeoutMs ?? (opts.soft ? 3000 : TIMEOUT_DEFAULT_MS);
     neonWarmPromise = withTimeout(query('SELECT 1'), timeoutMs)
       .then(() => {
         lastNeonWarm = Date.now();
         return true;
       })
       .catch((err) => {
+        const msg = String(err?.message || err || '').toLowerCase();
+        const isTimeout = msg.includes('timeout') || msg.includes('timed out');
+        if (opts.soft && isTimeout) {
+          // Treat slow network as indeterminate, not a hard failure.
+          // Avoid blocking the UI while still throttling retries.
+          lastNeonWarm = Date.now();
+          return true;
+        }
         const nowWarn = Date.now();
         if (nowWarn - lastNeonWarmWarn > NEON_WARM_WARN_INTERVAL_MS) {
           lastNeonWarmWarn = nowWarn;
