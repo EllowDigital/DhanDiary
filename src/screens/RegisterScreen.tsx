@@ -617,18 +617,6 @@ const RegisterScreen = () => {
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
-
-      <OfflineNotice
-        visible={offlineVisible}
-        retrying={offlineRetrying}
-        attemptsLeft={offlineAttemptsLeft}
-        onRetry={offlineManualRetry}
-        onClose={() => {
-          setOfflineVisible(false);
-          setOfflineRetrying(false);
-          setLoading(false);
-        }}
-      />
     </View>
   );
 };
