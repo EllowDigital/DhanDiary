@@ -143,7 +143,7 @@ const RegisterScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, [loading, showToast]);
 
@@ -167,7 +167,7 @@ const RegisterScreen = () => {
             return;
           }
         }
-      } catch (e) { }
+      } catch (e) {}
 
       setGate(null);
     } finally {
@@ -370,7 +370,7 @@ const RegisterScreen = () => {
         if (isNetOnline(net) && isLikelyServiceDownError(err)) {
           setGate('service');
         }
-      } catch (e) { }
+      } catch (e) {}
     } finally {
       setLoading(false);
       inFlightRef.current = false;
