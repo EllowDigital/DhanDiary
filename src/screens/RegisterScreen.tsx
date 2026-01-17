@@ -66,8 +66,10 @@ const RegisterScreen = () => {
   const isLandscape = width > height;
   const isTablet = width >= 600;
 
-  // Switch to "Card Mode" on Tablets or Landscape phones
-  const isCardLayout = isTablet || isLandscape;
+  // Switch to "Card Mode" on tablets or sufficiently-wide landscape.
+  // Avoid forcing card layout on compact landscape phones (cramped UI).
+  const isCardLayout = isTablet || (isLandscape && width >= 700);
+  const cardMaxWidth = Math.min(560, Math.max(480, width - 48));
 
   // --- STATE ---
   const [firstName, setFirstName] = useState('');
@@ -133,7 +135,7 @@ const RegisterScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -157,7 +159,7 @@ const RegisterScreen = () => {
             return;
           }
         }
-      } catch (e) {}
+      } catch (e) { }
 
       setGate(null);
     } finally {
@@ -337,7 +339,7 @@ const RegisterScreen = () => {
         if (isNetOnline(net) && isLikelyServiceDownError(err)) {
           setGate('service');
         }
-      } catch (e) {}
+      } catch (e) { }
     } finally {
       setLoading(false);
       inFlightRef.current = false;
@@ -432,6 +434,7 @@ const RegisterScreen = () => {
                 styles.responsiveContainer,
                 !isCardLayout && styles.phoneFill,
                 isCardLayout && styles.cardContainer,
+                isCardLayout && { maxWidth: cardMaxWidth },
               ]}
             >
               {/* Header */}

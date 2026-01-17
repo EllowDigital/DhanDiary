@@ -44,8 +44,11 @@ const ForgotPasswordScreen = () => {
   const isLandscape = width > height;
   const isTablet = width >= 600;
 
-  // "Card Layout" activates on Tablets or Landscape phones
-  const isCardLayout = isTablet || isLandscape;
+  // "Card Layout" activates on tablets or sufficiently-wide landscape.
+  // Avoid forcing card layout on compact landscape phones (cramped UI).
+  const isCardLayout = isTablet || (isLandscape && width >= 700);
+  const cardMaxWidth = Math.min(560, Math.max(480, width - 48));
+  const sheetMinHeight = Math.min(420, Math.max(240, Math.round(height * 0.55)));
 
   // --- STATE ---
   const [email, setEmail] = useState(route?.params?.email || '');
@@ -121,7 +124,7 @@ const ForgotPasswordScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -309,7 +312,7 @@ const ForgotPasswordScreen = () => {
           setGate('offline');
           return;
         }
-      } catch (e) {}
+      } catch (e) { }
 
       if (isLikelyServiceDownError(err)) {
         setGate('service');
@@ -383,7 +386,7 @@ const ForgotPasswordScreen = () => {
           setGate('offline');
           return;
         }
-      } catch (e) {}
+      } catch (e) { }
 
       if (isLikelyServiceDownError(err)) {
         setGate('service');
@@ -594,6 +597,7 @@ const ForgotPasswordScreen = () => {
               <Animated.View
                 style={[
                   styles.cardContainer,
+                  { maxWidth: cardMaxWidth },
                   {
                     opacity: fadeAnim,
                     transform: [
@@ -621,6 +625,7 @@ const ForgotPasswordScreen = () => {
                 <Animated.View
                   style={[
                     styles.sheetContainer,
+                    { minHeight: sheetMinHeight, paddingBottom: Math.max(insets.bottom + 24, 40) },
                     { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
                   ]}
                 >

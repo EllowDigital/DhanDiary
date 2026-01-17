@@ -66,6 +66,7 @@ const LoginScreen = () => {
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
   const isTablet = width >= 600; // Standard tablet breakpoint
+  const isWideLandscape = isLandscape && width >= 700;
 
   // Specific check for Tablet Portrait vs Phone Portrait
   const isTabletPortrait = isTablet && !isLandscape;
@@ -126,7 +127,7 @@ const LoginScreen = () => {
       }),
     ]).start();
 
-    warmNeonConnection().catch(() => {});
+    warmNeonConnection().catch(() => { });
     return () => {
       clearTimeout(t);
       sub.remove();
@@ -159,7 +160,7 @@ const LoginScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -184,7 +185,7 @@ const LoginScreen = () => {
             return;
           }
         }
-      } catch (e) {}
+      } catch (e) { }
 
       setGate(null);
     } finally {
@@ -477,7 +478,7 @@ const LoginScreen = () => {
         if (isNetOnline(net) && isLikelyServiceDownError(err)) {
           setGate('service');
         }
-      } catch (e) {}
+      } catch (e) { }
       setLoading(false);
     } finally {
       inFlightRef.current = false;
@@ -546,7 +547,7 @@ const LoginScreen = () => {
 
   // 1. Determine Content Container Style for ScrollView
   let contentContainerStyle;
-  if (isLandscape) {
+  if (isWideLandscape) {
     contentContainerStyle = styles.rowContentContainer; // Split View
   } else if (isTabletPortrait) {
     contentContainerStyle = styles.centerContentContainer; // Centered Card
@@ -557,7 +558,7 @@ const LoginScreen = () => {
   // 2. Determine Wrapper Style (Positioning of Brand vs Form)
   let brandWrapperStyle, formWrapperStyle;
 
-  if (isLandscape) {
+  if (isWideLandscape) {
     // Landscape: Side by Side
     brandWrapperStyle = styles.brandWrapperSplit;
     formWrapperStyle = styles.formWrapperSplit;
@@ -567,14 +568,17 @@ const LoginScreen = () => {
     formWrapperStyle = styles.formWrapperCenter;
   } else {
     // Phone Portrait: Stacked, Brand Top, Form Bottom
-    brandWrapperStyle = styles.brandWrapperStacked;
+    const brandTop = isLandscape ? 24 : height < 700 ? 40 : 60;
+    brandWrapperStyle = [styles.brandWrapperStacked, { marginTop: brandTop }];
     formWrapperStyle = styles.formWrapperBottom;
   }
 
   // 3. Card Styling (Borders & Widths)
   // On Tablet (Portrait or Landscape), we want a "Card" look (all corners rounded).
   // On Phone Portrait, we want a "Sheet" look (top corners rounded only).
-  const isCardStyle = isTablet || isLandscape;
+  const isCardStyle = isTablet || isWideLandscape;
+  const rowPaddingX = Math.min(60, Math.max(24, Math.round(width * 0.06)));
+  const rowPaddingY = Math.min(40, Math.max(24, Math.round(height * 0.06)));
 
   return (
     <View style={styles.container}>
@@ -594,7 +598,11 @@ const LoginScreen = () => {
           keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
         >
           <ScrollView
-            contentContainerStyle={[styles.scrollBase, contentContainerStyle]}
+            contentContainerStyle={[
+              styles.scrollBase,
+              contentContainerStyle,
+              isWideLandscape ? { paddingHorizontal: rowPaddingX, paddingVertical: rowPaddingY } : null,
+            ]}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
@@ -618,11 +626,11 @@ const LoginScreen = () => {
                   isCardStyle
                     ? { borderRadius: 24, padding: 32 } // Card Look
                     : {
-                        borderTopLeftRadius: 32,
-                        borderTopRightRadius: 32,
-                        padding: 32,
-                        paddingBottom: Math.max(insets.bottom + 20, 32),
-                      }, // Sheet Look
+                      borderTopLeftRadius: 32,
+                      borderTopRightRadius: 32,
+                      padding: 32,
+                      paddingBottom: Math.max(insets.bottom + 20, 32),
+                    }, // Sheet Look
                 ]}
               >
                 <Text style={styles.welcomeText}>Welcome Back!</Text>
