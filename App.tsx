@@ -48,6 +48,7 @@ import tokenCache from './src/utils/tokenCache';
 import * as SecureStore from 'expo-secure-store';
 import { isUuid } from './src/utils/uuid';
 import { getBiometricEnabled } from './src/utils/biometricSettings';
+import AsyncStorage from './src/utils/AsyncStorageWrapper';
 import { getIsSigningOut } from './src/utils/authBoundary';
 import {
   getBiometricSessionState,
@@ -123,9 +124,11 @@ const AppContent = () => {
   // --- Biometric session gate state ---
   const BIOMETRIC_KEY = 'BIOMETRIC_ENABLED'; // legacy fallback key (not used for new per-user storage)
   const BIOMETRIC_TIMEOUT_MS = 60 * 1000; // 30–60s per spec (keep 60s)
+  const BIOMETRIC_UNLOCK_KEY_PREFIX = 'BIOMETRIC_LAST_UNLOCK:';
   const [bioState, setBioState] = React.useState(() => getBiometricSessionState());
   const backgroundAtRef = React.useRef<number>(0);
   const appStateRef = React.useRef<AppStateStatus>(AppState.currentState);
+  const lastUnlockPersistedRef = React.useRef<number>(0);
 
   useEffect(() => {
     const unsub = subscribeBiometricSession((s) => setBioState(s));
@@ -248,6 +251,31 @@ const AppContent = () => {
     void refreshBiometricEnabled();
   }, [refreshBiometricEnabled]);
 
+  // Restore biometric unlocked state on cold start if the user reopened quickly
+  // after a successful unlock (prevents a redundant prompt/overlay).
+  const restoreBiometricUnlock = React.useCallback(async () => {
+    try {
+      const uid = localSessionId || (user && isUuid(user.id) ? user.id : null);
+      if (!uid) return;
+
+      const enabled = await getBiometricEnabled(String(uid));
+      if (!enabled) return;
+
+      const key = `${BIOMETRIC_UNLOCK_KEY_PREFIX}${String(uid)}`;
+      const raw = await AsyncStorage.getItem(key);
+      const ts = raw ? Number(raw) : 0;
+      if (ts && Number.isFinite(ts) && Date.now() - ts < BIOMETRIC_TIMEOUT_MS) {
+        setBiometricUnlockedSession(true);
+      }
+    } catch (e) {
+      // best-effort only
+    }
+  }, [localSessionId, user]);
+
+  useEffect(() => {
+    void restoreBiometricUnlock();
+  }, [restoreBiometricUnlock]);
+
   const isAuthenticated = !!(user?.id || localSessionId);
   // Account switch boundary: Clerk id is authoritative when present.
   const accountKey = clerkUser?.id ? String(clerkUser.id) : localSessionClerkId || null;
@@ -301,6 +329,37 @@ const AppContent = () => {
     bioState.isBiometricUnlocked,
     isAuthenticated,
     refreshBiometricEnabled,
+  ]);
+
+  // Persist biometric unlock timestamp so quick relaunches don't re-prompt.
+  useEffect(() => {
+    const uid = localSessionId || (user && isUuid(user.id) ? user.id : null);
+    if (!uid) return;
+
+    const key = `${BIOMETRIC_UNLOCK_KEY_PREFIX}${String(uid)}`;
+
+    if (!bioState.isBiometricEnabled) {
+      lastUnlockPersistedRef.current = 0;
+      AsyncStorage.removeItem(key).catch(() => { });
+      return;
+    }
+
+    if (bioState.isBiometricUnlocked) {
+      const ts = bioState.lastUnlockTimestamp || Date.now();
+      if (ts && ts !== lastUnlockPersistedRef.current) {
+        lastUnlockPersistedRef.current = ts;
+        AsyncStorage.setItem(key, String(ts)).catch(() => { });
+      }
+    } else {
+      lastUnlockPersistedRef.current = 0;
+      AsyncStorage.removeItem(key).catch(() => { });
+    }
+  }, [
+    bioState.isBiometricEnabled,
+    bioState.isBiometricUnlocked,
+    bioState.lastUnlockTimestamp,
+    localSessionId,
+    user,
   ]);
 
   const biometricLocked =
