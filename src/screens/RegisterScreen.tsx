@@ -133,7 +133,7 @@ const RegisterScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -157,7 +157,7 @@ const RegisterScreen = () => {
             return;
           }
         }
-      } catch (e) {}
+      } catch (e) { }
 
       setGate(null);
     } finally {
@@ -337,7 +337,7 @@ const RegisterScreen = () => {
         if (isNetOnline(net) && isLikelyServiceDownError(err)) {
           setGate('service');
         }
-      } catch (e) {}
+      } catch (e) { }
     } finally {
       setLoading(false);
       inFlightRef.current = false;
@@ -427,7 +427,13 @@ const RegisterScreen = () => {
               - Constrains width on tablets/landscape
               - Aligns self center
             */}
-            <View style={[styles.responsiveContainer, isCardLayout && styles.cardContainer]}>
+            <View
+              style={[
+                styles.responsiveContainer,
+                !isCardLayout && styles.phoneFill,
+                isCardLayout && styles.cardContainer,
+              ]}
+            >
               {/* Header */}
               <View style={styles.header}>
                 <TouchableOpacity onPress={onBack} style={styles.backBtn}>
@@ -652,6 +658,10 @@ const styles = StyleSheet.create({
   responsiveContainer: {
     width: '100%',
   },
+  // Phone portrait: fill height so footer can sit at bottom
+  phoneFill: {
+    flex: 1,
+  },
   // Card Styles (Tablets/Landscape)
   cardContainer: {
     maxWidth: 480,
@@ -715,6 +725,7 @@ const styles = StyleSheet.create({
   /* Form Content */
   formWrapper: {
     width: '100%',
+    flex: 1,
   },
   title: {
     fontSize: 28,
@@ -847,7 +858,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 'auto',
+    paddingTop: 16,
   },
   footerText: {
     color: '#64748B',

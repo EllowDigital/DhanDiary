@@ -1,8 +1,29 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+  useWindowDimensions,
+  Platform,
+  StatusBar,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { colors } from '../utils/design';
+
+// Fallback colors if your design utils are missing specific keys
+const THEME = {
+  bg: colors.background || '#F8FAFC',
+  card: '#FFFFFF',
+  text: colors.text || '#0F172A',
+  muted: colors.muted || '#64748B',
+  border: colors.border || '#E2E8F0',
+  primary: colors.primary || '#2563EB',
+  danger: '#EF4444',
+  surface: '#F1F5F9',
+};
 
 export type AuthGateVariant = 'offline' | 'service';
 
@@ -17,15 +38,15 @@ type Props = {
   loading?: boolean;
 };
 
-const defaults: Record<AuthGateVariant, { title: string; description: string; icon: any }> = {
+const defaults: Record<AuthGateVariant, { title: string; description: string; icon: keyof typeof MaterialIcon.glyphMap }> = {
   offline: {
-    title: 'You are offline',
-    description: 'Connect to the internet to continue.',
+    title: 'No Internet Connection',
+    description: 'It looks like you are offline. Please check your connection and try again.',
     icon: 'wifi-off',
   },
   service: {
-    title: 'Sorry — we are facing an issue',
-    description: 'Please try again after some time.',
+    title: 'Server Unavailable',
+    description: 'We are having trouble connecting to our services right now. Please try again later.',
     icon: 'cloud-off',
   },
 };
@@ -40,50 +61,69 @@ export const AuthGateScreen: React.FC<Props> = ({
   onSecondary,
   loading = false,
 }) => {
+  const { width } = useWindowDimensions();
   const d = defaults[variant];
+  
+  // Responsive Logic
+  const isTablet = width >= 768;
+  const cardMaxWidth = isTablet ? 480 : '100%';
+  const iconColor = variant === 'offline' ? THEME.danger : THEME.text;
 
   return (
     <View style={styles.container}>
-      <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom'] as any}>
-        <View style={styles.card}>
-          <View style={styles.iconCircle}>
-            <MaterialIcon
-              name={d.icon}
-              size={34}
-              color={variant === 'offline' ? '#B91C1C' : '#0F172A'}
-            />
+      <StatusBar barStyle="dark-content" backgroundColor={THEME.bg} />
+      
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right', 'bottom']}>
+        <View style={styles.centerContent}>
+          
+          {/* Main Card Container */}
+          <View style={[styles.card, { width: cardMaxWidth }]}>
+            
+            {/* Icon Section */}
+            <View style={[styles.iconContainer, { backgroundColor: variant === 'offline' ? '#FEF2F2' : THEME.surface }]}>
+              <MaterialIcon
+                name={d.icon}
+                size={40}
+                color={iconColor}
+              />
+            </View>
+
+            {/* Text Content */}
+            <View style={styles.textContainer}>
+              <Text style={styles.title}>{title || d.title}</Text>
+              <Text style={styles.desc}>{description || d.description}</Text>
+            </View>
+
+            {/* Action Buttons */}
+            <View style={styles.actionsContainer}>
+              {secondaryLabel && onSecondary && (
+                <TouchableOpacity
+                  style={[styles.btn, styles.secondaryBtn]}
+                  activeOpacity={0.7}
+                  onPress={onSecondary}
+                  disabled={loading}
+                >
+                  <Text style={styles.secondaryText}>{secondaryLabel}</Text>
+                </TouchableOpacity>
+              )}
+
+              {onPrimary && (
+                <TouchableOpacity
+                  style={[styles.btn, styles.primaryBtn, !secondaryLabel && styles.fullWidthBtn]}
+                  activeOpacity={0.8}
+                  onPress={onPrimary}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Text style={styles.primaryText}>{primaryLabel}</Text>
+                  )}
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
 
-          <Text style={styles.title}>{title || d.title}</Text>
-          <Text style={styles.desc}>{description || d.description}</Text>
-
-          <View style={styles.actions}>
-            {secondaryLabel && onSecondary && (
-              <TouchableOpacity
-                style={[styles.btn, styles.secondaryBtn]}
-                activeOpacity={0.85}
-                onPress={onSecondary}
-                disabled={loading}
-              >
-                <Text style={styles.secondaryText}>{secondaryLabel}</Text>
-              </TouchableOpacity>
-            )}
-
-            {onPrimary && (
-              <TouchableOpacity
-                style={[styles.btn, styles.primaryBtn]}
-                activeOpacity={0.85}
-                onPress={onPrimary}
-                disabled={loading}
-              >
-                {loading ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.primaryText}>{primaryLabel}</Text>
-                )}
-              </TouchableOpacity>
-            )}
-          </View>
         </View>
       </SafeAreaView>
     </View>
@@ -91,59 +131,101 @@ export const AuthGateScreen: React.FC<Props> = ({
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background || '#F8FAFC' },
-  safe: { flex: 1, justifyContent: 'center', padding: 20 },
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 24,
-    padding: 22,
-    borderWidth: 1,
-    borderColor: colors.border || '#E2E8F0',
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.08,
-    shadowRadius: 18,
-    elevation: 6,
+  container: {
+    flex: 1,
+    backgroundColor: THEME.bg,
   },
-  iconCircle: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: '#F1F5F9',
+  safeArea: {
+    flex: 1,
+    padding: 24,
+  },
+  centerContent: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 14,
+  },
+  card: {
+    backgroundColor: THEME.card,
+    borderRadius: 32,
+    paddingVertical: 40,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    // Modern Soft Shadow
+    shadowColor: '#64748B',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.1,
+    shadowRadius: 24,
+    elevation: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.6)',
+  },
+  iconContainer: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.03)',
+  },
+  textContainer: {
+    alignItems: 'center',
+    marginBottom: 32,
   },
   title: {
-    fontSize: 20,
-    fontWeight: '900',
-    color: colors.text || '#0F172A',
-    marginBottom: 8,
-    letterSpacing: -0.3,
+    fontSize: 24,
+    fontWeight: '800',
+    color: THEME.text,
+    marginBottom: 12,
+    textAlign: 'center',
+    letterSpacing: -0.5,
   },
   desc: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: colors.muted || '#64748B',
-    marginBottom: 18,
+    fontSize: 16,
+    lineHeight: 24,
+    color: THEME.muted,
+    textAlign: 'center',
+    maxWidth: '90%',
   },
-  actions: { flexDirection: 'row', gap: 12 },
+  actionsContainer: {
+    flexDirection: 'row',
+    width: '100%',
+    gap: 16, // Works in React Native 0.71+
+  },
   btn: {
     flex: 1,
-    height: 48,
-    borderRadius: 14,
+    height: 56, // Larger touch target
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 12,
+  },
+  fullWidthBtn: {
+    flex: 1,
   },
   primaryBtn: {
-    backgroundColor: colors.primary || '#2563EB',
+    backgroundColor: THEME.primary,
+    shadowColor: THEME.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 4,
   },
-  primaryText: { color: '#fff', fontSize: 16, fontWeight: '800' },
   secondaryBtn: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: colors.border || '#E2E8F0',
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: THEME.border,
   },
-  secondaryText: { color: colors.text || '#0F172A', fontSize: 16, fontWeight: '800' },
+  primaryText: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  secondaryText: {
+    color: THEME.text,
+    fontSize: 17,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+  },
 });
