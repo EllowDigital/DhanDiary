@@ -306,9 +306,9 @@ const RegisterScreen = () => {
       if (isCancelled || !createdSessionId || !setSession) {
         // User cancelled/closed the browser, or Clerk didn't finish creating a session.
         if (isCancelled) {
-          showToast('Sign up cancelled.', 'info', 2500);
+          showToast('Signup cancelled.', 'info', 2500);
         } else {
-          showToast('Could not complete sign up. Please try again.', 'error', 4000);
+          showToast("Couldn't complete signup. Please try again.", 'error', 4000);
         }
         return;
       }

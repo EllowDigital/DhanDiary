@@ -448,9 +448,9 @@ const LoginScreen = () => {
         // User cancelled/closed the browser, or Clerk didn't finish creating a session.
         // Do not show a success message.
         if (isCancelled) {
-          showToast('Sign in cancelled.', 'info', 2500);
+          showToast('Login cancelled.', 'info', 2500);
         } else {
-          showToast('Could not complete sign in. Please try again.', 'error', 4000);
+          showToast("Couldn't complete login. Please try again.", 'error', 4000);
         }
         setLoading(false);
         return;
