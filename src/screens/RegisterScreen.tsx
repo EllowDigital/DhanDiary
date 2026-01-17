@@ -25,7 +25,6 @@ import { useNavigation } from '@react-navigation/native';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
 import Constants from 'expo-constants';
-import OfflineNotice from '../components/OfflineNotice';
 
 // --- CUSTOM IMPORTS ---
 import { colors } from '../utils/design';
@@ -33,6 +32,10 @@ import { validateEmail } from '../utils/emailValidation';
 import { mapRegisterErrorToUi, mapSocialLoginErrorToUi } from '../utils/authUi';
 import { useToast } from '../context/ToastContext';
 import { isNetOnline } from '../utils/netState';
+import { AuthGateScreen } from '../components/AuthGateScreen';
+import { debugAuthError, isLikelyServiceDownError } from '../utils/serviceIssue';
+import { getNeonHealth } from '../api/neonClient';
+import { warmNeonConnection } from '../services/auth';
 
 // Warm up browser (OAuth)
 WebBrowser.maybeCompleteAuthSession();
@@ -72,9 +75,9 @@ const RegisterScreen = () => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [offlineVisible, setOfflineVisible] = useState(false);
-  const [offlineRetrying, setOfflineRetrying] = useState(false);
-  const [offlineAttemptsLeft, setOfflineAttemptsLeft] = useState<number | undefined>(undefined);
+  const [isOnline, setIsOnline] = useState<boolean | null>(null);
+  const [gate, setGate] = useState<null | 'offline' | 'service'>(null);
+  const [gateLoading, setGateLoading] = useState(false);
 
   const [emailError, setEmailError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
@@ -103,6 +106,89 @@ const RegisterScreen = () => {
       }),
     ]).start();
   }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    NetInfo.fetch()
+      .then((s) => {
+        if (!mounted) return;
+        const ok = isNetOnline(s);
+        setIsOnline(ok);
+        setGate((prev) => (!ok ? 'offline' : prev === 'offline' ? null : prev));
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setIsOnline(null);
+      });
+
+    const unsub = NetInfo.addEventListener((s) => {
+      if (!mounted) return;
+      const ok = isNetOnline(s);
+      setIsOnline(ok);
+      setGate((prev) => (!ok ? 'offline' : prev === 'offline' ? null : prev));
+    });
+
+    return () => {
+      mounted = false;
+      try {
+        unsub();
+      } catch (e) { }
+    };
+  }, []);
+
+  const retryGate = async () => {
+    setGateLoading(true);
+    try {
+      const net = await NetInfo.fetch();
+      const ok = isNetOnline(net);
+      setIsOnline(ok);
+      if (!ok) {
+        setGate('offline');
+        return;
+      }
+
+      try {
+        const health = getNeonHealth();
+        if (health.isConfigured) {
+          const warmed = await warmNeonConnection({ force: true, timeoutMs: 8000 });
+          if (!warmed) {
+            setGate('service');
+            return;
+          }
+        }
+      } catch (e) { }
+
+      setGate(null);
+    } finally {
+      setGateLoading(false);
+    }
+  };
+
+  if (gate === 'offline') {
+    return (
+      <AuthGateScreen
+        variant="offline"
+        description="Sign up requires internet (Clerk + Neon)."
+        primaryLabel="Try Again"
+        onPrimary={retryGate}
+        loading={gateLoading}
+      />
+    );
+  }
+
+  if (gate === 'service') {
+    return (
+      <AuthGateScreen
+        variant="service"
+        description="Sorry, we are facing some issue. Try again after some time."
+        primaryLabel="Try Again"
+        onPrimary={retryGate}
+        secondaryLabel="Back to Sign Up"
+        onSecondary={() => setGate(null)}
+        loading={gateLoading}
+      />
+    );
+  }
 
   const onSignUpPress = async () => {
     if (!isLoaded) return;
@@ -140,7 +226,22 @@ const RegisterScreen = () => {
       // Check connection before starting
       const net = await NetInfo.fetch();
       if (!isNetOnline(net)) {
-        startOfflineFlow();
+        setGate('offline');
+        return;
+      }
+
+      // If Neon is configured, fail fast with a friendly screen when DB is down.
+      try {
+        const health = getNeonHealth();
+        if (health.isConfigured) {
+          const warmed = await warmNeonConnection({ force: true, timeoutMs: 8000 });
+          if (!warmed) {
+            setGate('service');
+            return;
+          }
+        }
+      } catch (e) {
+        setGate('service');
         return;
       }
 
@@ -168,7 +269,21 @@ const RegisterScreen = () => {
     try {
       const net = await NetInfo.fetch();
       if (!isNetOnline(net)) {
-        setOfflineVisible(true);
+        setGate('offline');
+        return;
+      }
+
+      try {
+        const health = getNeonHealth();
+        if (health.isConfigured) {
+          const warmed = await warmNeonConnection({ force: true, timeoutMs: 8000 });
+          if (!warmed) {
+            setGate('service');
+            return;
+          }
+        }
+      } catch (e) {
+        setGate('service');
         return;
       }
 
@@ -208,12 +323,20 @@ const RegisterScreen = () => {
         // ignore
       }
     } catch (err: any) {
+      debugAuthError(`[Register] OAuth failed (${strategy})`, err);
       const ui = mapSocialLoginErrorToUi(err);
       if (ui) {
         const lower = ui.message.toLowerCase();
         const type = lower.includes('please log in using email') ? 'info' : 'error';
         showToast(ui.message, type as any, 6000);
       }
+
+      try {
+        const net = await NetInfo.fetch();
+        if (isNetOnline(net) && isLikelyServiceDownError(err)) {
+          setGate('service');
+        }
+      } catch (e) { }
     } finally {
       setLoading(false);
       inFlightRef.current = false;
@@ -240,6 +363,13 @@ const RegisterScreen = () => {
   };
 
   const handleSignUpError = (err: any) => {
+    debugAuthError('[Register] sign-up failed', err);
+    if (isLikelyServiceDownError(err)) {
+      setGate('service');
+      setLoading(false);
+      return;
+    }
+
     const ui = mapRegisterErrorToUi(err);
 
     if (ui.kind === 'already_registered') {
@@ -255,33 +385,6 @@ const RegisterScreen = () => {
       Alert.alert('Registration Failed', ui.message);
     }
     setLoading(false);
-  };
-
-  const startOfflineFlow = async () => {
-    setOfflineVisible(true);
-    setOfflineRetrying(true);
-    setLoading(false);
-
-    // Simple retry logic simulation
-    const MAX_ATTEMPTS = 3;
-    setOfflineAttemptsLeft(MAX_ATTEMPTS);
-
-    // (In a real app, you might loop check NetInfo here,
-    // but typically we wait for user manual retry)
-    setOfflineRetrying(false);
-  };
-
-  const offlineManualRetry = async () => {
-    setOfflineRetrying(true);
-    const net = await NetInfo.fetch();
-    if (isNetOnline(net)) {
-      setOfflineVisible(false);
-      setOfflineRetrying(false);
-      setLoading(true);
-      await attemptSignUp();
-    } else {
-      setTimeout(() => setOfflineRetrying(false), 1000);
-    }
   };
 
   const onBack = React.useCallback(() => {
