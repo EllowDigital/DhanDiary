@@ -133,7 +133,7 @@ const RegisterScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, []);
 
@@ -157,7 +157,7 @@ const RegisterScreen = () => {
             return;
           }
         }
-      } catch (e) { }
+      } catch (e) {}
 
       setGate(null);
     } finally {
@@ -276,7 +276,9 @@ const RegisterScreen = () => {
       }
 
       if (Platform.OS === 'android') {
-        await new Promise<void>((resolve) => InteractionManager.runAfterInteractions(() => resolve()));
+        await new Promise<void>((resolve) =>
+          InteractionManager.runAfterInteractions(() => resolve())
+        );
       }
 
       const startFlow = strategy === 'google' ? startGoogleFlow : startGithubFlow;
@@ -335,7 +337,7 @@ const RegisterScreen = () => {
         if (isNetOnline(net) && isLikelyServiceDownError(err)) {
           setGate('service');
         }
-      } catch (e) { }
+      } catch (e) {}
     } finally {
       setLoading(false);
       inFlightRef.current = false;

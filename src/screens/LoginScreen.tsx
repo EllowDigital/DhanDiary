@@ -126,7 +126,7 @@ const LoginScreen = () => {
       }),
     ]).start();
 
-    warmNeonConnection().catch(() => { });
+    warmNeonConnection().catch(() => {});
     return () => {
       clearTimeout(t);
       sub.remove();
@@ -159,7 +159,7 @@ const LoginScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, []);
 
@@ -184,7 +184,7 @@ const LoginScreen = () => {
             return;
           }
         }
-      } catch (e) { }
+      } catch (e) {}
 
       setGate(null);
     } finally {
@@ -416,7 +416,9 @@ const LoginScreen = () => {
       // On Android, launching the Custom Tab while the Activity is transitioning
       // can fail with "current activity is no longer available".
       if (Platform.OS === 'android') {
-        await new Promise<void>((resolve) => InteractionManager.runAfterInteractions(() => resolve()));
+        await new Promise<void>((resolve) =>
+          InteractionManager.runAfterInteractions(() => resolve())
+        );
         if (!isActiveRef.current) {
           setLoading(false);
           return;
@@ -475,7 +477,7 @@ const LoginScreen = () => {
         if (isNetOnline(net) && isLikelyServiceDownError(err)) {
           setGate('service');
         }
-      } catch (e) { }
+      } catch (e) {}
       setLoading(false);
     } finally {
       inFlightRef.current = false;
@@ -616,11 +618,11 @@ const LoginScreen = () => {
                   isCardStyle
                     ? { borderRadius: 24, padding: 32 } // Card Look
                     : {
-                      borderTopLeftRadius: 32,
-                      borderTopRightRadius: 32,
-                      padding: 32,
-                      paddingBottom: Math.max(insets.bottom + 20, 32),
-                    }, // Sheet Look
+                        borderTopLeftRadius: 32,
+                        borderTopRightRadius: 32,
+                        padding: 32,
+                        paddingBottom: Math.max(insets.bottom + 20, 32),
+                      }, // Sheet Look
                 ]}
               >
                 <Text style={styles.welcomeText}>Welcome Back!</Text>
@@ -791,7 +793,6 @@ const SocialButton = ({ label, iconName, onPress, disabled }: any) => (
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollBase: { flexGrow: 1 },
-
 
   // --- SCROLL CONTENT LAYOUTS ---
   columnContentContainer: {
