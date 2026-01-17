@@ -502,7 +502,7 @@ const LoginScreen = () => {
     return (
       <AuthGateScreen
         variant="offline"
-        description="Sign in requires internet (Clerk + Neon)."
+        description="Sign in requires internet."
         primaryLabel="Try Again"
         onPrimary={retryGate}
         loading={gateLoading}

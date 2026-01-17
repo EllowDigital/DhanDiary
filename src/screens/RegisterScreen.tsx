@@ -175,7 +175,7 @@ const RegisterScreen = () => {
     return (
       <AuthGateScreen
         variant="offline"
-        description="Sign up requires internet (Clerk + Neon)."
+        description="Sign up requires internet."
         primaryLabel="Try Again"
         onPrimary={retryGate}
         loading={gateLoading}
