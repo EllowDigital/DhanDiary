@@ -116,32 +116,37 @@ const RegisterScreen = () => {
 
   useEffect(() => {
     let mounted = true;
-    NetInfo.fetch()
-      .then((s) => {
-        if (!mounted) return;
-        const ok = isNetOnline(s);
-        setIsOnline(ok);
-        setGate((prev) => (!ok ? 'offline' : prev === 'offline' ? null : prev));
-      })
-      .catch(() => {
-        if (!mounted) return;
-        setIsOnline(null);
-      });
 
-    const unsub = NetInfo.addEventListener((s) => {
+    const handleState = (ok: boolean | null) => {
       if (!mounted) return;
-      const ok = isNetOnline(s);
       setIsOnline(ok);
-      setGate((prev) => (!ok ? 'offline' : prev === 'offline' ? null : prev));
-    });
+
+      if (ok === false) {
+        if (loading || inFlightRef.current) {
+          setLoading(false);
+          inFlightRef.current = false;
+          showToast('Connection lost. Please try again.', 'error', 3500);
+        }
+        setGate('offline');
+        return;
+      }
+
+      setGate((prev) => (prev === 'offline' ? null : prev));
+    };
+
+    NetInfo.fetch()
+      .then((s) => handleState(isNetOnline(s)))
+      .catch(() => handleState(null));
+
+    const unsub = NetInfo.addEventListener((s) => handleState(isNetOnline(s)));
 
     return () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
-  }, []);
+  }, [loading, showToast]);
 
   const retryGate = async () => {
     setGateLoading(true);
@@ -163,7 +168,7 @@ const RegisterScreen = () => {
             return;
           }
         }
-      } catch (e) {}
+      } catch (e) { }
 
       setGate(null);
     } finally {
@@ -353,7 +358,7 @@ const RegisterScreen = () => {
         if (isNetOnline(net) && isLikelyServiceDownError(err)) {
           setGate('service');
         }
-      } catch (e) {}
+      } catch (e) { }
     } finally {
       setLoading(false);
       inFlightRef.current = false;
