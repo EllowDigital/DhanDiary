@@ -79,6 +79,20 @@ let _syncPaused = false;
 let _loadedSyncPrefs = false;
 const SYNC_PAUSED_KEY = 'sync_paused_v1';
 
+// Temporary in-memory guard (non-persistent) to suspend sync during local DB resets.
+let _syncSuspended = false;
+
+export const setSyncSuspended = (suspended: boolean) => {
+  _syncSuspended = !!suspended;
+  if (_syncSuspended) {
+    try {
+      requestSyncCancel();
+    } catch (e) {}
+  }
+};
+
+export const isSyncSuspended = () => _syncSuspended;
+
 const loadSyncPrefsOnce = async () => {
   if (_loadedSyncPrefs) return;
   _loadedSyncPrefs = true;
@@ -166,6 +180,9 @@ export const stopSyncEngine = async () => {
 // Public: schedule a sync to run after interactions (UI-first) and de-dupe rapid triggers.
 export const scheduleSync = (options?: { force?: boolean; source?: 'manual' | 'auto' }) => {
   try {
+    if (_syncSuspended) {
+      return Promise.resolve({ ok: true, reason: 'throttled', upToDate: true } as any);
+    }
     // Hard boundary: never start/queue sync while a hard sign-out is in progress.
     // This prevents crashes caused by reading storage/DB while it is being wiped.
     try {
@@ -407,6 +424,14 @@ export type SyncResult = {
 
 export const syncBothWays = async (options?: { force?: boolean; source?: 'manual' | 'auto' }) => {
   let syncUserKey: string | null = null;
+  if (_syncSuspended) {
+    return {
+      ok: true,
+      reason: 'throttled',
+      upToDate: true,
+      counts: { pushed: 0, pulled: 0 },
+    } satisfies SyncResult;
+  }
   // State machine: sync can be paused at any time.
   await loadSyncPrefsOnce();
   if (_syncPaused) {
@@ -806,6 +831,7 @@ export const startAutoSyncListener = () => {
       const MIN_ONLINE_SYNC_MS = 30 * 1000; // don't run online sync more often than this
       if (!_lastSuccessfulSyncAt || now - _lastSuccessfulSyncAt > MIN_ONLINE_SYNC_MS) {
         InteractionManager.runAfterInteractions(() => {
+          if (_syncSuspended) return;
           if (_syncPaused) return;
           syncBothWays().catch(() => {
             // Swallow expected failures (offline/slow network) to avoid LogBox noise.
@@ -827,6 +853,7 @@ export const startAutoSyncListener = () => {
         _entriesUnsubscribe = subscribe(() => {
           try {
             if (!_isOnline) return;
+            if (_syncSuspended) return;
             if (_syncPaused) return;
             try {
               const h = getNeonHealth();
@@ -885,6 +912,7 @@ export const startForegroundSyncScheduler = (intervalMs: number = 15000) => {
       try {
         if (getIsSigningOut()) return;
       } catch (e) {}
+      if (_syncSuspended) return;
       if (_syncPaused) return;
       // Throttle frequent runs: if we recently synced successfully, skip until MIN_SCHEDULE_MS
       const MIN_SCHEDULE_MS = Math.max(60000, intervalMs); // at least 60s

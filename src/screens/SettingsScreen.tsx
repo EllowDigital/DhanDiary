@@ -35,7 +35,13 @@ try {
 // Logic
 import { performHardSignOut } from '../services/signOutFlow';
 import { isNetOnline } from '../utils/netState';
-import { syncBothWays, getLastSuccessfulSyncAt } from '../services/syncManager';
+import {
+  syncBothWays,
+  getLastSuccessfulSyncAt,
+  scheduleSync,
+  cancelSyncWork,
+  setSyncSuspended,
+} from '../services/syncManager';
 import NetInfo from '@react-native-community/netinfo';
 import { useNavigation } from '@react-navigation/native';
 import { useQueryClient } from '@tanstack/react-query';
@@ -292,9 +298,15 @@ const SettingsScreen = () => {
           onPress: async () => {
             if (isSigningOut) return;
             setIsSigningOut(true);
+            setSyncSuspended(true);
             try {
+              try {
+                cancelSyncWork();
+              } catch (e) {}
+
               await wipeLocalData();
               await initDB();
+
               try {
                 query.clear();
               } catch (e) {}
@@ -302,11 +314,28 @@ const SettingsScreen = () => {
                 const { notifyEntriesChanged } = require('../utils/dbEvents');
                 notifyEntriesChanged();
               } catch (e) {}
-              showToast('Local data cleared');
+
+              // Resume sync safely and kick it off if we're online.
+              setSyncSuspended(false);
+              try {
+                const net = await NetInfo.fetch();
+                if (isNetOnline(net)) {
+                  // Force a pull/push to restore from cloud quickly after wipe.
+                  scheduleSync({ force: true, source: 'auto' }).catch(() => {
+                    // best-effort
+                  });
+                  showToast('Local data cleared. Syncing from cloud…');
+                } else {
+                  showToast('Local data cleared. Offline — will sync when online.');
+                }
+              } catch (e) {
+                showToast('Local data cleared. Sync will run when online.');
+              }
             } catch (e) {
               console.warn('[Settings] reset local data failed', e);
               showToast('Failed to reset local data. Please try again.', 'error');
             } finally {
+              setSyncSuspended(false);
               setIsSigningOut(false);
             }
           },
