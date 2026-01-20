@@ -45,7 +45,7 @@ const APP_VERSION =
 const BUILD_TYPE = Constants.expoConfig?.extra?.BUILD_TYPE || (__DEV__ ? 'Development' : 'Release');
 
 // Mock Share Link (Replace with your actual dynamic link logic if needed)
-const getLatestShareLink = async () => ELLOW_URL;
+const getLatestShareLink = async () => APP_WEBSITE_URL;
 
 // --- THEME ---
 const theme = {
@@ -306,7 +306,7 @@ const AboutScreen: React.FC = () => {
         title: 'DhanDiary',
         message: `Check out DhanDiary! ${link}`,
       });
-    } catch (e) {}
+    } catch (e) { }
   };
 
   const infoGrid = useMemo(
