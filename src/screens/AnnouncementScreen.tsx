@@ -24,6 +24,7 @@ import {
   shouldShowCurrentAnnouncement,
   getCurrentAnnouncementAsync,
 } from '../announcements/announcementState';
+import { fetchOtaUpdate, reloadOtaUpdate } from '../services/backgroundUpdates';
 
 const ENTRY_DURATION = 600;
 const EXIT_DURATION = 400;
@@ -91,11 +92,13 @@ const AnnouncementScreen = () => {
     setIsApplyingUpdate(true);
 
     try {
-      await markCurrentAnnouncementSeen();
       if (Updates.isEnabled) {
-        await Updates.fetchUpdateAsync();
-        await Updates.reloadAsync();
-        return;
+        const fetched = await fetchOtaUpdate();
+        if (fetched) {
+          await markCurrentAnnouncementSeen();
+          await reloadOtaUpdate();
+          return;
+        }
       }
     } catch (e) {
       // Fallback
