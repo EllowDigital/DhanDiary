@@ -32,8 +32,6 @@
     "/* --- Build Scripts --- */": "",
     "prebuild": "npm run lint && npm test && npx tsc --noEmit",
     "build:apk-local": "npm ci && npx expo prebuild --platform android --no-install && cd android && gradlew.bat assembleRelease --daemon --parallel -Dorg.gradle.jvmargs=-Xmx4g"
-    
-    
   },
   "dependencies": {
     "@clerk/clerk-expo": "^2.19.14",

@@ -40,6 +40,8 @@ const AnnouncementScreen = () => {
   const [isApplyingUpdate, setIsApplyingUpdate] = useState(false);
   const [announcement, setAnnouncement] = useState<AnnouncementConfig | null>(null);
   const hasNavigatedRef = useRef(false);
+  const readyRef = useRef(false);
+  const announcementRef = useRef<AnnouncementConfig | null>(null);
 
   // Animation Values
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -117,7 +119,7 @@ const AnnouncementScreen = () => {
     let mounted = true;
     const fallbackTimer = setTimeout(() => {
       if (!mounted) return;
-      if (!readyToShow || !announcement) {
+      if (!readyRef.current || !announcementRef.current) {
         goToMain();
       }
     }, 5000);
@@ -140,6 +142,8 @@ const AnnouncementScreen = () => {
           return;
         }
 
+        announcementRef.current = current;
+        readyRef.current = true;
         setAnnouncement(current);
         setReadyToShow(true);
 
