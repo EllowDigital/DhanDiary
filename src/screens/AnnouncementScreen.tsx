@@ -8,6 +8,7 @@ import {
   StatusBar,
   useWindowDimensions,
   Easing,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
@@ -38,6 +39,7 @@ const AnnouncementScreen = () => {
   const [isDismissing, setIsDismissing] = useState(false);
   const [isApplyingUpdate, setIsApplyingUpdate] = useState(false);
   const [announcement, setAnnouncement] = useState<AnnouncementConfig | null>(null);
+  const hasNavigatedRef = useRef(false);
 
   // Animation Values
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -48,6 +50,8 @@ const AnnouncementScreen = () => {
   const autoHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const goToMain = () => {
+    if (hasNavigatedRef.current) return;
+    hasNavigatedRef.current = true;
     navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
   };
 
@@ -111,6 +115,12 @@ const AnnouncementScreen = () => {
   // --- LIFECYCLE ---
   useEffect(() => {
     let mounted = true;
+    const fallbackTimer = setTimeout(() => {
+      if (!mounted) return;
+      if (!readyToShow || !announcement) {
+        goToMain();
+      }
+    }, 5000);
 
     const init = async () => {
       try {
@@ -171,11 +181,20 @@ const AnnouncementScreen = () => {
 
     return () => {
       mounted = false;
+      clearTimeout(fallbackTimer);
       if (autoHideTimer.current) clearTimeout(autoHideTimer.current);
     };
   }, []);
 
-  if (!readyToShow || !announcement) return null;
+  if (!readyToShow || !announcement) {
+    return (
+      <View style={styles.loadingContainer}>
+        <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+        <ActivityIndicator size="large" color={colors.primary || '#2563EB'} />
+        <Text style={styles.loadingText}>Checking for updates...</Text>
+      </View>
+    );
+  }
 
   // Dynamic Styles
   const accentColor = announcement.accentColor || colors.primary || '#2563EB';
@@ -256,6 +275,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.5)', // Dimmed background
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#0F172A',
+  },
+  loadingText: {
+    marginTop: 12,
+    color: '#E2E8F0',
+    fontSize: 14,
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
