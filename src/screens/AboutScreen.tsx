@@ -29,6 +29,7 @@ import { useNeonStatus, describeNeonHealth } from '../hooks/useNeonStatus';
 import { colors } from '../utils/design';
 import { useToast } from '../context/ToastContext';
 import ScreenHeader from '../components/ScreenHeader';
+import { applyOtaUpdateAndReload } from '../services/backgroundUpdates';
 
 // --- CONSTANTS ---
 const ELLOW_URL = 'https://www.ellowdigital.space';
@@ -239,8 +240,10 @@ const AboutScreen: React.FC = () => {
 
     setChecking(true);
     try {
-      await Updates.fetchUpdateAsync();
-      await Updates.reloadAsync();
+      const applied = await applyOtaUpdateAndReload({ checkBeforeFetch: false, timeoutMs: 3000 });
+      if (!applied) {
+        throw new Error('Update failed.');
+      }
     } catch (err: any) {
       if (await isOfflineNow()) {
         showToast('You are offline.', 'info');
@@ -303,7 +306,7 @@ const AboutScreen: React.FC = () => {
         title: 'DhanDiary',
         message: `Check out DhanDiary! ${link}`,
       });
-    } catch (e) {}
+    } catch (e) { }
   };
 
   const infoGrid = useMemo(
