@@ -72,9 +72,6 @@
             /* arm64 only (matches gradle.properties) */
             "abiFilters": ["arm64-v8a"],
 
-            /* New Architecture support */
-            "newArchEnabled": true,
-
             /* Faster native builds */
             "ndk": {
               "debugSymbolLevel": "NONE"
