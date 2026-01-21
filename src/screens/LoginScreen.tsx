@@ -765,11 +765,10 @@ const LoginScreen = () => {
                 </View>
 
                 <TouchableOpacity
-                  style={[styles.primaryBtn, (loading || !isLoaded) && styles.disabledBtn]}
+                  style={[styles.primaryBtn, loading && styles.disabledBtn]}
                   onPress={onSignInPress}
                   disabled={
                     loading ||
-                    !isLoaded ||
                     !password ||
                     !validateEmail(email).isValidFormat ||
                     !validateEmail(email).isSupportedDomain
@@ -802,13 +801,13 @@ const LoginScreen = () => {
                     label="Google"
                     imageSource={GOOGLE_ICON}
                     onPress={() => onSocialLogin('google')}
-                    disabled={!isLoaded || loading}
+                    disabled={loading}
                   />
                   <SocialButton
                     label="GitHub"
                     imageSource={GITHUB_ICON}
                     onPress={() => onSocialLogin('github')}
-                    disabled={!isLoaded || loading}
+                    disabled={loading}
                   />
                 </View>
 

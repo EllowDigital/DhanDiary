@@ -514,13 +514,13 @@ const RegisterScreen = () => {
                     label="Google"
                     imageSource={GOOGLE_ICON}
                     onPress={() => onSocialSignUp('google')}
-                    disabled={!isLoaded || loading}
+                    disabled={loading}
                   />
                   <SocialButton
                     label="GitHub"
                     imageSource={GITHUB_ICON}
                     onPress={() => onSocialSignUp('github')}
-                    disabled={!isLoaded || loading}
+                    disabled={loading}
                   />
                 </View>
 

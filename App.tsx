@@ -89,6 +89,20 @@ const CLERK_PUBLISHABLE_KEY =
   process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ||
   '';
 
+const devLogOnce = (key: string, payload: Record<string, unknown>) => {
+  if (!__DEV__) return;
+  const g = globalThis as typeof globalThis & { __DD_LOG_ONCE__?: Record<string, true> };
+  if (!g.__DD_LOG_ONCE__) g.__DD_LOG_ONCE__ = {};
+  if (g.__DD_LOG_ONCE__[key]) return;
+  g.__DD_LOG_ONCE__[key] = true;
+  console.info(key, payload);
+};
+
+devLogOnce('[auth] key', {
+  hasKey: Boolean(CLERK_PUBLISHABLE_KEY),
+  length: CLERK_PUBLISHABLE_KEY?.length ?? 0,
+});
+
 // --- Navigation Stacks ---
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
@@ -118,6 +132,11 @@ const AppContent = () => {
   const [localSessionClerkId, setLocalSessionClerkId] = React.useState<string | null>(null);
   const [accountDeletedAt, setAccountDeletedAt] = React.useState<string | null>(null);
   const userSyncBlockRef = React.useRef<{ clerkId: string; until: number } | null>(null);
+  const lastNetRef = React.useRef<{
+    isConnected?: boolean | null;
+    isInternetReachable?: boolean | null;
+    type?: string | null;
+  } | null>(null);
   const [isOnline, setIsOnline] = React.useState<boolean | null>(null);
   const { showActionToast } = useToast();
   const prevClerkIdRef = React.useRef<string | null>(null);
@@ -140,28 +159,9 @@ const AppContent = () => {
     };
   }, []);
 
-  // Load persisted fallback session early so offline sync features work even when Clerk user
-  // isn't immediately available (e.g., cold start without internet).
+  // subscribe to session changes to keep localSessionId up-to-date
   useEffect(() => {
     let mounted = true;
-    (async () => {
-      try {
-        const s = await import('./src/db/session');
-        const sess = await s.getSession();
-        if (mounted) {
-          setLocalSessionId(sess?.id ?? null);
-          setLocalSessionClerkId((sess as any)?.clerk_id ? String((sess as any).clerk_id) : null);
-          try {
-            const del = await s.getAccountDeletedAt();
-            setAccountDeletedAt(del);
-          } catch (e) {}
-        }
-      } catch (e) {
-        if (__DEV__) console.warn('[AppContent] failed to load local session', e);
-      }
-    })();
-
-    // subscribe to session changes to keep localSessionId up-to-date
     let unsub: any = null;
     try {
       const se = require('./src/utils/sessionEvents');
@@ -191,13 +191,34 @@ const AppContent = () => {
   // when the device comes back online.
   useEffect(() => {
     let mounted = true;
+    const logNet = (state: NetInfo.NetInfoState) => {
+      if (!__DEV__) return;
+      const next = {
+        isConnected: state.isConnected,
+        isInternetReachable: state.isInternetReachable,
+        type: state.type,
+      };
+      const prev = lastNetRef.current;
+      if (
+        prev &&
+        prev.isConnected === next.isConnected &&
+        prev.isInternetReachable === next.isInternetReachable &&
+        prev.type === next.type
+      ) {
+        return;
+      }
+      lastNetRef.current = next;
+      console.info('[net] status', next);
+    };
     const unsub = NetInfo.addEventListener((state) => {
       if (!mounted) return;
       setIsOnline(!!state.isConnected);
+      logNet(state);
     });
     NetInfo.fetch()
       .then((state) => {
         if (mounted) setIsOnline(!!state.isConnected);
+        logNet(state);
       })
       .catch(() => {});
     return () => {
@@ -212,6 +233,9 @@ const AppContent = () => {
   // show a message before redirecting to login.
   useEffect(() => {
     if (!clerkLoaded) return;
+    if (__DEV__) {
+      console.info('[auth] Clerk loaded', { isSignedIn: Boolean(clerkUser?.id) });
+    }
     const prev = prevClerkIdRef.current;
     const next = clerkUser?.id ? String(clerkUser.id) : null;
     prevClerkIdRef.current = next;
