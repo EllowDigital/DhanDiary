@@ -210,9 +210,15 @@ const SplashScreen = () => {
           // If this session is tied to Clerk but Clerk is not signed in (and we are online),
           // force re-auth instead of silently letting a stale local session through.
           if (online && hasClerkIdentity) {
-            // Wait for Clerk auth state to load before deciding.
-            if (!authLoaded) return;
-            if (!isSignedIn) {
+            // Wait briefly for Clerk auth state to load before deciding.
+            if (!authLoaded) {
+              const start = Date.now();
+              while (Date.now() - start < 5000) {
+                await new Promise((r) => setTimeout(r, 200));
+                if (authLoaded) break;
+              }
+            }
+            if (!authLoaded || !isSignedIn) {
               showToast('Your session has expired. Please log in again.', 'error', 3500);
               navigateToNextScreen('Auth');
               return;
