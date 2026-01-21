@@ -77,6 +77,10 @@ const LoginScreen = () => {
   const { signIn, setActive, isLoaded } = useSignIn();
   const { user: clerkUser, isLoaded: clerkLoaded } = useUser();
   const { isSignedIn } = useAuth();
+  const hasClerkKey = Boolean(
+    Constants.expoConfig?.extra?.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ||
+    process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY
+  );
 
   // OAuth Strategies
   const { startOAuthFlow: startGoogleFlow } = useOAuth({ strategy: 'oauth_google' });
@@ -129,7 +133,7 @@ const LoginScreen = () => {
       }),
     ]).start();
 
-    warmNeonConnection({ soft: true, timeoutMs: 3000 }).catch(() => {});
+    warmNeonConnection({ soft: true, timeoutMs: 3000 }).catch(() => { });
     return () => {
       clearTimeout(t);
       sub.remove();
@@ -168,7 +172,7 @@ const LoginScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, [loading, showToast]);
 
@@ -193,7 +197,7 @@ const LoginScreen = () => {
             return;
           }
         }
-      } catch (e) {}
+      } catch (e) { }
 
       setGate(null);
     } finally {
@@ -270,7 +274,13 @@ const LoginScreen = () => {
 
   const onSignInPress = async () => {
     if (!isLoaded || !signIn) {
-      showToast('Auth is not ready yet. Check Clerk publishable key.', 'info', 3500);
+      showToast(
+        hasClerkKey
+          ? 'Auth is still initializing. Please try again in a moment.'
+          : 'Auth is not configured. Set EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY and rebuild.',
+        'info',
+        3500
+      );
       return;
     }
     if (loading || inFlightRef.current) return;
@@ -400,7 +410,13 @@ const LoginScreen = () => {
 
   const onSocialLogin = async (strategy: 'google' | 'github') => {
     if (!isLoaded) {
-      showToast('Auth is not ready yet. Check Clerk publishable key.', 'info', 3500);
+      showToast(
+        hasClerkKey
+          ? 'Auth is still initializing. Please try again in a moment.'
+          : 'Auth is not configured. Set EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY and rebuild.',
+        'info',
+        3500
+      );
       return;
     }
     if (loading || inFlightRef.current) return;
@@ -496,7 +512,7 @@ const LoginScreen = () => {
         if (isNetOnline(net) && isLikelyServiceDownError(err)) {
           setGate('service');
         }
-      } catch (e) {}
+      } catch (e) { }
       setLoading(false);
     } finally {
       inFlightRef.current = false;
@@ -659,11 +675,11 @@ const LoginScreen = () => {
                   isCardStyle
                     ? { borderRadius: 24, padding: 32 } // Card Look
                     : {
-                        borderTopLeftRadius: 32,
-                        borderTopRightRadius: 32,
-                        padding: 32,
-                        paddingBottom: Math.max(insets.bottom + 20, 32),
-                      }, // Sheet Look
+                      borderTopLeftRadius: 32,
+                      borderTopRightRadius: 32,
+                      padding: 32,
+                      paddingBottom: Math.max(insets.bottom + 20, 32),
+                    }, // Sheet Look
                 ]}
               >
                 <Text style={styles.welcomeText}>Welcome Back!</Text>
