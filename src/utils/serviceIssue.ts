@@ -47,11 +47,12 @@ export const isLikelyServiceDownError = (err: unknown): boolean => {
 
 export const debugAuthError = (tag: string, err: unknown) => {
   try {
+    const msg = err instanceof Error ? err.message : String(err ?? '');
+    // Avoid console.error to prevent dev red screen overlays.
     if (typeof __DEV__ !== 'undefined' && __DEV__) {
-      // Use error level in dev so it is easy to spot.
-      console.error(tag, err);
+      console.warn(tag, msg);
     } else {
-      console.warn(tag, err instanceof Error ? err.message : String(err ?? ''));
+      console.warn(tag, msg);
     }
   } catch (e) {
     // ignore
