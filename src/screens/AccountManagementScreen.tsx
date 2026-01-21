@@ -306,6 +306,27 @@ const AccountManagementScreen = () => {
     const current = await ImagePicker.getMediaLibraryPermissionsAsync();
     if (current.status === ImagePicker.PermissionStatus.GRANTED) return true;
 
+    if (current.status === ImagePicker.PermissionStatus.DENIED && !current.canAskAgain) {
+      Alert.alert(
+        'Permission needed',
+        'Please enable photo library access in Settings to update your profile photo.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Open Settings',
+            onPress: async () => {
+              try {
+                await Linking.openSettings();
+              } catch (e) {
+                showToast('Unable to open Settings. Please enable permissions manually.', 'error');
+              }
+            },
+          },
+        ]
+      );
+      return false;
+    }
+
     const askUser = await new Promise<boolean>((resolve) => {
       Alert.alert(
         'Allow Photo Access',
@@ -328,7 +349,16 @@ const AccountManagementScreen = () => {
       'Please enable photo library access in Settings to update your profile photo.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Open Settings', onPress: () => Linking.openSettings() },
+        {
+          text: 'Open Settings',
+          onPress: async () => {
+            try {
+              await Linking.openSettings();
+            } catch (e) {
+              showToast('Unable to open Settings. Please enable permissions manually.', 'error');
+            }
+          },
+        },
       ]
     );
 
@@ -336,6 +366,7 @@ const AccountManagementScreen = () => {
   };
 
   const handleChangeProfilePhoto = async () => {
+    if (isUpdatingPhoto) return;
     if (!user) {
       showToast('Please sign in to update your profile photo.', 'error');
       return;
@@ -365,7 +396,10 @@ const AccountManagementScreen = () => {
       if (!asset?.uri) throw new Error('No image selected');
 
       const response = await fetch(asset.uri);
+      if (!response.ok) throw new Error('Unable to read selected image');
       const blob = await response.blob();
+
+      if (!blob || blob.size === 0) throw new Error('Selected image is empty');
 
       await user.setProfileImage({ file: blob });
       if (typeof (user as any).reload === 'function') await (user as any).reload();
