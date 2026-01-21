@@ -168,7 +168,7 @@ const LoginScreen = () => {
       }),
     ]).start();
 
-    warmNeonConnection({ soft: true, timeoutMs: 3000 }).catch(() => { });
+    warmNeonConnection({ soft: true, timeoutMs: 3000 }).catch(() => {});
     return () => {
       clearTimeout(t);
       sub.remove();
@@ -207,7 +207,7 @@ const LoginScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, [loading, showToast]);
 
@@ -232,7 +232,7 @@ const LoginScreen = () => {
             return;
           }
         }
-      } catch (e) { }
+      } catch (e) {}
 
       setGate(null);
     } finally {
@@ -308,23 +308,8 @@ const LoginScreen = () => {
   };
 
   const onSignInPress = async () => {
-    if (!isLoadedRef.current || !signInRef.current) {
-      const start = Date.now();
-      while (Date.now() - start < 4000) {
-        await new Promise((r) => setTimeout(r, 200));
-        if (isLoadedRef.current && signInRef.current) break;
-      }
-      if (!isLoadedRef.current || !signInRef.current) {
-        showToast(
-          hasClerkKey
-            ? 'Auth is still initializing. Please try again in a moment.'
-            : 'Auth is not configured. Set EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY and rebuild.',
-          'info',
-          3500
-        );
-        return;
-      }
-    }
+    const ready = await ensureClerkReady();
+    if (!ready) return;
     if (loading || inFlightRef.current) return;
 
     // Sign-in requires internet (Clerk + Neon).
@@ -459,23 +444,8 @@ const LoginScreen = () => {
   };
 
   const onSocialLogin = async (strategy: 'google' | 'github') => {
-    if (!isLoadedRef.current) {
-      const start = Date.now();
-      while (Date.now() - start < 4000) {
-        await new Promise((r) => setTimeout(r, 200));
-        if (isLoadedRef.current) break;
-      }
-      if (!isLoadedRef.current) {
-        showToast(
-          hasClerkKey
-            ? 'Auth is still initializing. Please try again in a moment.'
-            : 'Auth is not configured. Set EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY and rebuild.',
-          'info',
-          3500
-        );
-        return;
-      }
-    }
+    const ready = await ensureClerkReady();
+    if (!ready) return;
     if (loading || inFlightRef.current) return;
     if (Platform.OS === 'android' && !isActiveRef.current) return;
 
@@ -569,7 +539,7 @@ const LoginScreen = () => {
         if (isNetOnline(net) && isLikelyServiceDownError(err)) {
           setGate('service');
         }
-      } catch (e) { }
+      } catch (e) {}
       setLoading(false);
     } finally {
       inFlightRef.current = false;
@@ -732,11 +702,11 @@ const LoginScreen = () => {
                   isCardStyle
                     ? { borderRadius: 24, padding: 32 } // Card Look
                     : {
-                      borderTopLeftRadius: 32,
-                      borderTopRightRadius: 32,
-                      padding: 32,
-                      paddingBottom: Math.max(insets.bottom + 20, 32),
-                    }, // Sheet Look
+                        borderTopLeftRadius: 32,
+                        borderTopRightRadius: 32,
+                        padding: 32,
+                        paddingBottom: Math.max(insets.bottom + 20, 32),
+                      }, // Sheet Look
                 ]}
               >
                 <Text style={styles.welcomeText}>Welcome Back!</Text>
@@ -826,12 +796,13 @@ const LoginScreen = () => {
                   onPress={onSignInPress}
                   disabled={
                     loading ||
+                    authInitPending ||
                     !password ||
                     !validateEmail(email).isValidFormat ||
                     !validateEmail(email).isSupportedDomain
                   }
                 >
-                  {loading ? (
+                  {loading || authInitPending ? (
                     <ActivityIndicator color="#fff" />
                   ) : (
                     <Text style={styles.primaryBtnText}>Sign In</Text>
@@ -858,13 +829,13 @@ const LoginScreen = () => {
                     label="Google"
                     imageSource={GOOGLE_ICON}
                     onPress={() => onSocialLogin('google')}
-                    disabled={loading}
+                    disabled={loading || authInitPending}
                   />
                   <SocialButton
                     label="GitHub"
                     imageSource={GITHUB_ICON}
                     onPress={() => onSocialLogin('github')}
-                    disabled={loading}
+                    disabled={loading || authInitPending}
                   />
                 </View>
 
