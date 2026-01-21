@@ -84,10 +84,11 @@ LogBox.ignoreLogs([
 enableLegacyLayoutAnimations();
 
 // Environment Variables
-const CLERK_PUBLISHABLE_KEY =
+const CLERK_PUBLISHABLE_KEY = String(
   Constants.expoConfig?.extra?.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ||
-  process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ||
-  '';
+    process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ||
+    ''
+).trim();
 
 const devLogOnce = (key: string, payload: Record<string, unknown>) => {
   if (!__DEV__) return;
@@ -100,7 +101,10 @@ const devLogOnce = (key: string, payload: Record<string, unknown>) => {
 
 devLogOnce('[auth] key', {
   hasKey: Boolean(CLERK_PUBLISHABLE_KEY),
-  length: CLERK_PUBLISHABLE_KEY?.length ?? 0,
+  tail:
+    CLERK_PUBLISHABLE_KEY && CLERK_PUBLISHABLE_KEY.length >= 6
+      ? `...${CLERK_PUBLISHABLE_KEY.slice(-6)}`
+      : null,
 });
 
 // --- Navigation Stacks ---
