@@ -918,6 +918,22 @@ const styles = StyleSheet.create({
     color: colors.primary || '#3B82F6',
     fontWeight: '600',
   },
+  changePhotoButton: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    backgroundColor: colors.primary || '#3B82F6',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  changePhotoButtonDisabled: {
+    opacity: 0.7,
+  },
+  changePhotoButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
 
   /* SECURITY TOGGLE */
   switchRow: {
