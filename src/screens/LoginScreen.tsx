@@ -78,9 +78,11 @@ const LoginScreen = () => {
   const { user: clerkUser, isLoaded: clerkLoaded } = useUser();
   const { isSignedIn } = useAuth();
   const signInRef = useRef(signIn);
+  const setActiveRef = useRef(setActive);
   const isLoadedRef = useRef(isLoaded);
   useEffect(() => {
     signInRef.current = signIn;
+    setActiveRef.current = setActive;
     isLoadedRef.current = isLoaded;
   }, [signIn, isLoaded]);
   const hasClerkKey = Boolean(
@@ -351,9 +353,17 @@ const LoginScreen = () => {
     Keyboard.dismiss();
 
     try {
-      const result = await signIn.create({ identifier: v.normalized, password });
+      const signInClient = signInRef.current;
+      if (!signInClient) {
+        throw new Error('Auth is not ready yet. Please try again.');
+      }
+      const result = await signInClient.create({ identifier: v.normalized, password });
       if (result.status === 'complete') {
-        await setActive({ session: result.createdSessionId });
+        const setActiveFn = setActiveRef.current;
+        if (!setActiveFn) {
+          throw new Error('Auth session could not be activated. Please try again.');
+        }
+        await setActiveFn({ session: result.createdSessionId });
         showToast('Welcome back! Signed in successfully.', 'success', 2500);
       } else {
         // Requires verification (email code flow)

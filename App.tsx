@@ -18,7 +18,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ClerkProvider, useUser } from '@clerk/clerk-expo';
 import Constants from 'expo-constants';
-import NetInfo from '@react-native-community/netinfo';
+import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 
 // --- Local Imports ---
 import SplashScreen from './src/screens/SplashScreen';
@@ -195,7 +195,7 @@ const AppContent = () => {
   // when the device comes back online.
   useEffect(() => {
     let mounted = true;
-    const logNet = (state: NetInfo.NetInfoState) => {
+    const logNet = (state: NetInfoState) => {
       if (!__DEV__) return;
       const next = {
         isConnected: state.isConnected,
