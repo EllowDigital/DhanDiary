@@ -719,6 +719,18 @@ const LoginScreen = () => {
 
                 {renderGateBanner()}
 
+                {!isLoaded && hasClerkKey && (
+                  <View style={styles.configBanner}>
+                    <ActivityIndicator size="small" color="#B45309" />
+                    <Text style={styles.configBannerText}>
+                      Auth is initializing. Please wait a moment.
+                    </Text>
+                    <TouchableOpacity onPress={reloadApp} style={styles.configBannerAction}>
+                      <Text style={styles.configBannerActionText}>Reload</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
                 {didWaitForClerk && !isLoaded && !hasClerkKey && (
                   <View style={styles.configBanner}>
                     <Ionicons name="warning-outline" size={16} color="#B45309" />
