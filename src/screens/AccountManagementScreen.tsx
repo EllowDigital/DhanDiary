@@ -302,6 +302,29 @@ const AccountManagementScreen = () => {
     if (activeCard !== id) Keyboard.dismiss();
   };
 
+  const ensureOnline = (actionLabel: string) => {
+    if (isOnline === false) {
+      showToast(`${actionLabel} requires an internet connection.`, 'error');
+      return false;
+    }
+    if (isOnline === null) {
+      showToast('Checking connection. Please try again in a moment.', 'info');
+      return false;
+    }
+    return true;
+  };
+
+  const refreshConnectivity = async () => {
+    try {
+      const s = await NetInfo.fetch();
+      const onlineNow = isNetOnline(s);
+      setIsOnline(onlineNow);
+      showToast(onlineNow ? 'Back online' : 'Still offline', onlineNow ? 'success' : 'error');
+    } catch (e) {
+      showToast('Unable to check connection right now.', 'error');
+    }
+  };
+
   const requestMediaLibraryPermission = async () => {
     const current = await ImagePicker.getMediaLibraryPermissionsAsync();
     if (current.status === ImagePicker.PermissionStatus.GRANTED) return true;
@@ -372,10 +395,7 @@ const AccountManagementScreen = () => {
       return;
     }
 
-    if (isOnline === false) {
-      showToast('An internet connection is required to update your profile photo.', 'error');
-      return;
-    }
+    if (!ensureOnline('Updating your profile photo')) return;
 
     try {
       setIsUpdatingPhoto(true);
@@ -414,6 +434,7 @@ const AccountManagementScreen = () => {
   };
 
   const handlePasswordSave = async () => {
+    if (!ensureOnline('Updating your password')) return;
     if (!newPass || !confirmPass)
       return Alert.alert('Missing Fields', 'Please fill in the new password fields.');
     if (newPass !== confirmPass) return Alert.alert('Mismatch', 'New passwords do not match');
@@ -451,6 +472,7 @@ const AccountManagementScreen = () => {
   };
 
   const handleDelete = async () => {
+    if (!ensureOnline('Deleting your account')) return;
     Alert.alert(
       'Delete Account?',
       'This action is irreversible. All your data will be permanently wiped.',
@@ -545,6 +567,15 @@ const AccountManagementScreen = () => {
               >
                 <MaterialIcon name="arrow-back" size={18} color={colors.text || '#1E293B'} />
                 <Text style={styles.offlineBackText}>Go back</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={styles.offlineRetryBtn}
+                onPress={refreshConnectivity}
+              >
+                <MaterialIcon name="refresh" size={18} color="#FFFFFF" />
+                <Text style={styles.offlineRetryText}>Try again</Text>
               </TouchableOpacity>
             </View>
 
