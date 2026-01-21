@@ -21,6 +21,7 @@ import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useAuth, useUser } from '@clerk/clerk-expo';
 import { useNavigation } from '@react-navigation/native';
 import * as LocalAuthentication from 'expo-local-authentication';
+import * as ImagePicker from 'expo-image-picker';
 import NetInfo from '@react-native-community/netinfo';
 
 import { getSession } from '../db/session';
@@ -150,6 +151,7 @@ const AccountManagementScreen = () => {
   // Loaders
   const [savingPasswordState, setSavingPasswordState] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [isUpdatingPhoto, setIsUpdatingPhoto] = useState(false);
 
   // Animation for Entrance
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -189,7 +191,7 @@ const AccountManagementScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -199,7 +201,7 @@ const AccountManagementScreen = () => {
       try {
         const s = await getSession();
         if (mounted) setFallbackSession(s);
-      } catch (e) {}
+      } catch (e) { }
     };
     load();
     const unsub = subscribeSession((s) => {
@@ -209,7 +211,7 @@ const AccountManagementScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -299,6 +301,56 @@ const AccountManagementScreen = () => {
     if (activeCard !== id) Keyboard.dismiss();
   };
 
+  const handleChangeProfilePhoto = async () => {
+    if (!user) {
+      showToast('Please sign in to update your profile photo.', 'error');
+      return;
+    }
+
+    if (isOnline === false) {
+      showToast('An internet connection is required to update your profile photo.', 'error');
+      return;
+    }
+
+    try {
+      setIsUpdatingPhoto(true);
+
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== ImagePicker.PermissionStatus.GRANTED) {
+        Alert.alert(
+          'Permission required',
+          'Please allow photo library access to update your profile picture.'
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.9,
+      });
+
+      if (result.canceled) return;
+
+      const asset = result.assets?.[0];
+      if (!asset?.uri) throw new Error('No image selected');
+
+      const response = await fetch(asset.uri);
+      const blob = await response.blob();
+
+      await user.setProfileImage({ file: blob });
+      if (typeof (user as any).reload === 'function') await (user as any).reload();
+
+      showToast('Profile photo updated', 'success');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unexpected error';
+      showToast(`Failed to update profile photo: ${msg}`, 'error');
+    } finally {
+      setIsUpdatingPhoto(false);
+    }
+  };
+
   const handlePasswordSave = async () => {
     if (!newPass || !confirmPass)
       return Alert.alert('Missing Fields', 'Please fill in the new password fields.');
@@ -384,7 +436,7 @@ const AccountManagementScreen = () => {
               Alert.alert(
                 'Delete failed',
                 err?.message ||
-                  'We could not delete your account from the cloud. Please check your internet connection and try again.'
+                'We could not delete your account from the cloud. Please check your internet connection and try again.'
               );
             } finally {
               setDeletingAccount(false);
@@ -426,7 +478,7 @@ const AccountManagementScreen = () => {
                 onPress={() => {
                   try {
                     navigation.goBack();
-                  } catch (e) {}
+                  } catch (e) { }
                 }}
               >
                 <MaterialIcon name="arrow-back" size={18} color={colors.text || '#1E293B'} />
@@ -525,6 +577,7 @@ const AccountManagementScreen = () => {
                           size={48}
                           name={effectiveName || undefined}
                           imageUrl={effectiveImage}
+                          onPress={handleChangeProfilePhoto}
                         />
                         {fallbackSession && !user ? (
                           <View style={styles.localBadgeInline}>
@@ -538,10 +591,10 @@ const AccountManagementScreen = () => {
                   {(user as any)?.emailAddresses?.some(
                     (e: any) => e.verification?.status === 'verified'
                   ) && (
-                    <View style={styles.verifiedBadge}>
-                      <MaterialIcon name="check" size={12} color="white" />
-                    </View>
-                  )}
+                      <View style={styles.verifiedBadge}>
+                        <MaterialIcon name="check" size={12} color="white" />
+                      </View>
+                    )}
                 </View>
 
                 <View style={styles.heroInfo}>
@@ -567,6 +620,18 @@ const AccountManagementScreen = () => {
                       {hasPassword ? 'Password Secured' : 'Social Login'}
                     </Text>
                   </View>
+                  <TouchableOpacity
+                    style={[styles.changePhotoButton, isUpdatingPhoto && styles.changePhotoButtonDisabled]}
+                    activeOpacity={0.7}
+                    onPress={handleChangeProfilePhoto}
+                    disabled={isUpdatingPhoto}
+                  >
+                    {isUpdatingPhoto ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.changePhotoButtonText}>Change Photo</Text>
+                    )}
+                  </TouchableOpacity>
                 </View>
               </View>
 

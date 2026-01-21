@@ -24,7 +24,10 @@
     "ios": {
       "bundleIdentifier": "com.ellowdigital.dhandiary",
       "buildNumber": "252",
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Allow DhanDiary to access your photo library to update your profile picture."
+      }
     },
 
     "android": {
