@@ -4,6 +4,7 @@
  * - Local APK builds (Gradle)
  * - EAS builds
  * - Play Store production
+ * - ensure my expo.dev also support 100% of these env vars
  */
 export default ({ config }) => {
   return {
