@@ -687,12 +687,11 @@ const LoginScreen = () => {
 
                 {renderGateBanner()}
 
-                {didWaitForClerk && !isLoaded && (
+                {didWaitForClerk && !isLoaded && !hasClerkKey && (
                   <View style={styles.configBanner}>
                     <Ionicons name="warning-outline" size={16} color="#B45309" />
                     <Text style={styles.configBannerText}>
-                      Auth is still loading or not configured. If this persists, set
-                      EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY and rebuild.
+                      Auth is not configured. Set EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY and rebuild.
                     </Text>
                   </View>
                 )}
