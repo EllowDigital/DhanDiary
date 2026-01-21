@@ -77,6 +77,12 @@ const LoginScreen = () => {
   const { signIn, setActive, isLoaded } = useSignIn();
   const { user: clerkUser, isLoaded: clerkLoaded } = useUser();
   const { isSignedIn } = useAuth();
+  const signInRef = useRef(signIn);
+  const isLoadedRef = useRef(isLoaded);
+  useEffect(() => {
+    signInRef.current = signIn;
+    isLoadedRef.current = isLoaded;
+  }, [signIn, isLoaded]);
   const hasClerkKey = Boolean(
     Constants.expoConfig?.extra?.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ||
     process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY
@@ -273,15 +279,22 @@ const LoginScreen = () => {
   };
 
   const onSignInPress = async () => {
-    if (!isLoaded || !signIn) {
-      showToast(
-        hasClerkKey
-          ? 'Auth is still initializing. Please try again in a moment.'
-          : 'Auth is not configured. Set EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY and rebuild.',
-        'info',
-        3500
-      );
-      return;
+    if (!isLoadedRef.current || !signInRef.current) {
+      const start = Date.now();
+      while (Date.now() - start < 4000) {
+        await new Promise((r) => setTimeout(r, 200));
+        if (isLoadedRef.current && signInRef.current) break;
+      }
+      if (!isLoadedRef.current || !signInRef.current) {
+        showToast(
+          hasClerkKey
+            ? 'Auth is still initializing. Please try again in a moment.'
+            : 'Auth is not configured. Set EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY and rebuild.',
+          'info',
+          3500
+        );
+        return;
+      }
     }
     if (loading || inFlightRef.current) return;
 
@@ -409,15 +422,22 @@ const LoginScreen = () => {
   };
 
   const onSocialLogin = async (strategy: 'google' | 'github') => {
-    if (!isLoaded) {
-      showToast(
-        hasClerkKey
-          ? 'Auth is still initializing. Please try again in a moment.'
-          : 'Auth is not configured. Set EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY and rebuild.',
-        'info',
-        3500
-      );
-      return;
+    if (!isLoadedRef.current) {
+      const start = Date.now();
+      while (Date.now() - start < 4000) {
+        await new Promise((r) => setTimeout(r, 200));
+        if (isLoadedRef.current) break;
+      }
+      if (!isLoadedRef.current) {
+        showToast(
+          hasClerkKey
+            ? 'Auth is still initializing. Please try again in a moment.'
+            : 'Auth is not configured. Set EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY and rebuild.',
+          'info',
+          3500
+        );
+        return;
+      }
     }
     if (loading || inFlightRef.current) return;
     if (Platform.OS === 'android' && !isActiveRef.current) return;

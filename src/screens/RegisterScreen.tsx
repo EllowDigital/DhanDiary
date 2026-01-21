@@ -61,6 +61,10 @@ const RegisterScreen = () => {
     Constants.expoConfig?.extra?.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ||
     process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY
   );
+  const isLoadedRef = useRef(isLoaded);
+  useEffect(() => {
+    isLoadedRef.current = isLoaded;
+  }, [isLoaded]);
   const insets = useSafeAreaInsets();
   const { showToast } = useToast();
 
@@ -281,15 +285,22 @@ const RegisterScreen = () => {
   };
 
   const onSocialSignUp = async (strategy: 'google' | 'github') => {
-    if (!isLoaded) {
-      showToast(
-        hasClerkKey
-          ? 'Auth is still initializing. Please try again in a moment.'
-          : 'Auth is not configured. Set EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY and rebuild.',
-        'info',
-        3500
-      );
-      return;
+    if (!isLoadedRef.current) {
+      const start = Date.now();
+      while (Date.now() - start < 4000) {
+        await new Promise((r) => setTimeout(r, 200));
+        if (isLoadedRef.current) break;
+      }
+      if (!isLoadedRef.current) {
+        showToast(
+          hasClerkKey
+            ? 'Auth is still initializing. Please try again in a moment.'
+            : 'Auth is not configured. Set EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY and rebuild.',
+          'info',
+          3500
+        );
+        return;
+      }
     }
     if (loading || inFlightRef.current) return;
 
