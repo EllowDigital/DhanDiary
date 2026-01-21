@@ -1,19 +1,19 @@
-import 'dotenv/config';
-
 /**
  * Expo dynamic config
  * Safe for:
- * - APK testing
+ * - Local APK builds (Gradle)
  * - EAS builds
  * - Play Store production
+ * - ensure my expo.dev also support 100% of these env vars
  */
 export default ({ config }) => {
   return {
     ...config,
-    // App versioning (kept in sync with app.json / package.json)
-    version: '2.5.0',
 
-    // 🔗 REQUIRED for Clerk + Google OAuth (NO proxy)
+    // App versioning
+    version: '2.5.2',
+
+    // Required for Clerk + OAuth (no proxy)
     scheme: 'dhandiary',
 
     name: 'DhanDiary',
@@ -22,12 +22,12 @@ export default ({ config }) => {
     android: {
       ...config.android,
       package: 'com.ellowdigital.dhandiary',
-      versionCode: 250,
+      versionCode: 252,
     },
 
     ios: {
       ...config.ios,
-      buildNumber: '250',
+      buildNumber: '252',
     },
 
     extra: {
@@ -39,11 +39,9 @@ export default ({ config }) => {
        */
       EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? null,
 
-      EXPO_PUBLIC_API_URL: process.env.EXPO_PUBLIC_API_URL ?? null,
-
       /**
        * 🔒 NEON DB PROTECTION
-       * DB URL is injected ONLY when explicitly enabled
+       * DB URL injected ONLY when enabled
        */
       EXPO_ENABLE_NEON_CLIENT: process.env.EXPO_ENABLE_NEON_CLIENT ?? '0',
 

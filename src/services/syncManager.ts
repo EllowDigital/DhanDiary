@@ -1,9 +1,10 @@
 import NetInfo from '@react-native-community/netinfo';
-import { InteractionManager } from 'react-native';
+import { InteractionManager, Platform } from 'react-native';
 import Constants from 'expo-constants';
 import AsyncStorage from '../utils/AsyncStorageWrapper';
 import { getPendingProfileUpdates, markPendingProfileProcessed } from '../db/localDb';
 import { getSession, saveSession } from '../db/session';
+import { getIsSigningOut } from '../utils/authBoundary';
 // Legacy entry-related DB helpers moved to `src/services/legacySync` to keep
 // `syncManager` free of direct Neon/SQLite logic. Import from legacy module
 // only when needed.
@@ -77,6 +78,20 @@ const _syncStatusListeners = new Set<(status: SyncStatus) => void>();
 let _syncPaused = false;
 let _loadedSyncPrefs = false;
 const SYNC_PAUSED_KEY = 'sync_paused_v1';
+
+// Temporary in-memory guard (non-persistent) to suspend sync during local DB resets.
+let _syncSuspended = false;
+
+export const setSyncSuspended = (suspended: boolean) => {
+  _syncSuspended = !!suspended;
+  if (_syncSuspended) {
+    try {
+      requestSyncCancel();
+    } catch (e) {}
+  }
+};
+
+export const isSyncSuspended = () => _syncSuspended;
 
 const loadSyncPrefsOnce = async () => {
   if (_loadedSyncPrefs) return;
@@ -165,6 +180,22 @@ export const stopSyncEngine = async () => {
 // Public: schedule a sync to run after interactions (UI-first) and de-dupe rapid triggers.
 export const scheduleSync = (options?: { force?: boolean; source?: 'manual' | 'auto' }) => {
   try {
+    if (_syncSuspended) {
+      return Promise.resolve({ ok: true, reason: 'throttled', upToDate: true } as any);
+    }
+    // Hard boundary: never start/queue sync while a hard sign-out is in progress.
+    // This prevents crashes caused by reading storage/DB while it is being wiped.
+    try {
+      if (getIsSigningOut()) {
+        return Promise.resolve({
+          ok: false,
+          reason: 'no_session',
+          upToDate: true,
+          counts: { pushed: 0, pulled: 0 },
+        } as any);
+      }
+    } catch (e) {}
+
     // Non-blocking: load persisted paused flag in background.
     void loadSyncPrefsOnce();
     if (_syncPaused) {
@@ -365,7 +396,7 @@ const flushPendingProfileUpdates = async () => {
         processed++;
       }
     } catch (err) {
-      console.error('Profile update failed', p.id, err);
+      if (__DEV__) console.warn('[sync] Profile update failed', p.id, err);
     }
   }
   return { processed };
@@ -393,6 +424,14 @@ export type SyncResult = {
 
 export const syncBothWays = async (options?: { force?: boolean; source?: 'manual' | 'auto' }) => {
   let syncUserKey: string | null = null;
+  if (_syncSuspended) {
+    return {
+      ok: true,
+      reason: 'throttled',
+      upToDate: true,
+      counts: { pushed: 0, pulled: 0 },
+    } satisfies SyncResult;
+  }
   // State machine: sync can be paused at any time.
   await loadSyncPrefsOnce();
   if (_syncPaused) {
@@ -403,6 +442,19 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
       counts: { pushed: 0, pulled: 0 },
     } satisfies SyncResult;
   }
+
+  // Hard boundary: never run sync while a hard sign-out is in progress.
+  // This avoids races with storage/DB wiping that can cause fatal crashes.
+  try {
+    if (getIsSigningOut()) {
+      return {
+        ok: false,
+        reason: 'no_session',
+        upToDate: true,
+        counts: { pushed: 0, pulled: 0 },
+      } satisfies SyncResult;
+    }
+  } catch (e) {}
 
   // Starting a new sync implies we want to clear any previous cancel request.
   try {
@@ -471,7 +523,7 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
     if (!realId) {
       try {
         const created = await safeQ(
-          "INSERT INTO users (clerk_id, email, name, password_hash, status) VALUES ($1, $2, $3, 'clerk_managed', 'active') RETURNING id",
+          "INSERT INTO users (clerk_id, email, name, password_hash, status) VALUES ($1, $2, $3, 'clerk_managed', 'active') ON CONFLICT (email) DO NOTHING RETURNING id",
           [clerkId, String(email || ''), String(name || '')]
         );
         const v = created && created.length ? String((created as any)[0]?.id || '') : '';
@@ -654,7 +706,12 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
 
     try {
       const { notifyEntriesChanged } = require('../utils/dbEvents');
-      notifyEntriesChanged();
+      // UI-first: defer refresh work until after current interactions.
+      InteractionManager.runAfterInteractions(() => {
+        try {
+          notifyEntriesChanged();
+        } catch (e) {}
+      });
     } catch (e) {}
 
     // success -> clear any previous error state
@@ -774,6 +831,7 @@ export const startAutoSyncListener = () => {
       const MIN_ONLINE_SYNC_MS = 30 * 1000; // don't run online sync more often than this
       if (!_lastSuccessfulSyncAt || now - _lastSuccessfulSyncAt > MIN_ONLINE_SYNC_MS) {
         InteractionManager.runAfterInteractions(() => {
+          if (_syncSuspended) return;
           if (_syncPaused) return;
           syncBothWays().catch(() => {
             // Swallow expected failures (offline/slow network) to avoid LogBox noise.
@@ -795,6 +853,7 @@ export const startAutoSyncListener = () => {
         _entriesUnsubscribe = subscribe(() => {
           try {
             if (!_isOnline) return;
+            if (_syncSuspended) return;
             if (_syncPaused) return;
             try {
               const h = getNeonHealth();
@@ -850,6 +909,10 @@ export const startForegroundSyncScheduler = (intervalMs: number = 15000) => {
   void loadSyncPrefsOnce();
   _foregroundTimer = setInterval(() => {
     try {
+      try {
+        if (getIsSigningOut()) return;
+      } catch (e) {}
+      if (_syncSuspended) return;
       if (_syncPaused) return;
       // Throttle frequent runs: if we recently synced successfully, skip until MIN_SCHEDULE_MS
       const MIN_SCHEDULE_MS = Math.max(60000, intervalMs); // at least 60s
@@ -889,6 +952,26 @@ export const startBackgroundFetch = async () => {
   if (_backgroundFetchInstance) return;
   await loadSyncPrefsOnce();
   if (_syncPaused) return;
+
+  // New Architecture / Bridgeless builds can be unstable with some native background
+  // modules. If users report force-closes shortly after login/startup, this is a prime
+  // suspect. Keep foreground sync instead.
+  try {
+    const g: any = globalThis as any;
+    const isNewArch =
+      !!g?.RN$Bridgeless ||
+      typeof g?.nativeFabricUIManager !== 'undefined' ||
+      typeof g?.__turboModuleProxy !== 'undefined';
+    if (Platform.OS === 'android' && isNewArch) {
+      if (__DEV__ && !_backgroundFetchWarned) {
+        console.warn('[BackgroundFetch] disabled on New Architecture Android build');
+        _backgroundFetchWarned = true;
+      }
+      return;
+    }
+  } catch (e) {
+    // ignore
+  }
 
   // Expo Go check
   const isExpoGo = Constants.appOwnership === 'expo';

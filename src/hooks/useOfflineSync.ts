@@ -84,7 +84,7 @@ export const useOfflineSync = (userId?: string | null) => {
           try {
             if (isSyncCancelRequested() || (err as any)?.message === 'sync_cancelled') return;
           } catch (e) {}
-          console.error('Sync failed', err);
+          if (__DEV__) console.warn('[useOfflineSync] sync failed', err);
           showToast('Auto-sync failed');
         }
       })();

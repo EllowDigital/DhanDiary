@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   StatusBar,
@@ -28,11 +27,14 @@ import OfflineNotice from '../components/OfflineNotice';
 import { syncClerkUserToNeon } from '../services/clerkUserSync';
 import { saveSession } from '../db/session';
 import { colors } from '../utils/design';
+import { useToast } from '../context/ToastContext';
+import { mapVerifyErrorToUi } from '../utils/authUi';
 
 const VerifyEmailScreen = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const insets = useSafeAreaInsets();
+  const { showToast } = useToast();
 
   // --- RESPONSIVE LAYOUT LOGIC ---
   const { width, height } = useWindowDimensions();
@@ -56,6 +58,7 @@ const VerifyEmailScreen = () => {
 
   // State
   const [code, setCode] = useState('');
+  const [codeError, setCodeError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [resendDisabled, setResendDisabled] = useState(false);
   const [countdown, setCountdown] = useState(30);
@@ -120,6 +123,14 @@ const VerifyEmailScreen = () => {
     }
   };
 
+  const onBack = React.useCallback(() => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    navigation.navigate('Login');
+  }, [navigation]);
+
   useEffect(() => {
     prepareVerification();
     startResendCooldown();
@@ -147,10 +158,14 @@ const VerifyEmailScreen = () => {
 
   // --- HANDLERS ---
   const onResend = async () => {
-    if (resendDisabled) return;
+    if (resendDisabled) {
+      showToast('Please wait before requesting another verification email.', 'info', 3500);
+      return;
+    }
     try {
       setLoading(true);
       setCode('');
+      setCodeError(null);
 
       if (mode === 'signup') {
         if (!signUpLoaded) return;
@@ -159,7 +174,7 @@ const VerifyEmailScreen = () => {
         await prepareVerification();
       }
 
-      Alert.alert('Code Sent', `A new verification code has been sent to ${email}`);
+      showToast(`A new verification code has been sent to ${email}`, 'success', 3500);
       startResendCooldown();
     } catch (err: any) {
       const msg = err?.errors?.[0]?.message || 'Failed to resend code.';
@@ -170,16 +185,19 @@ const VerifyEmailScreen = () => {
         setOfflineVisible(true);
         return;
       }
-      Alert.alert('Error', msg);
+      showToast('Something went wrong. Please try again later.', 'error', 4500);
     } finally {
       setLoading(false);
     }
   };
 
   const onVerify = async () => {
-    if (!code || code.length < 6)
-      return Alert.alert('Invalid Input', 'Please enter the 6-digit code.');
+    if (!code || code.length < 6) {
+      setCodeError('Please enter the 6-digit code.');
+      return;
+    }
     setLoading(true);
+    setCodeError(null);
 
     try {
       if (mode === 'signup') {
@@ -220,7 +238,7 @@ const VerifyEmailScreen = () => {
           await setActiveSignIn?.({ session: result.createdSessionId });
           navigation.reset({ index: 0, routes: [{ name: 'Announcement' }] });
         } else if (result?.status === 'needs_second_factor') {
-          Alert.alert('One More Step', 'Please check your email for the second verification code.');
+          showToast('Please check your email for the second verification code.', 'info', 4500);
           await prepareVerification();
           setCode('');
         } else {
@@ -228,7 +246,6 @@ const VerifyEmailScreen = () => {
         }
       }
     } catch (err: any) {
-      const errCode = err?.errors?.[0]?.code;
       const net = await NetInfo.fetch();
       if (!net.isConnected) {
         setLastOfflineAction('verify');
@@ -236,10 +253,11 @@ const VerifyEmailScreen = () => {
         setOfflineVisible(true);
         return;
       }
-      if (errCode === 'verification_failed') {
-        Alert.alert('Incorrect Code', 'The code you entered is invalid. Please try again.');
+      const ui = mapVerifyErrorToUi(err);
+      if (ui.field === 'code') {
+        setCodeError(ui.message);
       } else {
-        Alert.alert('Error', err?.errors?.[0]?.message || 'Verification failed. Please try again.');
+        showToast(ui.message, 'error', 4500);
       }
     } finally {
       setLoading(false);
@@ -289,7 +307,7 @@ const VerifyEmailScreen = () => {
           >
             {/* Header / Back Button */}
             <View style={styles.header}>
-              <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+              <TouchableOpacity onPress={onBack} style={styles.backBtn}>
                 <Ionicons name="arrow-back" size={24} color="#0F172A" />
               </TouchableOpacity>
             </View>
@@ -321,10 +339,15 @@ const VerifyEmailScreen = () => {
                   placeholderTextColor="#CBD5E1"
                   keyboardType="number-pad"
                   value={code}
-                  onChangeText={setCode}
+                  onChangeText={(t) => {
+                    setCode(t);
+                    setCodeError(null);
+                  }}
                   maxLength={6}
                   autoFocus
                 />
+
+                {!!codeError && <Text style={styles.fieldError}>{codeError}</Text>}
 
                 {/* Verify Button */}
                 <TouchableOpacity
@@ -343,7 +366,7 @@ const VerifyEmailScreen = () => {
                 {/* Resend Link */}
                 <TouchableOpacity
                   onPress={onResend}
-                  disabled={resendDisabled || loading}
+                  disabled={loading}
                   style={styles.resendRow}
                   activeOpacity={0.6}
                 >
@@ -401,6 +424,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 8,
+  },
+  fieldError: {
+    color: '#B91C1C',
+    fontSize: 13,
+    marginTop: 10,
+    textAlign: 'center',
   },
 
   /* Header */

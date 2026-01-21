@@ -1,4 +1,5 @@
 import React from 'react';
+import { InteractionManager } from 'react-native';
 import {
   useQuery,
   useMutation,
@@ -379,9 +380,13 @@ export const useEntries = (userId?: string | null) => {
         if (refetchDebounceRef.current) clearTimeout(refetchDebounceRef.current);
         refetchDebounceRef.current = setTimeout(() => {
           refetchDebounceRef.current = null;
-          try {
-            refetch();
-          } catch (e) {}
+          // UI-first: run the refetch after current interactions (scroll/tap)
+          // to avoid jank when a sync completes.
+          InteractionManager.runAfterInteractions(() => {
+            try {
+              refetch();
+            } catch (e) {}
+          });
         }, 250);
       } catch (e) {
         if (__DEV__) console.warn('[useEntries] refetch failed inside subscription', e);

@@ -14,7 +14,6 @@ import {
   Keyboard,
   useWindowDimensions,
   Animated,
-  UIManager,
   LayoutAnimation,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -40,6 +39,9 @@ import { DEFAULT_CATEGORY, ensureCategory, getIconForCategory } from '../constan
 import ScreenHeader from '../components/ScreenHeader';
 import { formatDate } from '../utils/date';
 import { isIncome } from '../utils/transactionType';
+import { enableLegacyLayoutAnimations } from '../utils/layoutAnimation';
+
+enableLegacyLayoutAnimations();
 
 // --- TYPES ---
 interface TransactionEntry {
@@ -71,12 +73,6 @@ interface EditModalProps {
 }
 
 // --- SETUP ---
-if (Platform.OS === 'android') {
-  if (UIManager.setLayoutAnimationEnabledExperimental) {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
-  }
-}
-
 const resolveEntryMoment = (entry: TransactionEntry) => {
   const v = entry?.date || entry?.created_at;
   if (v === null || v === undefined) return dayjs();
@@ -218,6 +214,15 @@ const EditTransactionModal = React.memo(({ visible, entryId, onClose, onSave }: 
   const [showCatPicker, setShowCatPicker] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const isSubmittingRef = useRef(false);
+  const pendingPromptShowingRef = useRef(false);
+  const allowUnsyncedEditForIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!visible) {
+      pendingPromptShowingRef.current = false;
+      allowUnsyncedEditForIdRef.current = null;
+    }
+  }, [visible]);
 
   useEffect(() => {
     let cancelled = false;
@@ -262,10 +267,43 @@ const EditTransactionModal = React.memo(({ visible, entryId, onClose, onSave }: 
 
         // Warn if pending sync
         if (Number((row as any).need_sync) === 1) {
-          Alert.alert('Pending changes', 'This entry is waiting to sync. Edit anyway?', [
-            { text: 'Cancel', style: 'cancel', onPress: onClose },
-            { text: 'Edit', onPress: applyRowToState },
-          ]);
+          const id = String(entryId);
+          if (allowUnsyncedEditForIdRef.current === id) {
+            applyRowToState();
+            return;
+          }
+          if (!pendingPromptShowingRef.current) {
+            pendingPromptShowingRef.current = true;
+            Alert.alert(
+              'Pending changes',
+              'This entry is waiting to sync. Edit anyway?',
+              [
+                {
+                  text: 'Cancel',
+                  style: 'cancel',
+                  onPress: () => {
+                    pendingPromptShowingRef.current = false;
+                    onClose();
+                  },
+                },
+                {
+                  text: 'Edit',
+                  onPress: () => {
+                    pendingPromptShowingRef.current = false;
+                    allowUnsyncedEditForIdRef.current = id;
+                    applyRowToState();
+                  },
+                },
+              ],
+              {
+                cancelable: true,
+                onDismiss: () => {
+                  pendingPromptShowingRef.current = false;
+                  onClose();
+                },
+              }
+            );
+          }
           return;
         }
 
@@ -447,6 +485,8 @@ const HistoryScreen = () => {
   const showLoading = useDelayedLoading(Boolean(isLoading));
   const [quickFilter, setQuickFilter] = useState<'ALL' | 'WEEK' | 'MONTH'>('ALL');
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+
+  const closeEditModal = useCallback(() => setEditingEntryId(null), []);
 
   useEffect(() => {
     let mounted = true;
@@ -660,7 +700,7 @@ const HistoryScreen = () => {
       <EditTransactionModal
         visible={!!editingEntryId}
         entryId={editingEntryId}
-        onClose={() => setEditingEntryId(null)}
+        onClose={closeEditModal}
         onSave={handleSaveEdit}
       />
     </SafeAreaView>

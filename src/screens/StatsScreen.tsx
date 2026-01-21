@@ -12,7 +12,6 @@ import {
   InteractionManager,
   PixelRatio,
   Platform,
-  UIManager,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@rneui/themed';
@@ -33,12 +32,9 @@ import { getSession } from '../db/session';
 import { subscribeSession } from '../utils/sessionEvents';
 import { executeSqlAsync } from '../db/sqlite';
 import { subscribeSyncStatus } from '../services/syncManager';
+import { enableLegacyLayoutAnimations } from '../utils/layoutAnimation';
 
-if (Platform.OS === 'android') {
-  if (UIManager.setLayoutAnimationEnabledExperimental) {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
-  }
-}
+enableLegacyLayoutAnimations();
 
 // --- CONSTANTS ---
 const FILTERS = ['Day', 'Week', '7 Days', '30 Days', 'This Month', 'This Year', 'All'];

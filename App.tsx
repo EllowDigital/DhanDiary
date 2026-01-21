@@ -8,7 +8,6 @@ import {
   AppState,
   AppStateStatus,
   Platform,
-  UIManager,
   InteractionManager,
   StyleSheet,
 } from 'react-native';
@@ -19,7 +18,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ClerkProvider, useUser } from '@clerk/clerk-expo';
 import Constants from 'expo-constants';
-import NetInfo from '@react-native-community/netinfo';
+import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 
 // --- Local Imports ---
 import SplashScreen from './src/screens/SplashScreen';
@@ -49,6 +48,7 @@ import tokenCache from './src/utils/tokenCache';
 import * as SecureStore from 'expo-secure-store';
 import { isUuid } from './src/utils/uuid';
 import { getBiometricEnabled } from './src/utils/biometricSettings';
+import AsyncStorage from './src/utils/AsyncStorageWrapper';
 import { getIsSigningOut } from './src/utils/authBoundary';
 import {
   getBiometricSessionState,
@@ -69,6 +69,7 @@ import {
   runBackgroundUpdateCheck,
   runBackgroundUpdateCheckWithResult,
 } from './src/services/backgroundUpdates';
+import { reloadOtaUpdate } from './src/services/backgroundUpdates';
 import * as Updates from 'expo-updates';
 
 // --- Configuration ---
@@ -80,15 +81,31 @@ LogBox.ignoreLogs([
 ]);
 
 // Enable LayoutAnimation
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+enableLegacyLayoutAnimations();
 
 // Environment Variables
-const CLERK_PUBLISHABLE_KEY =
+const CLERK_PUBLISHABLE_KEY = String(
   Constants.expoConfig?.extra?.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ||
-  process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ||
-  '';
+    process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ||
+    ''
+).trim();
+
+const devLogOnce = (key: string, payload: Record<string, unknown>) => {
+  if (!__DEV__) return;
+  const g = globalThis as typeof globalThis & { __DD_LOG_ONCE__?: Record<string, true> };
+  if (!g.__DD_LOG_ONCE__) g.__DD_LOG_ONCE__ = {};
+  if (g.__DD_LOG_ONCE__[key]) return;
+  g.__DD_LOG_ONCE__[key] = true;
+  console.info(key, payload);
+};
+
+devLogOnce('[auth] key', {
+  hasKey: Boolean(CLERK_PUBLISHABLE_KEY),
+  tail:
+    CLERK_PUBLISHABLE_KEY && CLERK_PUBLISHABLE_KEY.length >= 6
+      ? `...${CLERK_PUBLISHABLE_KEY.slice(-6)}`
+      : null,
+});
 
 // --- Navigation Stacks ---
 const RootStack = createNativeStackNavigator<RootStackParamList>();
@@ -118,15 +135,24 @@ const AppContent = () => {
   const [localSessionId, setLocalSessionId] = React.useState<string | null>(null);
   const [localSessionClerkId, setLocalSessionClerkId] = React.useState<string | null>(null);
   const [accountDeletedAt, setAccountDeletedAt] = React.useState<string | null>(null);
+  const userSyncBlockRef = React.useRef<{ clerkId: string; until: number } | null>(null);
+  const lastNetRef = React.useRef<{
+    isConnected?: boolean | null;
+    isInternetReachable?: boolean | null;
+    type?: string | null;
+  } | null>(null);
   const [isOnline, setIsOnline] = React.useState<boolean | null>(null);
   const { showActionToast } = useToast();
+  const prevClerkIdRef = React.useRef<string | null>(null);
 
   // --- Biometric session gate state ---
   const BIOMETRIC_KEY = 'BIOMETRIC_ENABLED'; // legacy fallback key (not used for new per-user storage)
   const BIOMETRIC_TIMEOUT_MS = 60 * 1000; // 30–60s per spec (keep 60s)
+  const BIOMETRIC_UNLOCK_KEY_PREFIX = 'BIOMETRIC_LAST_UNLOCK:';
   const [bioState, setBioState] = React.useState(() => getBiometricSessionState());
   const backgroundAtRef = React.useRef<number>(0);
   const appStateRef = React.useRef<AppStateStatus>(AppState.currentState);
+  const lastUnlockPersistedRef = React.useRef<number>(0);
 
   useEffect(() => {
     const unsub = subscribeBiometricSession((s) => setBioState(s));
@@ -137,28 +163,9 @@ const AppContent = () => {
     };
   }, []);
 
-  // Load persisted fallback session early so offline sync features work even when Clerk user
-  // isn't immediately available (e.g., cold start without internet).
+  // subscribe to session changes to keep localSessionId up-to-date
   useEffect(() => {
     let mounted = true;
-    (async () => {
-      try {
-        const s = await import('./src/db/session');
-        const sess = await s.getSession();
-        if (mounted) {
-          setLocalSessionId(sess?.id ?? null);
-          setLocalSessionClerkId((sess as any)?.clerk_id ? String((sess as any).clerk_id) : null);
-          try {
-            const del = await s.getAccountDeletedAt();
-            setAccountDeletedAt(del);
-          } catch (e) {}
-        }
-      } catch (e) {
-        if (__DEV__) console.warn('[AppContent] failed to load local session', e);
-      }
-    })();
-
-    // subscribe to session changes to keep localSessionId up-to-date
     let unsub: any = null;
     try {
       const se = require('./src/utils/sessionEvents');
@@ -188,13 +195,34 @@ const AppContent = () => {
   // when the device comes back online.
   useEffect(() => {
     let mounted = true;
+    const logNet = (state: NetInfoState) => {
+      if (!__DEV__) return;
+      const next = {
+        isConnected: state.isConnected,
+        isInternetReachable: state.isInternetReachable,
+        type: state.type,
+      };
+      const prev = lastNetRef.current;
+      if (
+        prev &&
+        prev.isConnected === next.isConnected &&
+        prev.isInternetReachable === next.isInternetReachable &&
+        prev.type === next.type
+      ) {
+        return;
+      }
+      lastNetRef.current = next;
+      console.info('[net] status', next);
+    };
     const unsub = NetInfo.addEventListener((state) => {
       if (!mounted) return;
       setIsOnline(!!state.isConnected);
+      logNet(state);
     });
     NetInfo.fetch()
       .then((state) => {
         if (mounted) setIsOnline(!!state.isConnected);
+        logNet(state);
       })
       .catch(() => {});
     return () => {
@@ -204,6 +232,32 @@ const AppContent = () => {
       } catch (e) {}
     };
   }, []);
+
+  // Session expired edge-case: if Clerk was signed in and becomes signed out unexpectedly,
+  // show a message before redirecting to login.
+  useEffect(() => {
+    if (!clerkLoaded) return;
+    if (__DEV__) {
+      console.info('[auth] Clerk loaded', { isSignedIn: Boolean(clerkUser?.id) });
+    }
+    const prev = prevClerkIdRef.current;
+    const next = clerkUser?.id ? String(clerkUser.id) : null;
+    prevClerkIdRef.current = next;
+
+    if (prev && !next) {
+      if (getIsSigningOut()) return;
+      // If we're definitely offline, don't force a logout UX.
+      if (isOnline === false) return;
+
+      showActionToast(
+        'Your session has expired. Please log in again.',
+        'Log in',
+        () => resetRoot({ index: 0, routes: [{ name: 'Auth' }] }),
+        'error',
+        8000
+      );
+    }
+  }, [clerkLoaded, clerkUser, isOnline, showActionToast]);
 
   // Load biometric enabled setting once, and refresh on foreground.
   const refreshBiometricEnabled = React.useCallback(async () => {
@@ -225,6 +279,31 @@ const AppContent = () => {
   useEffect(() => {
     void refreshBiometricEnabled();
   }, [refreshBiometricEnabled]);
+
+  // Restore biometric unlocked state on cold start if the user reopened quickly
+  // after a successful unlock (prevents a redundant prompt/overlay).
+  const restoreBiometricUnlock = React.useCallback(async () => {
+    try {
+      const uid = localSessionId || (user && isUuid(user.id) ? user.id : null);
+      if (!uid) return;
+
+      const enabled = await getBiometricEnabled(String(uid));
+      if (!enabled) return;
+
+      const key = `${BIOMETRIC_UNLOCK_KEY_PREFIX}${String(uid)}`;
+      const raw = await AsyncStorage.getItem(key);
+      const ts = raw ? Number(raw) : 0;
+      if (ts && Number.isFinite(ts) && Date.now() - ts < BIOMETRIC_TIMEOUT_MS) {
+        setBiometricUnlockedSession(true);
+      }
+    } catch (e) {
+      // best-effort only
+    }
+  }, [localSessionId, user]);
+
+  useEffect(() => {
+    void restoreBiometricUnlock();
+  }, [restoreBiometricUnlock]);
 
   const isAuthenticated = !!(user?.id || localSessionId);
   // Account switch boundary: Clerk id is authoritative when present.
@@ -281,8 +360,51 @@ const AppContent = () => {
     refreshBiometricEnabled,
   ]);
 
+  // Persist biometric unlock timestamp so quick relaunches don't re-prompt.
+  useEffect(() => {
+    const uid = localSessionId || (user && isUuid(user.id) ? user.id : null);
+    if (!uid) return;
+
+    const key = `${BIOMETRIC_UNLOCK_KEY_PREFIX}${String(uid)}`;
+
+    if (!bioState.isBiometricEnabled) {
+      lastUnlockPersistedRef.current = 0;
+      AsyncStorage.removeItem(key).catch(() => {});
+      return;
+    }
+
+    if (bioState.isBiometricUnlocked) {
+      const ts = bioState.lastUnlockTimestamp || Date.now();
+      if (ts && ts !== lastUnlockPersistedRef.current) {
+        lastUnlockPersistedRef.current = ts;
+        AsyncStorage.setItem(key, String(ts)).catch(() => {});
+      }
+    } else {
+      lastUnlockPersistedRef.current = 0;
+      AsyncStorage.removeItem(key).catch(() => {});
+    }
+  }, [
+    bioState.isBiometricEnabled,
+    bioState.isBiometricUnlocked,
+    bioState.lastUnlockTimestamp,
+    localSessionId,
+    user,
+  ]);
+
   const biometricLocked =
     bioState.isBiometricEnabled && isAuthenticated && !bioState.isBiometricUnlocked;
+
+  // Some native modules (network/update/sync) can be unstable during the OS biometric prompt
+  // on certain Android devices in release builds. Treat the biometric overlay as a hard gate:
+  // - do not run background sync/OTA checks while locked
+  // - wait a short moment after unlocking before kicking off deferred work
+  const biometricGateRef = React.useRef({ locked: biometricLocked, lastUnlockAt: 0 });
+  useEffect(() => {
+    biometricGateRef.current = {
+      locked: biometricLocked,
+      lastUnlockAt: bioState.lastUnlockTimestamp || 0,
+    };
+  }, [biometricLocked, bioState.lastUnlockTimestamp]);
 
   // Background OTA updates: fetch quietly, then show a toast to install.
   // - No banners
@@ -290,9 +412,19 @@ const AppContent = () => {
   useEffect(() => {
     let cancelled = false;
 
+    // Don't run while biometric gate is active.
+    if (biometricLocked) return;
+
     InteractionManager.runAfterInteractions(() => {
       (async () => {
         try {
+          // Avoid running during biometric prompt / immediately after unlock.
+          if (cancelled) return;
+          if (AppState.currentState !== 'active') return;
+          const gate = biometricGateRef.current;
+          if (gate.locked) return;
+          if (gate.lastUnlockAt && Date.now() - gate.lastUnlockAt < 1500) return;
+
           const res = await runBackgroundUpdateCheckWithResult();
           if (cancelled) return;
 
@@ -301,7 +433,7 @@ const AppContent = () => {
               'Update ready to install.',
               'Install',
               () => {
-                Updates.reloadAsync().catch(() => {});
+                reloadOtaUpdate().catch(() => {});
               },
               'info',
               8000
@@ -317,16 +449,23 @@ const AppContent = () => {
     return () => {
       cancelled = true;
     };
-  }, [showActionToast]);
+  }, [biometricLocked, showActionToast]);
 
   // 1. Setup Offline Sync Hook
+  // IMPORTANT: pause sync while biometric lock is active (release crash guard).
   // Prefer Clerk user id when available; otherwise use persisted local session id.
-  useOfflineSync(user?.id || localSessionId);
+  useOfflineSync(biometricLocked ? null : user?.id || localSessionId);
 
   // 2. Health Check (Neon)
   useEffect(() => {
+    // Avoid running during biometric prompt or immediately after unlock.
+    if (biometricLocked) return;
+    if (AppState.currentState !== 'active') return;
+    const gate = biometricGateRef.current;
+    if (gate.lastUnlockAt && Date.now() - gate.lastUnlockAt < 1500) return;
+
     checkNeonConnection().catch(() => {});
-  }, []);
+  }, [biometricLocked]);
 
   // 3. User Synchronization
   useEffect(() => {
@@ -334,6 +473,11 @@ const AppContent = () => {
     // Ensure this effect re-runs when connectivity changes (offline -> online).
     if (isOnline === false) return;
     if (getIsSigningOut()) return;
+
+    const block = userSyncBlockRef.current;
+    if (block && block.clerkId === String(clerkUser.id) && Date.now() < block.until) {
+      return;
+    }
 
     const syncUser = async () => {
       try {
@@ -425,12 +569,24 @@ const AppContent = () => {
           );
         }
       } catch (e) {
+        const msg = String((e as any)?.message || e || '');
+        if (msg.includes('Email is already linked to another account')) {
+          // Permanent identity conflict; avoid retrying on every connectivity/auth rerender.
+          userSyncBlockRef.current = {
+            clerkId: String(clerkUser.id),
+            until: Date.now() + 5 * 60 * 1000,
+          };
+        }
         console.warn('[App] User sync failed:', e);
       }
     };
 
     syncUser();
   }, [clerkLoaded, clerkUser, isOnline]);
+
+  const handleBiometricUnlocked = React.useCallback(() => {
+    setBiometricUnlockedSession(true);
+  }, []);
 
   return (
     <View style={{ flex: 1 }}>
@@ -448,9 +604,7 @@ const AppContent = () => {
         enabled={bioState.isBiometricEnabled && isAuthenticated}
         locked={biometricLocked}
         promptMessage="Unlock DhanDiary"
-        onUnlocked={() => {
-          setBiometricUnlockedSession(true);
-        }}
+        onUnlocked={handleBiometricUnlocked}
       />
 
       {/* no modal here: navigation handles account-deleted flow */}
@@ -524,7 +678,12 @@ function AppWithDb() {
     }
 
     startForegroundSyncScheduler(15000);
-    startBackgroundFetch().catch(() => {});
+    // Android background fetch can be a common source of force-closes depending on
+    // device/ROM/new-architecture/native module combinations. Keep the app stable
+    // by relying on foreground sync on Android.
+    if (Platform.OS !== 'android') {
+      startBackgroundFetch().catch(() => {});
+    }
 
     // Background Expo Updates: fetch quietly, apply on next restart.
     // Never block app launch.

@@ -12,9 +12,9 @@ import {
   StatusBar,
   Keyboard,
   LayoutAnimation,
-  UIManager,
   Switch,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Input, Button } from '@rneui/themed';
@@ -22,6 +22,8 @@ import MaterialIcon from '@expo/vector-icons/MaterialIcons';
 import { useAuth, useUser } from '@clerk/clerk-expo';
 import { useNavigation } from '@react-navigation/native';
 import * as LocalAuthentication from 'expo-local-authentication';
+import * as ImagePicker from 'expo-image-picker';
+import NetInfo from '@react-native-community/netinfo';
 
 import { getSession } from '../db/session';
 import { subscribeSession } from '../utils/sessionEvents';
@@ -31,13 +33,10 @@ import { colors } from '../utils/design';
 import ScreenHeader from '../components/ScreenHeader';
 import { deleteAccount } from '../services/auth';
 import UserAvatar from '../components/UserAvatar';
+import { enableLegacyLayoutAnimations } from '../utils/layoutAnimation';
+import { isNetOnline } from '../utils/netState';
 
-// Enable LayoutAnimation for Android
-if (Platform.OS === 'android') {
-  if (UIManager.setLayoutAnimationEnabledExperimental) {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
-  }
-}
+enableLegacyLayoutAnimations();
 
 // --- TYPES ---
 interface CardItem {
@@ -131,6 +130,7 @@ const AccountManagementScreen = () => {
   const [fallbackSession, setFallbackSession] = useState<any>(null);
   const navigation = useNavigation<any>();
   const { showToast } = useToast();
+  const [isOnline, setIsOnline] = useState<boolean | null>(null);
 
   // State
   const [activeCard, setActiveCard] = useState<string | null>(null);
@@ -152,6 +152,7 @@ const AccountManagementScreen = () => {
   // Loaders
   const [savingPasswordState, setSavingPasswordState] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [isUpdatingPhoto, setIsUpdatingPhoto] = useState(false);
 
   // Animation for Entrance
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -168,6 +169,31 @@ const AccountManagementScreen = () => {
     }).start();
 
     checkBiometrics();
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    NetInfo.fetch()
+      .then((s) => {
+        if (!mounted) return;
+        setIsOnline(isNetOnline(s));
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setIsOnline(null);
+      });
+
+    const unsub = NetInfo.addEventListener((s) => {
+      if (!mounted) return;
+      setIsOnline(isNetOnline(s));
+    });
+
+    return () => {
+      mounted = false;
+      try {
+        unsub();
+      } catch (e) {}
+    };
   }, []);
 
   useEffect(() => {
@@ -276,7 +302,139 @@ const AccountManagementScreen = () => {
     if (activeCard !== id) Keyboard.dismiss();
   };
 
+  const ensureOnline = (actionLabel: string) => {
+    if (isOnline === false) {
+      showToast(`${actionLabel} requires an internet connection.`, 'error');
+      return false;
+    }
+    if (isOnline === null) {
+      showToast('Checking connection. Please try again in a moment.', 'info');
+      return false;
+    }
+    return true;
+  };
+
+  const refreshConnectivity = async () => {
+    try {
+      const s = await NetInfo.fetch();
+      const onlineNow = isNetOnline(s);
+      setIsOnline(onlineNow);
+      showToast(onlineNow ? 'Back online' : 'Still offline', onlineNow ? 'success' : 'error');
+    } catch (e) {
+      showToast('Unable to check connection right now.', 'error');
+    }
+  };
+
+  const requestMediaLibraryPermission = async () => {
+    const current = await ImagePicker.getMediaLibraryPermissionsAsync();
+    if (current.status === ImagePicker.PermissionStatus.GRANTED) return true;
+
+    if (current.status === ImagePicker.PermissionStatus.DENIED && !current.canAskAgain) {
+      Alert.alert(
+        'Permission needed',
+        'Please enable photo library access in Settings to update your profile photo.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Open Settings',
+            onPress: async () => {
+              try {
+                await Linking.openSettings();
+              } catch (e) {
+                showToast('Unable to open Settings. Please enable permissions manually.', 'error');
+              }
+            },
+          },
+        ]
+      );
+      return false;
+    }
+
+    const askUser = await new Promise<boolean>((resolve) => {
+      Alert.alert(
+        'Allow Photo Access',
+        'DhanDiary needs access to your photo library so you can choose a profile picture.',
+        [
+          { text: 'Not now', style: 'cancel', onPress: () => resolve(false) },
+          { text: 'Continue', onPress: () => resolve(true) },
+        ],
+        { cancelable: true, onDismiss: () => resolve(false) }
+      );
+    });
+
+    if (askUser && current.canAskAgain) {
+      const next = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (next.status === ImagePicker.PermissionStatus.GRANTED) return true;
+    }
+
+    Alert.alert(
+      'Permission needed',
+      'Please enable photo library access in Settings to update your profile photo.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Open Settings',
+          onPress: async () => {
+            try {
+              await Linking.openSettings();
+            } catch (e) {
+              showToast('Unable to open Settings. Please enable permissions manually.', 'error');
+            }
+          },
+        },
+      ]
+    );
+
+    return false;
+  };
+
+  const handleChangeProfilePhoto = async () => {
+    if (isUpdatingPhoto) return;
+    if (!user) {
+      showToast('Please sign in to update your profile photo.', 'error');
+      return;
+    }
+
+    if (!ensureOnline('Updating your profile photo')) return;
+
+    try {
+      setIsUpdatingPhoto(true);
+
+      const hasPermission = await requestMediaLibraryPermission();
+      if (!hasPermission) return;
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaType.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.9,
+      });
+
+      if (result.canceled) return;
+
+      const asset = result.assets?.[0];
+      if (!asset?.uri) throw new Error('No image selected');
+
+      const response = await fetch(asset.uri);
+      if (!response.ok) throw new Error('Unable to read selected image');
+      const blob = await response.blob();
+
+      if (!blob || blob.size === 0) throw new Error('Selected image is empty');
+
+      await user.setProfileImage({ file: blob });
+      if (typeof (user as any).reload === 'function') await (user as any).reload();
+
+      showToast('Profile photo updated', 'success');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unexpected error';
+      showToast(`Failed to update profile photo: ${msg}`, 'error');
+    } finally {
+      setIsUpdatingPhoto(false);
+    }
+  };
+
   const handlePasswordSave = async () => {
+    if (!ensureOnline('Updating your password')) return;
     if (!newPass || !confirmPass)
       return Alert.alert('Missing Fields', 'Please fill in the new password fields.');
     if (newPass !== confirmPass) return Alert.alert('Mismatch', 'New passwords do not match');
@@ -314,6 +472,7 @@ const AccountManagementScreen = () => {
   };
 
   const handleDelete = async () => {
+    if (!ensureOnline('Deleting your account')) return;
     Alert.alert(
       'Delete Account?',
       'This action is irreversible. All your data will be permanently wiped.',
@@ -326,39 +485,15 @@ const AccountManagementScreen = () => {
             if (!user) return;
             setDeletingAccount(true);
             try {
-              // Try to delete Clerk user, but don't block local cleanup if it fails.
-              try {
-                if (typeof (user as any).delete === 'function') {
-                  await (user as any).delete();
-                }
-              } catch (clerkErr) {
-                console.warn(
-                  '[Account] Clerk user.delete() failed, continuing with local cleanup',
-                  clerkErr
-                );
-              }
-
-              // Ensure local cleanup runs even if Clerk deletion failed.
               console.info('[Account] deletion initiated', { userId: (user as any)?.id || null });
-              let deletionResult: any = {};
-              try {
-                deletionResult = await deleteAccount({ clerkUserId: (user as any)?.id });
-              } catch (localErr) {
-                console.warn('[Account] deleteAccount() failed', localErr);
-              }
+              const deletionResult = await deleteAccount({
+                clerkUserId: (user as any)?.id,
+                clerkUser: user,
+                strict: true,
+              });
               console.info('[Account] deletion completed', deletionResult || {});
 
-              // Re-initialize a fresh empty DB so the app resumes from a clean state
-              try {
-                const { initDB } = await import('../db/sqlite');
-                if (typeof initDB === 'function') {
-                  await initDB();
-                }
-              } catch (dbErr) {
-                console.warn('[Account] initDB after delete failed', dbErr);
-              }
-
-              showToast('Account deleted');
+              showToast('Account deleted', 'success');
               // Navigate via root navigation so nested stacks are targeted reliably
               try {
                 const { resetRoot } = await import('../utils/rootNavigation');
@@ -382,15 +517,11 @@ const AccountManagementScreen = () => {
             } catch (err: any) {
               // Catch-all: surface message but still attempt to navigate to Auth so app isn't left in broken state
               console.warn('[Account] unexpected error during delete flow', err);
-              try {
-                const { resetRoot } = await import('../utils/rootNavigation');
-                resetRoot({ index: 0, routes: [{ name: 'Auth' }] });
-              } catch (navErr) {
-                try {
-                  navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
-                } catch (e) {}
-              }
-              Alert.alert('Error', err?.message || 'Failed to delete account');
+              Alert.alert(
+                'Delete failed',
+                err?.message ||
+                  'We could not delete your account from the cloud. Please check your internet connection and try again.'
+              );
             } finally {
               setDeletingAccount(false);
             }
@@ -399,6 +530,92 @@ const AccountManagementScreen = () => {
       ]
     );
   };
+
+  if (isOnline === false) {
+    return (
+      <View style={styles.mainContainer}>
+        <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+        <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right'] as any}>
+          <ScreenHeader
+            title="Account"
+            subtitle="Offline"
+            showScrollHint={false}
+            useSafeAreaPadding={false}
+          />
+
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.offlineCard}>
+              <View style={styles.offlineIconCircle}>
+                <MaterialIcon name="wifi-off" size={28} color="#B91C1C" />
+              </View>
+              <Text style={styles.offlineTitle}>You are offline</Text>
+              <Text style={styles.offlineDesc}>
+                Account management (password, profile, deletion) requires an internet connection.
+              </Text>
+
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={styles.offlineBackBtn}
+                onPress={() => {
+                  try {
+                    navigation.goBack();
+                  } catch (e) {}
+                }}
+              >
+                <MaterialIcon name="arrow-back" size={18} color={colors.text || '#1E293B'} />
+                <Text style={styles.offlineBackText}>Go back</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={styles.offlineRetryBtn}
+                onPress={refreshConnectivity}
+              >
+                <MaterialIcon name="refresh" size={18} color="#FFFFFF" />
+                <Text style={styles.offlineRetryText}>Try again</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Allow local app security settings even while offline */}
+            {!isLoadingBiometrics && hasBiometricHardware && (
+              <ExpandableCard
+                item={{
+                  id: 'app_security',
+                  title: 'App Security',
+                  description: `Secure using ${biometricType}`,
+                  icon: 'fingerprint',
+                  bgColor: '#EFF6FF',
+                  iconColor: colors.primary || '#3B82F6',
+                }}
+                isExpanded={activeCard === 'app_security'}
+                onToggle={() => toggleCard('app_security')}
+              >
+                <View style={styles.switchRow}>
+                  <View style={{ flex: 1, paddingRight: 10 }}>
+                    <Text style={styles.switchLabel}>Enable {biometricType}</Text>
+                    <Text style={styles.switchDesc}>
+                      Require {biometricType} authentication to open the app.
+                    </Text>
+                  </View>
+                  <Switch
+                    value={biometricsEnabled}
+                    onValueChange={toggleBiometrics}
+                    trackColor={{ false: '#E2E8F0', true: colors.primary || '#3B82F6' }}
+                    thumbColor={'#fff'}
+                  />
+                </View>
+              </ExpandableCard>
+            )}
+
+            <View style={{ height: 100 }} />
+          </ScrollView>
+        </SafeAreaView>
+      </View>
+    );
+  }
 
   if (!isLoaded) {
     return (
@@ -429,6 +646,15 @@ const AccountManagementScreen = () => {
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
+            {isOnline === null && (
+              <View style={styles.connectionBanner}>
+                <MaterialIcon name="wifi" size={16} color={colors.primary || '#3B82F6'} />
+                <Text style={styles.connectionBannerText}>Checking connection…</Text>
+                <TouchableOpacity onPress={refreshConnectivity} style={styles.connectionBannerBtn}>
+                  <Text style={styles.connectionBannerBtnText}>Retry</Text>
+                </TouchableOpacity>
+              </View>
+            )}
             <Animated.View style={{ opacity: fadeAnim }}>
               {/* 1. HERO PROFILE ROW */}
               <View style={styles.heroRow}>
@@ -453,6 +679,7 @@ const AccountManagementScreen = () => {
                           size={48}
                           name={effectiveName || undefined}
                           imageUrl={effectiveImage}
+                          onPress={handleChangeProfilePhoto}
                         />
                         {fallbackSession && !user ? (
                           <View style={styles.localBadgeInline}>
@@ -495,6 +722,23 @@ const AccountManagementScreen = () => {
                       {hasPassword ? 'Password Secured' : 'Social Login'}
                     </Text>
                   </View>
+                  <TouchableOpacity
+                    style={[
+                      styles.changePhotoButton,
+                      isUpdatingPhoto && styles.changePhotoButtonDisabled,
+                    ]}
+                    activeOpacity={0.7}
+                    onPress={handleChangeProfilePhoto}
+                    disabled={isUpdatingPhoto || isOnline !== true}
+                  >
+                    {isUpdatingPhoto ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.changePhotoButtonText}>
+                        {isOnline === null ? 'Checking connection…' : 'Change Photo'}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
                 </View>
               </View>
 
@@ -664,6 +908,98 @@ const styles = StyleSheet.create({
     paddingTop: 10,
   },
 
+  offlineCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(185, 28, 28, 0.14)',
+    marginBottom: 18,
+  },
+  offlineIconCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#FEF2F2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(185, 28, 28, 0.12)',
+    marginBottom: 10,
+  },
+  offlineTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.text || '#1E293B',
+    marginBottom: 6,
+  },
+  offlineDesc: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.muted || '#64748B',
+    marginBottom: 14,
+  },
+  offlineBackBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    alignSelf: 'flex-start',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
+  },
+  offlineBackText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.text || '#1E293B',
+  },
+  offlineRetryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    alignSelf: 'flex-start',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: colors.primary || '#3B82F6',
+    marginTop: 10,
+  },
+  offlineRetryText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  connectionBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.2)',
+    marginBottom: 12,
+  },
+  connectionBannerText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.primary || '#3B82F6',
+  },
+  connectionBannerBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: colors.primary || '#3B82F6',
+  },
+  connectionBannerBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
   /* HERO ROW */
   heroRow: {
     flexDirection: 'row',
@@ -733,6 +1069,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.primary || '#3B82F6',
     fontWeight: '600',
+  },
+  changePhotoButton: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    backgroundColor: colors.primary || '#3B82F6',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  changePhotoButtonDisabled: {
+    opacity: 0.7,
+  },
+  changePhotoButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
 
   /* SECURITY TOGGLE */

@@ -23,27 +23,32 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import NetInfo from '@react-native-community/netinfo';
-import OfflineNotice from '../components/OfflineNotice';
 
 import { useToast } from '../context/ToastContext';
 
 // --- CUSTOM IMPORTS ---
 import { colors } from '../utils/design';
+import { isNetOnline } from '../utils/netState';
+import { AuthGateScreen } from '../components/AuthGateScreen';
+import { debugAuthError, isLikelyServiceDownError } from '../utils/serviceIssue';
 
 const ForgotPasswordScreen = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { signIn, isLoaded, setActive } = useSignIn();
   const insets = useSafeAreaInsets();
-  const { showToast } = useToast();
+  const { showToast, showActionToast } = useToast();
 
   // --- RESPONSIVE LAYOUT LOGIC ---
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
   const isTablet = width >= 600;
 
-  // "Card Layout" activates on Tablets or Landscape phones
-  const isCardLayout = isTablet || isLandscape;
+  // "Card Layout" activates on tablets or sufficiently-wide landscape.
+  // Avoid forcing card layout on compact landscape phones (cramped UI).
+  const isCardLayout = isTablet || (isLandscape && width >= 700);
+  const cardMaxWidth = Math.min(560, Math.max(480, width - 48));
+  const sheetMinHeight = Math.min(420, Math.max(240, Math.round(height * 0.55)));
 
   // --- STATE ---
   const [email, setEmail] = useState(route?.params?.email || '');
@@ -57,10 +62,10 @@ const ForgotPasswordScreen = () => {
   const [resendDisabled, setResendDisabled] = useState(false);
   const [countdown, setCountdown] = useState(0);
 
-  // Offline Handling
-  const [offlineVisible, setOfflineVisible] = useState(false);
-  const [offlineRetrying, setOfflineRetrying] = useState(false);
-  const [offlineAttemptsLeft, setOfflineAttemptsLeft] = useState<number | undefined>(undefined);
+  // Gate Handling (Password reset requires internet)
+  const [isOnline, setIsOnline] = useState<boolean | null>(null);
+  const [gate, setGate] = useState<null | 'offline' | 'service'>(null);
+  const [gateLoading, setGateLoading] = useState(false);
   const [lastOfflineAction, setLastOfflineAction] = useState<'request' | 'reset' | null>(null);
 
   // Animations
@@ -93,6 +98,85 @@ const ForgotPasswordScreen = () => {
 
   // --- LOGIC ---
 
+  useEffect(() => {
+    let mounted = true;
+
+    NetInfo.fetch()
+      .then((s) => {
+        if (!mounted) return;
+        const ok = isNetOnline(s);
+        setIsOnline(ok);
+        setGate((prev) => (!ok ? 'offline' : prev === 'offline' ? null : prev));
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setIsOnline(null);
+      });
+
+    const unsub = NetInfo.addEventListener((s) => {
+      if (!mounted) return;
+      const ok = isNetOnline(s);
+      setIsOnline(ok);
+      setGate((prev) => (!ok ? 'offline' : prev === 'offline' ? null : prev));
+    });
+
+    return () => {
+      mounted = false;
+      try {
+        unsub();
+      } catch (e) {}
+    };
+  }, []);
+
+  const retryGate = async () => {
+    setGateLoading(true);
+    try {
+      const net = await NetInfo.fetch();
+      const ok = isNetOnline(net);
+      setIsOnline(ok);
+      if (!ok) {
+        setGate('offline');
+        return;
+      }
+
+      setGate(null);
+
+      // Helpful: retry the last attempted action after connectivity returns.
+      if (lastOfflineAction === 'request') await onRequestReset();
+      else if (lastOfflineAction === 'reset') await onResetPassword();
+    } finally {
+      setGateLoading(false);
+    }
+  };
+
+  if (gate === 'offline') {
+    return (
+      <AuthGateScreen
+        variant="offline"
+        description="Password reset requires internet (Clerk)."
+        primaryLabel="Try Again"
+        onPrimary={retryGate}
+        secondaryLabel="Back to Sign In"
+        onSecondary={() => navigation.navigate('Login', { email })}
+        loading={gateLoading}
+      />
+    );
+  }
+
+  if (gate === 'service') {
+    return (
+      <AuthGateScreen
+        variant="service"
+        description="Sorry, we are facing some issue. Try again after some time."
+        primaryLabel="Try Again"
+        onPrimary={retryGate}
+        secondaryLabel="Back to Sign In"
+        onSecondary={() => navigation.navigate('Login', { email })}
+        loading={gateLoading}
+      />
+    );
+  }
+
   const getErrorMessage = (err: any) => {
     const clerkMessage = err?.errors?.[0]?.message;
     const message = clerkMessage || err?.message;
@@ -105,6 +189,28 @@ const ForgotPasswordScreen = () => {
 
     if (lower.includes('account not found') || lower.includes('password reset not supported')) {
       return 'We couldn’t start a password reset for that email. Double-check the address, or try signing in with the method you used when creating the account.';
+    }
+
+    return null;
+  };
+
+  const getFriendlyResetConfirmMessage = (err: any): string | null => {
+    const msg = getErrorMessage(err);
+    const lower = msg.toLowerCase();
+
+    if (
+      lower.includes('code') &&
+      (lower.includes('incorrect') || lower.includes('invalid') || lower.includes('expired'))
+    ) {
+      return 'That code is not valid anymore. Please request a new code and try again.';
+    }
+
+    if (lower.includes('password') && (lower.includes('weak') || lower.includes('too short'))) {
+      return 'Please choose a stronger password (at least 8 characters).';
+    }
+
+    if (lower.includes('too many') || lower.includes('rate limit')) {
+      return 'Too many attempts. Please wait a bit and try again.';
     }
 
     return null;
@@ -131,6 +237,18 @@ const ForgotPasswordScreen = () => {
     if (!isLoaded) return;
     if (!email) return Alert.alert('Missing Email', 'Please enter your email address.');
 
+    // Password reset requires internet.
+    try {
+      const net = await NetInfo.fetch();
+      if (!isNetOnline(net)) {
+        setLastOfflineAction('request');
+        setGate('offline');
+        return;
+      }
+    } catch (e) {
+      // allow flow to proceed if NetInfo fails
+    }
+
     setLoading(true);
     Keyboard.dismiss();
 
@@ -151,9 +269,12 @@ const ForgotPasswordScreen = () => {
       );
 
       if (!factor) {
-        showToast(
+        showActionToast(
           'We couldn’t start a password reset for that email. Double-check the address, or try signing in with the method you used when creating the account.',
-          'error'
+          'Try sign in',
+          () => navigation.navigate('Login', { email }),
+          'error',
+          8000
         );
         return;
       }
@@ -169,25 +290,42 @@ const ForgotPasswordScreen = () => {
       startCooldown(30);
       Alert.alert('Code Sent', `Check ${email} for your recovery code.`);
     } catch (err: any) {
+      debugAuthError('[ForgotPassword] reset request failed', err);
       const friendly = getFriendlyResetRequestMessage(err);
       if (friendly) {
-        showToast(friendly, 'error');
+        showActionToast(
+          friendly,
+          'Create account',
+          () => navigation.navigate('Register', { email }),
+          'info',
+          9000
+        );
         return;
       }
 
-      if (typeof __DEV__ !== 'undefined' && __DEV__) {
-        console.error('Reset request error:', err);
-      }
-      const msg = err.errors?.[0]?.message || err.message || 'Failed to send reset code.';
+      const msg = getErrorMessage(err) || 'Failed to send reset code.';
 
-      const net = await NetInfo.fetch();
-      if (!net.isConnected) {
-        setLastOfflineAction('request');
-        setOfflineAttemptsLeft(3);
-        setOfflineVisible(true);
+      try {
+        const net = await NetInfo.fetch();
+        if (!isNetOnline(net)) {
+          setLastOfflineAction('request');
+          setGate('offline');
+          return;
+        }
+      } catch (e) {}
+
+      if (isLikelyServiceDownError(err)) {
+        setGate('service');
         return;
       }
-      Alert.alert('Error', msg);
+
+      showToast(
+        typeof __DEV__ !== 'undefined' && __DEV__
+          ? msg
+          : 'We couldn’t send the reset code. Please try again.',
+        'error',
+        6000
+      );
     } finally {
       setLoading(false);
     }
@@ -199,6 +337,18 @@ const ForgotPasswordScreen = () => {
       return Alert.alert('Invalid Code', 'Please enter the 6-digit code.');
     if (!newPassword || newPassword.length < 8)
       return Alert.alert('Weak Password', 'Password must be at least 8 characters.');
+
+    // Password reset requires internet.
+    try {
+      const net = await NetInfo.fetch();
+      if (!isNetOnline(net)) {
+        setLastOfflineAction('reset');
+        setGate('offline');
+        return;
+      }
+    } catch (e) {
+      // allow flow to proceed if NetInfo fails
+    }
 
     setLoading(true);
     Keyboard.dismiss();
@@ -219,37 +369,43 @@ const ForgotPasswordScreen = () => {
         navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
       }
     } catch (err: any) {
-      console.error('Reset confirm error:', err);
-      const msg = err.errors?.[0]?.message || 'Failed to reset password.';
+      debugAuthError('[ForgotPassword] reset confirm failed', err);
 
-      const net = await NetInfo.fetch();
-      if (!net.isConnected) {
-        setLastOfflineAction('reset');
-        setOfflineAttemptsLeft(3);
-        setOfflineVisible(true);
+      const friendly = getFriendlyResetConfirmMessage(err);
+      if (friendly) {
+        showToast(friendly, 'error', 7000);
         return;
       }
-      Alert.alert('Error', msg);
+
+      const msg = getErrorMessage(err) || 'Failed to reset password.';
+
+      try {
+        const net = await NetInfo.fetch();
+        if (!isNetOnline(net)) {
+          setLastOfflineAction('reset');
+          setGate('offline');
+          return;
+        }
+      } catch (e) {}
+
+      if (isLikelyServiceDownError(err)) {
+        setGate('service');
+        return;
+      }
+
+      showToast(
+        typeof __DEV__ !== 'undefined' && __DEV__
+          ? msg
+          : 'Password reset failed. Please try again.',
+        'error',
+        6000
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  const offlineManualRetry = async () => {
-    setOfflineRetrying(true);
-    setOfflineAttemptsLeft((v) => (typeof v === 'number' ? Math.max(0, v - 1) : undefined));
-    try {
-      const net = await NetInfo.fetch();
-      if (net.isConnected) {
-        setOfflineVisible(false);
-        setOfflineRetrying(false);
-        if (lastOfflineAction === 'request') await onRequestReset();
-        else if (lastOfflineAction === 'reset') await onResetPassword();
-      }
-    } catch (e) {
-      setOfflineRetrying(false);
-    }
-  };
+  // Offline retry is handled by the full-screen gate.
 
   // --- SUB-COMPONENTS ---
 
@@ -424,7 +580,13 @@ const ForgotPasswordScreen = () => {
           >
             {/* Header / Back Button */}
             <View style={styles.header}>
-              <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+              <TouchableOpacity
+                onPress={() => {
+                  if (navigation.canGoBack()) navigation.goBack();
+                  else navigation.navigate('Login');
+                }}
+                style={styles.backBtn}
+              >
                 <Ionicons name="arrow-back" size={24} color="#0F172A" />
               </TouchableOpacity>
             </View>
@@ -435,6 +597,7 @@ const ForgotPasswordScreen = () => {
               <Animated.View
                 style={[
                   styles.cardContainer,
+                  { maxWidth: cardMaxWidth },
                   {
                     opacity: fadeAnim,
                     transform: [
@@ -462,6 +625,7 @@ const ForgotPasswordScreen = () => {
                 <Animated.View
                   style={[
                     styles.sheetContainer,
+                    { minHeight: sheetMinHeight, paddingBottom: Math.max(insets.bottom + 24, 40) },
                     { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
                   ]}
                 >
@@ -472,17 +636,6 @@ const ForgotPasswordScreen = () => {
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
-
-      <OfflineNotice
-        visible={offlineVisible}
-        retrying={offlineRetrying}
-        attemptsLeft={offlineAttemptsLeft}
-        onRetry={offlineManualRetry}
-        onClose={() => {
-          setOfflineVisible(false);
-          setOfflineRetrying(false);
-        }}
-      />
     </View>
   );
 };

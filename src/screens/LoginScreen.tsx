@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -16,27 +15,39 @@ import {
   useWindowDimensions,
   Animated,
   Easing,
+  InteractionManager,
   Keyboard,
+  DevSettings,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSignIn, useOAuth, useUser, useAuth } from '@clerk/clerk-expo';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
+import * as Updates from 'expo-updates';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import NetInfo from '@react-native-community/netinfo';
+import Constants from 'expo-constants';
 
 // --- CUSTOM IMPORTS ---
 // Ensure these paths match your project structure
-import OfflineNotice from '../components/OfflineNotice';
 import { syncClerkUserToNeon } from '../services/clerkUserSync';
 import { saveSession } from '../db/session';
 import { warmNeonConnection } from '../services/auth';
 import { colors } from '../utils/design';
+import { validateEmail } from '../utils/emailValidation';
+import { useToast } from '../context/ToastContext';
+import { mapLoginErrorToUi, mapSocialLoginErrorToUi } from '../utils/authUi';
+import { isNetOnline } from '../utils/netState';
+import { debugAuthError, isLikelyServiceDownError } from '../utils/serviceIssue';
+import { getNeonHealth } from '../api/neonClient';
 
 // Warm up browser
 WebBrowser.maybeCompleteAuthSession();
+
+const GOOGLE_ICON = require('../../assets/google0-icon.png');
+const GITHUB_ICON = require('../../assets/github-icon.png');
 
 const useWarmUpBrowser = () => {
   useEffect(() => {
@@ -51,11 +62,15 @@ const LoginScreen = () => {
   useWarmUpBrowser();
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
+  const { showToast, showActionToast } = useToast();
+
+  const [didWaitForClerk, setDidWaitForClerk] = useState(false);
 
   // --- RESPONSIVE DIMENSIONS ---
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
   const isTablet = width >= 600; // Standard tablet breakpoint
+  const isWideLandscape = isLandscape && width >= 700;
 
   // Specific check for Tablet Portrait vs Phone Portrait
   const isTabletPortrait = isTablet && !isLandscape;
@@ -64,6 +79,18 @@ const LoginScreen = () => {
   const { signIn, setActive, isLoaded } = useSignIn();
   const { user: clerkUser, isLoaded: clerkLoaded } = useUser();
   const { isSignedIn } = useAuth();
+  const signInRef = useRef(signIn);
+  const setActiveRef = useRef(setActive);
+  const isLoadedRef = useRef(isLoaded);
+  useEffect(() => {
+    signInRef.current = signIn;
+    setActiveRef.current = setActive;
+    isLoadedRef.current = isLoaded;
+  }, [signIn, isLoaded]);
+  const hasClerkKey = Boolean(
+    Constants.expoConfig?.extra?.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ||
+    process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY
+  );
 
   // OAuth Strategies
   const { startOAuthFlow: startGoogleFlow } = useOAuth({ strategy: 'oauth_google' });
@@ -76,8 +103,20 @@ const LoginScreen = () => {
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
 
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [emailSuggestion, setEmailSuggestion] = useState<string | null>(null);
+  const [authInitPending, setAuthInitPending] = useState(false);
+
+  const inFlightRef = useRef(false);
+  const didShowRedirectRef = useRef(false);
+  const authInitToastRef = useRef(false);
+
   // Offline State
-  const [offlineVisible, setOfflineVisible] = useState(false);
+  const [isOnline, setIsOnline] = useState<boolean | null>(null);
+  const [gate, setGate] = useState<null | 'offline' | 'service'>(null);
+  const [gateLoading, setGateLoading] = useState(false);
 
   // --- ANIMATIONS ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -86,7 +125,36 @@ const LoginScreen = () => {
   // App State
   const isActiveRef = useRef(true);
 
+  const reloadApp = async () => {
+    try {
+      if (__DEV__) {
+        DevSettings.reload();
+        return;
+      }
+      await Updates.reloadAsync();
+    } catch (e) {
+      showToast('Unable to reload the app. Please restart manually.', 'error');
+    }
+  };
+
+  const ensureClerkReady = async () => {
+    if (isLoadedRef.current && signInRef.current) return true;
+    setAuthInitPending(true);
+    const start = Date.now();
+    while (Date.now() - start < 5000) {
+      await new Promise((r) => setTimeout(r, 200));
+      if (isLoadedRef.current && signInRef.current) break;
+    }
+    setAuthInitPending(false);
+    if (!isLoadedRef.current || !signInRef.current) {
+      if (!authInitToastRef.current) authInitToastRef.current = true;
+      return false;
+    }
+    return true;
+  };
+
   useEffect(() => {
+    const t = setTimeout(() => setDidWaitForClerk(true), 1500);
     const sub = AppState.addEventListener('change', (next) => {
       isActiveRef.current = next === 'active';
     });
@@ -105,9 +173,77 @@ const LoginScreen = () => {
       }),
     ]).start();
 
-    warmNeonConnection().catch(() => {});
-    return () => sub.remove();
+    warmNeonConnection({ soft: true, timeoutMs: 3000 }).catch(() => {});
+    return () => {
+      clearTimeout(t);
+      sub.remove();
+    };
   }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const handleState = (ok: boolean | null) => {
+      if (!mounted) return;
+      setIsOnline(ok);
+
+      if (ok === false) {
+        // If connectivity drops during an auth attempt, stop the spinner and show gate.
+        if (loading || inFlightRef.current) {
+          setLoading(false);
+          inFlightRef.current = false;
+          showToast('Connection lost. Please try again.', 'error', 3500);
+        }
+        setGate('offline');
+        return;
+      }
+
+      // Restore from offline gate when back online.
+      setGate((prev) => (prev === 'offline' ? null : prev));
+    };
+
+    NetInfo.fetch()
+      .then((s) => handleState(isNetOnline(s)))
+      .catch(() => handleState(null));
+
+    const unsub = NetInfo.addEventListener((s) => handleState(isNetOnline(s)));
+
+    return () => {
+      mounted = false;
+      try {
+        unsub();
+      } catch (e) {}
+    };
+  }, [loading, showToast]);
+
+  const retryGate = async () => {
+    setGateLoading(true);
+    try {
+      const net = await NetInfo.fetch();
+      const ok = isNetOnline(net);
+      setIsOnline(ok);
+      if (!ok) {
+        setGate('offline');
+        return;
+      }
+
+      // If Neon is configured in this build, ensure it's reachable.
+      try {
+        const health = getNeonHealth();
+        if (health.isConfigured) {
+          const warmed = await warmNeonConnection({ force: true, timeoutMs: 3000, soft: true });
+          if (!warmed) {
+            setGate('service');
+            return;
+          }
+        }
+      } catch (e) {}
+
+      setGate(null);
+    } finally {
+      setGateLoading(false);
+    }
+  };
 
   // --- AUTO SYNC LOGIC ---
   useEffect(() => {
@@ -169,64 +305,289 @@ const LoginScreen = () => {
 
     setSyncing(false);
     setLoading(false);
+    if (!didShowRedirectRef.current) {
+      didShowRedirectRef.current = true;
+      showToast('Signed in successfully. Redirecting…', 'success', 2500);
+    }
     navigation.reset({ index: 0, routes: [{ name: 'Announcement' }] });
   };
 
   const onSignInPress = async () => {
-    if (!isLoaded || !email || !password) return;
+    const ready = await ensureClerkReady();
+    if (!ready) return;
+    if (loading || inFlightRef.current) return;
+
+    // Sign-in requires internet (Clerk + Neon).
+    try {
+      const net = await NetInfo.fetch();
+      if (!isNetOnline(net)) {
+        setGate('offline');
+        setLoading(false);
+        return;
+      }
+    } catch (e) {
+      // If we can't determine connectivity, allow the request to proceed and fail gracefully.
+    }
+
+    // If Neon is configured, fail fast with a friendly screen when DB is down.
+    try {
+      const health = getNeonHealth();
+      if (health.isConfigured) {
+        const warmed = await warmNeonConnection({ force: true, timeoutMs: 3000, soft: true });
+        if (!warmed) {
+          setGate('service');
+          setLoading(false);
+          return;
+        }
+      }
+    } catch (e) {
+      // If warm-up logic throws, treat as service issue.
+      setGate('service');
+      setLoading(false);
+      return;
+    }
+
+    setEmailError(null);
+    setPasswordError(null);
+    setFormError(null);
+
+    const v = validateEmail(email);
+    if (!v.isValidFormat) {
+      setEmailError('Please enter a valid email address.');
+      return;
+    }
+    if (!v.isSupportedDomain) {
+      setEmailError('This email domain is not supported. Please use a valid email provider.');
+      return;
+    }
+    if (!password) {
+      setPasswordError('Please enter your password.');
+      return;
+    }
+
     setLoading(true);
+    inFlightRef.current = true;
     Keyboard.dismiss();
 
     try {
-      const result = await signIn.create({ identifier: email, password });
+      const signInClient = signInRef.current;
+      if (!signInClient) {
+        throw new Error('Auth is not ready yet. Please try again.');
+      }
+      const result = await signInClient.create({ identifier: v.normalized, password });
       if (result.status === 'complete') {
-        await setActive({ session: result.createdSessionId });
+        const setActiveFn = setActiveRef.current;
+        if (!setActiveFn) {
+          throw new Error('Auth session could not be activated. Please try again.');
+        }
+        await setActiveFn({ session: result.createdSessionId });
+        showToast('Welcome back! Signed in successfully.', 'success', 2500);
       } else {
-        Alert.alert('Verification', 'Please check your email for verification.');
+        // Requires verification (email code flow)
+        const factor = (result as any)?.supportedFirstFactors?.find(
+          (f: any) => f?.strategy === 'email_code' && f?.safeIdentifier === v.normalized
+        );
+        showToast('Please verify your email before logging in.', 'info', 3500);
+        navigation.navigate('VerifyEmail', {
+          email: v.normalized,
+          mode: 'signin',
+          emailAddressId: factor?.emailAddressId,
+        });
         setLoading(false);
       }
     } catch (err: any) {
       handleLoginError(err);
+    } finally {
+      inFlightRef.current = false;
     }
   };
 
   const handleLoginError = async (err: any) => {
-    const code = err.errors?.[0]?.code;
-    const msg = err.errors?.[0]?.message || 'Invalid credentials.';
+    debugAuthError('[Login] sign-in failed', err);
     const net = await NetInfo.fetch();
-    if (!net.isConnected) {
-      setOfflineVisible(true);
+    if (!isNetOnline(net)) {
+      setGate('offline');
       setLoading(false);
       return;
     }
-    if (code === 'strategy_for_user_invalid') {
-      Alert.alert('Social Login Required', 'Please use Google or GitHub to sign in.');
-    } else if (code === 'form_identifier_not_found') {
-      Alert.alert('Account Not Found', 'Please create an account first.');
-    } else {
-      Alert.alert('Login Failed', msg);
+
+    // Online but upstream failing
+    if (isLikelyServiceDownError(err)) {
+      setGate('service');
+      setLoading(false);
+      return;
     }
+
+    const ui = mapLoginErrorToUi(err);
+    if (ui.field === 'password') setPasswordError(ui.message);
+    else if (ui.field === 'email') setEmailError(ui.message);
+    else setFormError(ui.message);
+
+    if (ui.action?.type === 'go_register') {
+      showActionToast(
+        'Account not found. Please register first.',
+        'Register',
+        () => navigation.navigate('Register', { email: validateEmail(email).normalized }),
+        'info',
+        7000
+      );
+    } else if (ui.action?.type === 'go_verify_email') {
+      showActionToast(
+        'Please verify your email before logging in.',
+        'Verify',
+        () =>
+          navigation.navigate('VerifyEmail', {
+            email: validateEmail(email).normalized,
+            mode: 'signin',
+          }),
+        'info',
+        7000
+      );
+    }
+
     setLoading(false);
   };
 
   const onSocialLogin = async (strategy: 'google' | 'github') => {
-    if (!isLoaded || loading) return;
+    const ready = await ensureClerkReady();
+    if (!ready) return;
+    if (loading || inFlightRef.current) return;
     if (Platform.OS === 'android' && !isActiveRef.current) return;
-    setLoading(true);
+
+    // OAuth requires internet.
     try {
-      const startFlow = strategy === 'google' ? startGoogleFlow : startGithubFlow;
-      const { createdSessionId, setActive: setSession } = await startFlow({
-        redirectUrl: AuthSession.makeRedirectUri({ scheme: 'dhandiary', path: 'oauth-callback' }),
-      });
-      if (createdSessionId && setSession) {
-        await setSession({ session: createdSessionId });
-      } else {
+      const net = await NetInfo.fetch();
+      if (!isNetOnline(net)) {
+        setGate('offline');
         setLoading(false);
+        return;
+      }
+    } catch (e) {
+      // allow flow to proceed if NetInfo fails
+    }
+
+    setLoading(true);
+    inFlightRef.current = true;
+    Keyboard.dismiss();
+    try {
+      // On Android, launching the Custom Tab while the Activity is transitioning
+      // can fail with "current activity is no longer available".
+      if (Platform.OS === 'android') {
+        await new Promise<void>((resolve) =>
+          InteractionManager.runAfterInteractions(() => resolve())
+        );
+        if (!isActiveRef.current) {
+          setLoading(false);
+          return;
+        }
+      }
+
+      const startFlow = strategy === 'google' ? startGoogleFlow : startGithubFlow;
+      const scheme =
+        (Constants.expoConfig as any)?.scheme ||
+        (Constants.expoConfig as any)?.android?.scheme ||
+        'dhandiary';
+      const res: any = await startFlow({
+        // Keep a stable native redirect URL for dev builds and production builds.
+        // Ensure this matches the redirect URL configured in your Clerk OAuth settings.
+        redirectUrl: AuthSession.makeRedirectUri({ scheme, path: 'oauth-callback' }),
+      });
+      const createdSessionId = res?.createdSessionId;
+      const setSession = res?.setActive;
+
+      const authSessionType = String(res?.authSessionResult?.type || '').toLowerCase();
+      const isCancelled = authSessionType === 'cancel' || authSessionType === 'dismiss';
+      if (isCancelled || !createdSessionId || !setSession) {
+        // User cancelled/closed the browser, or Clerk didn't finish creating a session.
+        // Do not show a success message.
+        if (isCancelled) {
+          showToast('Login cancelled.', 'info', 2500);
+        } else {
+          showToast("Couldn't complete login. Please try again.", 'error', 4000);
+        }
+        setLoading(false);
+        return;
+      }
+
+      await setSession({ session: createdSessionId });
+
+      // Best-effort heuristic: if Clerk provided a SignUp resource with createdUserId, treat as first-time.
+      const createdUserId = res?.signUp?.createdUserId || res?.signUp?.createdUser?.id || null;
+      if (createdUserId) {
+        showToast(
+          `Account created successfully using ${strategy === 'google' ? 'Google' : 'GitHub'}.`,
+          'success',
+          3000
+        );
+      } else {
+        showToast('Welcome back! Signed in successfully.', 'success', 2500);
       }
     } catch (err: any) {
-      if (!err.message?.includes('cancelled')) Alert.alert('Error', 'Social login failed.');
+      const msg = String(err?.message || '');
+      if (msg.toLowerCase().includes('current activity is no longer available')) {
+        console.warn(`[Login] OAuth failed (${strategy}): activity unavailable`, err);
+        showToast('Please try again. (App was busy switching screens)', 'info', 4000);
+        setLoading(false);
+        return;
+      }
+
+      debugAuthError(`[Login] OAuth failed (${strategy})`, err);
+      const ui = mapSocialLoginErrorToUi(err);
+      if (ui) {
+        const lower = ui.message.toLowerCase();
+        const type = lower.includes('please log in using email') ? 'info' : 'error';
+        showToast(ui.message, type, 6000);
+      }
+
+      try {
+        const net = await NetInfo.fetch();
+        if (isNetOnline(net) && isLikelyServiceDownError(err)) {
+          setGate('service');
+        }
+      } catch (e) {}
       setLoading(false);
+    } finally {
+      inFlightRef.current = false;
     }
+  };
+
+  const renderGateBanner = () => {
+    if (!gate) return null;
+
+    const isOffline = gate === 'offline';
+    const title = isOffline ? 'You are offline' : 'Service issue';
+    const description = isOffline
+      ? 'Sign in needs internet. We will keep retrying in background.'
+      : 'We are facing issues. We will keep retrying in background.';
+
+    return (
+      <View
+        style={[styles.gateBanner, isOffline ? styles.gateBannerOffline : styles.gateBannerService]}
+      >
+        <View style={styles.gateBannerLeft}>
+          <Ionicons
+            name={isOffline ? 'cloud-offline-outline' : 'alert-circle-outline'}
+            size={18}
+            color={isOffline ? '#9A3412' : '#9F1239'}
+          />
+          <View style={styles.gateBannerTextWrap}>
+            <Text style={styles.gateBannerTitle}>{title}</Text>
+            <Text style={styles.gateBannerText}>{description}</Text>
+          </View>
+        </View>
+        <TouchableOpacity
+          onPress={retryGate}
+          disabled={gateLoading}
+          style={styles.gateBannerAction}
+        >
+          {gateLoading ? (
+            <ActivityIndicator size="small" color="#2563EB" />
+          ) : (
+            <Text style={styles.gateBannerActionText}>Retry</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    );
   };
 
   const renderBrand = () => (
@@ -265,7 +626,7 @@ const LoginScreen = () => {
 
   // 1. Determine Content Container Style for ScrollView
   let contentContainerStyle;
-  if (isLandscape) {
+  if (isWideLandscape) {
     contentContainerStyle = styles.rowContentContainer; // Split View
   } else if (isTabletPortrait) {
     contentContainerStyle = styles.centerContentContainer; // Centered Card
@@ -276,7 +637,7 @@ const LoginScreen = () => {
   // 2. Determine Wrapper Style (Positioning of Brand vs Form)
   let brandWrapperStyle, formWrapperStyle;
 
-  if (isLandscape) {
+  if (isWideLandscape) {
     // Landscape: Side by Side
     brandWrapperStyle = styles.brandWrapperSplit;
     formWrapperStyle = styles.formWrapperSplit;
@@ -286,14 +647,17 @@ const LoginScreen = () => {
     formWrapperStyle = styles.formWrapperCenter;
   } else {
     // Phone Portrait: Stacked, Brand Top, Form Bottom
-    brandWrapperStyle = styles.brandWrapperStacked;
+    const brandTop = isLandscape ? 24 : height < 700 ? 40 : 60;
+    brandWrapperStyle = [styles.brandWrapperStacked, { marginTop: brandTop }];
     formWrapperStyle = styles.formWrapperBottom;
   }
 
   // 3. Card Styling (Borders & Widths)
   // On Tablet (Portrait or Landscape), we want a "Card" look (all corners rounded).
   // On Phone Portrait, we want a "Sheet" look (top corners rounded only).
-  const isCardStyle = isTablet || isLandscape;
+  const isCardStyle = isTablet || isWideLandscape;
+  const rowPaddingX = Math.min(60, Math.max(24, Math.round(width * 0.06)));
+  const rowPaddingY = Math.min(40, Math.max(24, Math.round(height * 0.06)));
 
   return (
     <View style={styles.container}>
@@ -313,7 +677,13 @@ const LoginScreen = () => {
           keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
         >
           <ScrollView
-            contentContainerStyle={[styles.scrollBase, contentContainerStyle]}
+            contentContainerStyle={[
+              styles.scrollBase,
+              contentContainerStyle,
+              isWideLandscape
+                ? { paddingHorizontal: rowPaddingX, paddingVertical: rowPaddingY }
+                : null,
+            ]}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
@@ -347,6 +717,29 @@ const LoginScreen = () => {
                 <Text style={styles.welcomeText}>Welcome Back!</Text>
                 <Text style={styles.promptText}>Please sign in to continue</Text>
 
+                {renderGateBanner()}
+
+                {!isLoaded && hasClerkKey && (
+                  <View style={styles.configBanner}>
+                    <ActivityIndicator size="small" color="#B45309" />
+                    <Text style={styles.configBannerText}>
+                      Auth is initializing. Please wait a moment.
+                    </Text>
+                    <TouchableOpacity onPress={reloadApp} style={styles.configBannerAction}>
+                      <Text style={styles.configBannerActionText}>Reload</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {didWaitForClerk && !isLoaded && !hasClerkKey && (
+                  <View style={styles.configBanner}>
+                    <Ionicons name="warning-outline" size={16} color="#B45309" />
+                    <Text style={styles.configBannerText}>
+                      Auth is not configured. Set EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY and rebuild.
+                    </Text>
+                  </View>
+                )}
+
                 <View style={styles.inputGroup}>
                   <View style={styles.inputContainer}>
                     <Ionicons name="mail" size={20} color={colors.muted} style={styles.inputIcon} />
@@ -355,11 +748,34 @@ const LoginScreen = () => {
                       placeholder="Email Address"
                       placeholderTextColor="#94A3B8"
                       value={email}
-                      onChangeText={setEmail}
+                      onChangeText={(t) => {
+                        const v = validateEmail(t);
+                        setEmail(v.normalized);
+                        setEmailSuggestion(v.suggestion || null);
+                        setEmailError(null);
+                        setFormError(null);
+                      }}
                       autoCapitalize="none"
                       keyboardType="email-address"
                     />
                   </View>
+
+                  {(emailError || emailSuggestion) && (
+                    <View style={{ marginTop: 6 }}>
+                      {!!emailError && <Text style={styles.fieldError}>{emailError}</Text>}
+                      {!!emailSuggestion && (
+                        <TouchableOpacity
+                          onPress={() => {
+                            setEmail(emailSuggestion);
+                            setEmailSuggestion(null);
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.suggestionText}>Did you mean {emailSuggestion}?</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
 
                   <View style={styles.inputContainer}>
                     <Ionicons
@@ -373,7 +789,11 @@ const LoginScreen = () => {
                       placeholder="Password"
                       placeholderTextColor="#94A3B8"
                       value={password}
-                      onChangeText={setPassword}
+                      onChangeText={(t) => {
+                        setPassword(t);
+                        setPasswordError(null);
+                        setFormError(null);
+                      }}
                       secureTextEntry={!showPassword}
                       autoCapitalize="none"
                     />
@@ -384,19 +804,29 @@ const LoginScreen = () => {
                       <Ionicons name={showPassword ? 'eye' : 'eye-off'} size={20} color="#94A3B8" />
                     </TouchableOpacity>
                   </View>
+
+                  {!!passwordError && <Text style={styles.fieldError}>{passwordError}</Text>}
                 </View>
 
                 <TouchableOpacity
                   style={[styles.primaryBtn, loading && styles.disabledBtn]}
                   onPress={onSignInPress}
-                  disabled={loading}
+                  disabled={
+                    loading ||
+                    authInitPending ||
+                    !password ||
+                    !validateEmail(email).isValidFormat ||
+                    !validateEmail(email).isSupportedDomain
+                  }
                 >
-                  {loading ? (
+                  {loading || authInitPending ? (
                     <ActivityIndicator color="#fff" />
                   ) : (
                     <Text style={styles.primaryBtnText}>Sign In</Text>
                   )}
                 </TouchableOpacity>
+
+                {!!formError && <Text style={styles.formError}>{formError}</Text>}
 
                 <TouchableOpacity
                   style={styles.forgotBtn}
@@ -414,13 +844,15 @@ const LoginScreen = () => {
                 <View style={styles.socialRow}>
                   <SocialButton
                     label="Google"
-                    icon="https://cdn-icons-png.flaticon.com/512/300/300221.png"
+                    imageSource={GOOGLE_ICON}
                     onPress={() => onSocialLogin('google')}
+                    disabled={loading || authInitPending}
                   />
                   <SocialButton
                     label="GitHub"
-                    icon="https://cdn-icons-png.flaticon.com/512/25/25231.png"
+                    imageSource={GITHUB_ICON}
                     onPress={() => onSocialLogin('github')}
+                    disabled={loading || authInitPending}
                   />
                 </View>
 
@@ -436,18 +868,6 @@ const LoginScreen = () => {
         </KeyboardAvoidingView>
       </SafeAreaView>
 
-      <OfflineNotice
-        visible={offlineVisible}
-        onRetry={() => {
-          setOfflineVisible(false);
-          setLoading(true);
-          onSignInPress();
-        }}
-        onClose={() => setOfflineVisible(false)}
-        retrying={false}
-        attemptsLeft={undefined}
-      />
-
       {syncing && (
         <View style={styles.overlay}>
           <View style={styles.syncBox}>
@@ -460,10 +880,23 @@ const LoginScreen = () => {
   );
 };
 
-const SocialButton = ({ label, icon, onPress }: any) => (
-  <TouchableOpacity style={styles.socialBtn} onPress={onPress}>
-    <Image source={{ uri: icon }} style={styles.socialIcon} resizeMode="contain" />
-    <Text style={styles.socialBtnText}>{label}</Text>
+const SocialButton = ({ label, iconName, imageSource, onPress, disabled }: any) => (
+  <TouchableOpacity
+    style={[styles.socialBtn, disabled && styles.disabledBtn]}
+    onPress={onPress}
+    disabled={disabled}
+    activeOpacity={0.8}
+  >
+    {imageSource ? (
+      <Image
+        source={imageSource}
+        style={[styles.socialIcon, disabled && { opacity: 0.55 }]}
+        resizeMode="contain"
+      />
+    ) : (
+      <Ionicons name={iconName} size={18} color={disabled ? '#94A3B8' : '#0F172A'} />
+    )}
+    <Text style={[styles.socialBtnText, disabled && { color: '#94A3B8' }]}>{label}</Text>
   </TouchableOpacity>
 );
 
@@ -519,6 +952,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center', // Centers in middle (Tablet)
   },
+
+  fieldError: {
+    color: '#B91C1C',
+    fontSize: 13,
+    marginTop: 6,
+    marginLeft: 4,
+  },
+  formError: {
+    color: '#B91C1C',
+    fontSize: 13,
+    marginTop: 12,
+    textAlign: 'center',
+  },
+  suggestionText: {
+    color: '#1D4ED8',
+    fontSize: 13,
+    marginTop: 6,
+    marginLeft: 4,
+  },
   formWrapperSplit: {
     flex: 1,
     alignItems: 'center',
@@ -569,6 +1021,62 @@ const styles = StyleSheet.create({
   },
   welcomeText: { fontSize: 24, fontWeight: '700', color: '#0F172A', marginBottom: 8 },
   promptText: { fontSize: 14, color: '#64748B', marginBottom: 24 },
+
+  configBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    marginBottom: 16,
+  },
+  configBannerText: { flex: 1, color: '#92400E', fontSize: 12, fontWeight: '600' },
+
+  gateBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 16,
+    gap: 12,
+  },
+  gateBannerOffline: {
+    backgroundColor: '#FFF7ED',
+    borderColor: '#FDBA74',
+  },
+  gateBannerService: {
+    backgroundColor: '#FFF1F2',
+    borderColor: '#FDA4AF',
+    configBannerAction: {
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 8,
+      backgroundColor: '#F59E0B',
+    },
+    configBannerActionText: {
+      color: '#fff',
+      fontSize: 12,
+      fontWeight: '700',
+    },
+  },
+  gateBannerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
+  gateBannerTextWrap: { flex: 1 },
+  gateBannerTitle: { color: '#0F172A', fontSize: 13, fontWeight: '700' },
+  gateBannerText: { color: '#475569', fontSize: 12, marginTop: 2 },
+  gateBannerAction: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: '#E0E7FF',
+  },
+  gateBannerActionText: { color: '#1D4ED8', fontSize: 12, fontWeight: '700' },
 
   inputGroup: { gap: 16, marginBottom: 24 },
   inputContainer: {

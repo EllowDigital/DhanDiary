@@ -8,6 +8,7 @@ import {
   StatusBar,
   useWindowDimensions,
   Easing,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcon from '@expo/vector-icons/MaterialIcons';
@@ -24,6 +25,7 @@ import {
   shouldShowCurrentAnnouncement,
   getCurrentAnnouncementAsync,
 } from '../announcements/announcementState';
+import { fetchOtaUpdate, reloadOtaUpdate } from '../services/backgroundUpdates';
 
 const ENTRY_DURATION = 600;
 const EXIT_DURATION = 400;
@@ -37,6 +39,9 @@ const AnnouncementScreen = () => {
   const [isDismissing, setIsDismissing] = useState(false);
   const [isApplyingUpdate, setIsApplyingUpdate] = useState(false);
   const [announcement, setAnnouncement] = useState<AnnouncementConfig | null>(null);
+  const hasNavigatedRef = useRef(false);
+  const readyRef = useRef(false);
+  const announcementRef = useRef<AnnouncementConfig | null>(null);
 
   // Animation Values
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -47,6 +52,8 @@ const AnnouncementScreen = () => {
   const autoHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const goToMain = () => {
+    if (hasNavigatedRef.current) return;
+    hasNavigatedRef.current = true;
     navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
   };
 
@@ -77,7 +84,11 @@ const AnnouncementScreen = () => {
         useNativeDriver: true,
       }),
     ]).start(async () => {
-      await markCurrentAnnouncementSeen();
+      try {
+        await markCurrentAnnouncementSeen();
+      } catch (e) {
+        // ignore
+      }
       goToMain();
     });
   };
@@ -87,11 +98,13 @@ const AnnouncementScreen = () => {
     setIsApplyingUpdate(true);
 
     try {
-      await markCurrentAnnouncementSeen();
       if (Updates.isEnabled) {
-        await Updates.fetchUpdateAsync();
-        await Updates.reloadAsync();
-        return;
+        const fetched = await fetchOtaUpdate();
+        if (fetched) {
+          await markCurrentAnnouncementSeen();
+          await reloadOtaUpdate();
+          return;
+        }
       }
     } catch (e) {
       // Fallback
@@ -104,54 +117,67 @@ const AnnouncementScreen = () => {
   // --- LIFECYCLE ---
   useEffect(() => {
     let mounted = true;
+    const fallbackTimer = setTimeout(() => {
+      if (!mounted) return;
+      if (!readyRef.current || !announcementRef.current) {
+        goToMain();
+      }
+    }, 5000);
 
     const init = async () => {
-      const current = await getCurrentAnnouncementAsync();
-      if (!mounted) return;
+      try {
+        const current = await getCurrentAnnouncementAsync();
+        if (!mounted) return;
 
-      if (!current) {
+        if (!current) {
+          goToMain();
+          return;
+        }
+
+        const shouldShow = await shouldShowCurrentAnnouncement();
+        if (!mounted) return;
+
+        if (!shouldShow) {
+          goToMain();
+          return;
+        }
+
+        announcementRef.current = current;
+        readyRef.current = true;
+        setAnnouncement(current);
+        setReadyToShow(true);
+
+        // Entrance Animation
+        Animated.parallel([
+          Animated.timing(fadeAnim, {
+            toValue: 1,
+            duration: ENTRY_DURATION,
+            useNativeDriver: true,
+            easing: Easing.out(Easing.cubic),
+          }),
+          Animated.spring(scaleAnim, {
+            toValue: 1,
+            friction: 7,
+            tension: 40,
+            useNativeDriver: true,
+          }),
+          Animated.spring(slideAnim, {
+            toValue: 0,
+            friction: 8,
+            tension: 50,
+            useNativeDriver: true,
+          }),
+        ]).start();
+
+        // Auto Hide Logic
+        if (current.autoHideMs && current.type !== 'critical') {
+          autoHideTimer.current = setTimeout(() => {
+            dismiss();
+          }, ENTRY_DURATION + current.autoHideMs);
+        }
+      } catch (e) {
+        // Fail safe: never block the user at the announcement gate.
         goToMain();
-        return;
-      }
-
-      const shouldShow = await shouldShowCurrentAnnouncement();
-      if (!mounted) return;
-
-      if (!shouldShow) {
-        goToMain();
-        return;
-      }
-
-      setAnnouncement(current);
-      setReadyToShow(true);
-
-      // Entrance Animation
-      Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: ENTRY_DURATION,
-          useNativeDriver: true,
-          easing: Easing.out(Easing.cubic),
-        }),
-        Animated.spring(scaleAnim, {
-          toValue: 1,
-          friction: 7,
-          tension: 40,
-          useNativeDriver: true,
-        }),
-        Animated.spring(slideAnim, {
-          toValue: 0,
-          friction: 8,
-          tension: 50,
-          useNativeDriver: true,
-        }),
-      ]).start();
-
-      // Auto Hide Logic
-      if (current.autoHideMs && current.type !== 'critical') {
-        autoHideTimer.current = setTimeout(() => {
-          dismiss();
-        }, ENTRY_DURATION + current.autoHideMs);
       }
     };
 
@@ -159,11 +185,20 @@ const AnnouncementScreen = () => {
 
     return () => {
       mounted = false;
+      clearTimeout(fallbackTimer);
       if (autoHideTimer.current) clearTimeout(autoHideTimer.current);
     };
   }, []);
 
-  if (!readyToShow || !announcement) return null;
+  if (!readyToShow || !announcement) {
+    return (
+      <View style={styles.loadingContainer}>
+        <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+        <ActivityIndicator size="large" color={colors.primary || '#2563EB'} />
+        <Text style={styles.loadingText}>Checking for updates...</Text>
+      </View>
+    );
+  }
 
   // Dynamic Styles
   const accentColor = announcement.accentColor || colors.primary || '#2563EB';
@@ -244,6 +279,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.5)', // Dimmed background
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#0F172A',
+  },
+  loadingText: {
+    marginTop: 12,
+    color: '#E2E8F0',
+    fontSize: 14,
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,

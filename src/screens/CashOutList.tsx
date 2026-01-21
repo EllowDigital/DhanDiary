@@ -11,7 +11,6 @@ import {
   LayoutAnimation,
   Alert,
   Platform,
-  UIManager,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, Button } from '@rneui/themed';
@@ -36,13 +35,9 @@ import {
 import { colors } from '../utils/design';
 import { getIconForCategory } from '../constants/categories';
 import { formatDate } from '../utils/date';
+import { enableLegacyLayoutAnimations } from '../utils/layoutAnimation';
 
-// Enable LayoutAnimation for Android
-if (Platform.OS === 'android') {
-  if (UIManager.setLayoutAnimationEnabledExperimental) {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
-  }
-}
+enableLegacyLayoutAnimations();
 
 // --- CONSTANTS ---
 const TIME_FILTERS = [

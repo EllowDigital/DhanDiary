@@ -119,7 +119,7 @@ export const useAuth = () => {
           setUser(session || null);
         }
       } catch (e) {
-        console.error(e);
+        if (__DEV__) console.warn('[useAuth] load failed', e);
       } finally {
         setLoading(false);
       }

@@ -34,7 +34,14 @@ try {
 
 // Logic
 import { performHardSignOut } from '../services/signOutFlow';
-import { syncBothWays, getLastSuccessfulSyncAt } from '../services/syncManager';
+import { isNetOnline } from '../utils/netState';
+import {
+  syncBothWays,
+  getLastSuccessfulSyncAt,
+  scheduleSync,
+  cancelSyncWork,
+  setSyncSuspended,
+} from '../services/syncManager';
 import NetInfo from '@react-native-community/netinfo';
 import { useNavigation } from '@react-navigation/native';
 import { useQueryClient } from '@tanstack/react-query';
@@ -44,6 +51,7 @@ import ScreenHeader from '../components/ScreenHeader';
 import { getNeonHealth } from '../api/neonClient';
 import appConfig from '../../app.json';
 import { wipeLocalData, initDB } from '../db/sqlite';
+import { tryShowNativeConfirm } from '../utils/nativeConfirm';
 
 // Safe Package Import for Version
 let pkg: { version?: string } = {};
@@ -83,7 +91,7 @@ const SettingsRow = ({
 const SettingsScreen = () => {
   const navigation = useNavigation<any>();
   const query = useQueryClient();
-  const { showToast } = useToast();
+  const { showToast, showActionToast } = useToast();
   const { signOut: clerkSignOut } = useClerkAuth();
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [scrollOffset, setScrollOffset] = useState(0);
@@ -217,45 +225,62 @@ const SettingsScreen = () => {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     if (isSigningOut) return;
-    Alert.alert('Sign Out', 'Are you sure you want to log out?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign Out',
-        style: 'destructive',
-        onPress: async () => {
-          if (isSigningOut) return;
-          setIsSigningOut(true);
-          try {
-            await performHardSignOut({
-              clerkSignOut: async () => {
-                await clerkSignOut();
-              },
-              navigateToAuth: () => {
-                try {
-                  const { resetRoot } = require('../utils/rootNavigation');
-                  resetRoot({ index: 0, routes: [{ name: 'Auth' }] });
-                } catch (e) {
-                  navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
-                }
-              },
-            });
 
+    // Sign-out must be done online so we can sync pending changes first.
+    try {
+      const net = await NetInfo.fetch();
+      if (!isNetOnline(net)) {
+        showToast('Please go online to sign out and sync your data to cloud.', 'info', 5000);
+        return;
+      }
+    } catch (e) {
+      // If NetInfo fails, allow the user to proceed.
+    }
+
+    const doSignOut = async () => {
+      if (isSigningOut) return;
+      setIsSigningOut(true);
+      try {
+        await performHardSignOut({
+          clerkSignOut: async () => {
+            await clerkSignOut();
+          },
+          navigateToAuth: () => {
             try {
-              query.clear();
-            } catch (e) {}
+              const { resetRoot } = require('../utils/rootNavigation');
+              resetRoot({ index: 0, routes: [{ name: 'Auth' }] });
+            } catch (e) {
+              navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
+            }
+          },
+        });
 
-            showToast('Signed out successfully');
-          } catch (e) {
-            console.warn('[Settings] logout failed', e);
-            showToast('Sign out failed. Please try again.', 'error');
-          } finally {
-            setIsSigningOut(false);
-          }
-        },
-      },
-    ]);
+        try {
+          query.clear();
+        } catch (e) {}
+
+        showToast('Signed out successfully');
+      } catch (e) {
+        console.warn('[Settings] logout failed', e);
+        showToast('Sign out failed. Please try again.', 'error');
+      } finally {
+        setIsSigningOut(false);
+      }
+    };
+
+    const usedNative = await tryShowNativeConfirm({
+      title: 'Sign Out',
+      message: 'Are you sure you want to log out?',
+      confirmText: 'Sign Out',
+      destructive: true,
+      onConfirm: doSignOut,
+    });
+
+    if (!usedNative) {
+      showActionToast('Sign out now?', 'Sign Out', doSignOut, 'info', 7000);
+    }
   };
 
   const handleResetApp = () => {
@@ -273,9 +298,15 @@ const SettingsScreen = () => {
           onPress: async () => {
             if (isSigningOut) return;
             setIsSigningOut(true);
+            setSyncSuspended(true);
             try {
+              try {
+                cancelSyncWork();
+              } catch (e) {}
+
               await wipeLocalData();
               await initDB();
+
               try {
                 query.clear();
               } catch (e) {}
@@ -283,11 +314,28 @@ const SettingsScreen = () => {
                 const { notifyEntriesChanged } = require('../utils/dbEvents');
                 notifyEntriesChanged();
               } catch (e) {}
-              showToast('Local data cleared');
+
+              // Resume sync safely and kick it off if we're online.
+              setSyncSuspended(false);
+              try {
+                const net = await NetInfo.fetch();
+                if (isNetOnline(net)) {
+                  // Force a pull/push to restore from cloud quickly after wipe.
+                  scheduleSync({ force: true, source: 'auto' }).catch(() => {
+                    // best-effort
+                  });
+                  showToast('Local data cleared. Syncing from cloud…');
+                } else {
+                  showToast('Local data cleared. Offline — will sync when online.');
+                }
+              } catch (e) {
+                showToast('Local data cleared. Sync will run when online.');
+              }
             } catch (e) {
               console.warn('[Settings] reset local data failed', e);
               showToast('Failed to reset local data. Please try again.', 'error');
             } finally {
+              setSyncSuspended(false);
               setIsSigningOut(false);
             }
           },

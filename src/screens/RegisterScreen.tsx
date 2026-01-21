@@ -3,6 +3,7 @@ import {
   View,
   Text,
   TextInput,
+  Image,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
@@ -14,31 +15,72 @@ import {
   useWindowDimensions,
   Animated,
   Easing,
+  InteractionManager,
   Keyboard,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import NetInfo from '@react-native-community/netinfo';
 import { Ionicons } from '@expo/vector-icons';
-import { useSignUp } from '@clerk/clerk-expo';
+import { useOAuth, useSignUp } from '@clerk/clerk-expo';
 import { useNavigation } from '@react-navigation/native';
-import OfflineNotice from '../components/OfflineNotice';
+import * as WebBrowser from 'expo-web-browser';
+import * as AuthSession from 'expo-auth-session';
+import Constants from 'expo-constants';
 
 // --- CUSTOM IMPORTS ---
 import { colors } from '../utils/design';
+import { validateEmail } from '../utils/emailValidation';
+import { mapRegisterErrorToUi, mapSocialLoginErrorToUi } from '../utils/authUi';
+import { useToast } from '../context/ToastContext';
+import { isNetOnline } from '../utils/netState';
+import { debugAuthError, isLikelyServiceDownError } from '../utils/serviceIssue';
+import { getNeonHealth } from '../api/neonClient';
+import { warmNeonConnection } from '../services/auth';
+
+// Warm up browser (OAuth)
+WebBrowser.maybeCompleteAuthSession();
+
+const GOOGLE_ICON = require('../../assets/google0-icon.png');
+const GITHUB_ICON = require('../../assets/github-icon.png');
+
+const useWarmUpBrowser = () => {
+  useEffect(() => {
+    void WebBrowser.warmUpAsync();
+    return () => {
+      void WebBrowser.coolDownAsync();
+    };
+  }, []);
+};
 
 const RegisterScreen = () => {
+  useWarmUpBrowser();
   const navigation = useNavigation<any>();
   const { isLoaded, signUp } = useSignUp();
+  const hasClerkKey = Boolean(
+    Constants.expoConfig?.extra?.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ||
+    process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY
+  );
+  const isLoadedRef = useRef(isLoaded);
+  useEffect(() => {
+    isLoadedRef.current = isLoaded;
+  }, [isLoaded]);
   const insets = useSafeAreaInsets();
+  const { showToast } = useToast();
+
+  // OAuth Strategies
+  const { startOAuthFlow: startGoogleFlow } = useOAuth({ strategy: 'oauth_google' });
+  const { startOAuthFlow: startGithubFlow } = useOAuth({ strategy: 'oauth_github' });
 
   // --- RESPONSIVE LAYOUT LOGIC ---
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
   const isTablet = width >= 600;
 
-  // Switch to "Card Mode" on Tablets or Landscape phones
-  const isCardLayout = isTablet || isLandscape;
+  // Switch to "Card Mode" on tablets or sufficiently-wide landscape.
+  // Avoid forcing card layout on compact landscape phones (cramped UI).
+  const isCardLayout = isTablet || (isLandscape && width >= 700);
+  const cardMaxWidth = Math.min(560, Math.max(480, width - 48));
 
   // --- STATE ---
   const [firstName, setFirstName] = useState('');
@@ -47,9 +89,16 @@ const RegisterScreen = () => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [offlineVisible, setOfflineVisible] = useState(false);
-  const [offlineRetrying, setOfflineRetrying] = useState(false);
-  const [offlineAttemptsLeft, setOfflineAttemptsLeft] = useState<number | undefined>(undefined);
+  const [isOnline, setIsOnline] = useState<boolean | null>(null);
+  const [gate, setGate] = useState<null | 'offline' | 'service'>(null);
+  const [gateLoading, setGateLoading] = useState(false);
+
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [emailSuggestion, setEmailSuggestion] = useState<string | null>(null);
+
+  const inFlightRef = useRef(false);
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -72,81 +121,334 @@ const RegisterScreen = () => {
     ]).start();
   }, []);
 
+  useEffect(() => {
+    let mounted = true;
+
+    const handleState = (ok: boolean | null) => {
+      if (!mounted) return;
+      setIsOnline(ok);
+
+      if (ok === false) {
+        if (loading || inFlightRef.current) {
+          setLoading(false);
+          inFlightRef.current = false;
+          showToast('Connection lost. Please try again.', 'error', 3500);
+        }
+        setGate('offline');
+        return;
+      }
+
+      setGate((prev) => (prev === 'offline' ? null : prev));
+    };
+
+    NetInfo.fetch()
+      .then((s) => handleState(isNetOnline(s)))
+      .catch(() => handleState(null));
+
+    const unsub = NetInfo.addEventListener((s) => handleState(isNetOnline(s)));
+
+    return () => {
+      mounted = false;
+      try {
+        unsub();
+      } catch (e) {}
+    };
+  }, [loading, showToast]);
+
+  const retryGate = async () => {
+    setGateLoading(true);
+    try {
+      const net = await NetInfo.fetch();
+      const ok = isNetOnline(net);
+      setIsOnline(ok);
+      if (!ok) {
+        setGate('offline');
+        return;
+      }
+
+      try {
+        const health = getNeonHealth();
+        if (health.isConfigured) {
+          const warmed = await warmNeonConnection({ force: true, timeoutMs: 3000, soft: true });
+          if (!warmed) {
+            setGate('service');
+            return;
+          }
+        }
+      } catch (e) {}
+
+      setGate(null);
+    } finally {
+      setGateLoading(false);
+    }
+  };
+
+  const renderGateBanner = () => {
+    if (!gate) return null;
+
+    const isOffline = gate === 'offline';
+    const title = isOffline ? 'You are offline' : 'Service issue';
+    const description = isOffline
+      ? 'Sign up needs internet. We will keep retrying in background.'
+      : 'We are facing issues. We will keep retrying in background.';
+
+    return (
+      <View
+        style={[styles.gateBanner, isOffline ? styles.gateBannerOffline : styles.gateBannerService]}
+      >
+        <View style={styles.gateBannerLeft}>
+          <Ionicons
+            name={isOffline ? 'cloud-offline-outline' : 'alert-circle-outline'}
+            size={18}
+            color={isOffline ? '#9A3412' : '#9F1239'}
+          />
+          <View style={styles.gateBannerTextWrap}>
+            <Text style={styles.gateBannerTitle}>{title}</Text>
+            <Text style={styles.gateBannerText}>{description}</Text>
+          </View>
+        </View>
+        <TouchableOpacity
+          onPress={retryGate}
+          disabled={gateLoading}
+          style={styles.gateBannerAction}
+        >
+          {gateLoading ? (
+            <ActivityIndicator size="small" color="#2563EB" />
+          ) : (
+            <Text style={styles.gateBannerActionText}>Retry</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
   const onSignUpPress = async () => {
     if (!isLoaded) return;
+    if (loading || inFlightRef.current) return;
+
+    setFormError(null);
+    setEmailError(null);
+    setPasswordError(null);
+
     if (!firstName || !lastName || !email || !password) {
-      return Alert.alert('Missing Fields', 'Please fill in all fields to continue.');
-    }
-
-    setLoading(true);
-    Keyboard.dismiss();
-
-    // Check connection before starting
-    const net = await NetInfo.fetch();
-    if (!net.isConnected) {
-      startOfflineFlow();
+      setFormError('Please fill in all fields to continue.');
       return;
     }
 
-    await attemptSignUp();
+    const v = validateEmail(email);
+    if (!v.isValidFormat) {
+      setEmailError('Please enter a valid email address.');
+      return;
+    }
+    if (!v.isSupportedDomain) {
+      setEmailError('This email domain is not supported. Please use a valid email provider.');
+      return;
+    }
+
+    if (password.length < 8) {
+      setPasswordError('Password must be at least 8 characters.');
+      return;
+    }
+
+    setLoading(true);
+    inFlightRef.current = true;
+    Keyboard.dismiss();
+
+    try {
+      // Check connection before starting
+      const net = await NetInfo.fetch();
+      if (!isNetOnline(net)) {
+        setGate('offline');
+        return;
+      }
+
+      // If Neon is configured, fail fast with a friendly screen when DB is down.
+      try {
+        const health = getNeonHealth();
+        if (health.isConfigured) {
+          const warmed = await warmNeonConnection({ force: true, timeoutMs: 3000, soft: true });
+          if (!warmed) {
+            setGate('service');
+            return;
+          }
+        }
+      } catch (e) {
+        setGate('service');
+        return;
+      }
+
+      await attemptSignUp();
+    } finally {
+      setLoading(false);
+      inFlightRef.current = false;
+    }
+  };
+
+  const onSocialSignUp = async (strategy: 'google' | 'github') => {
+    if (!isLoadedRef.current) {
+      const start = Date.now();
+      while (Date.now() - start < 4000) {
+        await new Promise((r) => setTimeout(r, 200));
+        if (isLoadedRef.current) break;
+      }
+      if (!isLoadedRef.current) {
+        showToast(
+          hasClerkKey
+            ? 'Auth is still initializing. Please try again in a moment.'
+            : 'Auth is not configured. Set EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY and rebuild.',
+          'info',
+          3500
+        );
+        return;
+      }
+    }
+    if (loading || inFlightRef.current) return;
+
+    setFormError(null);
+    setEmailError(null);
+    setPasswordError(null);
+
+    setLoading(true);
+    inFlightRef.current = true;
+    Keyboard.dismiss();
+
+    try {
+      const net = await NetInfo.fetch();
+      if (!isNetOnline(net)) {
+        setGate('offline');
+        return;
+      }
+
+      if (Platform.OS === 'android') {
+        await new Promise<void>((resolve) =>
+          InteractionManager.runAfterInteractions(() => resolve())
+        );
+      }
+
+      const startFlow = strategy === 'google' ? startGoogleFlow : startGithubFlow;
+      const scheme =
+        (Constants.expoConfig as any)?.scheme ||
+        (Constants.expoConfig as any)?.android?.scheme ||
+        'dhandiary';
+
+      const res: any = await startFlow({
+        redirectUrl: AuthSession.makeRedirectUri({ scheme, path: 'oauth-callback' }),
+      });
+
+      const createdSessionId = res?.createdSessionId;
+      const setSession = res?.setActive;
+      const createdUserId = res?.signUp?.createdUserId || res?.signUp?.createdUser?.id || null;
+
+      const authSessionType = String(res?.authSessionResult?.type || '').toLowerCase();
+      const isCancelled = authSessionType === 'cancel' || authSessionType === 'dismiss';
+      if (isCancelled || !createdSessionId || !setSession) {
+        // User cancelled/closed the browser, or Clerk didn't finish creating a session.
+        if (isCancelled) {
+          showToast('Signup cancelled.', 'info', 2500);
+        } else {
+          showToast("Couldn't complete signup. Please try again.", 'error', 4000);
+        }
+        return;
+      }
+
+      await setSession({ session: createdSessionId });
+
+      if (createdUserId) {
+        showToast(
+          `Account created successfully using ${strategy === 'google' ? 'Google' : 'GitHub'}.`,
+          'success',
+          3000
+        );
+      } else {
+        showToast('Welcome back! Signed in successfully.', 'success', 2500);
+      }
+
+      // Leave Auth stack after OAuth.
+      try {
+        const { resetRoot } = await import('../utils/rootNavigation');
+        resetRoot({ index: 0, routes: [{ name: 'Announcement' }] });
+      } catch (e) {
+        // ignore
+      }
+    } catch (err: any) {
+      const msg = String(err?.message || '');
+      if (msg.toLowerCase().includes('current activity is no longer available')) {
+        console.warn(`[Register] OAuth failed (${strategy}): activity unavailable`, err);
+        showToast('Please try again. (App was busy switching screens)', 'info', 4000);
+        return;
+      }
+
+      debugAuthError(`[Register] OAuth failed (${strategy})`, err);
+      const ui = mapSocialLoginErrorToUi(err);
+      if (ui) {
+        const lower = ui.message.toLowerCase();
+        const type = lower.includes('please log in using email') ? 'info' : 'error';
+        showToast(ui.message, type as any, 6000);
+      }
+
+      try {
+        const net = await NetInfo.fetch();
+        if (isNetOnline(net) && isLikelyServiceDownError(err)) {
+          setGate('service');
+        }
+      } catch (e) {}
+    } finally {
+      setLoading(false);
+      inFlightRef.current = false;
+    }
   };
 
   const attemptSignUp = async () => {
     try {
       if (!signUp) return;
-      await signUp.create({ firstName, lastName, emailAddress: email, password });
+      const normalizedEmail = validateEmail(email).normalized;
+      await signUp.create({ firstName, lastName, emailAddress: normalizedEmail, password });
       await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
 
       setLoading(false);
-      navigation.navigate('VerifyEmail', { email, mode: 'signup', firstName, lastName });
+      navigation.navigate('VerifyEmail', {
+        email: normalizedEmail,
+        mode: 'signup',
+        firstName,
+        lastName,
+      });
     } catch (err: any) {
       handleSignUpError(err);
     }
   };
 
   const handleSignUpError = (err: any) => {
-    const errors = err?.errors || [];
-    const errorMsg = errors.length > 0 ? errors[0].message : err.message;
+    debugAuthError('[Register] sign-up failed', err);
+    if (isLikelyServiceDownError(err)) {
+      setGate('service');
+      setLoading(false);
+      return;
+    }
 
-    if (errorMsg.includes('already exists')) {
-      Alert.alert('Account Exists', 'That email is already in use. Please log in instead.');
-    } else if (errorMsg.includes('password')) {
-      Alert.alert(
-        'Weak Password',
-        'Please choose a stronger password (min 8 chars, mixed case/numbers).'
-      );
+    const ui = mapRegisterErrorToUi(err);
+
+    if (ui.kind === 'already_registered') {
+      Alert.alert('Already Registered', ui.message, [
+        {
+          text: 'OK',
+          onPress: () => navigation.navigate('Login', { email: validateEmail(email).normalized }),
+        },
+      ]);
+    } else if (ui.kind === 'weak_password') {
+      setPasswordError(ui.message);
     } else {
-      Alert.alert('Registration Failed', errorMsg);
+      Alert.alert('Registration Failed', ui.message);
     }
     setLoading(false);
   };
 
-  const startOfflineFlow = async () => {
-    setOfflineVisible(true);
-    setOfflineRetrying(true);
-    setLoading(false);
-
-    // Simple retry logic simulation
-    const MAX_ATTEMPTS = 3;
-    setOfflineAttemptsLeft(MAX_ATTEMPTS);
-
-    // (In a real app, you might loop check NetInfo here,
-    // but typically we wait for user manual retry)
-    setOfflineRetrying(false);
-  };
-
-  const offlineManualRetry = async () => {
-    setOfflineRetrying(true);
-    const net = await NetInfo.fetch();
-    if (net.isConnected) {
-      setOfflineVisible(false);
-      setOfflineRetrying(false);
-      setLoading(true);
-      await attemptSignUp();
-    } else {
-      setTimeout(() => setOfflineRetrying(false), 1000);
+  const onBack = React.useCallback(() => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
     }
-  };
+    navigation.navigate('Login');
+  }, [navigation]);
 
   return (
     <View style={styles.container}>
@@ -179,10 +481,17 @@ const RegisterScreen = () => {
               - Constrains width on tablets/landscape
               - Aligns self center
             */}
-            <View style={[styles.responsiveContainer, isCardLayout && styles.cardContainer]}>
+            <View
+              style={[
+                styles.responsiveContainer,
+                !isCardLayout && styles.phoneFill,
+                isCardLayout && styles.cardContainer,
+                isCardLayout && { maxWidth: cardMaxWidth },
+              ]}
+            >
               {/* Header */}
               <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+                <TouchableOpacity onPress={onBack} style={styles.backBtn}>
                   <Ionicons name="arrow-back" size={24} color="#0F172A" />
                 </TouchableOpacity>
 
@@ -202,6 +511,31 @@ const RegisterScreen = () => {
               >
                 <Text style={styles.title}>Create Account</Text>
                 <Text style={styles.subtitle}>Start your financial journey today.</Text>
+
+                {renderGateBanner()}
+
+                <View style={styles.divider}>
+                  <View style={styles.line} />
+                  <Text style={styles.dividerText}>or continue with</Text>
+                  <View style={styles.line} />
+                </View>
+
+                <View style={styles.socialRow}>
+                  <SocialButton
+                    label="Google"
+                    imageSource={GOOGLE_ICON}
+                    onPress={() => onSocialSignUp('google')}
+                    disabled={loading}
+                  />
+                  <SocialButton
+                    label="GitHub"
+                    imageSource={GITHUB_ICON}
+                    onPress={() => onSocialSignUp('github')}
+                    disabled={loading}
+                  />
+                </View>
+
+                <Text style={styles.emailAltText}>Or create your account with email</Text>
 
                 <View style={styles.formContainer}>
                   {/* Name Row */}
@@ -250,12 +584,35 @@ const RegisterScreen = () => {
                       placeholder="Email Address"
                       placeholderTextColor="#94A3B8"
                       value={email}
-                      onChangeText={setEmail}
+                      onChangeText={(t) => {
+                        const v = validateEmail(t);
+                        setEmail(v.normalized);
+                        setEmailSuggestion(v.suggestion || null);
+                        setEmailError(null);
+                        setFormError(null);
+                      }}
                       autoCapitalize="none"
                       keyboardType="email-address"
                       autoComplete="email"
                     />
                   </View>
+
+                  {(emailError || emailSuggestion) && (
+                    <View style={{ marginTop: -6 }}>
+                      {!!emailError && <Text style={styles.fieldError}>{emailError}</Text>}
+                      {!!emailSuggestion && (
+                        <TouchableOpacity
+                          onPress={() => {
+                            setEmail(emailSuggestion);
+                            setEmailSuggestion(null);
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.suggestionText}>Did you mean {emailSuggestion}?</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
 
                   {/* Password */}
                   <View style={styles.inputContainer}>
@@ -270,7 +627,11 @@ const RegisterScreen = () => {
                       placeholder="Create Password"
                       placeholderTextColor="#94A3B8"
                       value={password}
-                      onChangeText={setPassword}
+                      onChangeText={(t) => {
+                        setPassword(t);
+                        setPasswordError(null);
+                        setFormError(null);
+                      }}
                       secureTextEntry={!showPassword}
                       autoCapitalize="none"
                     />
@@ -282,11 +643,20 @@ const RegisterScreen = () => {
                     </TouchableOpacity>
                   </View>
 
+                  {!!passwordError && <Text style={styles.fieldError}>{passwordError}</Text>}
+
                   {/* Action Button */}
                   <TouchableOpacity
                     style={[styles.primaryBtn, loading && styles.disabledBtn]}
                     onPress={onSignUpPress}
-                    disabled={loading}
+                    disabled={
+                      loading ||
+                      !firstName ||
+                      !lastName ||
+                      !password ||
+                      !validateEmail(email).isValidFormat ||
+                      !validateEmail(email).isSupportedDomain
+                    }
                     activeOpacity={0.8}
                   >
                     {loading ? (
@@ -295,6 +665,8 @@ const RegisterScreen = () => {
                       <Text style={styles.primaryBtnText}>Continue</Text>
                     )}
                   </TouchableOpacity>
+
+                  {!!formError && <Text style={styles.formError}>{formError}</Text>}
                 </View>
 
                 {/* Footer */}
@@ -309,21 +681,29 @@ const RegisterScreen = () => {
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
-
-      <OfflineNotice
-        visible={offlineVisible}
-        retrying={offlineRetrying}
-        attemptsLeft={offlineAttemptsLeft}
-        onRetry={offlineManualRetry}
-        onClose={() => {
-          setOfflineVisible(false);
-          setOfflineRetrying(false);
-          setLoading(false);
-        }}
-      />
     </View>
   );
 };
+
+const SocialButton = ({ label, iconName, imageSource, onPress, disabled }: any) => (
+  <TouchableOpacity
+    style={[styles.socialBtn, disabled && styles.disabledBtn]}
+    onPress={onPress}
+    disabled={disabled}
+    activeOpacity={0.8}
+  >
+    {imageSource ? (
+      <Image
+        source={imageSource}
+        style={[styles.socialIcon, disabled && { opacity: 0.55 }]}
+        resizeMode="contain"
+      />
+    ) : (
+      <Ionicons name={iconName} size={18} color={disabled ? '#94A3B8' : '#0F172A'} />
+    )}
+    <Text style={[styles.socialBtnText, disabled && { color: '#94A3B8' }]}>{label}</Text>
+  </TouchableOpacity>
+);
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
@@ -342,6 +722,10 @@ const styles = StyleSheet.create({
   // Responsive Container
   responsiveContainer: {
     width: '100%',
+  },
+  // Phone portrait: fill height so footer can sit at bottom
+  phoneFill: {
+    flex: 1,
   },
   // Card Styles (Tablets/Landscape)
   cardContainer: {
@@ -406,6 +790,7 @@ const styles = StyleSheet.create({
   /* Form Content */
   formWrapper: {
     width: '100%',
+    flex: 1,
   },
   title: {
     fontSize: 28,
@@ -421,10 +806,99 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
 
+  gateBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 16,
+    gap: 12,
+  },
+  gateBannerOffline: {
+    backgroundColor: '#FFF7ED',
+    borderColor: '#FDBA74',
+  },
+  gateBannerService: {
+    backgroundColor: '#FFF1F2',
+    borderColor: '#FDA4AF',
+  },
+  gateBannerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
+  gateBannerTextWrap: { flex: 1 },
+  gateBannerTitle: { color: '#0F172A', fontSize: 13, fontWeight: '700' },
+  gateBannerText: { color: '#475569', fontSize: 12, marginTop: 2 },
+  gateBannerAction: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: '#E0E7FF',
+  },
+  gateBannerActionText: { color: '#1D4ED8', fontSize: 12, fontWeight: '700' },
+
+  divider: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  line: { flex: 1, height: 1, backgroundColor: '#E2E8F0' },
+  dividerText: {
+    marginHorizontal: 16,
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+
+  socialRow: { flexDirection: 'row', gap: 16, marginBottom: 16 },
+  socialBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    height: 50,
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  socialIcon: { width: 18, height: 18 },
+  socialBtnText: { fontSize: 14, fontWeight: '600', color: '#1E293B', marginLeft: 8 },
+
+  emailAltText: {
+    marginTop: -4,
+    marginBottom: 16,
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    textAlign: 'center',
+  },
+
   /* Inputs */
   formContainer: {
     gap: 16,
     marginBottom: 24,
+  },
+  fieldError: {
+    color: '#B91C1C',
+    fontSize: 13,
+    marginTop: 6,
+    marginLeft: 4,
+  },
+  formError: {
+    color: '#B91C1C',
+    fontSize: 13,
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  suggestionText: {
+    color: '#1D4ED8',
+    fontSize: 13,
+    marginTop: 6,
+    marginLeft: 4,
   },
   row: {
     flexDirection: 'row',
@@ -481,7 +955,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 'auto',
+    paddingTop: 16,
   },
   footerText: {
     color: '#64748B',

@@ -12,7 +12,6 @@ import {
   StatusBar,
   TextInput,
   LayoutAnimation,
-  UIManager,
   Keyboard,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -34,13 +33,9 @@ import { ALLOWED_CATEGORIES, DEFAULT_CATEGORY, ensureCategory } from '../constan
 import ScreenHeader from '../components/ScreenHeader';
 import { isIncome, toCanonical } from '../utils/transactionType';
 import { getTransactionByLocalId } from '../db/transactions';
+import { enableLegacyLayoutAnimations } from '../utils/layoutAnimation';
 
-// Enable LayoutAnimation for Android
-if (Platform.OS === 'android') {
-  if (UIManager.setLayoutAnimationEnabledExperimental) {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
-  }
-}
+enableLegacyLayoutAnimations();
 
 // --- TYPES ---
 type RootStackParamList = {
@@ -91,6 +86,15 @@ const AddEntryScreen: React.FC = () => {
   const [category, setCategory] = useState(DEFAULT_CATEGORY);
   const [date, setDate] = useState<Date>(new Date());
   const [saving, setSaving] = useState(false);
+
+  // Prevent duplicate pending-sync prompts (e.g., due to re-renders/StrictMode in dev)
+  const pendingPromptShowingRef = useRef(false);
+  const allowUnsyncedEditRef = useRef(false);
+
+  useEffect(() => {
+    pendingPromptShowingRef.current = false;
+    allowUnsyncedEditRef.current = false;
+  }, [editingParamId]);
 
   // Modals
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
@@ -195,22 +199,56 @@ const AddEntryScreen: React.FC = () => {
 
         // Optional: warn if the row has pending local changes
         if (Number((row as any).need_sync) === 1) {
-          Alert.alert('Pending changes', 'This transaction has unsynced changes. Edit anyway?', [
-            { text: 'Cancel', style: 'cancel', onPress: () => navigation.goBack() },
-            {
-              text: 'Edit',
-              onPress: () => {
-                if (cancelled) return;
-                setAmount(String((row as any).amount ?? ''));
-                setNote((row as any).note ?? '');
-                setTypeIndex(isIncome((row as any).type) ? 1 : 0);
-                setCategory(ensureCategory((row as any).category));
-                const d = (row as any).date || (row as any).created_at;
-                setDate(parseToDate(d));
-                setEditingLocalId(String((row as any).id));
-              },
-            },
-          ]);
+          if (allowUnsyncedEditRef.current) {
+            setAmount(String((row as any).amount ?? ''));
+            setNote((row as any).note ?? '');
+            setTypeIndex(isIncome((row as any).type) ? 1 : 0);
+            setCategory(ensureCategory((row as any).category));
+            const d = (row as any).date || (row as any).created_at;
+            setDate(parseToDate(d));
+            setEditingLocalId(String((row as any).id));
+            return;
+          }
+
+          if (!pendingPromptShowingRef.current) {
+            pendingPromptShowingRef.current = true;
+            Alert.alert(
+              'Pending changes',
+              'This transaction has unsynced changes. Edit anyway?',
+              [
+                {
+                  text: 'Cancel',
+                  style: 'cancel',
+                  onPress: () => {
+                    pendingPromptShowingRef.current = false;
+                    navigation.goBack();
+                  },
+                },
+                {
+                  text: 'Edit',
+                  onPress: () => {
+                    pendingPromptShowingRef.current = false;
+                    allowUnsyncedEditRef.current = true;
+                    if (cancelled) return;
+                    setAmount(String((row as any).amount ?? ''));
+                    setNote((row as any).note ?? '');
+                    setTypeIndex(isIncome((row as any).type) ? 1 : 0);
+                    setCategory(ensureCategory((row as any).category));
+                    const d = (row as any).date || (row as any).created_at;
+                    setDate(parseToDate(d));
+                    setEditingLocalId(String((row as any).id));
+                  },
+                },
+              ],
+              {
+                cancelable: true,
+                onDismiss: () => {
+                  pendingPromptShowingRef.current = false;
+                  navigation.goBack();
+                },
+              }
+            );
+          }
           return;
         }
 

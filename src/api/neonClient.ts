@@ -21,6 +21,8 @@ let circuitOpenUntil = 0;
 let cachedNetInfoAt = 0;
 let cachedIsConnected: boolean | null = null;
 let warmPromise: Promise<void> | null = null;
+let lastDuplicateWarnAt = 0;
+let lastDuplicateWarnMsg: string | null = null;
 
 const isVerboseNeonLoggingEnabled = () => {
   try {
@@ -220,7 +222,16 @@ export const query = async <T = any>(
         msg.includes('duplicate key') ||
         msg.includes('unique constraint')
       ) {
-        console.warn('Neon Query duplicate key (suppressed):', msg);
+        const now = Date.now();
+        const shouldWarn =
+          typeof __DEV__ !== 'undefined' &&
+          __DEV__ &&
+          (now - lastDuplicateWarnAt > 30_000 || lastDuplicateWarnMsg !== msg);
+        if (shouldWarn) {
+          lastDuplicateWarnAt = now;
+          lastDuplicateWarnMsg = msg;
+          console.warn('Neon Query duplicate key (rate-limited):', msg);
+        }
         throw error;
       }
 

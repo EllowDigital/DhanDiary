@@ -62,8 +62,12 @@ export const isOnline = async (): Promise<boolean> => {
 
 let neonWarmPromise: Promise<boolean> | null = null;
 let lastNeonWarm = 0;
+let lastNeonWarmWarn = 0;
+const NEON_WARM_WARN_INTERVAL_MS = 60_000;
 
-export const warmNeonConnection = async (opts: { force?: boolean; timeoutMs?: number } = {}) => {
+export const warmNeonConnection = async (
+  opts: { force?: boolean; timeoutMs?: number; soft?: boolean } = {}
+) => {
   const NEON_URL = resolveNeonUrl();
   if (!NEON_URL) return false;
 
@@ -76,14 +80,26 @@ export const warmNeonConnection = async (opts: { force?: boolean; timeoutMs?: nu
   }
 
   if (!neonWarmPromise) {
-    const timeoutMs = opts.timeoutMs ?? TIMEOUT_DEFAULT_MS;
+    const timeoutMs = opts.timeoutMs ?? (opts.soft ? 3000 : TIMEOUT_DEFAULT_MS);
     neonWarmPromise = withTimeout(query('SELECT 1'), timeoutMs)
       .then(() => {
         lastNeonWarm = Date.now();
         return true;
       })
       .catch((err) => {
-        console.warn('[Auth] Neon warm-up failed:', err?.message || err);
+        const msg = String(err?.message || err || '').toLowerCase();
+        const isTimeout = msg.includes('timeout') || msg.includes('timed out');
+        if (opts.soft && isTimeout) {
+          // Treat slow network as indeterminate, not a hard failure.
+          // Avoid blocking the UI while still throttling retries.
+          lastNeonWarm = Date.now();
+          return true;
+        }
+        const nowWarn = Date.now();
+        if (nowWarn - lastNeonWarmWarn > NEON_WARM_WARN_INTERVAL_MS) {
+          lastNeonWarmWarn = nowWarn;
+          console.warn('[Auth] Neon warm-up failed:', err?.message || err);
+        }
         return false;
       })
       .finally(() => {
@@ -365,52 +381,121 @@ export const logout = async (opts?: {
   return wipedOk;
 };
 
-export const deleteAccount = async (opts?: { clerkUserId?: string }) => {
+export const deleteAccount = async (opts?: {
+  clerkUserId?: string;
+  clerkUser?: any;
+  /**
+   * When true (default), require Clerk deletion to succeed if a clerkUserId is provided.
+   * This prevents wiping local data while the Clerk account still exists.
+   */
+  strict?: boolean;
+}) => {
   const NEON_URL = resolveNeonUrl();
   const session = await getSession();
 
   if (!session) throw new Error('No active session found');
 
-  let remoteDeleted = 0;
-  let userDeleted = 0;
+  const strict = opts?.strict ?? true;
+
+  let remoteTxDeleted = 0;
+  let remoteDailyDeleted = 0;
+  let remoteMonthlyDeleted = 0;
+  let remoteUserDeleted = 0;
   let clerkDeleted = false;
 
-  // 1. Remote Deletion (if online and configured)
+  const online = await isOnline();
+  // If we have any cloud identity or cloud config, require online.
+  if (!online && (opts?.clerkUserId || NEON_URL)) {
+    throw new Error('Internet connection required to delete your account.');
+  }
+
+  // Figure out which Neon user row to delete (prefer clerk_id mapping, then session UUID, then email).
+  let targetRemoteUserId: string | null = null;
+
+  // 1) Remote Deletion (Neon)
   if (NEON_URL) {
     try {
-      // If the session id is not a UUID (e.g. guest_xxx created for offline-only users),
-      // skip remote deletion — Postgres uuid columns will reject non-UUID input.
-      const uuidOk = typeof session.id === 'string' && isUuid(session.id);
-      if (!uuidOk) {
-        console.info('[Auth] Skipping remote Neon deletion for non-UUID session id', session.id);
-      } else {
+      // Prefer deleting by clerk_id when available to avoid mismatch cases.
+      if (opts?.clerkUserId) {
         try {
-          // Delete dependent entries first
-          const entriesRes = await withTimeout(
-            query('DELETE FROM transactions WHERE user_id = $1 RETURNING id', [session.id]),
+          const rows = await withTimeout(
+            query<{ id: string }>('SELECT id FROM users WHERE clerk_id = $1 LIMIT 1', [
+              opts.clerkUserId,
+            ]),
             10_000
           );
-          if (entriesRes && Array.isArray(entriesRes)) remoteDeleted = entriesRes.length;
-
-          // Delete user record
-          const userRes = await withTimeout(
-            query('DELETE FROM users WHERE id = $1 RETURNING id', [session.id]),
-            10_000
-          );
-          if (userRes && Array.isArray(userRes)) userDeleted = userRes.length;
-        } catch (err) {
-          console.warn('[Auth] Failed to connect or delete remote account:', err);
-          // Proceed to wipe local data anyway
+          if (rows && rows.length) targetRemoteUserId = rows[0].id;
+        } catch (e) {
+          // ignore: fallback to other identifiers
         }
+      }
+
+      if (!targetRemoteUserId) {
+        const uuidOk = typeof session.id === 'string' && isUuid(session.id);
+        if (uuidOk) targetRemoteUserId = session.id;
+      }
+
+      if (!targetRemoteUserId && session?.email) {
+        try {
+          const rows = await withTimeout(
+            query<{ id: string }>('SELECT id FROM users WHERE email = $1 LIMIT 1', [session.email]),
+            10_000
+          );
+          if (rows && rows.length) targetRemoteUserId = rows[0].id;
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      if (!targetRemoteUserId) {
+        console.info('[Auth] No remote Neon user id resolved; skipping Neon deletion.');
+      } else {
+        // Explicitly delete dependent tables first (even though FKs are CASCADE) so
+        // we can report accurate counts and keep summaries consistent.
+        const dailyRes = await withTimeout(
+          query('DELETE FROM daily_summaries WHERE user_id = $1 RETURNING user_id', [
+            targetRemoteUserId,
+          ]),
+          10_000
+        );
+        if (dailyRes && Array.isArray(dailyRes)) remoteDailyDeleted = dailyRes.length;
+
+        const monthlyRes = await withTimeout(
+          query('DELETE FROM monthly_summaries WHERE user_id = $1 RETURNING user_id', [
+            targetRemoteUserId,
+          ]),
+          10_000
+        );
+        if (monthlyRes && Array.isArray(monthlyRes)) remoteMonthlyDeleted = monthlyRes.length;
+
+        const txRes = await withTimeout(
+          query('DELETE FROM transactions WHERE user_id = $1 RETURNING id', [targetRemoteUserId]),
+          15_000
+        );
+        if (txRes && Array.isArray(txRes)) remoteTxDeleted = txRes.length;
+
+        const userRes = await withTimeout(
+          query('DELETE FROM users WHERE id = $1 RETURNING id', [targetRemoteUserId]),
+          15_000
+        );
+        if (userRes && Array.isArray(userRes)) remoteUserDeleted = userRes.length;
       }
     } catch (err) {
       console.warn('[Auth] Failed to connect or delete remote account:', err);
-      // Proceed to wipe local data anyway
     }
   }
 
-  // 2. Clerk Deletion (best-effort; prefer backend endpoint)
+  // 2) Clerk Deletion (prefer self-delete via SDK, fallback to backend endpoint)
   try {
+    if (!clerkDeleted && opts?.clerkUser && typeof opts.clerkUser.delete === 'function') {
+      try {
+        await withTimeout(Promise.resolve(opts.clerkUser.delete()), 15_000);
+        clerkDeleted = true;
+      } catch (e) {
+        console.warn('[Auth] Clerk self-delete failed', (e as any)?.message || e);
+      }
+    }
+
     // Prefer calling a backend delete endpoint (recommended). If your app
     // configures `CLERK_DELETE_URL` (in expo extra or env), we'll POST to it
     // with the clerk user id. The backend should authenticate the request and
@@ -420,12 +505,22 @@ export const deleteAccount = async (opts?: { clerkUserId?: string }) => {
       process.env.CLERK_DELETE_URL ||
       null;
 
-    if (opts?.clerkUserId && BACKEND_DELETE_URL) {
+    const BACKEND_DELETE_KEY =
+      (Constants.expoConfig && (Constants.expoConfig.extra as any)?.CLERK_DELETE_API_KEY) ||
+      (Constants.expoConfig && (Constants.expoConfig.extra as any)?.DELETE_API_KEY) ||
+      process.env.CLERK_DELETE_API_KEY ||
+      process.env.DELETE_API_KEY ||
+      null;
+
+    if (!clerkDeleted && opts?.clerkUserId && BACKEND_DELETE_URL) {
       try {
         await withTimeout(
           fetch(BACKEND_DELETE_URL, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...(BACKEND_DELETE_KEY ? { 'x-delete-key': String(BACKEND_DELETE_KEY) } : {}),
+            },
             body: JSON.stringify({ userId: opts.clerkUserId }),
           }),
           10000
@@ -465,10 +560,35 @@ export const deleteAccount = async (opts?: { clerkUserId?: string }) => {
     console.warn('[Auth] Clerk clean up failed', (e as any)?.message || e);
   }
 
+  // 3) If strict mode is enabled, require deletions to succeed before wiping local state.
+  if (strict) {
+    if (opts?.clerkUserId && !clerkDeleted) {
+      throw new Error('Failed to delete your Clerk account. Please try again.');
+    }
+    if (NEON_URL && targetRemoteUserId && remoteUserDeleted < 1) {
+      throw new Error('Failed to delete your cloud data from Neon. Please try again.');
+    }
+  }
+
+  // 4) Local wipe (transactions/session/cache) only after success to avoid trapping the user.
+  try {
+    const sessMod = require('../db/session');
+    if (sessMod && typeof sessMod.setAccountDeletedAt === 'function') {
+      await sessMod.setAccountDeletedAt(new Date().toISOString());
+    }
+  } catch (e) {}
+
+  // Use the existing logout pipeline to fully wipe local SQLite + storage.
+  await logout({ clearAllStorage: true });
+
   const deletionInfo = {
     timestamp: new Date().toISOString(),
-    remoteDeleted,
-    userDeleted,
+    targetRemoteUserId,
+    remoteTxDeleted,
+    remoteDailyDeleted,
+    remoteMonthlyDeleted,
+    remoteUserDeleted,
+    clerkDeleted,
   };
 
   // Emit analytics event if analytics helper available (best-effort)
@@ -491,7 +611,14 @@ export const deleteAccount = async (opts?: { clerkUserId?: string }) => {
     console.info('[Auth] account deleted', deletionInfo);
   } catch (e) {}
 
-  return { remoteDeleted, userDeleted };
+  return {
+    targetRemoteUserId,
+    remoteTxDeleted,
+    remoteDailyDeleted,
+    remoteMonthlyDeleted,
+    remoteUserDeleted,
+    clerkDeleted,
+  };
 };
 
 export const updateProfile = async (updates: { name?: string; email?: string }) => {
