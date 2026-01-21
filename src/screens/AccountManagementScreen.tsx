@@ -646,6 +646,15 @@ const AccountManagementScreen = () => {
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
+            {isOnline === null && (
+              <View style={styles.connectionBanner}>
+                <MaterialIcon name="wifi" size={16} color={colors.primary || '#3B82F6'} />
+                <Text style={styles.connectionBannerText}>Checking connection…</Text>
+                <TouchableOpacity onPress={refreshConnectivity} style={styles.connectionBannerBtn}>
+                  <Text style={styles.connectionBannerBtnText}>Retry</Text>
+                </TouchableOpacity>
+              </View>
+            )}
             <Animated.View style={{ opacity: fadeAnim }}>
               {/* 1. HERO PROFILE ROW */}
               <View style={styles.heroRow}>
@@ -720,12 +729,14 @@ const AccountManagementScreen = () => {
                     ]}
                     activeOpacity={0.7}
                     onPress={handleChangeProfilePhoto}
-                    disabled={isUpdatingPhoto}
+                    disabled={isUpdatingPhoto || isOnline !== true}
                   >
                     {isUpdatingPhoto ? (
                       <ActivityIndicator size="small" color="#FFFFFF" />
                     ) : (
-                      <Text style={styles.changePhotoButtonText}>Change Photo</Text>
+                      <Text style={styles.changePhotoButtonText}>
+                        {isOnline === null ? 'Checking connection…' : 'Change Photo'}
+                      </Text>
                     )}
                   </TouchableOpacity>
                 </View>
@@ -942,6 +953,51 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: colors.text || '#1E293B',
+  },
+  offlineRetryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    alignSelf: 'flex-start',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: colors.primary || '#3B82F6',
+    marginTop: 10,
+  },
+  offlineRetryText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  connectionBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.2)',
+    marginBottom: 12,
+  },
+  connectionBannerText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.primary || '#3B82F6',
+  },
+  connectionBannerBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: colors.primary || '#3B82F6',
+  },
+  connectionBannerBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
 
   /* HERO ROW */
