@@ -39,8 +39,6 @@ export default ({ config }) => {
        */
       EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? null,
 
-      EXPO_PUBLIC_API_URL: process.env.EXPO_PUBLIC_API_URL ?? null,
-
       /**
        * 🔒 NEON DB PROTECTION
        * DB URL injected ONLY when enabled
@@ -48,14 +46,6 @@ export default ({ config }) => {
       EXPO_ENABLE_NEON_CLIENT: process.env.EXPO_ENABLE_NEON_CLIENT ?? '0',
 
       NEON_URL: process.env.EXPO_ENABLE_NEON_CLIENT === '1' ? (process.env.NEON_URL ?? null) : null,
-
-      /**
-       * Clerk account deletion
-       * (Do NOT ship admin secrets in production apps)
-       */
-      CLERK_DELETE_URL: process.env.CLERK_DELETE_URL ?? null,
-
-      CLERK_DELETE_API_KEY: process.env.CLERK_DELETE_API_KEY ?? process.env.DELETE_API_KEY ?? null,
     },
   };
 };
