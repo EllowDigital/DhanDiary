@@ -10,7 +10,7 @@ export default ({ config }) => {
     ...config,
 
     // App versioning
-    version: '2.5.0',
+    version: '2.5.2',
 
     // Required for Clerk + OAuth (no proxy)
     scheme: 'dhandiary',
@@ -21,12 +21,12 @@ export default ({ config }) => {
     android: {
       ...config.android,
       package: 'com.ellowdigital.dhandiary',
-      versionCode: 250,
+      versionCode: 252,
     },
 
     ios: {
       ...config.ios,
-      buildNumber: '250',
+      buildNumber: '252',
     },
 
     extra: {
