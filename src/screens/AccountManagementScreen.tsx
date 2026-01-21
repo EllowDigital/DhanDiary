@@ -14,6 +14,7 @@ import {
   LayoutAnimation,
   Switch,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Input, Button } from '@rneui/themed';
@@ -301,6 +302,39 @@ const AccountManagementScreen = () => {
     if (activeCard !== id) Keyboard.dismiss();
   };
 
+  const requestMediaLibraryPermission = async () => {
+    const current = await ImagePicker.getMediaLibraryPermissionsAsync();
+    if (current.status === ImagePicker.PermissionStatus.GRANTED) return true;
+
+    const askUser = await new Promise<boolean>((resolve) => {
+      Alert.alert(
+        'Allow Photo Access',
+        'DhanDiary needs access to your photo library so you can choose a profile picture.',
+        [
+          { text: 'Not now', style: 'cancel', onPress: () => resolve(false) },
+          { text: 'Continue', onPress: () => resolve(true) },
+        ],
+        { cancelable: true, onDismiss: () => resolve(false) }
+      );
+    });
+
+    if (askUser && current.canAskAgain) {
+      const next = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (next.status === ImagePicker.PermissionStatus.GRANTED) return true;
+    }
+
+    Alert.alert(
+      'Permission needed',
+      'Please enable photo library access in Settings to update your profile photo.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Open Settings', onPress: () => Linking.openSettings() },
+      ]
+    );
+
+    return false;
+  };
+
   const handleChangeProfilePhoto = async () => {
     if (!user) {
       showToast('Please sign in to update your profile photo.', 'error');
@@ -315,14 +349,8 @@ const AccountManagementScreen = () => {
     try {
       setIsUpdatingPhoto(true);
 
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== ImagePicker.PermissionStatus.GRANTED) {
-        Alert.alert(
-          'Permission required',
-          'Please allow photo library access to update your profile picture.'
-        );
-        return;
-      }
+      const hasPermission = await requestMediaLibraryPermission();
+      if (!hasPermission) return;
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -621,7 +649,10 @@ const AccountManagementScreen = () => {
                     </Text>
                   </View>
                   <TouchableOpacity
-                    style={[styles.changePhotoButton, isUpdatingPhoto && styles.changePhotoButtonDisabled]}
+                    style={[
+                      styles.changePhotoButton,
+                      isUpdatingPhoto && styles.changePhotoButtonDisabled,
+                    ]}
                     activeOpacity={0.7}
                     onPress={handleChangeProfilePhoto}
                     disabled={isUpdatingPhoto}
