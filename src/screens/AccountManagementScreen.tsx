@@ -2,17 +2,28 @@ import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   StyleSheet,
-  TouchableOpacity,
+              { isOnline === null && (
+    <View style={styles.connectionBanner}>
+      <MaterialIcon name="wifi" size={16} color={colors.primary || '#3B82F6'} />
+      <Text style={styles.connectionBannerText}>Checking connection…</Text>
+      <TouchableOpacity onPress={refreshConnectivity} style={styles.connectionBannerBtn}>
+        <Text style={styles.connectionBannerBtnText}>Retry</Text>
+      </TouchableOpacity>
+    </View>
+  )}
+TouchableOpacity,
   Alert,
   ScrollView,
   Text,
-  Platform,
-  Animated,
+  disabled = { isUpdatingPhoto || isOnline !== true}
+Animated,
   KeyboardAvoidingView,
   StatusBar,
   Keyboard,
-  LayoutAnimation,
-  Switch,
+  <Text style={styles.changePhotoButtonText}>
+    {isOnline === null ? 'Checking connection…' : 'Change Photo'}
+  </Text>
+Switch,
   ActivityIndicator,
   Linking,
 } from 'react-native';
