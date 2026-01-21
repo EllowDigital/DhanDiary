@@ -57,6 +57,10 @@ const RegisterScreen = () => {
   useWarmUpBrowser();
   const navigation = useNavigation<any>();
   const { isLoaded, signUp } = useSignUp();
+  const hasClerkKey = Boolean(
+    Constants.expoConfig?.extra?.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ||
+    process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY
+  );
   const insets = useSafeAreaInsets();
   const { showToast } = useToast();
 
@@ -278,7 +282,13 @@ const RegisterScreen = () => {
 
   const onSocialSignUp = async (strategy: 'google' | 'github') => {
     if (!isLoaded) {
-      showToast('Auth is not ready yet. Check Clerk publishable key.', 'info', 3500);
+      showToast(
+        hasClerkKey
+          ? 'Auth is still initializing. Please try again in a moment.'
+          : 'Auth is not configured. Set EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY and rebuild.',
+        'info',
+        3500
+      );
       return;
     }
     if (loading || inFlightRef.current) return;

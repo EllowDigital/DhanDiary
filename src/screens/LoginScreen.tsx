@@ -133,7 +133,7 @@ const LoginScreen = () => {
       }),
     ]).start();
 
-    warmNeonConnection({ soft: true, timeoutMs: 3000 }).catch(() => { });
+    warmNeonConnection({ soft: true, timeoutMs: 3000 }).catch(() => {});
     return () => {
       clearTimeout(t);
       sub.remove();
@@ -172,7 +172,7 @@ const LoginScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, [loading, showToast]);
 
@@ -197,7 +197,7 @@ const LoginScreen = () => {
             return;
           }
         }
-      } catch (e) { }
+      } catch (e) {}
 
       setGate(null);
     } finally {
@@ -512,7 +512,7 @@ const LoginScreen = () => {
         if (isNetOnline(net) && isLikelyServiceDownError(err)) {
           setGate('service');
         }
-      } catch (e) { }
+      } catch (e) {}
       setLoading(false);
     } finally {
       inFlightRef.current = false;
@@ -675,11 +675,11 @@ const LoginScreen = () => {
                   isCardStyle
                     ? { borderRadius: 24, padding: 32 } // Card Look
                     : {
-                      borderTopLeftRadius: 32,
-                      borderTopRightRadius: 32,
-                      padding: 32,
-                      paddingBottom: Math.max(insets.bottom + 20, 32),
-                    }, // Sheet Look
+                        borderTopLeftRadius: 32,
+                        borderTopRightRadius: 32,
+                        padding: 32,
+                        paddingBottom: Math.max(insets.bottom + 20, 32),
+                      }, // Sheet Look
                 ]}
               >
                 <Text style={styles.welcomeText}>Welcome Back!</Text>
