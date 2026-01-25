@@ -86,8 +86,8 @@ enableLegacyLayoutAnimations();
 // Environment Variables
 const CLERK_PUBLISHABLE_KEY = String(
   Constants.expoConfig?.extra?.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ||
-    process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ||
-    ''
+  process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ||
+  ''
 ).trim();
 
 const devLogOnce = (key: string, payload: Record<string, unknown>) => {
@@ -159,7 +159,7 @@ const AppContent = () => {
     return () => {
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -178,16 +178,16 @@ const AppContent = () => {
             if (mod && typeof mod.getAccountDeletedAt === 'function') {
               mod.getAccountDeletedAt().then((v: any) => setAccountDeletedAt(v));
             }
-          } catch (e) {}
-        } catch (e) {}
+          } catch (e) { }
+        } catch (e) { }
       });
-    } catch (e) {}
+    } catch (e) { }
 
     return () => {
       mounted = false;
       try {
         if (unsub) unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -224,12 +224,12 @@ const AppContent = () => {
         if (mounted) setIsOnline(!!state.isConnected);
         logNet(state);
       })
-      .catch(() => {});
+      .catch(() => { });
     return () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -244,11 +244,27 @@ const AppContent = () => {
     const next = clerkUser?.id ? String(clerkUser.id) : null;
     prevClerkIdRef.current = next;
 
-    if (prev && !next) {
-      if (getIsSigningOut()) return;
-      // If we're definitely offline, don't force a logout UX.
-      if (isOnline === false) return;
+    // Only show session expired if:
+    // 1. We had a valid session before (prev exists)
+    // 2. Now we don't (next is null)
+    // 3. We're not explicitly signing out
+    // 4. We have internet (or isOnline is null, meaning we haven't determined connectivity yet)
+    if (prev && !next && !getIsSigningOut()) {
+      // If definitely offline, keep using local session - don't force logout
+      if (isOnline === false) {
+        if (__DEV__) console.info('[auth] Session lost but offline; preserving local session');
+        return;
+      }
 
+      // If isOnline is null (checking connectivity), wait a bit longer before showing error
+      // This prevents false positives on app startup
+      if (isOnline === null) {
+        if (__DEV__) console.info('[auth] Connectivity unknown; deferring session check');
+        return;
+      }
+
+      // Only show the message if we're genuinely online and session expired
+      if (__DEV__) console.warn('[auth] Session expired while online');
       showActionToast(
         'Your session has expired. Please log in again.',
         'Log in',
@@ -369,7 +385,7 @@ const AppContent = () => {
 
     if (!bioState.isBiometricEnabled) {
       lastUnlockPersistedRef.current = 0;
-      AsyncStorage.removeItem(key).catch(() => {});
+      AsyncStorage.removeItem(key).catch(() => { });
       return;
     }
 
@@ -377,11 +393,11 @@ const AppContent = () => {
       const ts = bioState.lastUnlockTimestamp || Date.now();
       if (ts && ts !== lastUnlockPersistedRef.current) {
         lastUnlockPersistedRef.current = ts;
-        AsyncStorage.setItem(key, String(ts)).catch(() => {});
+        AsyncStorage.setItem(key, String(ts)).catch(() => { });
       }
     } else {
       lastUnlockPersistedRef.current = 0;
-      AsyncStorage.removeItem(key).catch(() => {});
+      AsyncStorage.removeItem(key).catch(() => { });
     }
   }, [
     bioState.isBiometricEnabled,
@@ -433,7 +449,7 @@ const AppContent = () => {
               'Update ready to install.',
               'Install',
               () => {
-                reloadOtaUpdate().catch(() => {});
+                reloadOtaUpdate().catch(() => { });
               },
               'info',
               8000
@@ -441,7 +457,7 @@ const AppContent = () => {
           }
         } catch (e) {
           // Fallback to silent behavior
-          runBackgroundUpdateCheck().catch(() => {});
+          runBackgroundUpdateCheck().catch(() => { });
         }
       })();
     });
@@ -464,7 +480,7 @@ const AppContent = () => {
     const gate = biometricGateRef.current;
     if (gate.lastUnlockAt && Date.now() - gate.lastUnlockAt < 1500) return;
 
-    checkNeonConnection().catch(() => {});
+    checkNeonConnection().catch(() => { });
   }, [biometricLocked]);
 
   // 3. User Synchronization
@@ -526,13 +542,13 @@ const AppContent = () => {
             try {
               const { notifyEntriesChanged } = require('./src/utils/dbEvents');
               notifyEntriesChanged();
-            } catch (e) {}
+            } catch (e) { }
             try {
               const holder = require('./src/utils/queryClientHolder');
               if (holder && typeof holder.clearQueryCache === 'function') {
                 await holder.clearQueryCache();
               }
-            } catch (e) {}
+            } catch (e) { }
           };
 
           // Crash-safety: mark owner as pending before wiping so a mid-wipe crash
@@ -648,7 +664,7 @@ function AppWithDb() {
     try {
       const holder = require('./src/utils/queryClientHolder');
       if (holder?.setQueryClient) holder.setQueryClient(queryClient);
-    } catch (e) {}
+    } catch (e) { }
   }, [queryClient]);
 
   const initializeDatabase = useCallback(async () => {
@@ -674,7 +690,7 @@ function AppWithDb() {
     if (!dbReady) return;
 
     if (AppState.currentState === 'active') {
-      runFullSync().catch(() => {});
+      runFullSync().catch(() => { });
     }
 
     startForegroundSyncScheduler(15000);
@@ -682,13 +698,13 @@ function AppWithDb() {
     // device/ROM/new-architecture/native module combinations. Keep the app stable
     // by relying on foreground sync on Android.
     if (Platform.OS !== 'android') {
-      startBackgroundFetch().catch(() => {});
+      startBackgroundFetch().catch(() => { });
     }
 
     // Background Expo Updates: fetch quietly, apply on next restart.
     // Never block app launch.
     InteractionManager.runAfterInteractions(() => {
-      runBackgroundUpdateCheck().catch(() => {});
+      runBackgroundUpdateCheck().catch(() => { });
     });
 
     return () => {
@@ -703,7 +719,7 @@ function AppWithDb() {
     const handleAppStateChange = (nextState: AppStateStatus) => {
       if (nextState === 'active' && !isSyncRunning) {
         setTimeout(() => {
-          runFullSync().catch(() => {});
+          runFullSync().catch(() => { });
         }, 500);
       }
     };
@@ -779,11 +795,11 @@ export default function App() {
                 '[App] JS Error suppressed in production:',
                 error && error.message ? error.message : error
               );
-            } catch (e) {}
+            } catch (e) { }
             // Optionally send to analytics here
           });
         }
-      } catch (e) {}
+      } catch (e) { }
 
       // Catch unhandled promise rejections
       try {
@@ -794,9 +810,9 @@ export default function App() {
               '[App] Unhandled Promise Rejection suppressed in production:',
               reason && reason.message ? reason.message : reason
             );
-          } catch (e) {}
+          } catch (e) { }
         };
-      } catch (e) {}
+      } catch (e) { }
     }
     // Warn if CLERK_SECRET exists in runtime config — this is insecure for clients
     try {
@@ -807,8 +823,8 @@ export default function App() {
           '[App] SECURITY WARNING: CLERK_SECRET is present in client runtime. Do NOT ship admin secrets to mobile clients. Prefer a server-side deletion endpoint.'
         );
       }
-    } catch (e) {}
-  } catch (e) {}
+    } catch (e) { }
+  } catch (e) { }
   if (!CLERK_PUBLISHABLE_KEY) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>

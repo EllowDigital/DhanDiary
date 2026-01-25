@@ -18,6 +18,7 @@ try {
   useClerkUser = null;
   useClerkAuth = null;
 }
+import { recoverSessionGracefully } from '../services/sessionRecovery';
 
 type UserSession = {
   id: string;
