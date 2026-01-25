@@ -403,12 +403,23 @@ const AccountManagementScreen = () => {
       const hasPermission = await requestMediaLibraryPermission();
       if (!hasPermission) return;
 
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      const mediaTypes =
+        (ImagePicker as any).MediaTypeOptions?.Images ??
+        (ImagePicker as any).MediaType?.Images ??
+        (ImagePicker as any).MediaTypeOptions?.All ??
+        (ImagePicker as any).MediaType?.All ??
+        undefined;
+
+      const pickerOptions: ImagePicker.ImagePickerOptions = {
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.9,
-      });
+      };
+      if (mediaTypes) {
+        (pickerOptions as any).mediaTypes = mediaTypes;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync(pickerOptions);
 
       if (result.canceled) return;
 
