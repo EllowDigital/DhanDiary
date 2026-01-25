@@ -217,6 +217,13 @@ export const query = async <T = any>(
         msg.includes('502') ||
         msg.includes('503');
 
+      // 401 means external auth is valid but database token (if any) is rejected.
+      // Often happens if rotation is out of sync.
+      if (msg.includes('401') || msg.includes('unauthorized') || msg.includes('password authentication failed')) {
+         console.warn('[Neon] Auth failure', msg);
+         throw new Error('Unauthorized');
+      }
+
       if (
         (error as any)?.code === '23505' ||
         msg.includes('duplicate key') ||
