@@ -132,55 +132,6 @@ export const getAccountDeletedAt = async (): Promise<string | null> => {
   }
 };
 
-/**
- * Validate that the current session is still valid.
- * Returns true only if a valid UUID session exists.
- */
-export const isValidSessionStored = async (): Promise<boolean> => {
-  try {
-    const session = await getSession();
-    if (!session?.id) return false;
-    // Basic UUID validation (36 chars with dashes)
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(session.id);
-  } catch (e) {
-    return false;
-  }
-};
-
-/**
- * Ensure session is persisted with all required fields.
- * Useful after login to verify everything was saved correctly.
- */
-export const ensureSessionPersisted = async (): Promise<Session> => {
-  try {
-    const session = await getSession();
-    if (!session?.id) {
-      console.warn('[Session] No session found during persistence check');
-      return null;
-    }
-
-    // Re-save to ensure all fields are properly stored
-    await saveSession(
-      session.id,
-      session.name || '',
-      session.email || '',
-      session.image ?? null,
-      session.imageUrl ?? null,
-      session.clerk_id ?? null
-    );
-
-    // Re-read and verify
-    const verified = await getSession();
-    if (__DEV__ && !verified?.id) {
-      console.warn('[Session] Persistence verification failed');
-    }
-    return verified;
-  } catch (e) {
-    console.error('[Session] Persistence check failed', e);
-    return null;
-  }
-};
-
 export default {
   getSession,
   saveSession,
@@ -189,6 +140,4 @@ export default {
   getNoGuestMode,
   setAccountDeletedAt,
   getAccountDeletedAt,
-  isValidSessionStored,
-  ensureSessionPersisted,
 };

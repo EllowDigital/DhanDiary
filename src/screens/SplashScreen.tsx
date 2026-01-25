@@ -224,7 +224,7 @@ const SplashScreen = () => {
               return;
             }
           }
-          navigateToNextScreen('Announcement');
+          navigateToNextScreen('Announcement'); // Or Home/Main
         } else if (isExitingUser) {
           navigateToNextScreen('Auth');
         } else {
@@ -257,9 +257,29 @@ const SplashScreen = () => {
               <Stop offset="1" stopColor="#F8FAFC" stopOpacity="1" />
             </LinearGradient>
           </Defs>
-          left: -minDim * 0.2,
-          backgroundColor: `${colors.secondary || '#8B5CF6'}10`,
-          transform: [{scale: orbPulse }, {translateY: Animated.multiply(orbTranslate, -1) }],
+          <Rect width="100%" height="100%" fill="url(#grad)" />
+        </Svg>
+
+        {/* Ambient Orbs */}
+        <Animated.View
+          style={[
+            styles.orb,
+            {
+              top: -minDim * 0.2, // Responsive positioning
+              right: -minDim * 0.3,
+              backgroundColor: `${colors.primary || '#3B82F6'}10`,
+              transform: [{ scale: orbPulse }, { translateY: orbTranslate }],
+            },
+          ]}
+        />
+        <Animated.View
+          style={[
+            styles.orb,
+            {
+              bottom: -minDim * 0.1,
+              left: -minDim * 0.2,
+              backgroundColor: `${colors.secondary || '#8B5CF6'}10`,
+              transform: [{ scale: orbPulse }, { translateY: Animated.multiply(orbTranslate, -1) }],
             },
           ]}
         />

@@ -40,7 +40,6 @@ import DrawerNavigator from './src/navigation/DrawerNavigator';
 import { useToast } from './src/context/ToastContext';
 import { useOfflineSync } from './src/hooks/useOfflineSync';
 import { useAuth } from './src/hooks/useAuth';
-import { useSessionRecoveryOnAppStateChange } from './src/hooks/useSessionRecoveryOnAppStateChange';
 import { checkNeonConnection } from './src/api/neonClient';
 import { syncClerkUserToNeon } from './src/services/clerkUserSync';
 import { saveSession as saveLocalSession } from './src/db/session';
@@ -146,8 +145,6 @@ const AppContent = () => {
   const { showActionToast } = useToast();
   const prevClerkIdRef = React.useRef<string | null>(null);
 
-  // Initialize session recovery on app state changes
-  useSessionRecoveryOnAppStateChange();
   // --- Biometric session gate state ---
   const BIOMETRIC_KEY = 'BIOMETRIC_ENABLED'; // legacy fallback key (not used for new per-user storage)
   const BIOMETRIC_TIMEOUT_MS = 60 * 1000; // 30–60s per spec (keep 60s)
@@ -247,27 +244,11 @@ const AppContent = () => {
     const next = clerkUser?.id ? String(clerkUser.id) : null;
     prevClerkIdRef.current = next;
 
-    // Only show session expired if:
-    // 1. We had a valid session before (prev exists)
-    // 2. Now we don't (next is null)
-    // 3. We're not explicitly signing out
-    // 4. We have internet (or isOnline is null, meaning we haven't determined connectivity yet)
-    if (prev && !next && !getIsSigningOut()) {
-      // If definitely offline, keep using local session - don't force logout
-      if (isOnline === false) {
-        if (__DEV__) console.info('[auth] Session lost but offline; preserving local session');
-        return;
-      }
+    if (prev && !next) {
+      if (getIsSigningOut()) return;
+      // If we're definitely offline, don't force a logout UX.
+      if (isOnline === false) return;
 
-      // If isOnline is null (checking connectivity), wait a bit longer before showing error
-      // This prevents false positives on app startup
-      if (isOnline === null) {
-        if (__DEV__) console.info('[auth] Connectivity unknown; deferring session check');
-        return;
-      }
-
-      // Only show the message if we're genuinely online and session expired
-      if (__DEV__) console.warn('[auth] Session expired while online');
       showActionToast(
         'Your session has expired. Please log in again.',
         'Log in',
