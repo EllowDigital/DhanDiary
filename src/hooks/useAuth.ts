@@ -142,9 +142,10 @@ export const useAuth = () => {
             } else if (cUser.emailAddresses && cUser.emailAddresses.length) {
               email = cUser.emailAddresses[0]?.emailAddress || null;
             }
-          } catch (e) {}
-
-          try {
+              // If Clerk is present and has an active user, prefer that identity and
+              // persist it locally so the rest of the app sees the user immediately.
+              // This block prioritizes Clerk's identity over any stale local session.
+              if (useClerkUser && useClerkAuth) {
             image = cUser.imageUrl || cUser.profileImageUrl || null;
           } catch (e) {}
 

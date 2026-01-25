@@ -900,6 +900,39 @@ const SocialButton = ({ label, iconName, imageSource, onPress, disabled }: any) 
   </TouchableOpacity>
 );
 
+// Verify session persists correctly and initiate sync
+useEffect(() => {
+  if (!isSignedIn || !clerkLoaded || !clerkUser) return;
+
+  const verifyAndSync = async () => {
+    try {
+      // Wait a moment for session to be saved
+      await new Promise(r => setTimeout(r, 500));
+
+      // Verify session was persisted
+      const { getSession } = require('../db/session');
+      const savedSession = await getSession();
+
+      if (!savedSession?.id) {
+        if (__DEV__) console.warn('[LoginScreen] Session not persisted after login');
+        return;
+      }
+
+      // Initiate sync to pull remote data
+      try {
+        const { scheduleSync } = require('../services/syncManager');
+        scheduleSync({ source: 'login', force: true });
+      } catch (e) {
+        if (__DEV__) console.warn('[LoginScreen] Could not schedule sync', e);
+      }
+    } catch (e) {
+      if (__DEV__) console.warn('[LoginScreen] Session verification failed', e);
+    }
+  };
+
+  verifyAndSync();
+}, [isSignedIn, clerkLoaded]);
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollBase: { flexGrow: 1 },
