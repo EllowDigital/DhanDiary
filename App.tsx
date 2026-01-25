@@ -144,6 +144,11 @@ const AppContent = () => {
   const [isOnline, setIsOnline] = React.useState<boolean | null>(null);
   const { showActionToast } = useToast();
   const prevClerkIdRef = React.useRef<string | null>(null);
+  const clerkIdRef = React.useRef<string | null>(null);
+  const clerkLoadedRef = React.useRef(false);
+  const onlineRef = React.useRef<boolean | null>(null);
+  const sessionExpiredTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const didShowSessionExpiredRef = React.useRef(false);
 
   // --- Biometric session gate state ---
   const BIOMETRIC_KEY = 'BIOMETRIC_ENABLED'; // legacy fallback key (not used for new per-user storage)
@@ -217,11 +222,15 @@ const AppContent = () => {
     const unsub = NetInfo.addEventListener((state) => {
       if (!mounted) return;
       setIsOnline(!!state.isConnected);
+      onlineRef.current = !!state.isConnected;
       logNet(state);
     });
     NetInfo.fetch()
       .then((state) => {
-        if (mounted) setIsOnline(!!state.isConnected);
+        if (mounted) {
+          setIsOnline(!!state.isConnected);
+          onlineRef.current = !!state.isConnected;
+        }
         logNet(state);
       })
       .catch(() => { });

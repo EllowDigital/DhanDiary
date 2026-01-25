@@ -218,7 +218,7 @@ const SplashScreen = () => {
                 if (authLoaded) break;
               }
             }
-            if (!authLoaded || !isSignedIn) {
+            if (authLoaded && !isSignedIn) {
               showToast('Your session has expired. Please log in again.', 'error', 3500);
               navigateToNextScreen('Auth');
               return;
