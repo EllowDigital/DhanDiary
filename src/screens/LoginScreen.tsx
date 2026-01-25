@@ -173,7 +173,7 @@ const LoginScreen = () => {
       }),
     ]).start();
 
-    warmNeonConnection({ soft: true, timeoutMs: 3000 }).catch(() => {});
+    warmNeonConnection({ soft: true, timeoutMs: 3000 }).catch(() => { });
     return () => {
       clearTimeout(t);
       sub.remove();
@@ -212,7 +212,7 @@ const LoginScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, [loading, showToast]);
 
@@ -237,7 +237,7 @@ const LoginScreen = () => {
             return;
           }
         }
-      } catch (e) {}
+      } catch (e) { }
 
       setGate(null);
     } finally {
@@ -544,7 +544,7 @@ const LoginScreen = () => {
         if (isNetOnline(net) && isLikelyServiceDownError(err)) {
           setGate('service');
         }
-      } catch (e) {}
+      } catch (e) { }
       setLoading(false);
     } finally {
       inFlightRef.current = false;
@@ -707,11 +707,11 @@ const LoginScreen = () => {
                   isCardStyle
                     ? { borderRadius: 24, padding: 32 } // Card Look
                     : {
-                        borderTopLeftRadius: 32,
-                        borderTopRightRadius: 32,
-                        padding: 32,
-                        paddingBottom: Math.max(insets.bottom + 20, 32),
-                      }, // Sheet Look
+                      borderTopLeftRadius: 32,
+                      borderTopRightRadius: 32,
+                      padding: 32,
+                      paddingBottom: Math.max(insets.bottom + 20, 32),
+                    }, // Sheet Look
                 ]}
               >
                 <Text style={styles.welcomeText}>Welcome Back!</Text>
@@ -1035,6 +1035,17 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   configBannerText: { flex: 1, color: '#92400E', fontSize: 12, fontWeight: '600' },
+  configBannerAction: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: '#F59E0B',
+  },
+  configBannerActionText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
 
   gateBanner: {
     flexDirection: 'row',
@@ -1054,17 +1065,6 @@ const styles = StyleSheet.create({
   gateBannerService: {
     backgroundColor: '#FFF1F2',
     borderColor: '#FDA4AF',
-    configBannerAction: {
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      borderRadius: 8,
-      backgroundColor: '#F59E0B',
-    },
-    configBannerActionText: {
-      color: '#fff',
-      fontSize: 12,
-      fontWeight: '700',
-    },
   },
   gateBannerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
   gateBannerTextWrap: { flex: 1 },
