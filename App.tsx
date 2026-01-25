@@ -40,6 +40,7 @@ import DrawerNavigator from './src/navigation/DrawerNavigator';
 import { useToast } from './src/context/ToastContext';
 import { useOfflineSync } from './src/hooks/useOfflineSync';
 import { useAuth } from './src/hooks/useAuth';
+import { useSessionRecoveryOnAppStateChange } from './src/hooks/useSessionRecoveryOnAppStateChange';
 import { checkNeonConnection } from './src/api/neonClient';
 import { syncClerkUserToNeon } from './src/services/clerkUserSync';
 import { saveSession as saveLocalSession } from './src/db/session';
@@ -145,6 +146,8 @@ const AppContent = () => {
   const { showActionToast } = useToast();
   const prevClerkIdRef = React.useRef<string | null>(null);
 
+  // Initialize session recovery on app state changes
+  useSessionRecoveryOnAppStateChange();
   // --- Biometric session gate state ---
   const BIOMETRIC_KEY = 'BIOMETRIC_ENABLED'; // legacy fallback key (not used for new per-user storage)
   const BIOMETRIC_TIMEOUT_MS = 60 * 1000; // 30–60s per spec (keep 60s)
