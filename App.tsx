@@ -144,6 +144,11 @@ const AppContent = () => {
   const [isOnline, setIsOnline] = React.useState<boolean | null>(null);
   const { showActionToast } = useToast();
   const prevClerkIdRef = React.useRef<string | null>(null);
+  const clerkIdRef = React.useRef<string | null>(null);
+  const clerkLoadedRef = React.useRef(false);
+  const onlineRef = React.useRef<boolean | null>(null);
+  const sessionExpiredTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const didShowSessionExpiredRef = React.useRef(false);
 
   // --- Biometric session gate state ---
   const BIOMETRIC_KEY = 'BIOMETRIC_ENABLED'; // legacy fallback key (not used for new per-user storage)
@@ -217,11 +222,15 @@ const AppContent = () => {
     const unsub = NetInfo.addEventListener((state) => {
       if (!mounted) return;
       setIsOnline(!!state.isConnected);
+      onlineRef.current = !!state.isConnected;
       logNet(state);
     });
     NetInfo.fetch()
       .then((state) => {
-        if (mounted) setIsOnline(!!state.isConnected);
+        if (mounted) {
+          setIsOnline(!!state.isConnected);
+          onlineRef.current = !!state.isConnected;
+        }
         logNet(state);
       })
       .catch(() => {});
@@ -233,8 +242,14 @@ const AppContent = () => {
     };
   }, []);
 
+  // Track Clerk state in refs to avoid stale values in delayed checks.
+  useEffect(() => {
+    clerkLoadedRef.current = clerkLoaded;
+    clerkIdRef.current = clerkUser?.id ? String(clerkUser.id) : null;
+  }, [clerkLoaded, clerkUser]);
+
   // Session expired edge-case: if Clerk was signed in and becomes signed out unexpectedly,
-  // show a message before redirecting to login.
+  // show a message before redirecting to login (after a short grace window).
   useEffect(() => {
     if (!clerkLoaded) return;
     if (__DEV__) {
@@ -244,20 +259,52 @@ const AppContent = () => {
     const next = clerkUser?.id ? String(clerkUser.id) : null;
     prevClerkIdRef.current = next;
 
+    if (next) {
+      didShowSessionExpiredRef.current = false;
+      if (sessionExpiredTimerRef.current) {
+        clearTimeout(sessionExpiredTimerRef.current);
+        sessionExpiredTimerRef.current = null;
+      }
+      return;
+    }
+
     if (prev && !next) {
       if (getIsSigningOut()) return;
       // If we're definitely offline, don't force a logout UX.
       if (isOnline === false) return;
+      // Only enforce if this device has a Clerk-backed local session.
+      if (!localSessionClerkId) return;
 
-      showActionToast(
-        'Your session has expired. Please log in again.',
-        'Log in',
-        () => resetRoot({ index: 0, routes: [{ name: 'Auth' }] }),
-        'error',
-        8000
-      );
+      if (sessionExpiredTimerRef.current) {
+        clearTimeout(sessionExpiredTimerRef.current);
+        sessionExpiredTimerRef.current = null;
+      }
+
+      sessionExpiredTimerRef.current = setTimeout(() => {
+        if (getIsSigningOut()) return;
+        if (onlineRef.current === false) return;
+        if (!clerkLoadedRef.current) return;
+        if (clerkIdRef.current) return;
+        if (AppState.currentState !== 'active') return;
+
+        didShowSessionExpiredRef.current = true;
+        showActionToast(
+          'Your session has expired. Please log in again.',
+          'Log in',
+          () => resetRoot({ index: 0, routes: [{ name: 'Auth' }] }),
+          'error',
+          8000
+        );
+      }, 8000); // 8s grace period to allow re-hydration/network recovery
     }
-  }, [clerkLoaded, clerkUser, isOnline, showActionToast]);
+
+    return () => {
+      if (sessionExpiredTimerRef.current) {
+        clearTimeout(sessionExpiredTimerRef.current);
+        sessionExpiredTimerRef.current = null;
+      }
+    };
+  }, [clerkLoaded, clerkUser, isOnline, showActionToast, localSessionClerkId]);
 
   // Load biometric enabled setting once, and refresh on foreground.
   const refreshBiometricEnabled = React.useCallback(async () => {

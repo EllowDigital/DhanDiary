@@ -1035,6 +1035,17 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   configBannerText: { flex: 1, color: '#92400E', fontSize: 12, fontWeight: '600' },
+  configBannerAction: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: '#F59E0B',
+  },
+  configBannerActionText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
 
   gateBanner: {
     flexDirection: 'row',
@@ -1054,17 +1065,6 @@ const styles = StyleSheet.create({
   gateBannerService: {
     backgroundColor: '#FFF1F2',
     borderColor: '#FDA4AF',
-    configBannerAction: {
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      borderRadius: 8,
-      backgroundColor: '#F59E0B',
-    },
-    configBannerActionText: {
-      color: '#fff',
-      fontSize: 12,
-      fontWeight: '700',
-    },
   },
   gateBannerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
   gateBannerTextWrap: { flex: 1 },

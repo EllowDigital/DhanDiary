@@ -11,6 +11,9 @@ import { getIsSigningOut } from '../utils/authBoundary';
 import { query } from '../api/neonClient';
 import { requestSyncCancel, resetSyncCancel } from '../sync/syncCancel';
 import { syncClerkUserToNeon } from './clerkUserSync';
+import { Mutex } from '../utils/mutex';
+
+const syncMutex = new Mutex(50000); // 50s timeout (slightly larger than client timeout)
 
 // --- Types & Constants ---
 
@@ -443,355 +446,369 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
     } satisfies SyncResult;
   }
 
-  // Hard boundary: never run sync while a hard sign-out is in progress.
-  // This avoids races with storage/DB wiping that can cause fatal crashes.
-  try {
-    if (getIsSigningOut()) {
+  // --- MUTEX WRAPPER ---
+  // Ensure we never start setup/network checks while another sync frame is already building.
+  return syncMutex.runExclusive(async () => {
+    // Double-check flags inside lock
+    if (_syncSuspended || _syncPaused) {
       return {
-        ok: false,
-        reason: 'no_session',
+        ok: true,
+        reason: 'throttled',
         upToDate: true,
         counts: { pushed: 0, pulled: 0 },
       } satisfies SyncResult;
     }
-  } catch (e) {}
 
-  // Starting a new sync implies we want to clear any previous cancel request.
-  try {
-    resetSyncCancel();
-  } catch (e) {}
-  // If cloud sync isn't configured in this build, fail fast with a clear reason.
-  try {
-    const h = getNeonHealth();
-    if (!h.isConfigured) {
-      if (__DEV__) console.warn('[sync] cloud sync not configured (missing NEON_URL)');
-      return { ok: false, reason: 'not_configured' } satisfies SyncResult;
-    }
-  } catch (e) {}
-
-  if (_syncInProgress) {
-    _pendingSyncRequested = true;
-    _pendingSyncForce = _pendingSyncForce || !!options?.force;
+    // Hard boundary: never run sync while a hard sign-out is in progress.
+    // This avoids races with storage/DB wiping that can cause fatal crashes.
     try {
-      const verbose = Boolean(
-        (globalThis as any).__NEON_VERBOSE__ || (globalThis as any).__SYNC_VERBOSE__
-      );
-      if (__DEV__ && verbose) {
-        const now = Date.now();
-        if (now - _lastAlreadyRunningLogAt > 2500) {
-          _lastAlreadyRunningLogAt = now;
-          console.log('Sync already running, scheduling follow-up');
-        }
+      if (getIsSigningOut()) {
+        return {
+          ok: false,
+          reason: 'no_session',
+          upToDate: true,
+          counts: { pushed: 0, pulled: 0 },
+        } satisfies SyncResult;
       }
     } catch (e) {}
-    return { ok: true, reason: 'already_running', upToDate: true } satisfies SyncResult;
-  }
 
-  _lastSyncAttemptAt = Date.now();
+    // Starting a new sync implies we want to clear any previous cancel request.
+    try {
+      resetSyncCancel();
+    } catch (e) {}
+    // If cloud sync isn't configured in this build, fail fast with a clear reason.
+    try {
+      const h = getNeonHealth();
+      if (!h.isConfigured) {
+        if (__DEV__) console.warn('[sync] cloud sync not configured (missing NEON_URL)');
+        return { ok: false, reason: 'not_configured' } satisfies SyncResult;
+      }
+    } catch (e) {}
 
-  const state = await NetInfo.fetch();
-  _isOnline = !!state.isConnected;
-  if (!state.isConnected) return { ok: false, reason: 'offline' } satisfies SyncResult;
+    if (_syncInProgress) {
+      // If we are here, it means the mutex let us in but the logic flag says running.
+      // This shouldn't normally happen with the mutex, but we keep the log for sanity.
+      _pendingSyncRequested = true;
+      _pendingSyncForce = _pendingSyncForce || !!options?.force;
+      return { ok: true, reason: 'already_running', upToDate: true } satisfies SyncResult;
+    }
 
-  // Identity boundary (NON-NEGOTIABLE): Clerk is the source of truth.
-  // Resolve the canonical Neon user UUID by clerk_id, and migrate any local
-  // offline-placeholder UUID to the real Neon UUID when it becomes available.
-  try {
-    const sess: any = await getSession();
-    const uid = sess?.id ? String(sess.id) : null;
-    const clerkId = sess?.clerk_id ? String(sess.clerk_id) : null;
-    const email = sess?.email ? String(sess.email) : '';
-    const name = sess?.name ? String(sess.name) : '';
+    _lastSyncAttemptAt = Date.now();
 
-    if (!uid || !clerkId) {
+    const state = await NetInfo.fetch();
+    _isOnline = !!state.isConnected;
+    if (!state.isConnected) return { ok: false, reason: 'offline' } satisfies SyncResult;
+
+    // Identity boundary (NON-NEGOTIABLE): Clerk is the source of truth.
+    // Resolve the canonical Neon user UUID by clerk_id, and migrate any local
+    // offline-placeholder UUID to the real Neon UUID when it becomes available.
+    try {
+      const sess: any = await getSession();
+      const uid = sess?.id ? String(sess.id) : null;
+      const clerkId = sess?.clerk_id ? String(sess.clerk_id) : null;
+      const email = sess?.email ? String(sess.email) : '';
+      const name = sess?.name ? String(sess.name) : '';
+
+      if (!uid || !clerkId) {
+        return {
+          ok: false,
+          reason: 'no_session',
+          upToDate: true,
+          counts: { pushed: 0, pulled: 0 },
+        };
+      }
+
+      // Look up by clerk_id (authoritative).
+      let realId: string | null = null;
+      try {
+        const rows = await safeQ('SELECT id, name, email FROM users WHERE clerk_id = $1 LIMIT 1', [
+          clerkId,
+        ]);
+        const v = rows && rows.length ? String((rows as any)[0]?.id || '') : '';
+        if (v && isUuid(v)) realId = v;
+      } catch (e) {
+        // ignore and fall through to optional create
+      }
+
+      // If missing on server but we're online, attempt to create the user row.
+      if (!realId) {
+        try {
+          const created = await safeQ(
+            "INSERT INTO users (clerk_id, email, name, password_hash, status) VALUES ($1, $2, $3, 'clerk_managed', 'active') ON CONFLICT (email) DO NOTHING RETURNING id",
+            [clerkId, String(email || ''), String(name || '')]
+          );
+          const v = created && created.length ? String((created as any)[0]?.id || '') : '';
+          if (v && isUuid(v)) realId = v;
+        } catch (e) {
+          // If email uniqueness conflicts with an existing legacy row, do not guess ownership here.
+          // We'll fall back to the dedicated bridge service below.
+        }
+      }
+
+      // Final fallback: use the bridge service, which safely links legacy email-only rows
+      // ONLY when clerk_id is NULL, otherwise it fails closed.
+      if (!realId && email) {
+        try {
+          const bridged = await syncClerkUserToNeon({
+            id: clerkId,
+            emailAddresses: [{ emailAddress: email }],
+            fullName: name || null,
+          });
+          if (bridged?.uuid && isUuid(bridged.uuid) && !bridged.isOfflineFallback) {
+            realId = bridged.uuid;
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      // If still unresolved, skip sync to avoid FK violations when pushing transactions.
+      if (!realId || !isUuid(realId)) {
+        return {
+          ok: false,
+          reason: 'no_session',
+          upToDate: true,
+          counts: { pushed: 0, pulled: 0 },
+        } satisfies SyncResult;
+      }
+
+      // Keep a stable key for throttling follow-up pulls.
+      syncUserKey = realId;
+
+      // If we found a real Neon UUID and it differs from the current session uuid,
+      // migrate local rows and reset pull cursors.
+      if (realId !== uid) {
+        try {
+          const { executeSqlAsync } = require('../db/sqlite');
+          await executeSqlAsync('UPDATE transactions SET user_id = ? WHERE user_id = ?;', [
+            realId,
+            uid,
+          ]);
+          try {
+            const oldKey = `last_pull_server_version:${uid}`;
+            const newKey = `last_pull_server_version:${realId}`;
+            const oldCursor = `last_pull_cursor_v2:${uid}`;
+            const newCursor = `last_pull_cursor_v2:${realId}`;
+            await executeSqlAsync('DELETE FROM meta WHERE key IN (?, ?, ?, ?);', [
+              oldKey,
+              newKey,
+              oldCursor,
+              newCursor,
+            ]);
+          } catch (e) {}
+        } catch (e) {}
+
+        try {
+          await saveSession(
+            realId,
+            name,
+            email,
+            (sess as any)?.image ?? null,
+            (sess as any)?.imageUrl ?? null,
+            clerkId
+          );
+        } catch (e) {}
+        try {
+          const { notifyEntriesChanged } = require('../utils/dbEvents');
+          notifyEntriesChanged();
+        } catch (e) {}
+      } else {
+        // Ensure clerk_id is persisted even when uuid already matches.
+        try {
+          await saveSession(
+            realId,
+            name,
+            email,
+            (sess as any)?.image ?? null,
+            (sess as any)?.imageUrl ?? null,
+            clerkId
+          );
+        } catch (e) {}
+      }
+    } catch (e) {
       return { ok: false, reason: 'no_session', upToDate: true, counts: { pushed: 0, pulled: 0 } };
     }
 
-    // Look up by clerk_id (authoritative).
-    let realId: string | null = null;
+    // Legacy repair: ensure all local transaction ids are UUIDs before pushing to Neon.
+    // (Older builds created ids like "local_..." which Neon rejects.)
     try {
-      const rows = await safeQ('SELECT id, name, email FROM users WHERE clerk_id = $1 LIMIT 1', [
-        clerkId,
-      ]);
-      const v = rows && rows.length ? String((rows as any)[0]?.id || '') : '';
-      if (v && isUuid(v)) realId = v;
-    } catch (e) {
-      // ignore and fall through to optional create
-    }
-
-    // If missing on server but we're online, attempt to create the user row.
-    if (!realId) {
-      try {
-        const created = await safeQ(
-          "INSERT INTO users (clerk_id, email, name, password_hash, status) VALUES ($1, $2, $3, 'clerk_managed', 'active') ON CONFLICT (email) DO NOTHING RETURNING id",
-          [clerkId, String(email || ''), String(name || '')]
-        );
-        const v = created && created.length ? String((created as any)[0]?.id || '') : '';
-        if (v && isUuid(v)) realId = v;
-      } catch (e) {
-        // If email uniqueness conflicts with an existing legacy row, do not guess ownership here.
-        // We'll fall back to the dedicated bridge service below.
+      const { migrateNonUuidTransactionIds } = require('../db/transactions');
+      if (typeof migrateNonUuidTransactionIds === 'function') {
+        await migrateNonUuidTransactionIds();
       }
-    }
+    } catch (e) {}
 
-    // Final fallback: use the bridge service, which safely links legacy email-only rows
-    // ONLY when clerk_id is NULL, otherwise it fails closed.
-    if (!realId && email) {
-      try {
-        const bridged = await syncClerkUserToNeon({
-          id: clerkId,
-          emailAddresses: [{ emailAddress: email }],
-          fullName: name || null,
-        });
-        if (bridged?.uuid && isUuid(bridged.uuid) && !bridged.isOfflineFallback) {
-          realId = bridged.uuid;
-        }
-      } catch (e) {
-        // ignore
-      }
-    }
+    _syncInProgress = true;
+    // notify listeners that sync started
+    try {
+      setSyncStatus('syncing');
+    } catch (e) {}
 
-    // If still unresolved, skip sync to avoid FK violations when pushing transactions.
-    if (!realId || !isUuid(realId)) {
-      return {
-        ok: false,
-        reason: 'no_session',
-        upToDate: true,
-        counts: { pushed: 0, pulled: 0 },
-      } satisfies SyncResult;
-    }
+    try {
+      // Delegate actual sync work to runFullSync (single source of truth)
+      const runResult = await runFullSync({ force: !!options?.force });
 
-    // Keep a stable key for throttling follow-up pulls.
-    syncUserKey = realId;
-
-    // If we found a real Neon UUID and it differs from the current session uuid,
-    // migrate local rows and reset pull cursors.
-    if (realId !== uid) {
-      try {
-        const { executeSqlAsync } = require('../db/sqlite');
-        await executeSqlAsync('UPDATE transactions SET user_id = ? WHERE user_id = ?;', [
-          realId,
-          uid,
-        ]);
+      // If runFullSync was skipped (throttled/already running/no-session), treat as non-error no-op.
+      if (runResult?.status === 'skipped') {
         try {
-          const oldKey = `last_pull_server_version:${uid}`;
-          const newKey = `last_pull_server_version:${realId}`;
-          const oldCursor = `last_pull_cursor_v2:${uid}`;
-          const newCursor = `last_pull_cursor_v2:${realId}`;
-          await executeSqlAsync('DELETE FROM meta WHERE key IN (?, ?, ?, ?);', [
-            oldKey,
-            newKey,
-            oldCursor,
-            newCursor,
-          ]);
+          const verbose = Boolean(
+            (globalThis as any).__NEON_VERBOSE__ || (globalThis as any).__SYNC_VERBOSE__
+          );
+          if (__DEV__ && verbose)
+            console.log('[sync] syncBothWays: runFullSync skipped', runResult.reason);
         } catch (e) {}
+        _lastSyncAttemptAt = Date.now();
+        _syncInProgress = false;
+        try {
+          setSyncStatus('idle');
+        } catch (e) {}
+        return {
+          ok: true,
+          reason:
+            runResult.reason === 'no_session' || runResult.reason === 'cancelled'
+              ? 'up_to_date'
+              : (runResult.reason as any),
+          upToDate: true,
+          counts: { pushed: 0, pulled: 0 },
+        } satisfies SyncResult;
+      }
+
+      // If runFullSync reports push/pull failures, treat this as a sync error.
+      // (We still allow partial local progress, but UI should prompt the user to retry.)
+      try {
+        const errs: any = (runResult as any)?.errors || null;
+        const pushFailed = !!errs?.push;
+        const pullFailed = !!errs?.pull;
+        if (pushFailed || pullFailed) {
+          try {
+            setSyncStatus('error');
+          } catch (e) {}
+          return { ok: false, reason: 'error' } satisfies SyncResult;
+        }
       } catch (e) {}
 
+      _lastSuccessfulSyncAt = Date.now();
       try {
-        await saveSession(
-          realId,
-          name,
-          email,
-          (sess as any)?.image ?? null,
-          (sess as any)?.imageUrl ?? null,
-          clerkId
-        );
+        // Persist last successful sync time so UI can show it after restarts
+        await AsyncStorage.setItem('last_sync_at', String(_lastSuccessfulSyncAt));
       } catch (e) {}
+      _syncFailureCount = 0;
+
+      // Compute push/pull counts for callers and for last-sync metrics
+      let pushedCount = 0;
+      let pulledCount = 0;
+      try {
+        if (runResult && runResult.status === 'ran') {
+          // push result may be an object { pushed: string[] } or an array
+          const pr: any = runResult.pushed;
+          if (pr) {
+            if (Array.isArray(pr)) pushedCount = pr.length;
+            else if (Array.isArray(pr.pushed)) pushedCount = pr.pushed.length;
+            else if (typeof pr === 'number') pushedCount = pr;
+          }
+
+          const pl: any = runResult.pulled;
+          if (pl) {
+            if (typeof pl.pulled === 'number') pulledCount = pl.pulled;
+            else if (typeof pl === 'number') pulledCount = pl;
+          }
+        }
+      } catch (e) {}
+
       try {
         const { notifyEntriesChanged } = require('../utils/dbEvents');
-        notifyEntriesChanged();
+        // UI-first: defer refresh work until after current interactions.
+        InteractionManager.runAfterInteractions(() => {
+          try {
+            notifyEntriesChanged();
+          } catch (e) {}
+        });
       } catch (e) {}
-    } else {
-      // Ensure clerk_id is persisted even when uuid already matches.
+
+      // success -> clear any previous error state
       try {
-        await saveSession(
-          realId,
-          name,
-          email,
-          (sess as any)?.image ?? null,
-          (sess as any)?.imageUrl ?? null,
-          clerkId
-        );
+        setSyncStatus('idle');
       } catch (e) {}
-    }
-  } catch (e) {
-    return { ok: false, reason: 'no_session', upToDate: true, counts: { pushed: 0, pulled: 0 } };
-  }
 
-  // Legacy repair: ensure all local transaction ids are UUIDs before pushing to Neon.
-  // (Older builds created ids like "local_..." which Neon rejects.)
-  try {
-    const { migrateNonUuidTransactionIds } = require('../db/transactions');
-    if (typeof migrateNonUuidTransactionIds === 'function') {
-      await migrateNonUuidTransactionIds();
-    }
-  } catch (e) {}
+      try {
+        // persist last sync counts for diagnostics
+        try {
+          await AsyncStorage.setItem('last_sync_count', String(pulledCount));
+        } catch (e) {}
+      } catch (e) {}
+      const upToDate = pushedCount === 0 && pulledCount === 0;
 
-  _syncInProgress = true;
-  // notify listeners that sync started
-  try {
-    setSyncStatus('syncing');
-  } catch (e) {}
+      // If the pull stopped early (large account / time budget), queue a single follow-up
+      // forced sync to continue pulling more pages.
+      try {
+        const hasMore = Boolean((runResult as any)?.pulled?.hasMore);
+        if (hasMore && pulledCount > 0) {
+          const now = Date.now();
+          const key = syncUserKey || 'global';
+          const last = _followUpPullQueuedAtByUser[key] || 0;
+          if (now - last > 5000) {
+            _followUpPullQueuedAtByUser[key] = now;
+            setTimeout(() => {
+              try {
+                scheduleSync({ source: 'auto', force: true } as any);
+              } catch (e) {}
+            }, 500);
+          }
+        }
+      } catch (e) {}
 
-  try {
-    // Delegate actual sync work to runFullSync (single source of truth)
-    const runResult = await runFullSync({ force: !!options?.force });
-
-    // If runFullSync was skipped (throttled/already running/no-session), treat as non-error no-op.
-    if (runResult?.status === 'skipped') {
+      return {
+        ok: true,
+        reason: upToDate ? 'up_to_date' : 'success',
+        upToDate,
+        counts: { pushed: pushedCount, pulled: pulledCount },
+      } satisfies SyncResult;
+    } catch (err) {
+      // Cancellation is a normal outcome (e.g., logout). Do not enter error state.
+      try {
+        if ((err as any)?.message === 'sync_cancelled') {
+          try {
+            setSyncStatus('idle');
+          } catch (e) {}
+          return {
+            ok: true,
+            reason: 'up_to_date',
+            upToDate: true,
+            counts: { pushed: 0, pulled: 0 },
+          };
+        }
+      } catch (e) {}
       try {
         const verbose = Boolean(
           (globalThis as any).__NEON_VERBOSE__ || (globalThis as any).__SYNC_VERBOSE__
         );
-        if (__DEV__ && verbose)
-          console.log('[sync] syncBothWays: runFullSync skipped', runResult.reason);
+        if (__DEV__ && verbose) console.warn('Sync failed', err);
       } catch (e) {}
-      _lastSyncAttemptAt = Date.now();
+      _syncFailureCount = Math.min(5, _syncFailureCount + 1);
+      // Enter error state — callers should only set this if runFullSync truly failed
+      try {
+        setSyncStatus('error');
+      } catch (e) {}
+      return { ok: false, reason: 'error' } satisfies SyncResult;
+    } finally {
       _syncInProgress = false;
+      // notify listeners that sync finished (if not errored, set to idle above)
       try {
-        setSyncStatus('idle');
+        if (_syncStatus !== 'error') setSyncStatus('idle');
       } catch (e) {}
-      return {
-        ok: true,
-        reason:
-          runResult.reason === 'no_session' || runResult.reason === 'cancelled'
-            ? 'up_to_date'
-            : (runResult.reason as any),
-        upToDate: true,
-        counts: { pushed: 0, pulled: 0 },
-      } satisfies SyncResult;
+      if (_pendingSyncRequested) {
+        _pendingSyncRequested = false;
+        const forceFollowUp = _pendingSyncForce;
+        _pendingSyncForce = false;
+        setTimeout(() => {
+          // Use the UI-friendly scheduler so follow-up sync doesn't block taps/gestures.
+          scheduleSync(forceFollowUp ? { force: true, source: 'auto' } : undefined).catch(() => {
+            // Swallow follow-up errors; banner/NetInfo will reflect offline state.
+          });
+        }, 500);
+      }
     }
-
-    // If runFullSync reports push/pull failures, treat this as a sync error.
-    // (We still allow partial local progress, but UI should prompt the user to retry.)
-    try {
-      const errs: any = (runResult as any)?.errors || null;
-      const pushFailed = !!errs?.push;
-      const pullFailed = !!errs?.pull;
-      if (pushFailed || pullFailed) {
-        try {
-          setSyncStatus('error');
-        } catch (e) {}
-        return { ok: false, reason: 'error' } satisfies SyncResult;
-      }
-    } catch (e) {}
-
-    _lastSuccessfulSyncAt = Date.now();
-    try {
-      // Persist last successful sync time so UI can show it after restarts
-      await AsyncStorage.setItem('last_sync_at', String(_lastSuccessfulSyncAt));
-    } catch (e) {}
-    _syncFailureCount = 0;
-
-    // Compute push/pull counts for callers and for last-sync metrics
-    let pushedCount = 0;
-    let pulledCount = 0;
-    try {
-      if (runResult && runResult.status === 'ran') {
-        // push result may be an object { pushed: string[] } or an array
-        const pr: any = runResult.pushed;
-        if (pr) {
-          if (Array.isArray(pr)) pushedCount = pr.length;
-          else if (Array.isArray(pr.pushed)) pushedCount = pr.pushed.length;
-          else if (typeof pr === 'number') pushedCount = pr;
-        }
-
-        const pl: any = runResult.pulled;
-        if (pl) {
-          if (typeof pl.pulled === 'number') pulledCount = pl.pulled;
-          else if (typeof pl === 'number') pulledCount = pl;
-        }
-      }
-    } catch (e) {}
-
-    try {
-      const { notifyEntriesChanged } = require('../utils/dbEvents');
-      // UI-first: defer refresh work until after current interactions.
-      InteractionManager.runAfterInteractions(() => {
-        try {
-          notifyEntriesChanged();
-        } catch (e) {}
-      });
-    } catch (e) {}
-
-    // success -> clear any previous error state
-    try {
-      setSyncStatus('idle');
-    } catch (e) {}
-
-    try {
-      // persist last sync counts for diagnostics
-      try {
-        await AsyncStorage.setItem('last_sync_count', String(pulledCount));
-      } catch (e) {}
-    } catch (e) {}
-    const upToDate = pushedCount === 0 && pulledCount === 0;
-
-    // If the pull stopped early (large account / time budget), queue a single follow-up
-    // forced sync to continue pulling more pages.
-    try {
-      const hasMore = Boolean((runResult as any)?.pulled?.hasMore);
-      if (hasMore && pulledCount > 0) {
-        const now = Date.now();
-        const key = syncUserKey || 'global';
-        const last = _followUpPullQueuedAtByUser[key] || 0;
-        if (now - last > 5000) {
-          _followUpPullQueuedAtByUser[key] = now;
-          setTimeout(() => {
-            try {
-              scheduleSync({ source: 'auto', force: true } as any);
-            } catch (e) {}
-          }, 500);
-        }
-      }
-    } catch (e) {}
-
-    return {
-      ok: true,
-      reason: upToDate ? 'up_to_date' : 'success',
-      upToDate,
-      counts: { pushed: pushedCount, pulled: pulledCount },
-    } satisfies SyncResult;
-  } catch (err) {
-    // Cancellation is a normal outcome (e.g., logout). Do not enter error state.
-    try {
-      if ((err as any)?.message === 'sync_cancelled') {
-        try {
-          setSyncStatus('idle');
-        } catch (e) {}
-        return { ok: true, reason: 'up_to_date', upToDate: true, counts: { pushed: 0, pulled: 0 } };
-      }
-    } catch (e) {}
-    try {
-      const verbose = Boolean(
-        (globalThis as any).__NEON_VERBOSE__ || (globalThis as any).__SYNC_VERBOSE__
-      );
-      if (__DEV__ && verbose) console.warn('Sync failed', err);
-    } catch (e) {}
-    _syncFailureCount = Math.min(5, _syncFailureCount + 1);
-    // Enter error state — callers should only set this if runFullSync truly failed
-    try {
-      setSyncStatus('error');
-    } catch (e) {}
-    return { ok: false, reason: 'error' } satisfies SyncResult;
-  } finally {
-    _syncInProgress = false;
-    // notify listeners that sync finished (if not errored, set to idle above)
-    try {
-      if (_syncStatus !== 'error') setSyncStatus('idle');
-    } catch (e) {}
-    if (_pendingSyncRequested) {
-      _pendingSyncRequested = false;
-      const forceFollowUp = _pendingSyncForce;
-      _pendingSyncForce = false;
-      setTimeout(() => {
-        // Use the UI-friendly scheduler so follow-up sync doesn't block taps/gestures.
-        scheduleSync(forceFollowUp ? { force: true, source: 'auto' } : undefined).catch(() => {
-          // Swallow follow-up errors; banner/NetInfo will reflect offline state.
-        });
-      }, 500);
-    }
-  }
+  }); // End Mutex
 };
 
 // --- Listeners & Background Tasks ---

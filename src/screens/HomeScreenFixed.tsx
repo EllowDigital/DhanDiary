@@ -39,17 +39,17 @@ enableLegacyLayoutAnimations();
 
 // --- CONSTANTS ---
 const COLORS = {
-  primary: '#2563EB',
-  primaryDark: '#1E40AF',
-  background: '#F8FAFC',
-  card: '#FFFFFF',
-  textMain: '#0F172A',
-  textSub: '#64748B',
-  success: '#10B981',
-  successBg: 'rgba(16, 185, 129, 0.15)',
-  danger: '#EF4444',
-  dangerBg: 'rgba(239, 68, 68, 0.15)',
-  border: '#E2E8F0',
+  primary: themeColors.primary,
+  primaryDark: '#1E40AF', // Keep as variant not in design system
+  background: themeColors.background,
+  card: themeColors.card,
+  textMain: themeColors.text,
+  textSub: themeColors.muted,
+  success: themeColors.accentGreen,
+  successBg: themeColors.accentGreenSoft, // Approx match
+  danger: themeColors.accentRed,
+  dangerBg: themeColors.accentRedSoft, // Approx match
+  border: themeColors.border,
 };
 
 const CHART_PALETTE = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
@@ -284,13 +284,18 @@ const HomeScreen = () => {
 
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }).start();
+
+    // Optimization: Only listen for sync status if we have no entries (bootstrap mode).
+    // Once data exists, we don't need to trigger full screen re-renders for sync spinning.
+    if (entriesCount > 0) return;
+
     const unsub = subscribeSyncStatus((s) => setIsSyncing(s === 'syncing'));
     return () => {
       try {
         unsub?.();
       } catch (e) {}
     };
-  }, [fadeAnim]);
+  }, [fadeAnim, entriesCount]);
 
   // Session & User Info
   useEffect(() => {

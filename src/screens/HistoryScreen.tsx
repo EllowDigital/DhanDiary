@@ -5,6 +5,7 @@ import {
   FlatList,
   Alert,
   Modal,
+  InteractionManager,
   ScrollView,
   TouchableOpacity,
   TouchableWithoutFeedback,
@@ -30,7 +31,7 @@ import CategoryPickerModal from '../components/CategoryPickerModal';
 import { useEntries } from '../hooks/useEntries';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../context/ToastContext';
-import { getTransactionByLocalId } from '../db/transactions';
+import { getTransactionByLocalId, TransactionRow } from '../db/transactions';
 import runInBackground from '../utils/background';
 import useDelayedLoading from '../hooks/useDelayedLoading';
 import FullScreenSpinner from '../components/FullScreenSpinner';
@@ -238,7 +239,7 @@ const EditTransactionModal = React.memo(({ visible, entryId, onClose, onSave }: 
         }
 
         // Deleted guard
-        if ((row as any).deleted_at || Number((row as any).sync_status) === 2) {
+        if (row.deleted_at || row.sync_status === 2) {
           Alert.alert('Cannot edit', 'This transaction is deleted.');
           onClose();
           return;
@@ -246,12 +247,12 @@ const EditTransactionModal = React.memo(({ visible, entryId, onClose, onSave }: 
 
         const applyRowToState = () => {
           if (cancelled) return;
-          setAmount(String((row as any).amount ?? ''));
-          setCategory(ensureCategory((row as any).category));
-          setNote((row as any).note || '');
-          setTypeIndex(isIncome((row as any).type) ? 1 : 0);
+          setAmount(String(row.amount ?? ''));
+          setCategory(ensureCategory(row.category));
+          setNote(row.note || '');
+          setTypeIndex(isIncome(row.type) ? 1 : 0);
 
-          const v = (row as any).date || (row as any).created_at;
+          const v = row.date || row.created_at;
           if (v === null || v === undefined) {
             setDate(new Date());
           } else {
@@ -266,7 +267,7 @@ const EditTransactionModal = React.memo(({ visible, entryId, onClose, onSave }: 
         };
 
         // Warn if pending sync
-        if (Number((row as any).need_sync) === 1) {
+        if (row.need_sync === 1) {
           const id = String(entryId);
           if (allowUnsyncedEditForIdRef.current === id) {
             applyRowToState();
@@ -531,17 +532,32 @@ const HistoryScreen = () => {
     });
   }, [entries]);
 
-  const filtered = useMemo<PreparedEntry[]>(() => {
-    const now = dayjs();
-    const startWeekTs = now.subtract(6, 'day').startOf('day').valueOf();
-    const startMonthTs = now.startOf('month').valueOf();
+  const [deferredEntries, setDeferredEntries] = useState<PreparedEntry[]>([]);
 
-    let list = preparedEntries;
-    if (quickFilter === 'WEEK') list = preparedEntries.filter((e) => e.__ts >= startWeekTs);
-    else if (quickFilter === 'MONTH') list = preparedEntries.filter((e) => e.__ts >= startMonthTs);
+  // UI Perf: Defer the sorting/filtering to avoid dropping frames during navigation transition
+  useEffect(() => {
+    let active = true;
+    const task = InteractionManager.runAfterInteractions(() => {
+      // Re-run filter logic here essentially
+      const now = dayjs();
+      const startWeekTs = now.subtract(6, 'day').startOf('day').valueOf();
+      const startMonthTs = now.startOf('month').valueOf();
 
-    return [...list].sort((a, b) => b.__ts - a.__ts);
+      let list = preparedEntries;
+      if (quickFilter === 'WEEK') list = preparedEntries.filter((e) => e.__ts >= startWeekTs);
+      else if (quickFilter === 'MONTH')
+        list = preparedEntries.filter((e) => e.__ts >= startMonthTs);
+
+      const sorted = [...list].sort((a, b) => b.__ts - a.__ts);
+      if (active) setDeferredEntries(sorted);
+    });
+    return () => {
+      active = false;
+      task.cancel();
+    };
   }, [preparedEntries, quickFilter]);
+
+  const filtered = deferredEntries;
 
   const summary = useMemo(() => {
     let net = 0;
@@ -679,11 +695,11 @@ const HistoryScreen = () => {
         renderItem={renderItem}
         ListHeaderComponent={renderHeader}
         contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 80 }]}
-        initialNumToRender={10}
-        windowSize={5}
+        initialNumToRender={8}
+        windowSize={3}
         removeClippedSubviews={Platform.OS === 'android'}
-        maxToRenderPerBatch={10}
-        updateCellsBatchingPeriod={50}
+        maxToRenderPerBatch={8}
+        updateCellsBatchingPeriod={100}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           !showLoading ? (

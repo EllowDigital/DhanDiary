@@ -23,6 +23,7 @@ import { useAuth, useUser } from '@clerk/clerk-expo';
 import { useNavigation } from '@react-navigation/native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import NetInfo from '@react-native-community/netinfo';
 
 import { getSession } from '../db/session';
@@ -325,69 +326,6 @@ const AccountManagementScreen = () => {
     }
   };
 
-  const requestMediaLibraryPermission = async () => {
-    const current = await ImagePicker.getMediaLibraryPermissionsAsync();
-    if (current.status === ImagePicker.PermissionStatus.GRANTED) return true;
-
-    if (current.status === ImagePicker.PermissionStatus.DENIED && !current.canAskAgain) {
-      Alert.alert(
-        'Permission needed',
-        'Please enable photo library access in Settings to update your profile photo.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Open Settings',
-            onPress: async () => {
-              try {
-                await Linking.openSettings();
-              } catch (e) {
-                showToast('Unable to open Settings. Please enable permissions manually.', 'error');
-              }
-            },
-          },
-        ]
-      );
-      return false;
-    }
-
-    const askUser = await new Promise<boolean>((resolve) => {
-      Alert.alert(
-        'Allow Photo Access',
-        'DhanDiary needs access to your photo library so you can choose a profile picture.',
-        [
-          { text: 'Not now', style: 'cancel', onPress: () => resolve(false) },
-          { text: 'Continue', onPress: () => resolve(true) },
-        ],
-        { cancelable: true, onDismiss: () => resolve(false) }
-      );
-    });
-
-    if (askUser && current.canAskAgain) {
-      const next = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (next.status === ImagePicker.PermissionStatus.GRANTED) return true;
-    }
-
-    Alert.alert(
-      'Permission needed',
-      'Please enable photo library access in Settings to update your profile photo.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Open Settings',
-          onPress: async () => {
-            try {
-              await Linking.openSettings();
-            } catch (e) {
-              showToast('Unable to open Settings. Please enable permissions manually.', 'error');
-            }
-          },
-        },
-      ]
-    );
-
-    return false;
-  };
-
   const handleChangeProfilePhoto = async () => {
     if (isUpdatingPhoto) return;
     if (!user) {
@@ -395,38 +333,58 @@ const AccountManagementScreen = () => {
       return;
     }
 
-    if (!ensureOnline('Updating your profile photo')) return;
+    if (isOnline === false) {
+      showToast('You must be online to change your profile photo.', 'error');
+      return;
+    }
+    if (isOnline === null) {
+      showToast('Checking connection...', 'info');
+      // Optimistically proceed or block? Better to block to avoid crash.
+      return;
+    }
 
     try {
       setIsUpdatingPhoto(true);
 
-      const hasPermission = await requestMediaLibraryPermission();
-      if (!hasPermission) return;
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaType.Images,
+      const pickerOptions: ImagePicker.ImagePickerOptions = {
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.9,
-      });
+        quality: 0.7, // Reduce quality to keep payload size manageable
+        mediaTypes: ['images'],
+        base64: true, // Request base64 directly from picker if supported, but we'll read file to be safe
+      };
+
+      const result = await ImagePicker.launchImageLibraryAsync(pickerOptions);
 
       if (result.canceled) return;
 
       const asset = result.assets?.[0];
       if (!asset?.uri) throw new Error('No image selected');
 
-      const response = await fetch(asset.uri);
-      if (!response.ok) throw new Error('Unable to read selected image');
-      const blob = await response.blob();
+      // Use FileSystem to reliably read the file, avoiding fetch-blob issues
+      // Clerk supports base64 data URIs for setProfileImage
+      const base64Content = await FileSystem.readAsStringAsync(asset.uri, {
+        encoding: 'base64',
+      });
 
-      if (!blob || blob.size === 0) throw new Error('Selected image is empty');
+      const mimeType = asset.mimeType || 'image/jpeg';
+      const filePayload = `data:${mimeType};base64,${base64Content}`;
 
-      await user.setProfileImage({ file: blob });
-      if (typeof (user as any).reload === 'function') await (user as any).reload();
+      // Validate payload size roughly (allocating huge strings can crash, but <1MB is fine)
+      console.log(`[Profile] Preparing upload. Mime: ${mimeType}, Length: ${base64Content.length}`);
+
+      await user.setProfileImage({ file: filePayload });
+
+      // Force reload user to update UI
+      await user.reload();
+
+      // Invalidate the cache to force new image load if we had one
+      // (This might require more complex Image cache clearing, but reload() updates the user object url)
 
       showToast('Profile photo updated', 'success');
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unexpected error';
+      console.error('Profile update error:', err);
       showToast(`Failed to update profile photo: ${msg}`, 'error');
     } finally {
       setIsUpdatingPhoto(false);

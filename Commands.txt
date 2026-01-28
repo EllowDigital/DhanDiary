@@ -1,0 +1,209 @@
+############################################
+
+# SYSTEM / ENVIRONMENT VERIFICATION
+
+############################################
+node -v
+npm -v
+java -version
+adb version
+emulator -version
+expo --version
+
+############################################
+
+# PROJECT NAVIGATION
+
+############################################
+cd D:\Devs\Github\EllowDigital\DhanDiary
+
+############################################
+
+# DEPENDENCY INSTALLATION
+
+############################################
+
+# Normal install (first time / after changes)
+
+npm install
+
+# Clean install (when node_modules is broken)
+
+npm ci
+
+############################################
+
+# DEVELOPMENT (LOCAL)
+
+############################################
+
+# Start Expo development server
+
+npm start
+
+# Start Expo manually
+
+npx expo start
+
+# Run Android app (emulator must be running)
+
+npm run android
+
+# Run Web version
+
+npm run web
+
+# Clear Metro cache and restart
+
+npx expo start -c
+
+############################################
+
+# CLEAN / RESET
+
+############################################
+
+# Clean native build files
+
+npm run clean
+
+# Full manual reset (when everything breaks)
+
+rmdir /s /q node_modules
+del package-lock.json
+npm install
+
+############################################
+
+# LINTING / FORMATTING
+
+############################################
+
+# Lint code
+
+npm run lint
+
+# Lint and auto-fix
+
+npm run lint:fix
+
+# Format code
+
+npm run format
+
+# Check formatting only
+
+npm run format:check
+
+############################################
+
+# TYPE CHECKING
+
+############################################
+npm run typecheck
+
+############################################
+
+# TESTING
+
+############################################
+
+# Unit tests
+
+npm test
+
+# Integration tests
+
+npm run test:integration
+
+############################################
+
+# FULL QUALITY CHECK (CI STYLE)
+
+############################################
+npm run check
+
+############################################
+
+# DATABASE / MIGRATIONS
+
+############################################
+
+# Local migrations
+
+npm run migrate
+
+# Neon migrations
+
+npm run neon:migrate
+
+############################################
+
+# ANDROID (LOCAL NATIVE BUILD)
+
+############################################
+
+# Prebuild native project
+
+npm run prebuild
+
+# Build APK locally (no EAS)
+
+npm run build:apk-local
+
+# APK output:
+
+# android\app\build\outputs\apk\release\
+
+############################################
+
+# EXPO / EAS (CLOUD BUILD)
+
+############################################
+
+# Login to Expo
+
+npx expo login
+
+# Install EAS CLI
+
+npm install -g eas-cli
+
+# Configure EAS (run once)
+
+eas build:configure
+
+# Cloud build for Android
+
+eas build -p android
+
+############################################
+
+# DEBUG / TROUBLESHOOTING
+
+############################################
+
+# Expo diagnostics
+
+npx expo doctor
+
+# List connected Android devices
+
+adb devices
+
+# Restart adb server
+
+adb kill-server
+adb start-server
+
+############################################
+
+# MOST USED DAILY COMMANDS
+
+############################################
+npm install
+npm start
+npm run android
+npm run clean
+npm run build:apk-local
+eas build -p android
