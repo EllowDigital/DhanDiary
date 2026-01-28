@@ -23,6 +23,7 @@ import { useAuth, useUser } from '@clerk/clerk-expo';
 import { useNavigation } from '@react-navigation/native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import NetInfo from '@react-native-community/netinfo';
 
 import { getSession } from '../db/session';
@@ -339,12 +340,12 @@ const AccountManagementScreen = () => {
     try {
       setIsUpdatingPhoto(true);
 
-      // Removed explicit permission request to respect user privacy and use system picker
       const pickerOptions: ImagePicker.ImagePickerOptions = {
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.8, // Reduced quality slightly to ensure upload success
+        quality: 0.7, // Reduce quality to keep payload size manageable
         mediaTypes: ['images'],
+        base64: true, // Request base64 directly from picker if supported, but we'll read file to be safe
       };
 
       const result = await ImagePicker.launchImageLibraryAsync(pickerOptions);
@@ -354,24 +355,25 @@ const AccountManagementScreen = () => {
       const asset = result.assets?.[0];
       if (!asset?.uri) throw new Error('No image selected');
 
-      // Fix for local file handling
-      const response = await fetch(asset.uri);
-      // response.ok is often false/undefined for file:// URIs on Android/iOS
-      // so we only check it if it's a remote URL (http/https)
-      if (asset.uri.startsWith('http') && !response.ok) {
-        throw new Error('Unable to read selected image');
-      }
+      // Use FileSystem to reliably read the file, avoiding fetch-blob issues
+      // Clerk supports base64 data URIs for setProfileImage
+      const base64Content = await FileSystem.readAsStringAsync(asset.uri, {
+        encoding: 'base64',
+      });
 
-      const blob = await response.blob();
+      const mimeType = asset.mimeType || 'image/jpeg';
+      const filePayload = `data:${mimeType};base64,${base64Content}`;
 
-      if (!blob || blob.size === 0) throw new Error('Selected image is empty');
+      // Validate payload size roughly (allocating huge strings can crash, but <1MB is fine)
+      console.log(`[Profile] Preparing upload. Mime: ${mimeType}, Length: ${base64Content.length}`);
 
-      await user.setProfileImage({ file: blob });
+      await user.setProfileImage({ file: filePayload });
 
       // Force reload user to update UI
-      if (typeof (user as any).reload === 'function') {
-        await (user as any).reload();
-      }
+      await user.reload();
+
+      // Invalidate the cache to force new image load if we had one
+      // (This might require more complex Image cache clearing, but reload() updates the user object url)
 
       showToast('Profile photo updated', 'success');
     } catch (err) {

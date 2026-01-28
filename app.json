@@ -14,7 +14,6 @@
       "backgroundColor": "#ffffff"
     },
     "jsEngine": "hermes",
-    /* ✅ NEW ARCHITECTURE (single source of truth) */
     "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "com.ellowdigital.dhandiary",
@@ -61,18 +60,15 @@
         }
       ],
       "expo-image-picker",
-      /* ✅ ANDROID BUILD SOURCE OF TRUTH */
       [
         "expo-build-properties",
         {
           "android": {
             "minSdkVersion": 24,
             "enableHermes": true,
-            /* arm64 only (matches gradle.properties) */
             "abiFilters": [
               "arm64-v8a"
             ],
-            /* Faster native builds */
             "ndk": {
               "debugSymbolLevel": "NONE"
             }
