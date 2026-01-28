@@ -1,5 +1,6 @@
 import * as Updates from 'expo-updates';
 import AsyncStorage from '../utils/AsyncStorageWrapper';
+import NetInfo from '@react-native-community/netinfo';
 
 const STORAGE_KEY = 'last_ota_update_check_at';
 
@@ -30,6 +31,18 @@ let reloadInFlight: Promise<boolean> | null = null;
 
 export const checkForOtaUpdateAvailable = async (timeoutMs = 2000): Promise<boolean> => {
   if (!isUpdatesEnabled()) return false;
+
+  // Check network status first
+  try {
+    const state = await NetInfo.fetch();
+    if (!state.isConnected || state.isInternetReachable === false) {
+      return false;
+    }
+  } catch (e) {
+    // If NetInfo fails, assume offline or proceed? Better to fail safe.
+    return false;
+  }
+
   if (checkInFlight) return checkInFlight;
 
   checkInFlight = (async () => {
