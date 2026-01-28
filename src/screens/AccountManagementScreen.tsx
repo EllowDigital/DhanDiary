@@ -335,7 +335,15 @@ const AccountManagementScreen = () => {
       return;
     }
 
-    if (!ensureOnline('Updating your profile photo')) return;
+    if (isOnline === false) {
+      showToast('You must be online to change your profile photo.', 'error');
+      return;
+    }
+    if (isOnline === null) {
+      showToast('Checking connection...', 'info');
+      // Optimistically proceed or block? Better to block to avoid crash.
+      return;
+    }
 
     try {
       setIsUpdatingPhoto(true);
