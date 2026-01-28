@@ -32,7 +32,7 @@ import { colors } from '../utils/design';
 import { ALLOWED_CATEGORIES, DEFAULT_CATEGORY, ensureCategory } from '../constants/categories';
 import ScreenHeader from '../components/ScreenHeader';
 import { isIncome, toCanonical } from '../utils/transactionType';
-import { getTransactionByLocalId } from '../db/transactions';
+import { getTransactionByLocalId, TransactionRow } from '../db/transactions';
 import { enableLegacyLayoutAnimations } from '../utils/layoutAnimation';
 
 enableLegacyLayoutAnimations();
@@ -148,29 +148,7 @@ const AddEntryScreen: React.FC = () => {
 
   // Helper to parse dates safely
   const parseToDate = (v: any): Date => {
-    if (!v && v !== 0) return new Date();
-    // Numbers (could be seconds or ms)
-    if (typeof v === 'number') {
-      const n = Number(v);
-      if (n < 1e12) return new Date(n * 1000); // likely seconds
-      return new Date(n); // likely ms
-    }
-    // Strings
-    if (typeof v === 'string') {
-      const p = Date.parse(v);
-      if (!Number.isNaN(p)) return new Date(p);
-      // Try parsing numeric string
-      const asNum = Number(v);
-      if (!Number.isNaN(asNum)) {
-        if (asNum < 1e12) return new Date(asNum * 1000);
-        return new Date(asNum);
-      }
-      return new Date();
-    }
-    // If it's already a Date object (or Date-like)
-    if (v instanceof Date) return v;
-
-    return new Date();
+    return dayjs(v).toDate();
   };
 
   // Load Data for Editing (fresh read from SQLite)
@@ -191,22 +169,22 @@ const AddEntryScreen: React.FC = () => {
         }
 
         // Tombstone guard
-        if ((row as any).deleted_at || Number((row as any).sync_status) === 2) {
+        if (row.deleted_at || row.sync_status === 2) {
           showToast('This transaction is deleted and cannot be edited.', 'error');
           navigation.goBack();
           return;
         }
 
         // Optional: warn if the row has pending local changes
-        if (Number((row as any).need_sync) === 1) {
+        if (row.need_sync === 1) {
           if (allowUnsyncedEditRef.current) {
-            setAmount(String((row as any).amount ?? ''));
-            setNote((row as any).note ?? '');
-            setTypeIndex(isIncome((row as any).type) ? 1 : 0);
-            setCategory(ensureCategory((row as any).category));
-            const d = (row as any).date || (row as any).created_at;
+            setAmount(String(row.amount ?? ''));
+            setNote(row.note ?? '');
+            setTypeIndex(isIncome(row.type) ? 1 : 0);
+            setCategory(ensureCategory(row.category));
+            const d = row.date || row.created_at;
             setDate(parseToDate(d));
-            setEditingLocalId(String((row as any).id));
+            setEditingLocalId(String(row.id));
             return;
           }
 
@@ -230,13 +208,13 @@ const AddEntryScreen: React.FC = () => {
                     pendingPromptShowingRef.current = false;
                     allowUnsyncedEditRef.current = true;
                     if (cancelled) return;
-                    setAmount(String((row as any).amount ?? ''));
-                    setNote((row as any).note ?? '');
-                    setTypeIndex(isIncome((row as any).type) ? 1 : 0);
-                    setCategory(ensureCategory((row as any).category));
-                    const d = (row as any).date || (row as any).created_at;
+                    setAmount(String(row.amount ?? ''));
+                    setNote(row.note ?? '');
+                    setTypeIndex(isIncome(row.type) ? 1 : 0);
+                    setCategory(ensureCategory(row.category));
+                    const d = row.date || row.created_at;
                     setDate(parseToDate(d));
-                    setEditingLocalId(String((row as any).id));
+                    setEditingLocalId(String(row.id));
                   },
                 },
               ],
@@ -252,14 +230,14 @@ const AddEntryScreen: React.FC = () => {
           return;
         }
 
-        setAmount(String((row as any).amount ?? ''));
-        setNote((row as any).note ?? '');
-        setTypeIndex(isIncome((row as any).type) ? 1 : 0);
-        setCategory(ensureCategory((row as any).category));
+        setAmount(String(row.amount ?? ''));
+        setNote(row.note ?? '');
+        setTypeIndex(isIncome(row.type) ? 1 : 0);
+        setCategory(ensureCategory(row.category));
 
-        const d = (row as any).date || (row as any).created_at;
+        const d = row.date || row.created_at;
         setDate(parseToDate(d));
-        setEditingLocalId(String((row as any).id));
+        setEditingLocalId(String(row.id));
       } catch (e) {
         if (cancelled) return;
         showToast('Failed to load transaction.', 'error');
