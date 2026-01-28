@@ -310,7 +310,7 @@ const AboutScreen: React.FC = () => {
         title: 'DhanDiary',
         message: `Check out DhanDiary! ${link}`,
       });
-    } catch (e) { }
+    } catch (e) {}
   };
 
   const infoGrid = useMemo(
