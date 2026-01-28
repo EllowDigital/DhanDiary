@@ -8,6 +8,8 @@ import { throwIfSyncCancelled } from './syncCancel';
  * Simple lock to prevent overlapping syncs. Exported so callers can query state.
  */
 export let isSyncRunning = false;
+// NOTE: This exported flag is legacy; robust callers should use the syncManager mutex.
+// runFullSync uses this mainly to prevent *reentrant* calls if bypasses happen.
 
 // Throttle foreground syncs to avoid repeated runs when app quickly toggles
 let lastSyncAt = 0;
@@ -60,9 +62,15 @@ export async function runFullSync(options?: { force?: boolean }): Promise<RunFul
   }
 
   // 1. Concurrency Check
+  // Deadlock guard: if the lock has been held for > 45s (e.g. stalled promise), break it.
   if (isSyncRunning) {
-    if (__DEV__) console.log('[sync] runFullSync: already running, skipping');
-    return { status: 'skipped', reason: 'already_running' };
+    if (now - lastSyncAt > 45000) {
+      if (__DEV__) console.warn('[sync] Breaking stale lock (stuck > 45s)');
+      isSyncRunning = false;
+    } else {
+      if (__DEV__) console.log('[sync] runFullSync: already running, skipping');
+      return { status: 'skipped', reason: 'already_running' };
+    }
   }
 
   // 2. Throttling Check

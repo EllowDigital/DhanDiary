@@ -51,7 +51,7 @@
     "babel-plugin-add-react-displayname": "^0.0.5",
     "bcryptjs": "^3.0.3",
     "dayjs": "^1.11.19",
-    "expo": "~54.0.31",
+    "expo": "~54.0.32",
     "expo-auth-session": "~7.0.10",
     "expo-blur": "~15.0.8",
     "expo-build-properties": "^1.0.9",

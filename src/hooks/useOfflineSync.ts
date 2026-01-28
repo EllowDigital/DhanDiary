@@ -53,41 +53,43 @@ export const useOfflineSync = (userId?: string | null) => {
         }
       } catch (e) {}
 
-      (async () => {
-        try {
-          const res: any = await scheduleSync();
+      // (async () => {
+      //   try {
+      //     const res: any = await scheduleSync();
 
-          // After sync completes, refresh any active entry lists again.
-          try {
-            queryClient.invalidateQueries({ queryKey: ['entries'], exact: false } as any);
-            void queryClient.refetchQueries({ queryKey: ['entries'], exact: false } as any);
-          } catch (e) {}
+      //     // After sync completes, refresh any active entry lists again.
+      //     try {
+      //       queryClient.invalidateQueries({ queryKey: ['entries'], exact: false } as any);
+      //       void queryClient.refetchQueries({ queryKey: ['entries'], exact: false } as any);
+      //     } catch (e) {}
 
-          // Only show toast when a real sync ran and moved data.
-          if (res && res.ok && res.reason === 'success') {
-            const pushed = res.counts?.pushed || 0;
-            const pulled = res.counts?.pulled || 0;
-            if (pulled > 0 || pushed > 0) {
-              const parts = [] as string[];
-              if (pulled > 0) parts.push(`${pulled} pulled`);
-              if (pushed > 0) parts.push(`${pushed} pushed`);
-              showToast(`Auto-sync complete — ${parts.join(', ')}`);
-            }
-          } else {
-            // Up-to-date / throttled / already-running are normal states; keep logs quiet.
-            if (__DEV__ && res && res.ok === false && res.reason === 'error') {
-              console.log('[useOfflineSync] sync error', res);
-            }
-          }
-        } catch (err) {
-          // If logout/navigation requested cancellation, don't surface as a failure.
-          try {
-            if (isSyncCancelRequested() || (err as any)?.message === 'sync_cancelled') return;
-          } catch (e) {}
-          if (__DEV__) console.warn('[useOfflineSync] sync failed', err);
-          showToast('Auto-sync failed');
-        }
-      })();
+      //     // Only show toast when a real sync ran and moved data.
+      //     if (res && res.ok && res.reason === 'success') {
+      //       const pushed = res.counts?.pushed || 0;
+      //       const pulled = res.counts?.pulled || 0;
+      //       if (pulled > 0 || pushed > 0) {
+      //         const parts = [] as string[];
+      //         if (pulled > 0) parts.push(`${pulled} pulled`);
+      //         if (pushed > 0) parts.push(`${pushed} pushed`);
+      //         showToast(`Auto-sync complete — ${parts.join(', ')}`);
+      //       }
+      //     } else {
+      //       // Up-to-date / throttled / already-running are normal states; keep logs quiet.
+      //       if (__DEV__ && res && res.ok === false && res.reason === 'error') {
+      //         console.log('[useOfflineSync] sync error', res);
+      //       }
+      //     }
+      //   } catch (err) {
+      //     // If logout/navigation requested cancellation, don't surface as a failure.
+      //     try {
+      //       if (isSyncCancelRequested() || (err as any)?.message === 'sync_cancelled') return;
+      //     } catch (e) {}
+      //     if (__DEV__) console.warn('[useOfflineSync] sync failed', err);
+      //     showToast('Auto-sync failed');
+      //   }
+      // })();
+      // Redundant trigger removed: syncManager/App.tsx listeners handle this. This hook now only manages
+      // conflicts and forcing a query refresh on network restore.
     }
 
     prevOnlineRef.current = !!isOnline;

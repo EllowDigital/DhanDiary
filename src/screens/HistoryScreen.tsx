@@ -5,6 +5,7 @@ import {
   FlatList,
   Alert,
   Modal,
+  InteractionManager,
   ScrollView,
   TouchableOpacity,
   TouchableWithoutFeedback,
@@ -531,17 +532,32 @@ const HistoryScreen = () => {
     });
   }, [entries]);
 
-  const filtered = useMemo<PreparedEntry[]>(() => {
-    const now = dayjs();
-    const startWeekTs = now.subtract(6, 'day').startOf('day').valueOf();
-    const startMonthTs = now.startOf('month').valueOf();
+  const [deferredEntries, setDeferredEntries] = useState<PreparedEntry[]>([]);
 
-    let list = preparedEntries;
-    if (quickFilter === 'WEEK') list = preparedEntries.filter((e) => e.__ts >= startWeekTs);
-    else if (quickFilter === 'MONTH') list = preparedEntries.filter((e) => e.__ts >= startMonthTs);
+  // UI Perf: Defer the sorting/filtering to avoid dropping frames during navigation transition
+  useEffect(() => {
+    let active = true;
+    const task = InteractionManager.runAfterInteractions(() => {
+      // Re-run filter logic here essentially
+      const now = dayjs();
+      const startWeekTs = now.subtract(6, 'day').startOf('day').valueOf();
+      const startMonthTs = now.startOf('month').valueOf();
 
-    return [...list].sort((a, b) => b.__ts - a.__ts);
+      let list = preparedEntries;
+      if (quickFilter === 'WEEK') list = preparedEntries.filter((e) => e.__ts >= startWeekTs);
+      else if (quickFilter === 'MONTH')
+        list = preparedEntries.filter((e) => e.__ts >= startMonthTs);
+
+      const sorted = [...list].sort((a, b) => b.__ts - a.__ts);
+      if (active) setDeferredEntries(sorted);
+    });
+    return () => {
+      active = false;
+      task.cancel();
+    };
   }, [preparedEntries, quickFilter]);
+
+  const filtered = deferredEntries;
 
   const summary = useMemo(() => {
     let net = 0;
@@ -679,11 +695,11 @@ const HistoryScreen = () => {
         renderItem={renderItem}
         ListHeaderComponent={renderHeader}
         contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 80 }]}
-        initialNumToRender={10}
-        windowSize={5}
+        initialNumToRender={8}
+        windowSize={3}
         removeClippedSubviews={Platform.OS === 'android'}
-        maxToRenderPerBatch={10}
-        updateCellsBatchingPeriod={50}
+        maxToRenderPerBatch={8}
+        updateCellsBatchingPeriod={100}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           !showLoading ? (
