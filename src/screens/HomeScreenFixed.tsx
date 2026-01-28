@@ -284,13 +284,18 @@ const HomeScreen = () => {
 
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }).start();
+
+    // Optimization: Only listen for sync status if we have no entries (bootstrap mode).
+    // Once data exists, we don't need to trigger full screen re-renders for sync spinning.
+    if (entriesCount > 0) return;
+
     const unsub = subscribeSyncStatus((s) => setIsSyncing(s === 'syncing'));
     return () => {
       try {
         unsub?.();
       } catch (e) { }
     };
-  }, [fadeAnim]);
+  }, [fadeAnim, entriesCount]);
 
   // Session & User Info
   useEffect(() => {

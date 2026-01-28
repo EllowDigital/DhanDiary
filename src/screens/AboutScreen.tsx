@@ -48,17 +48,19 @@ const BUILD_TYPE = Constants.expoConfig?.extra?.BUILD_TYPE || (__DEV__ ? 'Develo
 const getLatestShareLink = async () => APP_WEBSITE_URL;
 
 // --- THEME ---
+// --- THEME ---
+// Mapping strictly to design system to avoid fragmentation
 const theme = {
-  background: colors.background || '#F8FAFC',
-  surface: colors.card || '#FFFFFF',
-  primary: colors.primary || '#2563EB',
-  primarySoft: colors.primarySoft || 'rgba(37, 99, 235, 0.1)',
-  text: colors.text || '#1E293B',
-  textSecondary: colors.muted || '#64748B',
-  accentGreen: colors.accentGreen || '#10B981',
-  accentRed: colors.accentRed || '#EF4444',
-  heroBg: '#0F172A', // Dark Slate for premium contrast
-  border: colors.border || '#E2E8F0',
+  background: colors.background,
+  surface: colors.card,
+  primary: colors.primary,
+  primarySoft: colors.primarySoft,
+  text: colors.text,
+  textSecondary: colors.muted,
+  accentGreen: colors.accentGreen,
+  accentRed: colors.accentRed,
+  heroBg: '#0F172A', // Custom dark shade for Hero Only
+  border: colors.border,
 };
 
 // --- COMPONENT: SYSTEM STATUS PILL ---
@@ -106,6 +108,7 @@ const SystemStatus: React.FC = () => {
     >
       <View style={[styles.activeDot, { backgroundColor: dotColor }]} />
       <Text
+        numberOfLines={1}
         style={[
           styles.activeText,
           tone === 'positive'
@@ -113,6 +116,7 @@ const SystemStatus: React.FC = () => {
             : tone === 'warning'
               ? { color: '#92400E' }
               : { color: '#475569' },
+          { flexShrink: 1 },
         ]}
       >
         {label}
@@ -306,7 +310,7 @@ const AboutScreen: React.FC = () => {
         title: 'DhanDiary',
         message: `Check out DhanDiary! ${link}`,
       });
-    } catch (e) {}
+    } catch (e) { }
   };
 
   const infoGrid = useMemo(
@@ -545,7 +549,7 @@ const styles = StyleSheet.create({
   heroIcon: { width: 56, height: 56 },
   heroText: { marginLeft: 16, flex: 1, justifyContent: 'center' },
   heroTextStack: { marginLeft: 0, marginTop: 12, width: '100%' },
-  heroTitle: { fontSize: 24, fontWeight: '800', color: '#fff', letterSpacing: -0.5 },
+  heroTitle: { fontSize: 22, fontWeight: '800', color: '#fff', letterSpacing: -0.5 },
   heroSubtitle: { fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
   heroDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.1)', marginVertical: 20 },
   heroFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
@@ -590,10 +594,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,0.1)',
-    paddingVertical: 6,
+    paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 100,
     gap: 4,
+    maxWidth: '100%',
   },
   visitBtnWrapItem: {
     marginRight: 8,
