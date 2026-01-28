@@ -192,7 +192,7 @@ const AccountManagementScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -202,7 +202,7 @@ const AccountManagementScreen = () => {
       try {
         const s = await getSession();
         if (mounted) setFallbackSession(s);
-      } catch (e) {}
+      } catch (e) { }
     };
     load();
     const unsub = subscribeSession((s) => {
@@ -212,7 +212,7 @@ const AccountManagementScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -325,68 +325,7 @@ const AccountManagementScreen = () => {
     }
   };
 
-  const requestMediaLibraryPermission = async () => {
-    const current = await ImagePicker.getMediaLibraryPermissionsAsync();
-    if (current.status === ImagePicker.PermissionStatus.GRANTED) return true;
 
-    if (current.status === ImagePicker.PermissionStatus.DENIED && !current.canAskAgain) {
-      Alert.alert(
-        'Permission needed',
-        'Please enable photo library access in Settings to update your profile photo.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Open Settings',
-            onPress: async () => {
-              try {
-                await Linking.openSettings();
-              } catch (e) {
-                showToast('Unable to open Settings. Please enable permissions manually.', 'error');
-              }
-            },
-          },
-        ]
-      );
-      return false;
-    }
-
-    const askUser = await new Promise<boolean>((resolve) => {
-      Alert.alert(
-        'Allow Photo Access',
-        'DhanDiary needs access to your photo library so you can choose a profile picture.',
-        [
-          { text: 'Not now', style: 'cancel', onPress: () => resolve(false) },
-          { text: 'Continue', onPress: () => resolve(true) },
-        ],
-        { cancelable: true, onDismiss: () => resolve(false) }
-      );
-    });
-
-    if (askUser && current.canAskAgain) {
-      const next = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (next.status === ImagePicker.PermissionStatus.GRANTED) return true;
-    }
-
-    Alert.alert(
-      'Permission needed',
-      'Please enable photo library access in Settings to update your profile photo.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Open Settings',
-          onPress: async () => {
-            try {
-              await Linking.openSettings();
-            } catch (e) {
-              showToast('Unable to open Settings. Please enable permissions manually.', 'error');
-            }
-          },
-        },
-      ]
-    );
-
-    return false;
-  };
 
   const handleChangeProfilePhoto = async () => {
     if (isUpdatingPhoto) return;
@@ -400,13 +339,11 @@ const AccountManagementScreen = () => {
     try {
       setIsUpdatingPhoto(true);
 
-      const hasPermission = await requestMediaLibraryPermission();
-      if (!hasPermission) return;
-
+      // Removed explicit permission request to respect user privacy and use system picker
       const pickerOptions: ImagePicker.ImagePickerOptions = {
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.9,
+        quality: 0.8, // Reduced quality slightly to ensure upload success
         mediaTypes: ['images'],
       };
 
@@ -417,18 +354,29 @@ const AccountManagementScreen = () => {
       const asset = result.assets?.[0];
       if (!asset?.uri) throw new Error('No image selected');
 
+      // Fix for local file handling
       const response = await fetch(asset.uri);
-      if (!response.ok) throw new Error('Unable to read selected image');
+      // response.ok is often false/undefined for file:// URIs on Android/iOS
+      // so we only check it if it's a remote URL (http/https)
+      if (asset.uri.startsWith('http') && !response.ok) {
+        throw new Error('Unable to read selected image');
+      }
+
       const blob = await response.blob();
 
       if (!blob || blob.size === 0) throw new Error('Selected image is empty');
 
       await user.setProfileImage({ file: blob });
-      if (typeof (user as any).reload === 'function') await (user as any).reload();
+
+      // Force reload user to update UI
+      if (typeof (user as any).reload === 'function') {
+        await (user as any).reload();
+      }
 
       showToast('Profile photo updated', 'success');
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unexpected error';
+      console.error('Profile update error:', err);
       showToast(`Failed to update profile photo: ${msg}`, 'error');
     } finally {
       setIsUpdatingPhoto(false);
@@ -522,7 +470,7 @@ const AccountManagementScreen = () => {
               Alert.alert(
                 'Delete failed',
                 err?.message ||
-                  'We could not delete your account from the cloud. Please check your internet connection and try again.'
+                'We could not delete your account from the cloud. Please check your internet connection and try again.'
               );
             } finally {
               setDeletingAccount(false);
@@ -564,7 +512,7 @@ const AccountManagementScreen = () => {
                 onPress={() => {
                   try {
                     navigation.goBack();
-                  } catch (e) {}
+                  } catch (e) { }
                 }}
               >
                 <MaterialIcon name="arrow-back" size={18} color={colors.text || '#1E293B'} />
@@ -695,10 +643,10 @@ const AccountManagementScreen = () => {
                   {(user as any)?.emailAddresses?.some(
                     (e: any) => e.verification?.status === 'verified'
                   ) && (
-                    <View style={styles.verifiedBadge}>
-                      <MaterialIcon name="check" size={12} color="white" />
-                    </View>
-                  )}
+                      <View style={styles.verifiedBadge}>
+                        <MaterialIcon name="check" size={12} color="white" />
+                      </View>
+                    )}
                 </View>
 
                 <View style={styles.heroInfo}>

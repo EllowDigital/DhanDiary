@@ -5,22 +5,17 @@
     "slug": "dhandiary",
     "scheme": "dhandiary",
     "version": "2.5.2",
-
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-
     "icon": "./assets/icon.png",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-
     "jsEngine": "hermes",
-
     /* ✅ NEW ARCHITECTURE (single source of truth) */
     "newArchEnabled": true,
-
     "ios": {
       "bundleIdentifier": "com.ellowdigital.dhandiary",
       "buildNumber": "252",
@@ -29,29 +24,31 @@
         "NSPhotoLibraryUsageDescription": "Allow DhanDiary to access your photo library to update your profile picture."
       }
     },
-
     "android": {
       "package": "com.ellowdigital.dhandiary",
       "versionCode": 252,
-
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-
       "intentFilters": [
         {
           "action": "VIEW",
-          "category": ["BROWSABLE", "DEFAULT"],
-          "data": [{ "scheme": "dhandiary" }]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ],
+          "data": [
+            {
+              "scheme": "dhandiary"
+            }
+          ]
         }
       ]
     },
-
     "web": {
       "favicon": "./assets/favicon.png"
     },
-
     "plugins": [
       "expo-sqlite",
       "expo-updates",
@@ -63,7 +60,7 @@
           "faceIDPermission": "Allow DhanDiary to use Face ID to secure your data."
         }
       ],
-
+      "expo-image-picker",
       /* ✅ ANDROID BUILD SOURCE OF TRUTH */
       [
         "expo-build-properties",
@@ -71,10 +68,10 @@
           "android": {
             "minSdkVersion": 24,
             "enableHermes": true,
-
             /* arm64 only (matches gradle.properties) */
-            "abiFilters": ["arm64-v8a"],
-
+            "abiFilters": [
+              "arm64-v8a"
+            ],
             /* Faster native builds */
             "ndk": {
               "debugSymbolLevel": "NONE"
@@ -83,18 +80,15 @@
         }
       ]
     ],
-
     "updates": {
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0,
       "url": "https://u.expo.dev/77c33e0a-8d3a-4f5b-afcf-72967c9af0bf"
     },
-
     "runtimeVersion": {
       "policy": "appVersion"
     },
-
     "extra": {
       "eas": {
         "projectId": "77c33e0a-8d3a-4f5b-afcf-72967c9af0bf"
