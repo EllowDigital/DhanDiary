@@ -132,51 +132,68 @@ export async function ensureLocalSchemaUpgrades(): Promise<void> {
       // This will convert mixed numeric/string dates into ISO strings (for date/created_at)
       // and epoch ms for updated_at. This preserves the original moment while making
       // client-side grouping and sorting reliable across devices.
+      // Normalize existing date/created_at/updated_at formats for consistency.
+      // Optimazation: Run this ONLY once. We use a meta flag to track it.
       try {
-        const rows =
-          (await getAllAsync('SELECT id, date, created_at, updated_at FROM transactions;')) || [];
-        for (const r of rows) {
+        const metaRows = (await getAllAsync("SELECT value FROM meta WHERE key = 'normalized_dates_v2'")) || [];
+        const alreadyDone = metaRows.length > 0;
+
+        if (!alreadyDone) {
+          if (__DEV__) console.log('[sqlite] running one-time date normalization...');
+          const rows =
+            (await getAllAsync('SELECT id, date, created_at, updated_at FROM transactions;')) || [];
+
+          let batchCount = 0;
+
+          await executeSqlAsync('BEGIN TRANSACTION;');
           try {
-            const toIso = (v: any, fallbackMs?: number) => {
-              if (v == null) return fallbackMs ? new Date(fallbackMs).toISOString() : null;
-              if (v instanceof Date) return v.toISOString();
-              const n = Number(v);
-              if (!Number.isNaN(n)) {
-                const ms = n < 1e12 ? n * 1000 : n;
-                return new Date(ms).toISOString();
+            for (const r of rows) {
+              // ... (logic remains same, just inside the loop)
+              const toIso = (v: any, fallbackMs?: number) => {
+                if (v == null) return fallbackMs ? new Date(fallbackMs).toISOString() : null;
+                if (v instanceof Date) return v.toISOString();
+                const n = Number(v);
+                if (!Number.isNaN(n)) {
+                  const ms = n < 1e12 ? n * 1000 : n;
+                  return new Date(ms).toISOString();
+                }
+                const parsed = Date.parse(String(v));
+                if (!Number.isNaN(parsed)) return new Date(parsed).toISOString();
+                return fallbackMs ? new Date(fallbackMs).toISOString() : null;
+              };
+
+              const normUpdated = (() => {
+                const u = r.updated_at;
+                if (u == null) return null;
+                const n = Number(u);
+                if (!Number.isNaN(n)) return n < 1e12 ? n * 1000 : n;
+                const parsed = Date.parse(String(u));
+                return Number.isNaN(parsed) ? null : parsed;
+              })();
+
+              const newDate = toIso(r.date, normUpdated ?? Date.now());
+              const newCreated = toIso(r.created_at, normUpdated ?? Date.now());
+              const newUpdated = normUpdated ?? null;
+
+              const needUpdate =
+                (newDate && String(newDate) !== String(r.date)) ||
+                (newCreated && String(newCreated) !== String(r.created_at)) ||
+                (newUpdated && Number(newUpdated) !== Number(r.updated_at));
+
+              if (needUpdate) {
+                await executeSqlAsync(
+                  'UPDATE transactions SET date = ?, created_at = ?, updated_at = ? WHERE id = ?; ',
+                  [newDate ?? r.date, newCreated ?? r.created_at, newUpdated ?? r.updated_at, r.id]
+                );
+                batchCount++;
               }
-              const parsed = Date.parse(String(v));
-              if (!Number.isNaN(parsed)) return new Date(parsed).toISOString();
-              return fallbackMs ? new Date(fallbackMs).toISOString() : null;
-            };
-
-            const normUpdated = (() => {
-              const u = r.updated_at;
-              if (u == null) return null;
-              const n = Number(u);
-              if (!Number.isNaN(n)) return n < 1e12 ? n * 1000 : n;
-              const parsed = Date.parse(String(u));
-              return Number.isNaN(parsed) ? null : parsed;
-            })();
-
-            const newDate = toIso(r.date, normUpdated ?? Date.now());
-            const newCreated = toIso(r.created_at, normUpdated ?? Date.now());
-            const newUpdated = normUpdated ?? null;
-
-            const needUpdate =
-              (newDate && String(newDate) !== String(r.date)) ||
-              (newCreated && String(newCreated) !== String(r.created_at)) ||
-              (newUpdated && Number(newUpdated) !== Number(r.updated_at));
-
-            if (needUpdate) {
-              await executeSqlAsync(
-                'UPDATE transactions SET date = ?, created_at = ?, updated_at = ? WHERE id = ?; ',
-                [newDate ?? r.date, newCreated ?? r.created_at, newUpdated ?? r.updated_at, r.id]
-              );
-              if (__DEV__) console.log('[sqlite] normalized transaction dates for', r.id);
             }
-          } catch (e) {
-            if (__DEV__) console.warn('[sqlite] failed to normalize row', r && r.id, e);
+            await executeSqlAsync("INSERT OR REPLACE INTO meta (key, value) VALUES ('normalized_dates_v2', '1');");
+            await executeSqlAsync('COMMIT;');
+            if (__DEV__) console.log(`[sqlite] normalization complete. Updated ${batchCount} rows.`);
+          } catch (err) {
+            await executeSqlAsync('ROLLBACK;');
+            throw err;
           }
         }
       } catch (e) {

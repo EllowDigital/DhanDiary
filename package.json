@@ -102,6 +102,7 @@
     "babel-preset-expo": "^54.0.10",
     "depcheck": "^1.4.7",
     "dotenv": "^17.2.3",
+    "eas-cli": "^16.31.0",
     "eslint": "^9.39.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-import-resolver-typescript": "^4.4.4",
