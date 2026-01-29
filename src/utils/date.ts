@@ -28,7 +28,11 @@ export function dayjsFrom(value: unknown) {
 }
 
 export function formatDate(value: unknown, fmt = 'MMM D, h:mm A') {
-  return dayjsFrom(value).format(fmt);
+  try {
+    return dayjsFrom(value).format(fmt);
+  } catch (e) {
+    return 'Invalid Date';
+  }
 }
 
 export default { parseToDate, dayjsFrom, formatDate };
