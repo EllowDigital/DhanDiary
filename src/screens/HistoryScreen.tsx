@@ -31,7 +31,7 @@ import CategoryPickerModal from '../components/CategoryPickerModal';
 import { useEntries } from '../hooks/useEntries';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../context/ToastContext';
-import { getTransactionByLocalId, TransactionRow } from '../db/transactions';
+import { getTransactionByLocalId } from '../db/transactions';
 import runInBackground from '../utils/background';
 import useDelayedLoading from '../hooks/useDelayedLoading';
 import FullScreenSpinner from '../components/FullScreenSpinner';
@@ -58,14 +58,6 @@ interface TransactionEntry {
   deleted_at?: string | null;
 }
 
-type PreparedEntry = TransactionEntry & {
-  __ts: number;
-  __amountNum: number;
-  __dateStr: string;
-  __amountStr: string;
-  __isIncome: boolean;
-};
-
 interface EditModalProps {
   visible: boolean;
   entryId: string | null;
@@ -74,36 +66,53 @@ interface EditModalProps {
 }
 
 // --- SETUP ---
-const resolveEntryMoment = (entry: TransactionEntry) => {
+const resolveEntrySortKey = (entry: TransactionEntry) => {
   const v = entry?.date || entry?.created_at;
-  if (v === null || v === undefined) return dayjs();
-  const num = Number(v);
-  if (!Number.isNaN(num)) {
-    // heuristic: < 1e12 usually means seconds (unix timestamp)
-    const ms = num < 1e12 ? num * 1000 : num;
-    return dayjs(ms);
-  }
-  return dayjs(v);
+  if (v === null || v === undefined) return Date.now();
+  if (typeof v === 'number') return v;
+  if (v instanceof Date) return v.getTime();
+  const n = Number(v);
+  if (!Number.isNaN(n)) return n < 1e12 ? n * 1000 : n;
+  return Date.parse(String(v)) || Date.now();
 };
 
 const inrFormatter = new Intl.NumberFormat('en-IN');
 
 // --- 1. SWIPEABLE LIST ITEM ---
+// Optimized: Computes derived state inside the item, not in the parent list
 const SwipeableHistoryItem = React.memo(
   ({
     item,
     onEdit,
     onDelete,
   }: {
-    item: PreparedEntry;
-    onEdit: (entry: PreparedEntry) => void;
+    item: TransactionEntry;
+    onEdit: (entry: TransactionEntry) => void;
     onDelete: (id: string) => void;
   }) => {
-    const isInc = item.__isIncome;
+    // Derived state (lightweight)
+    const isInc = isIncome(item.type);
     const color = isInc ? colors.accentGreen || '#10B981' : colors.accentRed || '#EF4444';
     const catIcon = getIconForCategory(item.category);
     const iconName = catIcon || (isInc ? 'arrow-downward' : 'arrow-upward');
-    const dateStr = item.__dateStr;
+
+    // Safety: ensure date format doesn't crash
+    const dateStr = useMemo(() => {
+      try {
+        return formatDate(item.date || item.created_at);
+      } catch (e) {
+        return 'Invalid Date';
+      }
+    }, [item.date, item.created_at]);
+
+    const amountStr = useMemo(() => {
+      try {
+        return inrFormatter.format(Number(item.amount) || 0);
+      } catch (e) {
+        return '0';
+      }
+    }, [item.amount]);
+
     const swipeableRef = useRef<Swipeable>(null);
 
     const renderRightActions = (
@@ -187,7 +196,7 @@ const SwipeableHistoryItem = React.memo(
               </View>
 
               <Text style={[styles.compactAmount, { color }]}>
-                {isInc ? '+' : '-'}₹{item.__amountStr}
+                {isInc ? '+' : '-'}₹{amountStr}
               </Text>
             </View>
             <View style={styles.compactSubRow}>
@@ -507,7 +516,7 @@ const HistoryScreen = () => {
   const dismissSwipeTip = useCallback(() => {
     const key = `history_swipe_tip_dismissed:${user?.id || 'anon'}`;
     setSwipeTipVisible(false);
-    AsyncStorage.setItem(key, '1').catch(() => {});
+    AsyncStorage.setItem(key, '1').catch(() => { });
   }, [user?.id]);
 
   const toggleFilter = useCallback((f: 'ALL' | 'WEEK' | 'MONTH') => {
@@ -515,54 +524,40 @@ const HistoryScreen = () => {
     setQuickFilter(f);
   }, []);
 
-  // Filter Logic
-  const preparedEntries = useMemo<PreparedEntry[]>(() => {
+  // Optimized Filter Logic: Filter directly without excessive mapping
+  // We use useMemo but only for filtering, not for formatting every item.
+  // Formatting is deferred to the renderItem component.
+  const filtered = useMemo(() => {
     const list = entries || [];
-    return list.map((e) => {
-      const ts = resolveEntryMoment(e).valueOf();
-      const amountNum = Number(e.amount) || 0;
-      return {
-        ...e,
-        __ts: ts,
-        __amountNum: amountNum,
-        __dateStr: formatDate(e.date || e.created_at),
-        __amountStr: inrFormatter.format(amountNum),
-        __isIncome: isIncome(e.type),
-      };
+    if (!list.length) return [];
+
+    // Sort first (descending date)
+    // Note: useEntries hook already returns sorted data usually, but we ensure it here
+    // sorting is somewhat expensive, but doing it on raw data is faster than mapped data
+    const sorted = [...list].sort((a, b) => resolveEntrySortKey(b) - resolveEntrySortKey(a));
+
+    const now = dayjs();
+    let cutoff = 0;
+
+    if (quickFilter === 'WEEK') {
+      cutoff = now.subtract(6, 'day').startOf('day').valueOf();
+    } else if (quickFilter === 'MONTH') {
+      cutoff = now.startOf('month').valueOf();
+    } else {
+      return sorted; // ALL
+    }
+
+    return sorted.filter(e => {
+      const ts = resolveEntrySortKey(e);
+      return ts >= cutoff;
     });
-  }, [entries]);
-
-  const [deferredEntries, setDeferredEntries] = useState<PreparedEntry[]>([]);
-
-  // UI Perf: Defer the sorting/filtering to avoid dropping frames during navigation transition
-  useEffect(() => {
-    let active = true;
-    const task = InteractionManager.runAfterInteractions(() => {
-      // Re-run filter logic here essentially
-      const now = dayjs();
-      const startWeekTs = now.subtract(6, 'day').startOf('day').valueOf();
-      const startMonthTs = now.startOf('month').valueOf();
-
-      let list = preparedEntries;
-      if (quickFilter === 'WEEK') list = preparedEntries.filter((e) => e.__ts >= startWeekTs);
-      else if (quickFilter === 'MONTH')
-        list = preparedEntries.filter((e) => e.__ts >= startMonthTs);
-
-      const sorted = [...list].sort((a, b) => b.__ts - a.__ts);
-      if (active) setDeferredEntries(sorted);
-    });
-    return () => {
-      active = false;
-      task.cancel();
-    };
-  }, [preparedEntries, quickFilter]);
-
-  const filtered = deferredEntries;
+  }, [entries, quickFilter]);
 
   const summary = useMemo(() => {
     let net = 0;
     filtered.forEach((e) => {
-      net += e.__isIncome ? e.__amountNum : -e.__amountNum;
+      const amt = Number(e.amount) || 0;
+      net += e.type === 'income' || e.type === 'in' ? amt : -amt;
     });
     return { net, count: filtered.length };
   }, [filtered]);
@@ -573,6 +568,8 @@ const HistoryScreen = () => {
         await updateEntry({ local_id: id, updates });
         showToast('Updated successfully');
         setEditingEntryId(null);
+        // Force layout animation for smooth removal/update if list changes
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       } catch (err) {
         showToast('Update failed', 'error');
         throw err;
@@ -591,6 +588,7 @@ const HistoryScreen = () => {
           onPress: () => {
             runInBackground(async () => {
               try {
+                // LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
                 await deleteEntry(id);
                 showToast('Deleted');
               } catch (e) {
@@ -609,7 +607,7 @@ const HistoryScreen = () => {
   }, []);
 
   const renderItem = useCallback(
-    ({ item }: { item: PreparedEntry }) => (
+    ({ item }: { item: TransactionEntry }) => (
       <SwipeableHistoryItem item={item} onEdit={attemptEdit} onDelete={handleDelete} />
     ),
     [attemptEdit, handleDelete]
@@ -695,11 +693,11 @@ const HistoryScreen = () => {
         renderItem={renderItem}
         ListHeaderComponent={renderHeader}
         contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 80 }]}
-        initialNumToRender={8}
-        windowSize={3}
+        initialNumToRender={10}
+        windowSize={5}
         removeClippedSubviews={Platform.OS === 'android'}
-        maxToRenderPerBatch={8}
-        updateCellsBatchingPeriod={100}
+        maxToRenderPerBatch={10}
+        updateCellsBatchingPeriod={50}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           !showLoading ? (
@@ -798,108 +796,118 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.card || '#FFFFFF',
     padding: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.03)',
-    height: 72,
   },
   compactIcon: {
     width: 40,
     height: 40,
-    borderRadius: 12,
-    justifyContent: 'center',
+    borderRadius: 10,
     alignItems: 'center',
+    justifyContent: 'center',
     marginRight: 12,
   },
   compactContent: { flex: 1 },
-  compactHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 2 },
+  compactHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
   compactCategory: {
     fontSize: 15,
     fontWeight: '600',
     color: colors.text || '#1E293B',
-    flex: 1,
-    marginRight: 8,
-    flexShrink: 1,
+    maxWidth: '65%',
   },
-  syncIconWrapper: { marginLeft: 8, justifyContent: 'center' },
-  compactAmount: { fontSize: 15, fontWeight: '700', marginLeft: 'auto' },
+  syncIconWrapper: { marginLeft: 6, justifyContent: 'center' },
+  compactAmount: { fontSize: 15, fontWeight: '700' },
   compactSubRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  compactNote: { fontSize: 12, color: colors.muted || '#94A3B8', flex: 1, marginRight: 8 },
-  compactDate: { fontSize: 11, color: colors.subtleText || '#CBD5E1' },
+  compactNote: { fontSize: 13, color: colors.muted || '#64748B', flex: 1, marginRight: 8 },
+  compactDate: { fontSize: 12, color: colors.muted || '#94A3B8' },
 
-  // Swipe Actions
+  // Hidden Actions
   leftAction: {
-    backgroundColor: '#3B82F6',
+    backgroundColor: colors.primary || '#3B82F6',
     justifyContent: 'center',
-    alignItems: 'center',
-    width: 70,
-    height: '100%',
-    borderRadius: 14,
-    marginRight: 8,
+    alignItems: 'flex-start',
+    flex: 1,
+    paddingLeft: 20,
   },
   rightAction: {
-    backgroundColor: '#EF4444',
+    backgroundColor: colors.error || '#EF4444',
     justifyContent: 'center',
-    alignItems: 'center',
-    width: 70,
-    height: '100%',
-    borderRadius: 14,
-    marginLeft: 8,
+    alignItems: 'flex-end',
+    flex: 1,
+    paddingRight: 20,
   },
-  actionText: { color: 'white', fontSize: 11, fontWeight: '600', marginTop: 2 },
-
-  // Empty State
-  emptyState: { alignItems: 'center', paddingVertical: 60, opacity: 0.6 },
-  emptyText: { marginTop: 12, color: colors.muted || '#94A3B8', fontSize: 15 },
+  actionText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 12,
+    marginTop: 4,
+  },
 
   // Modal
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
   modalContent: {
     backgroundColor: colors.card || '#FFFFFF',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,
-    maxHeight: '90%',
+    maxHeight: '85%',
   },
   sheetHandle: {
-    width: 36,
+    width: 40,
     height: 4,
     backgroundColor: colors.border || '#E2E8F0',
     borderRadius: 2,
     alignSelf: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
   },
-  modalHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
-  modalTitle: { fontSize: 18, fontWeight: '700', color: colors.text || '#1E293B' },
-  closeBtn: { padding: 4, backgroundColor: colors.surfaceMuted || '#F1F5F9', borderRadius: 20 },
-  modalInput: { borderBottomWidth: 1, borderColor: colors.border || '#E2E8F0', marginBottom: 12 },
-  saveBtn: { backgroundColor: colors.primary || '#2563EB', borderRadius: 12, height: 48 },
-
-  // Quick Chips
-  quickRow: { flexDirection: 'row', gap: 8, marginBottom: 16, marginTop: -8 },
-  quickChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: colors.surfaceMuted || '#F1F5F9',
-    borderWidth: 1,
+  modalHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  modalTitle: { fontSize: 20, fontWeight: '700', color: colors.text || '#0F172A' },
+  closeBtn: { padding: 4 },
+  modalInput: {
+    borderBottomWidth: 1,
     borderColor: colors.border || '#E2E8F0',
+    paddingHorizontal: 0,
   },
-  quickChipText: { fontSize: 12, color: colors.text || '#1E293B', fontWeight: '600' },
-
-  rowInputs: { flexDirection: 'row', marginBottom: 16 },
+  rowInputs: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+  },
   pickerBtn: {
     flex: 1,
+    backgroundColor: colors.surfaceMuted || '#F8FAFC',
+    padding: 12,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border || '#E2E8F0',
+  },
+  pickerLabel: { fontSize: 11, color: colors.muted || '#94A3B8', marginBottom: 4 },
+  pickerValue: { fontSize: 15, fontWeight: '600', color: colors.text || '#0F172A' },
+  quickRow: { flexDirection: 'row', gap: 8, marginBottom: 24, flexWrap: 'wrap' },
+  quickChip: {
+    backgroundColor: colors.surfaceMuted || '#F1F5F9',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  quickChipText: { fontSize: 13, fontWeight: '600', color: colors.text || '#334155' },
+  saveBtn: {
+    backgroundColor: colors.primary || '#2563EB',
     borderRadius: 12,
-    padding: 10,
+    paddingVertical: 14,
   },
-  pickerLabel: {
-    fontSize: 10,
-    color: colors.muted || '#94A3B8',
-    marginBottom: 2,
-    textTransform: 'uppercase',
-  },
-  pickerValue: { fontSize: 14, color: colors.text || '#1E293B', fontWeight: '600' },
+  emptyState: { alignItems: 'center', justifyContent: 'center', marginTop: 80, opacity: 0.6 },
+  emptyText: { marginTop: 12, fontSize: 16, color: colors.muted || '#94A3B8' },
 });
