@@ -215,7 +215,8 @@ const AboutScreen: React.FC = () => {
   }, [fadeAnim, slideAnim]);
 
   // --- UPDATE MANAGER INTEGRATION ---
-  const [updateState, setUpdateState] = useState<import('../services/UpdateManager').UpdateState>('IDLE');
+  const [updateState, setUpdateState] =
+    useState<import('../services/UpdateManager').UpdateState>('IDLE');
 
   useEffect(() => {
     const unsub = UpdateManager.subscribe(setUpdateState);
@@ -229,14 +230,10 @@ const AboutScreen: React.FC = () => {
     }
 
     if (updateState === 'READY') {
-      Alert.alert(
-        'Restart Required',
-        'The app will restart to apply the update.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Restart', onPress: () => UpdateManager.reload() }
-        ]
-      );
+      Alert.alert('Restart Required', 'The app will restart to apply the update.', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Restart', onPress: () => UpdateManager.reload() },
+      ]);
       return;
     }
 
@@ -247,35 +244,41 @@ const AboutScreen: React.FC = () => {
       }
       const found = await UpdateManager.checkForUpdateManual();
       if (!found && updateState !== 'ERROR') {
-        showToast("You're up to date.", "success");
+        showToast("You're up to date.", 'success');
       }
     }
   }, [updateState, isExpoGo, isOnline, showToast]);
 
   const getButtonTitle = () => {
     switch (updateState) {
-      case 'CHECKING': return 'Checking...';
-      case 'DOWNLOADING': return 'Downloading...';
-      case 'READY': return 'Restart to Apply';
-      default: return 'Check for Updates';
+      case 'CHECKING':
+        return 'Checking...';
+      case 'DOWNLOADING':
+        return 'Downloading...';
+      case 'READY':
+        return 'Restart to Apply';
+      default:
+        return 'Check for Updates';
     }
   };
 
   const getStatusText = () => {
     if (!isOnline) return 'You are offline.';
     switch (updateState) {
-      case 'CHECKING': return 'Looking for updates...';
-      case 'DOWNLOADING': return 'Downloading new version...';
-      case 'READY': return 'Update ready to install.';
-      case 'ERROR': return 'Check failed. Try again.';
-      default: return 'You are up to date.';
+      case 'CHECKING':
+        return 'Looking for updates...';
+      case 'DOWNLOADING':
+        return 'Downloading new version...';
+      case 'READY':
+        return 'Update ready to install.';
+      case 'ERROR':
+        return 'Check failed. Try again.';
+      default:
+        return 'You are up to date.';
     }
   };
 
   // (Legacy functions applyUpdate/checkForUpdates are removed in favor of handleUpdateAction)
-
-
-
 
   const updateId = Updates.updateId || 'Embedded';
   const shortId = updateId === 'Embedded' ? updateId : updateId.substring(0, 8);
@@ -292,7 +295,7 @@ const AboutScreen: React.FC = () => {
         title: 'DhanDiary',
         message: `Check out DhanDiary! ${link}`,
       });
-    } catch (e) { }
+    } catch (e) {}
   };
 
   const infoGrid = useMemo(
@@ -413,9 +416,8 @@ const AboutScreen: React.FC = () => {
                 style={[
                   styles.iconBoxLarge,
                   {
-                    backgroundColor: updateState === 'READY'
-                      ? 'rgba(16, 185, 129, 0.1)'
-                      : theme.primarySoft,
+                    backgroundColor:
+                      updateState === 'READY' ? 'rgba(16, 185, 129, 0.1)' : theme.primarySoft,
                   },
                 ]}
               >
@@ -427,9 +429,7 @@ const AboutScreen: React.FC = () => {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.cardTitle}>App Version</Text>
-                <Text style={styles.cardDesc}>
-                  {getStatusText()}
-                </Text>
+                <Text style={styles.cardDesc}>{getStatusText()}</Text>
               </View>
             </View>
 
@@ -448,8 +448,6 @@ const AboutScreen: React.FC = () => {
                 ) : undefined
               }
             />
-
-
           </View>
 
           {/* 4. FOOTER BUTTONS */}

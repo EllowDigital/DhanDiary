@@ -135,7 +135,8 @@ export async function ensureLocalSchemaUpgrades(): Promise<void> {
       // Normalize existing date/created_at/updated_at formats for consistency.
       // Optimazation: Run this ONLY once. We use a meta flag to track it.
       try {
-        const metaRows = (await getAllAsync("SELECT value FROM meta WHERE key = 'normalized_dates_v2'")) || [];
+        const metaRows =
+          (await getAllAsync("SELECT value FROM meta WHERE key = 'normalized_dates_v2'")) || [];
         const alreadyDone = metaRows.length > 0;
 
         if (!alreadyDone) {
@@ -188,9 +189,12 @@ export async function ensureLocalSchemaUpgrades(): Promise<void> {
                 batchCount++;
               }
             }
-            await executeSqlAsync("INSERT OR REPLACE INTO meta (key, value) VALUES ('normalized_dates_v2', '1');");
+            await executeSqlAsync(
+              "INSERT OR REPLACE INTO meta (key, value) VALUES ('normalized_dates_v2', '1');"
+            );
             await executeSqlAsync('COMMIT;');
-            if (__DEV__) console.log(`[sqlite] normalization complete. Updated ${batchCount} rows.`);
+            if (__DEV__)
+              console.log(`[sqlite] normalization complete. Updated ${batchCount} rows.`);
           } catch (err) {
             await executeSqlAsync('ROLLBACK;');
             throw err;
