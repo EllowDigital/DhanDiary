@@ -243,7 +243,7 @@ const AboutScreen: React.FC = () => {
         return;
       }
       const found = await UpdateManager.checkForUpdateManual();
-      if (!found && updateState !== 'ERROR') {
+      if (!found) {
         showToast("You're up to date.", 'success');
       }
     }
@@ -295,7 +295,7 @@ const AboutScreen: React.FC = () => {
         title: 'DhanDiary',
         message: `Check out DhanDiary! ${link}`,
       });
-    } catch (e) {}
+    } catch (e) { }
   };
 
   const infoGrid = useMemo(

@@ -1,6 +1,6 @@
 import * as Updates from 'expo-updates';
 import { Alert } from 'react-native';
-import AsyncStorage from '../utils/AsyncStorageWrapper';
+
 
 export type UpdateState = 'IDLE' | 'CHECKING' | 'DOWNLOADING' | 'READY' | 'ERROR';
 
@@ -13,7 +13,7 @@ class UpdateManager {
   private lastCheck = 0;
   private MIN_CHECK_INTERVAL = 30 * 60 * 1000; // 30 mins
 
-  private constructor() {}
+  private constructor() { }
 
   public static getInstance(): UpdateManager {
     if (!UpdateManager.instance) {
@@ -34,7 +34,9 @@ class UpdateManager {
     this.listeners.forEach((l) => {
       try {
         l(s);
-      } catch (e) {}
+      } catch (e) {
+        if (__DEV__) console.warn('[UpdateManager] Listener error:', e);
+      }
     });
   }
 
@@ -87,15 +89,23 @@ class UpdateManager {
     const now = Date.now();
     if (now - this.lastCheck < this.MIN_CHECK_INTERVAL) return;
 
+    // Prevent race condition if multiple calls happen quickly
+    this.lastCheck = now;
+
     try {
-      this.lastCheck = now;
       const result = await Updates.checkForUpdateAsync();
       if (result.isAvailable) {
         await Updates.fetchUpdateAsync();
         this.setState('READY'); // UI shows badge, doesn't force reload
+      } else {
+        // Explicitly set IDLE to notify listeners if needed, though usually state is already IDLE/ERROR
+        this.setState('IDLE');
       }
     } catch (e) {
-      // Silent fail
+      // Don't leave it in a potential unknown state, though here we didn't change state yet.
+      // If we want to allow retries sooner on error, we could reset lastCheck or just leave it.
+      // Setting state to ERROR allows UI to show error status if it wants to.
+      this.setState('ERROR');
     }
   }
 

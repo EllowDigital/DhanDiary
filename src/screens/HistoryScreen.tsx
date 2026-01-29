@@ -98,19 +98,13 @@ const SwipeableHistoryItem = React.memo(
 
     // Safety: ensure date format doesn't crash
     const dateStr = useMemo(() => {
-      try {
-        return formatDate(item.date || item.created_at);
-      } catch (e) {
-        return 'Invalid Date';
-      }
+      return formatDate(item.date || item.created_at);
     }, [item.date, item.created_at]);
 
     const amountStr = useMemo(() => {
-      try {
-        return inrFormatter.format(Number(item.amount) || 0);
-      } catch (e) {
-        return '0';
-      }
+      const amount = Number(item.amount);
+      const safeAmount = Number.isFinite(amount) ? amount : 0;
+      return inrFormatter.format(safeAmount);
     }, [item.amount]);
 
     const swipeableRef = useRef<Swipeable>(null);
@@ -516,7 +510,7 @@ const HistoryScreen = () => {
   const dismissSwipeTip = useCallback(() => {
     const key = `history_swipe_tip_dismissed:${user?.id || 'anon'}`;
     setSwipeTipVisible(false);
-    AsyncStorage.setItem(key, '1').catch(() => {});
+    AsyncStorage.setItem(key, '1').catch(() => { });
   }, [user?.id]);
 
   const toggleFilter = useCallback((f: 'ALL' | 'WEEK' | 'MONTH') => {
@@ -557,7 +551,7 @@ const HistoryScreen = () => {
     let net = 0;
     filtered.forEach((e) => {
       const amt = Number(e.amount) || 0;
-      net += e.type === 'income' || e.type === 'in' ? amt : -amt;
+      net += isIncome(e.type) ? amt : -amt;
     });
     return { net, count: filtered.length };
   }, [filtered]);
