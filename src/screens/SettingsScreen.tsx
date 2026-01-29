@@ -205,6 +205,10 @@ const SettingsScreen = () => {
           showToast('Sign in to enable cloud sync.', 'error');
           return;
         }
+        if (res && res.reason === 'service_unavailable') {
+          showToast('Service unavailable. Changes saved locally.', 'error');
+          return;
+        }
         // Treat throttled/already-running as a non-error for manual sync: user is effectively up to date.
         if (res && (res.reason === 'throttled' || res.reason === 'already_running')) {
           showToast("You're up to date.");

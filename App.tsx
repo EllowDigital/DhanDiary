@@ -65,11 +65,7 @@ import {
   stopBackgroundFetch,
 } from './src/services/syncManager';
 import runFullSync, { isSyncRunning } from './src/sync/runFullSync';
-import {
-  runBackgroundUpdateCheck,
-  runBackgroundUpdateCheckWithResult,
-} from './src/services/backgroundUpdates';
-import { reloadOtaUpdate } from './src/services/backgroundUpdates';
+import UpdateManager from './src/services/UpdateManager';
 import * as Updates from 'expo-updates';
 
 // --- Configuration ---
@@ -453,50 +449,30 @@ const AppContent = () => {
     };
   }, [biometricLocked, bioState.lastUnlockTimestamp]);
 
-  // Background OTA updates: fetch quietly, then show a toast to install.
-  // - No banners
-  // - Never blocks core flows
+  // Background OTA updates: fetch quietly using the Unified Manager
   useEffect(() => {
-    let cancelled = false;
-
-    // Don't run while biometric gate is active.
-    if (biometricLocked) return;
-
     InteractionManager.runAfterInteractions(() => {
-      (async () => {
-        try {
-          // Avoid running during biometric prompt / immediately after unlock.
-          if (cancelled) return;
-          if (AppState.currentState !== 'active') return;
-          const gate = biometricGateRef.current;
-          if (gate.locked) return;
-          if (gate.lastUnlockAt && Date.now() - gate.lastUnlockAt < 1500) return;
-
-          const res = await runBackgroundUpdateCheckWithResult();
-          if (cancelled) return;
-
-          if (res.fetched && Updates.isEnabled) {
-            showActionToast(
-              'Update ready to install.',
-              'Install',
-              () => {
-                reloadOtaUpdate().catch(() => {});
-              },
-              'info',
-              8000
-            );
-          }
-        } catch (e) {
-          // Fallback to silent behavior
-          runBackgroundUpdateCheck().catch(() => {});
-        }
-      })();
+      UpdateManager.checkForUpdateBackground().catch(() => {});
     });
+  }, [biometricLocked]);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [biometricLocked, showActionToast]);
+  // Listener for Update Manager: Show toast when ready
+  useEffect(() => {
+    const unsub = UpdateManager.subscribe((state) => {
+      if (state === 'READY' && AppState.currentState === 'active') {
+        showActionToast(
+          'Update ready to install.',
+          'Restart',
+          () => {
+            UpdateManager.reload().catch(() => {});
+          },
+          'success',
+          10000
+        );
+      }
+    });
+    return unsub;
+  }, [showActionToast]);
 
   // 1. Setup Offline Sync Hook
   // IMPORTANT: pause sync while biometric lock is active (release crash guard).
@@ -628,7 +604,12 @@ const AppContent = () => {
       }
     };
 
-    syncUser();
+    // Debounce the user sync to avoid choking the app on immediate network restore
+    const timer = setTimeout(() => {
+      syncUser();
+    }, 1500);
+
+    return () => clearTimeout(timer);
   }, [clerkLoaded, clerkUser, isOnline]);
 
   const handleBiometricUnlocked = React.useCallback(() => {
@@ -735,7 +716,7 @@ function AppWithDb() {
     // Background Expo Updates: fetch quietly, apply on next restart.
     // Never block app launch.
     InteractionManager.runAfterInteractions(() => {
-      runBackgroundUpdateCheck().catch(() => {});
+      UpdateManager.checkForUpdateBackground().catch(() => {});
     });
 
     return () => {

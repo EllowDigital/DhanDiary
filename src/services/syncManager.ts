@@ -420,6 +420,7 @@ export type SyncResult = {
     | 'throttled'
     | 'offline'
     | 'not_configured'
+    | 'service_unavailable' // New: Auth exists but DB is down
     | 'error';
   upToDate?: boolean;
   counts?: { pushed: number; pulled: number };
@@ -520,6 +521,8 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
 
       // Look up by clerk_id (authoritative).
       let realId: string | null = null;
+      let lookupError: unknown = null;
+
       try {
         const rows = await safeQ('SELECT id, name, email FROM users WHERE clerk_id = $1 LIMIT 1', [
           clerkId,
@@ -527,6 +530,7 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
         const v = rows && rows.length ? String((rows as any)[0]?.id || '') : '';
         if (v && isUuid(v)) realId = v;
       } catch (e) {
+        lookupError = e;
         // ignore and fall through to optional create
       }
 
@@ -540,6 +544,7 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
           const v = created && created.length ? String((created as any)[0]?.id || '') : '';
           if (v && isUuid(v)) realId = v;
         } catch (e) {
+          lookupError = e;
           // If email uniqueness conflicts with an existing legacy row, do not guess ownership here.
           // We'll fall back to the dedicated bridge service below.
         }
@@ -564,6 +569,20 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
 
       // If still unresolved, skip sync to avoid FK violations when pushing transactions.
       if (!realId || !isUuid(realId)) {
+        // IMPROVEMENT: If we have a local clerkId (signed in) but failed to talk to Neon,
+        // specifically report 'service_unavailable' instead of 'no_session'.
+        // This prevents the UI from telling the user they are signed out.
+        if (clerkId && lookupError) {
+          if (__DEV__)
+            console.warn('[sync] User lookup failed => service_unavailable', lookupError);
+          return {
+            ok: false,
+            reason: 'service_unavailable',
+            upToDate: true, // Treat as up-to-date locally to avoid panic
+            counts: { pushed: 0, pulled: 0 },
+          } satisfies SyncResult;
+        }
+
         return {
           ok: false,
           reason: 'no_session',

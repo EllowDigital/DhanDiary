@@ -351,17 +351,24 @@ const SyncStatusBanner = () => {
           titleColor: colors.text,
           subtitleColor: colors.strongMuted,
         };
-      case 'error':
+      case 'error': {
+        // Retrieve the latest specific error from the sync client to help the user debug.
+        const health = getNeonHealth();
+        const errorMsg = health.lastErrorMessage
+          ? String(health.lastErrorMessage).slice(0, 60) // Truncate to fit UI
+          : 'Will retry automatically';
+
         return {
           icon: 'error-outline',
           text: 'Sync paused',
-          subtext: 'Will retry automatically',
+          subtext: errorMsg,
           iconColor: colors.accentRed,
           bgColor: colors.accentRedSoft,
           borderColor: colors.accentRed,
           titleColor: colors.text,
           subtitleColor: colors.strongMuted,
         };
+      }
       case 'synced':
         return {
           icon: 'check',
