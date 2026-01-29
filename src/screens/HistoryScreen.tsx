@@ -516,7 +516,7 @@ const HistoryScreen = () => {
   const dismissSwipeTip = useCallback(() => {
     const key = `history_swipe_tip_dismissed:${user?.id || 'anon'}`;
     setSwipeTipVisible(false);
-    AsyncStorage.setItem(key, '1').catch(() => { });
+    AsyncStorage.setItem(key, '1').catch(() => {});
   }, [user?.id]);
 
   const toggleFilter = useCallback((f: 'ALL' | 'WEEK' | 'MONTH') => {
@@ -547,7 +547,7 @@ const HistoryScreen = () => {
       return sorted; // ALL
     }
 
-    return sorted.filter(e => {
+    return sorted.filter((e) => {
       const ts = resolveEntrySortKey(e);
       return ts >= cutoff;
     });
