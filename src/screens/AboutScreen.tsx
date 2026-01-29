@@ -29,7 +29,7 @@ import { useNeonStatus, describeNeonHealth } from '../hooks/useNeonStatus';
 import { colors } from '../utils/design';
 import { useToast } from '../context/ToastContext';
 import ScreenHeader from '../components/ScreenHeader';
-import { applyOtaUpdateAndReload } from '../services/backgroundUpdates';
+import UpdateManager from '../services/UpdateManager';
 
 // --- CONSTANTS ---
 const ELLOW_URL = 'https://www.ellowdigital.space';
@@ -214,86 +214,68 @@ const AboutScreen: React.FC = () => {
     ]).start();
   }, [fadeAnim, slideAnim]);
 
-  // Update State
-  const [checking, setChecking] = useState(false);
-  const [updateAvailable, setUpdateAvailable] = useState(false);
-  const [failureCount, setFailureCount] = useState(0);
+  // --- UPDATE MANAGER INTEGRATION ---
+  const [updateState, setUpdateState] = useState<import('../services/UpdateManager').UpdateState>('IDLE');
 
   useEffect(() => {
-    AsyncStorage.getItem('UPDATE_FAIL_COUNT').then((val) => {
-      if (val) setFailureCount(Number(val));
-    });
+    const unsub = UpdateManager.subscribe(setUpdateState);
+    return unsub;
   }, []);
 
-  const isOfflineNow = useCallback(async (): Promise<boolean> => {
-    if (!isOnline) return true;
-    try {
-      const state = await NetInfo.fetch();
-      return state.isConnected === false || state.isInternetReachable === false;
-    } catch {
-      return !isOnline;
-    }
-  }, [isOnline]);
-
-  const applyUpdate = useCallback(async () => {
-    if (isExpoGo) return;
-    if (!isOnline) {
-      showToast('You are offline.', 'info');
-      return;
-    }
-
-    setChecking(true);
-    try {
-      const applied = await applyOtaUpdateAndReload({ checkBeforeFetch: false, timeoutMs: 3000 });
-      if (!applied) {
-        throw new Error('Update failed.');
-      }
-    } catch (err: any) {
-      if (await isOfflineNow()) {
-        showToast('You are offline.', 'info');
-      } else {
-        showToast(err?.message || 'Update failed.', 'error');
-        const newCount = failureCount + 1;
-        setFailureCount(newCount);
-        AsyncStorage.setItem('UPDATE_FAIL_COUNT', String(newCount));
-      }
-    } finally {
-      setChecking(false);
-    }
-  }, [failureCount, isExpoGo, isOfflineNow, isOnline, showToast]);
-
-  const checkForUpdates = useCallback(async () => {
+  const handleUpdateAction = useCallback(async () => {
     if (isExpoGo) {
-      showToast('Updates are managed by Expo Go.', 'info');
-      return;
-    }
-    if (!isOnline) {
-      showToast('You are offline.', 'info');
+      showToast('Updates managed by Expo Go', 'info');
       return;
     }
 
-    setChecking(true);
-    try {
-      const result = await Updates.checkForUpdateAsync();
-      if (result.isAvailable) {
-        setUpdateAvailable(true);
-        showActionToast('Update available.', 'Install', applyUpdate);
-      } else {
-        setUpdateAvailable(false);
-        showToast("You're up to date.", 'success');
+    if (updateState === 'READY') {
+      Alert.alert(
+        'Restart Required',
+        'The app will restart to apply the update.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Restart', onPress: () => UpdateManager.reload() }
+        ]
+      );
+      return;
+    }
+
+    if (updateState === 'IDLE' || updateState === 'ERROR') {
+      if (!isOnline) {
+        showToast('You are offline', 'info');
+        return;
       }
-    } catch (err: any) {
-      showToast('Check failed. Try again later.', 'error');
-    } finally {
-      setChecking(false);
+      const found = await UpdateManager.checkForUpdateManual();
+      if (!found && updateState !== 'ERROR') {
+        showToast("You're up to date.", "success");
+      }
     }
-  }, [applyUpdate, isExpoGo, isOnline, showActionToast, showToast]);
+  }, [updateState, isExpoGo, isOnline, showToast]);
 
-  const clearRetryState = async () => {
-    await AsyncStorage.removeItem('UPDATE_FAIL_COUNT');
-    setFailureCount(0);
-    showToast('Retry count cleared.', 'success');
+  const getButtonTitle = () => {
+    switch (updateState) {
+      case 'CHECKING': return 'Checking...';
+      case 'DOWNLOADING': return 'Downloading...';
+      case 'READY': return 'Restart to Apply';
+      default: return 'Check for Updates';
+    }
   };
+
+  const getStatusText = () => {
+    if (!isOnline) return 'You are offline.';
+    switch (updateState) {
+      case 'CHECKING': return 'Looking for updates...';
+      case 'DOWNLOADING': return 'Downloading new version...';
+      case 'READY': return 'Update ready to install.';
+      case 'ERROR': return 'Check failed. Try again.';
+      default: return 'You are up to date.';
+    }
+  };
+
+  // (Legacy functions applyUpdate/checkForUpdates are removed in favor of handleUpdateAction)
+
+
+
 
   const updateId = Updates.updateId || 'Embedded';
   const shortId = updateId === 'Embedded' ? updateId : updateId.substring(0, 8);
@@ -310,7 +292,7 @@ const AboutScreen: React.FC = () => {
         title: 'DhanDiary',
         message: `Check out DhanDiary! ${link}`,
       });
-    } catch (e) {}
+    } catch (e) { }
   };
 
   const infoGrid = useMemo(
@@ -431,56 +413,43 @@ const AboutScreen: React.FC = () => {
                 style={[
                   styles.iconBoxLarge,
                   {
-                    backgroundColor: updateAvailable
+                    backgroundColor: updateState === 'READY'
                       ? 'rgba(16, 185, 129, 0.1)'
                       : theme.primarySoft,
                   },
                 ]}
               >
                 <MaterialIcon
-                  name={updateAvailable ? 'cloud-download' : 'system-update'}
+                  name={updateState === 'READY' ? 'cloud-download' : 'system-update'}
                   size={24}
-                  color={updateAvailable ? theme.accentGreen : theme.primary}
+                  color={updateState === 'READY' ? theme.accentGreen : theme.primary}
                 />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.cardTitle}>App Version</Text>
                 <Text style={styles.cardDesc}>
-                  {!isOnline
-                    ? 'You are offline.'
-                    : updateAvailable
-                      ? 'New features available.'
-                      : 'You are up to date.'}
+                  {getStatusText()}
                 </Text>
               </View>
             </View>
 
             <Button
-              title={
-                checking ? 'Checking...' : updateAvailable ? 'Update Now' : 'Check for Updates'
-              }
-              loading={checking}
-              onPress={updateAvailable ? applyUpdate : checkForUpdates}
+              title={getButtonTitle()}
+              loading={updateState === 'CHECKING' || updateState === 'DOWNLOADING'}
+              onPress={handleUpdateAction}
               buttonStyle={[
                 styles.mainBtn,
-                updateAvailable && { backgroundColor: theme.accentGreen },
+                updateState === 'READY' && { backgroundColor: theme.accentGreen },
               ]}
               titleStyle={{ fontWeight: '600', fontSize: 14 }}
               icon={
-                !checking && !updateAvailable ? (
+                updateState === 'IDLE' || updateState === 'ERROR' ? (
                   <MaterialIcon name="refresh" size={16} color="white" style={{ marginRight: 8 }} />
                 ) : undefined
               }
             />
 
-            {failureCount > 0 && (
-              <TouchableOpacity style={styles.errorRow} onPress={clearRetryState}>
-                <MaterialIcon name="error-outline" size={16} color={theme.accentRed} />
-                <Text style={styles.errorText}>
-                  Update failed {failureCount} times. Tap to reset.
-                </Text>
-              </TouchableOpacity>
-            )}
+
           </View>
 
           {/* 4. FOOTER BUTTONS */}
