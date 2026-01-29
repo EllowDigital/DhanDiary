@@ -90,7 +90,7 @@ export const setSyncSuspended = (suspended: boolean) => {
   if (_syncSuspended) {
     try {
       requestSyncCancel();
-    } catch (e) {}
+    } catch (e) { }
   }
 };
 
@@ -132,7 +132,7 @@ export const setSyncPaused = async (paused: boolean) => {
   if (_syncPaused) {
     try {
       requestSyncCancel();
-    } catch (e) {}
+    } catch (e) { }
   }
 };
 
@@ -142,7 +142,7 @@ export const retrySync = () => scheduleSync({ force: true, source: 'manual' });
 export const cancelSyncWork = () => {
   try {
     requestSyncCancel();
-  } catch (e) {}
+  } catch (e) { }
 };
 
 // Public: stop all sync triggers and cancel queued work.
@@ -150,30 +150,30 @@ export const cancelSyncWork = () => {
 export const stopSyncEngine = async () => {
   try {
     cancelSyncWork();
-  } catch (e) {}
+  } catch (e) { }
 
   try {
     stopAutoSyncListener();
-  } catch (e) {}
+  } catch (e) { }
 
   try {
     stopForegroundSyncScheduler();
-  } catch (e) {}
+  } catch (e) { }
 
   try {
     await stopBackgroundFetch();
-  } catch (e) {}
+  } catch (e) { }
 
   // Cancel scheduled/debounced timers
   try {
     if (_scheduledSyncTimer) clearTimeout(_scheduledSyncTimer);
-  } catch (e) {}
+  } catch (e) { }
   _scheduledSyncTimer = null;
   _scheduledSyncOptions = null;
 
   try {
     if (_entriesSyncTimer) clearTimeout(_entriesSyncTimer);
-  } catch (e) {}
+  } catch (e) { }
   _entriesSyncTimer = null;
 
   _pendingSyncRequested = false;
@@ -197,7 +197,7 @@ export const scheduleSync = (options?: { force?: boolean; source?: 'manual' | 'a
           counts: { pushed: 0, pulled: 0 },
         } as any);
       }
-    } catch (e) {}
+    } catch (e) { }
 
     // Non-blocking: load persisted paused flag in background.
     void loadSyncPrefsOnce();
@@ -236,12 +236,12 @@ export const scheduleSync = (options?: { force?: boolean; source?: 'manual' | 'a
           .then((res) => {
             try {
               _scheduledSyncResolve?.(res);
-            } catch (e) {}
+            } catch (e) { }
           })
           .catch((err) => {
             try {
               _scheduledSyncReject?.(err);
-            } catch (e) {}
+            } catch (e) { }
           })
           .finally(() => {
             _scheduledSyncPromise = null;
@@ -269,15 +269,15 @@ const setSyncStatus = (s: SyncStatus) => {
     _syncStatusListeners.forEach((l) => {
       try {
         l(s);
-      } catch (e) {}
+      } catch (e) { }
     });
-  } catch (e) {}
+  } catch (e) { }
   // Dev-only diagnostic to help QA catch persistent failures
   try {
     if (__DEV__ && s === 'error') {
       console.warn('[sync] Entered error state');
     }
-  } catch (e) {}
+  } catch (e) { }
 };
 
 // --- Helper Functions ---
@@ -295,7 +295,7 @@ const safeQ = async (sql: string, params: any[] = []) => {
       if (__DEV__ && verbose) {
         console.warn('Neon query failed', { sql: sql.substring(0, 50) + '...', err });
       }
-    } catch (e) {}
+    } catch (e) { }
     throw err;
   }
 };
@@ -413,14 +413,15 @@ import { getNeonHealth } from '../api/neonClient';
 export type SyncResult = {
   ok: boolean;
   reason?:
-    | 'success'
-    | 'up_to_date'
-    | 'no_session'
-    | 'already_running'
-    | 'throttled'
-    | 'offline'
-    | 'not_configured'
-    | 'error';
+  | 'success'
+  | 'up_to_date'
+  | 'no_session'
+  | 'already_running'
+  | 'throttled'
+  | 'offline'
+  | 'not_configured'
+  | 'service_unavailable' // New: Auth exists but DB is down
+  | 'error';
   upToDate?: boolean;
   counts?: { pushed: number; pulled: number };
 };
@@ -470,12 +471,12 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
           counts: { pushed: 0, pulled: 0 },
         } satisfies SyncResult;
       }
-    } catch (e) {}
+    } catch (e) { }
 
     // Starting a new sync implies we want to clear any previous cancel request.
     try {
       resetSyncCancel();
-    } catch (e) {}
+    } catch (e) { }
     // If cloud sync isn't configured in this build, fail fast with a clear reason.
     try {
       const h = getNeonHealth();
@@ -483,7 +484,7 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
         if (__DEV__) console.warn('[sync] cloud sync not configured (missing NEON_URL)');
         return { ok: false, reason: 'not_configured' } satisfies SyncResult;
       }
-    } catch (e) {}
+    } catch (e) { }
 
     if (_syncInProgress) {
       // If we are here, it means the mutex let us in but the logic flag says running.
@@ -520,6 +521,8 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
 
       // Look up by clerk_id (authoritative).
       let realId: string | null = null;
+      let lookupError: unknown = null;
+
       try {
         const rows = await safeQ('SELECT id, name, email FROM users WHERE clerk_id = $1 LIMIT 1', [
           clerkId,
@@ -527,6 +530,7 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
         const v = rows && rows.length ? String((rows as any)[0]?.id || '') : '';
         if (v && isUuid(v)) realId = v;
       } catch (e) {
+        lookupError = e;
         // ignore and fall through to optional create
       }
 
@@ -540,6 +544,7 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
           const v = created && created.length ? String((created as any)[0]?.id || '') : '';
           if (v && isUuid(v)) realId = v;
         } catch (e) {
+          lookupError = e;
           // If email uniqueness conflicts with an existing legacy row, do not guess ownership here.
           // We'll fall back to the dedicated bridge service below.
         }
@@ -564,6 +569,19 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
 
       // If still unresolved, skip sync to avoid FK violations when pushing transactions.
       if (!realId || !isUuid(realId)) {
+        // IMPROVEMENT: If we have a local clerkId (signed in) but failed to talk to Neon,
+        // specifically report 'service_unavailable' instead of 'no_session'.
+        // This prevents the UI from telling the user they are signed out.
+        if (clerkId && lookupError) {
+          if (__DEV__) console.warn('[sync] User lookup failed => service_unavailable', lookupError);
+          return {
+            ok: false,
+            reason: 'service_unavailable',
+            upToDate: true, // Treat as up-to-date locally to avoid panic
+            counts: { pushed: 0, pulled: 0 },
+          } satisfies SyncResult;
+        }
+
         return {
           ok: false,
           reason: 'no_session',
@@ -595,8 +613,8 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
               oldCursor,
               newCursor,
             ]);
-          } catch (e) {}
-        } catch (e) {}
+          } catch (e) { }
+        } catch (e) { }
 
         try {
           await saveSession(
@@ -607,11 +625,11 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
             (sess as any)?.imageUrl ?? null,
             clerkId
           );
-        } catch (e) {}
+        } catch (e) { }
         try {
           const { notifyEntriesChanged } = require('../utils/dbEvents');
           notifyEntriesChanged();
-        } catch (e) {}
+        } catch (e) { }
       } else {
         // Ensure clerk_id is persisted even when uuid already matches.
         try {
@@ -623,7 +641,7 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
             (sess as any)?.imageUrl ?? null,
             clerkId
           );
-        } catch (e) {}
+        } catch (e) { }
       }
     } catch (e) {
       return { ok: false, reason: 'no_session', upToDate: true, counts: { pushed: 0, pulled: 0 } };
@@ -636,13 +654,13 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
       if (typeof migrateNonUuidTransactionIds === 'function') {
         await migrateNonUuidTransactionIds();
       }
-    } catch (e) {}
+    } catch (e) { }
 
     _syncInProgress = true;
     // notify listeners that sync started
     try {
       setSyncStatus('syncing');
-    } catch (e) {}
+    } catch (e) { }
 
     try {
       // Delegate actual sync work to runFullSync (single source of truth)
@@ -656,12 +674,12 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
           );
           if (__DEV__ && verbose)
             console.log('[sync] syncBothWays: runFullSync skipped', runResult.reason);
-        } catch (e) {}
+        } catch (e) { }
         _lastSyncAttemptAt = Date.now();
         _syncInProgress = false;
         try {
           setSyncStatus('idle');
-        } catch (e) {}
+        } catch (e) { }
         return {
           ok: true,
           reason:
@@ -682,16 +700,16 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
         if (pushFailed || pullFailed) {
           try {
             setSyncStatus('error');
-          } catch (e) {}
+          } catch (e) { }
           return { ok: false, reason: 'error' } satisfies SyncResult;
         }
-      } catch (e) {}
+      } catch (e) { }
 
       _lastSuccessfulSyncAt = Date.now();
       try {
         // Persist last successful sync time so UI can show it after restarts
         await AsyncStorage.setItem('last_sync_at', String(_lastSuccessfulSyncAt));
-      } catch (e) {}
+      } catch (e) { }
       _syncFailureCount = 0;
 
       // Compute push/pull counts for callers and for last-sync metrics
@@ -713,7 +731,7 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
             else if (typeof pl === 'number') pulledCount = pl;
           }
         }
-      } catch (e) {}
+      } catch (e) { }
 
       try {
         const { notifyEntriesChanged } = require('../utils/dbEvents');
@@ -721,21 +739,21 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
         InteractionManager.runAfterInteractions(() => {
           try {
             notifyEntriesChanged();
-          } catch (e) {}
+          } catch (e) { }
         });
-      } catch (e) {}
+      } catch (e) { }
 
       // success -> clear any previous error state
       try {
         setSyncStatus('idle');
-      } catch (e) {}
+      } catch (e) { }
 
       try {
         // persist last sync counts for diagnostics
         try {
           await AsyncStorage.setItem('last_sync_count', String(pulledCount));
-        } catch (e) {}
-      } catch (e) {}
+        } catch (e) { }
+      } catch (e) { }
       const upToDate = pushedCount === 0 && pulledCount === 0;
 
       // If the pull stopped early (large account / time budget), queue a single follow-up
@@ -751,11 +769,11 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
             setTimeout(() => {
               try {
                 scheduleSync({ source: 'auto', force: true } as any);
-              } catch (e) {}
+              } catch (e) { }
             }, 500);
           }
         }
-      } catch (e) {}
+      } catch (e) { }
 
       return {
         ok: true,
@@ -769,7 +787,7 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
         if ((err as any)?.message === 'sync_cancelled') {
           try {
             setSyncStatus('idle');
-          } catch (e) {}
+          } catch (e) { }
           return {
             ok: true,
             reason: 'up_to_date',
@@ -777,25 +795,25 @@ export const syncBothWays = async (options?: { force?: boolean; source?: 'manual
             counts: { pushed: 0, pulled: 0 },
           };
         }
-      } catch (e) {}
+      } catch (e) { }
       try {
         const verbose = Boolean(
           (globalThis as any).__NEON_VERBOSE__ || (globalThis as any).__SYNC_VERBOSE__
         );
         if (__DEV__ && verbose) console.warn('Sync failed', err);
-      } catch (e) {}
+      } catch (e) { }
       _syncFailureCount = Math.min(5, _syncFailureCount + 1);
       // Enter error state — callers should only set this if runFullSync truly failed
       try {
         setSyncStatus('error');
-      } catch (e) {}
+      } catch (e) { }
       return { ok: false, reason: 'error' } satisfies SyncResult;
     } finally {
       _syncInProgress = false;
       // notify listeners that sync finished (if not errored, set to idle above)
       try {
         if (_syncStatus !== 'error') setSyncStatus('idle');
-      } catch (e) {}
+      } catch (e) { }
       if (_pendingSyncRequested) {
         _pendingSyncRequested = false;
         const forceFollowUp = _pendingSyncForce;
@@ -839,7 +857,7 @@ export const startAutoSyncListener = () => {
     if (!isOnline && _syncInProgress) {
       try {
         requestSyncCancel();
-      } catch (e) {}
+      } catch (e) { }
     }
 
     if (!wasOnline && isOnline) {
@@ -893,11 +911,11 @@ export const startAutoSyncListener = () => {
                 // Swallow expected failures (offline/slow network) to avoid LogBox noise.
               });
             }, 5000);
-          } catch (e) {}
+          } catch (e) { }
         });
       }
     }
-  } catch (e) {}
+  } catch (e) { }
 };
 
 export const stopAutoSyncListener = () => {
@@ -909,14 +927,14 @@ export const stopAutoSyncListener = () => {
   if (_entriesSyncTimer) {
     try {
       clearTimeout(_entriesSyncTimer);
-    } catch (e) {}
+    } catch (e) { }
     _entriesSyncTimer = null;
   }
 
   if (_entriesUnsubscribe) {
     try {
       _entriesUnsubscribe();
-    } catch (e) {}
+    } catch (e) { }
     _entriesUnsubscribe = null;
   }
 };
@@ -928,7 +946,7 @@ export const startForegroundSyncScheduler = (intervalMs: number = 15000) => {
     try {
       try {
         if (getIsSigningOut()) return;
-      } catch (e) {}
+      } catch (e) { }
       if (_syncSuspended) return;
       if (_syncPaused) return;
       // Throttle frequent runs: if we recently synced successfully, skip until MIN_SCHEDULE_MS
@@ -1022,22 +1040,22 @@ export const startBackgroundFetch = async () => {
                   // switches cause immediate refetch.
                   try {
                     await qc.invalidateQueries({ queryKey: ['entries'] });
-                  } catch (e) {}
+                  } catch (e) { }
                   // Also invalidate generic balances/summary keys if present.
                   try {
                     await qc.invalidateQueries({ queryKey: ['balances'] });
-                  } catch (e) {}
+                  } catch (e) { }
                 }
-              } catch (e) {}
+              } catch (e) { }
 
               const { notifyEntriesChanged } = require('../utils/dbEvents');
               notifyEntriesChanged();
-            } catch (e) {}
+            } catch (e) { }
 
             // Signal task complete to BackgroundFetch
             try {
               if (typeof BackgroundFetch.finish === 'function') BackgroundFetch.finish(taskId);
-            } catch (e) {}
+            } catch (e) { }
           }
         },
         (error: any) => console.warn('BackgroundFetch configure failed', error)
@@ -1055,7 +1073,7 @@ export const stopBackgroundFetch = async () => {
   if (_backgroundFetchInstance) {
     try {
       _backgroundFetchInstance.stop();
-    } catch (e) {}
+    } catch (e) { }
     _backgroundFetchInstance = null;
   }
 };

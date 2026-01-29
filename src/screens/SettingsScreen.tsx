@@ -20,8 +20,8 @@ import { useAuth as useClerkAuth } from '@clerk/clerk-expo';
 
 // Optional Haptics: prefer runtime require so builds without expo-haptics still work.
 let Haptics: any = {
-  impactAsync: async () => {},
-  notificationAsync: async () => {},
+  impactAsync: async () => { },
+  notificationAsync: async () => { },
   ImpactFeedbackStyle: { Medium: 'medium' },
   NotificationFeedbackType: { Warning: 'warning' },
 };
@@ -139,13 +139,13 @@ const SettingsScreen = () => {
         const d = new Date(last);
         setLastSyncTime(`${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`);
       }
-    } catch (e) {}
+    } catch (e) { }
 
     return () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -175,7 +175,7 @@ const SettingsScreen = () => {
         showToast('Cloud sync is disabled in this build.', 'error');
         return;
       }
-    } catch (e) {}
+    } catch (e) { }
 
     // Haptic feedback
     if (Platform.OS !== 'web') {
@@ -203,6 +203,10 @@ const SettingsScreen = () => {
         }
         if (res && res.reason === 'no_session') {
           showToast('Sign in to enable cloud sync.', 'error');
+          return;
+        }
+        if (res && res.reason === 'service_unavailable') {
+          showToast('Service unavailable. Changes saved locally.', 'error');
           return;
         }
         // Treat throttled/already-running as a non-error for manual sync: user is effectively up to date.
@@ -259,7 +263,7 @@ const SettingsScreen = () => {
 
         try {
           query.clear();
-        } catch (e) {}
+        } catch (e) { }
 
         showToast('Signed out successfully');
       } catch (e) {
@@ -302,18 +306,18 @@ const SettingsScreen = () => {
             try {
               try {
                 cancelSyncWork();
-              } catch (e) {}
+              } catch (e) { }
 
               await wipeLocalData();
               await initDB();
 
               try {
                 query.clear();
-              } catch (e) {}
+              } catch (e) { }
               try {
                 const { notifyEntriesChanged } = require('../utils/dbEvents');
                 notifyEntriesChanged();
-              } catch (e) {}
+              } catch (e) { }
 
               // Resume sync safely and kick it off if we're online.
               setSyncSuspended(false);
