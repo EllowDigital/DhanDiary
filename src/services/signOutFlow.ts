@@ -58,7 +58,9 @@ export const performHardSignOut = async (deps: HardSignOutDeps) => {
     const signOutPromise = (async () => {
       try {
         await deps.clerkSignOut();
-      } catch (e) { /* best effort */ }
+      } catch (e) {
+        /* best effort */
+      }
       await clearTokenCache();
     })();
 
@@ -73,11 +75,17 @@ export const performHardSignOut = async (deps: HardSignOutDeps) => {
         const db = await import('../db/sqlite');
         if (typeof db.wipeLocalData === 'function') await db.wipeLocalData();
         if (typeof db.initDB === 'function') await db.initDB();
-      } catch (e) { /* best-effort */ }
+      } catch (e) {
+        /* best-effort */
+      }
 
       // Clear persisted storage.
-      try { await AsyncStorageNative.clear(); } catch (e) { }
-      try { await AsyncStorage.clear(); } catch (e) { }
+      try {
+        await AsyncStorageNative.clear();
+      } catch (e) {}
+      try {
+        await AsyncStorage.clear();
+      } catch (e) {}
 
       // Clear persisted biometric flags.
       await clearBiometricSettings();
@@ -88,7 +96,7 @@ export const performHardSignOut = async (deps: HardSignOutDeps) => {
         if (holder && typeof holder.clearQueryCache === 'function') {
           await holder.clearQueryCache();
         }
-      } catch (e) { }
+      } catch (e) {}
     })();
 
     // improved feedback: wait for both
@@ -100,11 +108,11 @@ export const performHardSignOut = async (deps: HardSignOutDeps) => {
     try {
       const { notifyEntriesChanged } = require('../utils/dbEvents');
       notifyEntriesChanged();
-    } catch (e) { }
+    } catch (e) {}
     try {
       const { notifySessionChanged } = require('../utils/sessionEvents');
       await notifySessionChanged();
-    } catch (e) { }
+    } catch (e) {}
 
     // Give callers a chance to persist flags after storage wipe but before navigation.
     try {

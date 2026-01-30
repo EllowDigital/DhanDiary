@@ -59,15 +59,17 @@ export const checkForOtaUpdateAvailable = async (timeoutMs = 2000): Promise<bool
   return checkInFlight;
 };
 
-export const fetchOtaUpdate = async (): Promise<boolean> => {
+export const fetchOtaUpdate = async (timeoutMs = 60000): Promise<boolean> => {
   if (!isUpdatesEnabled()) return false;
   if (fetchInFlight) return fetchInFlight;
 
   fetchInFlight = (async () => {
     try {
-      await Updates.fetchUpdateAsync();
+      // 60s default timeout for download (larger than check)
+      await withTimeout(Updates.fetchUpdateAsync(), timeoutMs);
       return true;
     } catch (e) {
+      if (__DEV__) console.warn('[OTA] fetch failed or timed out', e);
       return false;
     } finally {
       fetchInFlight = null;

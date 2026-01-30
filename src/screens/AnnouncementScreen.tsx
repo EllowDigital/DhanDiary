@@ -97,21 +97,42 @@ const AnnouncementScreen = () => {
     if (isApplyingUpdate) return;
     setIsApplyingUpdate(true);
 
+    // Hard UI timeout: 30s max to wait for update, otherwise let user in.
+    const UI_TIMEOUT = 30000;
+    let didTimeout = false;
+
     try {
       if (Updates.isEnabled) {
-        const fetched = await fetchOtaUpdate();
-        if (fetched) {
+        // Race between fetch and a timeout
+        const success = await Promise.race([
+          fetchOtaUpdate(UI_TIMEOUT - 1000), // request slightly shorter internal timeout
+          new Promise<boolean>((resolve) =>
+            setTimeout(() => {
+              didTimeout = true;
+              resolve(false);
+            }, UI_TIMEOUT)
+          ),
+        ]);
+
+        if (success) {
           await markCurrentAnnouncementSeen();
           await reloadOtaUpdate();
-          return;
+          return; // Reload will happen
+        } else {
+          // If it failed or timed out
+          if (didTimeout) {
+            // Optional: Show a toast here if you have context, or just log
+            if (__DEV__) console.warn('[OTA] Update timed out in UI');
+          }
         }
       }
     } catch (e) {
       // Fallback
+      if (__DEV__) console.warn('[OTA] apply failed', e);
     } finally {
       setIsApplyingUpdate(false);
+      goToMain();
     }
-    goToMain();
   };
 
   // --- LIFECYCLE ---

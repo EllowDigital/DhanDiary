@@ -91,7 +91,7 @@ class UpdateManager {
       // Show error state briefly, then reset to IDLE so user can retry immediately
       this.setState('ERROR');
       setTimeout(() => {
-         this.setState('IDLE');
+        this.setState('IDLE');
       }, 2000);
       return false;
     }

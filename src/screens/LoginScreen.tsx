@@ -270,6 +270,16 @@ const LoginScreen = () => {
             // Shorter toast for fast path
             showToast('Welcome back!', 'success', 1500);
           }
+          // Explicitly trigger background sync so data refreshes immediately
+          try {
+            const syncManager = require('../services/syncManager');
+            if (syncManager && typeof syncManager.scheduleSync === 'function') {
+              syncManager.scheduleSync({ force: true, source: 'manual' });
+            }
+          } catch (e) {
+            // ignore
+          }
+
           setSyncing(false);
           navigation.reset({ index: 0, routes: [{ name: 'Announcement' }] });
           return;
@@ -327,6 +337,17 @@ const LoginScreen = () => {
 
     setSyncing(false);
     setLoading(false);
+
+    // Trigger sync immediately so home screen populates fast
+    try {
+      const syncManager = require('../services/syncManager');
+      if (syncManager && typeof syncManager.scheduleSync === 'function') {
+        syncManager.scheduleSync({ force: true, source: 'manual' });
+      }
+    } catch (e) {
+      // ignore
+    }
+
     if (!didShowRedirectRef.current) {
       didShowRedirectRef.current = true;
       showToast('Signed in successfully. Redirecting…', 'success', 2500);
