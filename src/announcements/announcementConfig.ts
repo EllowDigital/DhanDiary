@@ -50,7 +50,7 @@ export const OTA_UPDATE_ANNOUNCEMENT: AnnouncementConfig = {
   emoji: '⬆️',
   autoHideMs: null,
   accentColor: colors.primary,
-  isActive: true,
+  isActive: false,
 };
 
 const DEFAULT_ANNOUNCEMENTS: AnnouncementConfig[] = [

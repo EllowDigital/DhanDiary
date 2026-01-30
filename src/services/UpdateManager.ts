@@ -16,7 +16,7 @@ class UpdateManager {
   private STORAGE_KEY = 'last_update_check_ts';
   private TIMEOUT_MS = 15000; // 15s timeout for checks
 
-  private constructor() {}
+  private constructor() { }
 
   public static getInstance(): UpdateManager {
     if (!UpdateManager.instance) {
@@ -120,9 +120,11 @@ class UpdateManager {
 
     // Prevent race condition if multiple calls happen quickly
     this.lastCheck = now;
-    AsyncStorage.setItem(this.STORAGE_KEY, String(now)).catch(() => {});
+    AsyncStorage.setItem(this.STORAGE_KEY, String(now)).catch(() => { });
 
     try {
+      this.setState('CHECKING');
+
       const result = await Promise.race([
         Updates.checkForUpdateAsync(),
         new Promise<never>((_, reject) =>
@@ -131,23 +133,22 @@ class UpdateManager {
       ]);
 
       if ((result as any).isAvailable) {
+        // Notify listeners so we can show "Updating..." toast
+        this.setState('DOWNLOADING');
+
         await Promise.race([
           Updates.fetchUpdateAsync(),
           new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('Timeout')), this.TIMEOUT_MS * 2)
+            setTimeout(() => reject(new Error('Timeout')), this.TIMEOUT_MS * 4) // Longer timeout for background download
           ),
         ]);
-        this.setState('READY'); // UI shows badge, doesn't force reload
+        this.setState('READY'); // UI shows badge/toast, doesn't force reload
       } else {
-        // Explicitly set IDLE to notify listeners if needed, though usually state is already IDLE/ERROR
         this.setState('IDLE');
       }
     } catch (e) {
-      // Don't leave it in a potential unknown state, though here we didn't change state yet.
-      // If we want to allow retries sooner on error, we could reset lastCheck or just leave it.
-      // Setting state to ERROR allows UI to show error status if it wants to.
-      // But for background, better to just be quiet unless we want to show a warning badge.
-      // We'll set IDLE so we aren't stuck.
+      if (__DEV__) console.warn('[UpdateManager] Background check failed', e);
+      // Reset to IDLE so we don't get stuck in CHECKING/DOWNLOADING
       this.setState('IDLE');
     }
   }
