@@ -42,6 +42,21 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   const { showToast, showActionToast } = useToast();
   const [fallbackSession, setFallbackSession] = useState<any>(null);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [isOnline, setIsOnline] = useState<boolean | null>(true);
+
+  useEffect(() => {
+    let mounted = true;
+    NetInfo.fetch().then((state) => {
+      if (mounted) setIsOnline(isNetOnline(state));
+    });
+    const unsub = NetInfo.addEventListener((state) => {
+      if (mounted) setIsOnline(isNetOnline(state));
+    });
+    return () => {
+      mounted = false;
+      unsub();
+    };
+  }, []);
 
   // Animation Refs
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -69,7 +84,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
       try {
         const s = await getSession();
         if (mounted) setFallbackSession(s);
-      } catch (e) {}
+      } catch (e) { }
     };
     loadSession();
 
@@ -81,7 +96,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -106,7 +121,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   const closeDrawerSafely = () => {
     try {
       (props.navigation as any).closeDrawer?.();
-    } catch (e) {}
+    } catch (e) { }
   };
 
   const goToDashboardTab = (screen: 'Home' | 'History') => {
@@ -253,7 +268,8 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
               <Text style={styles.profileEmail} numberOfLines={1}>
                 {user?.primaryEmailAddress?.emailAddress ||
                   fallbackSession?.email ||
-                  'Sign in to sync'}
+                  fallbackSession?.email ||
+                  (isOnline === false ? 'Offline' : 'Sign in to sync')}
               </Text>
             </View>
             <MaterialIcon name="chevron-right" size={24} color={colors.border || '#CBD5E1'} />
