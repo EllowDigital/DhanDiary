@@ -2,7 +2,6 @@ import * as Updates from 'expo-updates';
 import { Alert } from 'react-native';
 import AsyncStorage from '../utils/AsyncStorageWrapper';
 
-
 export type UpdateState = 'IDLE' | 'CHECKING' | 'DOWNLOADING' | 'READY' | 'ERROR';
 
 type StateListener = (state: UpdateState) => void;
@@ -17,7 +16,7 @@ class UpdateManager {
   private STORAGE_KEY = 'last_update_check_ts';
   private TIMEOUT_MS = 15000; // 15s timeout for checks
 
-  private constructor() { }
+  private constructor() {}
 
   public static getInstance(): UpdateManager {
     if (!UpdateManager.instance) {
@@ -66,7 +65,9 @@ class UpdateManager {
 
       const checkResult = await Promise.race([
         Updates.checkForUpdateAsync(),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout')), this.TIMEOUT_MS)),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout')), this.TIMEOUT_MS)
+        ),
       ]);
 
       if ((checkResult as any).isAvailable) {
@@ -74,7 +75,9 @@ class UpdateManager {
         this.setState('DOWNLOADING');
         await Promise.race([
           Updates.fetchUpdateAsync(),
-          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout')), this.TIMEOUT_MS * 2)),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Timeout')), this.TIMEOUT_MS * 2)
+          ),
         ]);
 
         this.setState('READY');
@@ -117,18 +120,22 @@ class UpdateManager {
 
     // Prevent race condition if multiple calls happen quickly
     this.lastCheck = now;
-    AsyncStorage.setItem(this.STORAGE_KEY, String(now)).catch(() => { });
+    AsyncStorage.setItem(this.STORAGE_KEY, String(now)).catch(() => {});
 
     try {
       const result = await Promise.race([
         Updates.checkForUpdateAsync(),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout')), this.TIMEOUT_MS)),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout')), this.TIMEOUT_MS)
+        ),
       ]);
 
       if ((result as any).isAvailable) {
         await Promise.race([
           Updates.fetchUpdateAsync(),
-          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout')), this.TIMEOUT_MS * 2)),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Timeout')), this.TIMEOUT_MS * 2)
+          ),
         ]);
         this.setState('READY'); // UI shows badge, doesn't force reload
       } else {

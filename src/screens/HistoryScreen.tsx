@@ -206,290 +206,299 @@ const SwipeableHistoryItem = React.memo(
 );
 
 // --- 2. EDIT MODAL ---
-const EditTransactionModal = React.memo(({ visible, entryId, onClose, onSave, onDelete }: EditModalProps) => {
-  const insets = useSafeAreaInsets();
-  const [amount, setAmount] = useState('');
-  const [category, setCategory] = useState(DEFAULT_CATEGORY);
-  const [note, setNote] = useState('');
-  const [typeIndex, setTypeIndex] = useState(0);
-  const [date, setDate] = useState<Date>(new Date());
+const EditTransactionModal = React.memo(
+  ({ visible, entryId, onClose, onSave, onDelete }: EditModalProps) => {
+    const insets = useSafeAreaInsets();
+    const [amount, setAmount] = useState('');
+    const [category, setCategory] = useState(DEFAULT_CATEGORY);
+    const [note, setNote] = useState('');
+    const [typeIndex, setTypeIndex] = useState(0);
+    const [date, setDate] = useState<Date>(new Date());
 
-  const [showCatPicker, setShowCatPicker] = useState(false);
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const isSubmittingRef = useRef(false);
-  const pendingPromptShowingRef = useRef(false);
-  const allowUnsyncedEditForIdRef = useRef<string | null>(null);
+    const [showCatPicker, setShowCatPicker] = useState(false);
+    const [showDatePicker, setShowDatePicker] = useState(false);
+    const isSubmittingRef = useRef(false);
+    const pendingPromptShowingRef = useRef(false);
+    const allowUnsyncedEditForIdRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    if (!visible) {
-      pendingPromptShowingRef.current = false;
-      allowUnsyncedEditForIdRef.current = null;
-    }
-  }, [visible]);
+    useEffect(() => {
+      if (!visible) {
+        pendingPromptShowingRef.current = false;
+        allowUnsyncedEditForIdRef.current = null;
+      }
+    }, [visible]);
 
-  useEffect(() => {
-    let cancelled = false;
-    if (!visible || !entryId) return;
+    useEffect(() => {
+      let cancelled = false;
+      if (!visible || !entryId) return;
 
-    (async () => {
-      try {
-        const row = await getTransactionByLocalId(String(entryId));
-        if (cancelled) return;
-        if (!row) {
-          onClose();
-          return;
-        }
-
-        // Deleted guard
-        if (row.deleted_at || row.sync_status === 2) {
-          Alert.alert('Cannot edit', 'This transaction is deleted.');
-          onClose();
-          return;
-        }
-
-        const applyRowToState = () => {
+      (async () => {
+        try {
+          const row = await getTransactionByLocalId(String(entryId));
           if (cancelled) return;
-          setAmount(String(row.amount ?? ''));
-          setCategory(ensureCategory(row.category));
-          setNote(row.note || '');
-          setTypeIndex(isIncome(row.type) ? 1 : 0);
-
-          const v = row.date || row.created_at;
-          if (v === null || v === undefined) {
-            setDate(new Date());
-          } else {
-            const n = Number(v);
-            if (!Number.isNaN(n)) {
-              setDate(new Date(n < 1e12 ? n * 1000 : n));
-            } else {
-              const parsed = Date.parse(String(v));
-              setDate(!Number.isNaN(parsed) ? new Date(parsed) : new Date());
-            }
-          }
-        };
-
-        // Warn if pending sync
-        if (row.need_sync === 1) {
-          const id = String(entryId);
-          if (allowUnsyncedEditForIdRef.current === id) {
-            applyRowToState();
+          if (!row) {
+            onClose();
             return;
           }
-          if (!pendingPromptShowingRef.current) {
-            pendingPromptShowingRef.current = true;
-            Alert.alert(
-              'Pending changes',
-              'This entry is waiting to sync. Edit anyway?',
-              [
+
+          // Deleted guard
+          if (row.deleted_at || row.sync_status === 2) {
+            Alert.alert('Cannot edit', 'This transaction is deleted.');
+            onClose();
+            return;
+          }
+
+          const applyRowToState = () => {
+            if (cancelled) return;
+            setAmount(String(row.amount ?? ''));
+            setCategory(ensureCategory(row.category));
+            setNote(row.note || '');
+            setTypeIndex(isIncome(row.type) ? 1 : 0);
+
+            const v = row.date || row.created_at;
+            if (v === null || v === undefined) {
+              setDate(new Date());
+            } else {
+              const n = Number(v);
+              if (!Number.isNaN(n)) {
+                setDate(new Date(n < 1e12 ? n * 1000 : n));
+              } else {
+                const parsed = Date.parse(String(v));
+                setDate(!Number.isNaN(parsed) ? new Date(parsed) : new Date());
+              }
+            }
+          };
+
+          // Warn if pending sync
+          if (row.need_sync === 1) {
+            const id = String(entryId);
+            if (allowUnsyncedEditForIdRef.current === id) {
+              applyRowToState();
+              return;
+            }
+            if (!pendingPromptShowingRef.current) {
+              pendingPromptShowingRef.current = true;
+              Alert.alert(
+                'Pending changes',
+                'This entry is waiting to sync. Edit anyway?',
+                [
+                  {
+                    text: 'Cancel',
+                    style: 'cancel',
+                    onPress: () => {
+                      pendingPromptShowingRef.current = false;
+                      onClose();
+                    },
+                  },
+                  {
+                    text: 'Edit',
+                    onPress: () => {
+                      pendingPromptShowingRef.current = false;
+                      allowUnsyncedEditForIdRef.current = id;
+                      applyRowToState();
+                    },
+                  },
+                ],
                 {
-                  text: 'Cancel',
-                  style: 'cancel',
-                  onPress: () => {
+                  cancelable: true,
+                  onDismiss: () => {
                     pendingPromptShowingRef.current = false;
                     onClose();
                   },
-                },
-                {
-                  text: 'Edit',
-                  onPress: () => {
-                    pendingPromptShowingRef.current = false;
-                    allowUnsyncedEditForIdRef.current = id;
-                    applyRowToState();
-                  },
-                },
-              ],
-              {
-                cancelable: true,
-                onDismiss: () => {
-                  pendingPromptShowingRef.current = false;
-                  onClose();
-                },
-              }
-            );
+                }
+              );
+            }
+            return;
           }
-          return;
+
+          applyRowToState();
+        } catch (e) {
+          onClose();
         }
+      })();
 
-        applyRowToState();
-      } catch (e) {
-        onClose();
+      return () => {
+        cancelled = true;
+      };
+    }, [entryId, onClose, visible]);
+
+    const handleSave = async () => {
+      if (!entryId) return;
+      if (isSubmittingRef.current) return;
+
+      const clean = amount.replace(/,/g, '').trim();
+      const amt = parseFloat(clean);
+
+      if (!clean || isNaN(amt) || amt <= 0) {
+        Alert.alert('Invalid Amount', 'Please enter a valid number.');
+        return;
       }
-    })();
 
-    return () => {
-      cancelled = true;
+      try {
+        isSubmittingRef.current = true;
+        await onSave(String(entryId), {
+          amount: amt,
+          category,
+          note,
+          type: typeIndex === 1 ? 'in' : 'out',
+          date: date.toISOString(),
+        });
+        onClose();
+      } catch (e) {
+        Alert.alert('Error', 'Failed to save changes.');
+      } finally {
+        isSubmittingRef.current = false;
+      }
     };
-  }, [entryId, onClose, visible]);
 
-  const handleSave = async () => {
-    if (!entryId) return;
-    if (isSubmittingRef.current) return;
+    const onDateChange = (_event: DateTimePickerEvent, selectedDate?: Date) => {
+      if (Platform.OS === 'android') setShowDatePicker(false);
+      if (selectedDate) setDate(selectedDate);
+    };
 
-    const clean = amount.replace(/,/g, '').trim();
-    const amt = parseFloat(clean);
+    const quickAmounts = ['100', '500', '1000', '2000'];
 
-    if (!clean || isNaN(amt) || amt <= 0) {
-      Alert.alert('Invalid Amount', 'Please enter a valid number.');
-      return;
-    }
+    return (
+      <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : insets.bottom}
+          style={{ flex: 1 }}
+        >
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                <View style={styles.sheetHandle} />
 
-    try {
-      isSubmittingRef.current = true;
-      await onSave(String(entryId), {
-        amount: amt,
-        category,
-        note,
-        type: typeIndex === 1 ? 'in' : 'out',
-        date: date.toISOString(),
-      });
-      onClose();
-    } catch (e) {
-      Alert.alert('Error', 'Failed to save changes.');
-    } finally {
-      isSubmittingRef.current = false;
-    }
-  };
+                <View style={styles.modalHeaderRow}>
+                  <Text style={styles.modalTitle}>Edit Entry</Text>
+                  <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+                    <MaterialIcon name="close" size={22} color={colors.text} />
+                  </TouchableOpacity>
+                </View>
 
-  const onDateChange = (_event: DateTimePickerEvent, selectedDate?: Date) => {
-    if (Platform.OS === 'android') setShowDatePicker(false);
-    if (selectedDate) setDate(selectedDate);
-  };
+                <ScrollView
+                  showsVerticalScrollIndicator={false}
+                  keyboardShouldPersistTaps="handled"
+                  contentContainerStyle={{ paddingBottom: Math.max(24, insets.bottom + 16) }}
+                >
+                  <SimpleButtonGroup
+                    buttons={['Expense', 'Income']}
+                    selectedIndex={typeIndex}
+                    onPress={setTypeIndex}
+                    containerStyle={{ marginBottom: 16 }}
+                  />
 
-  const quickAmounts = ['100', '500', '1000', '2000'];
+                  <Input
+                    label="Amount"
+                    value={amount}
+                    onChangeText={setAmount}
+                    keyboardType="numeric"
+                    inputContainerStyle={styles.modalInput}
+                    inputStyle={{ color: colors.text }}
+                    placeholderTextColor={colors.muted}
+                    selectionColor={colors.primary}
+                    leftIcon={<MaterialIcon name="currency-rupee" size={16} color={colors.muted} />}
+                    renderErrorMessage={false}
+                  />
 
-  return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : insets.bottom}
-        style={{ flex: 1 }}
-      >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <View style={styles.sheetHandle} />
+                  <View style={styles.quickRow}>
+                    {quickAmounts.map((val) => (
+                      <TouchableOpacity
+                        key={val}
+                        onPress={() => setAmount(val)}
+                        style={styles.quickChip}
+                      >
+                        <Text style={styles.quickChipText}>₹{val}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
 
-              <View style={styles.modalHeaderRow}>
-                <Text style={styles.modalTitle}>Edit Entry</Text>
-                <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-                  <MaterialIcon name="close" size={22} color={colors.text} />
-                </TouchableOpacity>
-              </View>
-
-              <ScrollView
-                showsVerticalScrollIndicator={false}
-                keyboardShouldPersistTaps="handled"
-                contentContainerStyle={{ paddingBottom: Math.max(24, insets.bottom + 16) }}
-              >
-                <SimpleButtonGroup
-                  buttons={['Expense', 'Income']}
-                  selectedIndex={typeIndex}
-                  onPress={setTypeIndex}
-                  containerStyle={{ marginBottom: 16 }}
-                />
-
-                <Input
-                  label="Amount"
-                  value={amount}
-                  onChangeText={setAmount}
-                  keyboardType="numeric"
-                  inputContainerStyle={styles.modalInput}
-                  inputStyle={{ color: colors.text }}
-                  placeholderTextColor={colors.muted}
-                  selectionColor={colors.primary}
-                  leftIcon={<MaterialIcon name="currency-rupee" size={16} color={colors.muted} />}
-                  renderErrorMessage={false}
-                />
-
-                <View style={styles.quickRow}>
-                  {quickAmounts.map((val) => (
+                  <View style={styles.rowInputs}>
                     <TouchableOpacity
-                      key={val}
-                      onPress={() => setAmount(val)}
-                      style={styles.quickChip}
+                      style={[styles.pickerBtn, { marginRight: 8 }]}
+                      onPress={() => setShowCatPicker(true)}
                     >
-                      <Text style={styles.quickChipText}>₹{val}</Text>
+                      <Text style={styles.pickerLabel}>Category</Text>
+                      <Text style={styles.pickerValue}>{category}</Text>
                     </TouchableOpacity>
-                  ))}
-                </View>
 
-                <View style={styles.rowInputs}>
-                  <TouchableOpacity
-                    style={[styles.pickerBtn, { marginRight: 8 }]}
-                    onPress={() => setShowCatPicker(true)}
-                  >
-                    <Text style={styles.pickerLabel}>Category</Text>
-                    <Text style={styles.pickerValue}>{category}</Text>
-                  </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.pickerBtn}
+                      onPress={() => setShowDatePicker(true)}
+                    >
+                      <Text style={styles.pickerLabel}>Date</Text>
+                      <Text style={styles.pickerValue}>{formatDate(date, 'DD MMM YYYY')}</Text>
+                    </TouchableOpacity>
+                  </View>
 
-                  <TouchableOpacity
-                    style={styles.pickerBtn}
-                    onPress={() => setShowDatePicker(true)}
-                  >
-                    <Text style={styles.pickerLabel}>Date</Text>
-                    <Text style={styles.pickerValue}>{formatDate(date, 'DD MMM YYYY')}</Text>
-                  </TouchableOpacity>
-                </View>
+                  <Input
+                    label="Note"
+                    value={note}
+                    onChangeText={setNote}
+                    inputContainerStyle={styles.modalInput}
+                    inputStyle={{ color: colors.text }}
+                    placeholder="Optional description"
+                    placeholderTextColor={colors.muted}
+                    renderErrorMessage={false}
+                  />
 
-                <Input
-                  label="Note"
-                  value={note}
-                  onChangeText={setNote}
-                  inputContainerStyle={styles.modalInput}
-                  inputStyle={{ color: colors.text }}
-                  placeholder="Optional description"
-                  placeholderTextColor={colors.muted}
-                  renderErrorMessage={false}
-                />
+                  <Button
+                    title="Save Changes"
+                    onPress={handleSave}
+                    buttonStyle={styles.saveBtn}
+                    containerStyle={{ marginTop: 20 }}
+                  />
 
-                <Button
-                  title="Save Changes"
-                  onPress={handleSave}
-                  buttonStyle={styles.saveBtn}
-                  containerStyle={{ marginTop: 20 }}
-                />
-
-                <Button
-                  title="Delete Entry"
-                  type="clear"
-                  icon={<MaterialIcon name="delete-outline" size={20} color={colors.accentRed || '#EF4444'} style={{ marginRight: 8 }} />}
-                  titleStyle={{ color: colors.accentRed || '#EF4444' }}
-                  onPress={() => {
-                    if (entryId) {
-                      onClose();
-                      // Small delay to allow modal to close before alert implies interaction
-                      setTimeout(() => onDelete(entryId), 200);
+                  <Button
+                    title="Delete Entry"
+                    type="clear"
+                    icon={
+                      <MaterialIcon
+                        name="delete-outline"
+                        size={20}
+                        color={colors.accentRed || '#EF4444'}
+                        style={{ marginRight: 8 }}
+                      />
                     }
-                  }}
-                  containerStyle={{ marginTop: 12 }}
-                />
-              </ScrollView>
+                    titleStyle={{ color: colors.accentRed || '#EF4444' }}
+                    onPress={() => {
+                      if (entryId) {
+                        onClose();
+                        // Small delay to allow modal to close before alert implies interaction
+                        setTimeout(() => onDelete(entryId), 200);
+                      }
+                    }}
+                    containerStyle={{ marginTop: 12 }}
+                  />
+                </ScrollView>
+              </View>
             </View>
-          </View>
-        </TouchableWithoutFeedback>
-      </KeyboardAvoidingView>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
 
-      <CategoryPickerModal
-        visible={showCatPicker}
-        onClose={() => setShowCatPicker(false)}
-        onSelect={(c) => {
-          setCategory(c);
-          setShowCatPicker(false);
-        }}
-      />
-
-      {showDatePicker && (
-        <DateTimePicker
-          value={date}
-          mode="date"
-          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-          onChange={onDateChange}
-          maximumDate={new Date()}
+        <CategoryPickerModal
+          visible={showCatPicker}
+          onClose={() => setShowCatPicker(false)}
+          onSelect={(c) => {
+            setCategory(c);
+            setShowCatPicker(false);
+          }}
         />
-      )}
-    </Modal>
-  );
-});
+
+        {showDatePicker && (
+          <DateTimePicker
+            value={date}
+            mode="date"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={onDateChange}
+            maximumDate={new Date()}
+          />
+        )}
+      </Modal>
+    );
+  }
+);
 
 // --- 3. MAIN SCREEN ---
 const HistoryScreen = () => {

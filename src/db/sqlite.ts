@@ -149,7 +149,6 @@ export async function ensureLocalSchemaUpgrades(): Promise<void> {
           await executeSqlAsync('BEGIN TRANSACTION;');
           try {
             for (const r of rows) {
-
               const toIso = (v: any, fallbackMs?: number) => {
                 if (v == null) return fallbackMs ? new Date(fallbackMs).toISOString() : null;
                 if (v instanceof Date) return v.toISOString();
