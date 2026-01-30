@@ -84,7 +84,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
       try {
         const s = await getSession();
         if (mounted) setFallbackSession(s);
-      } catch (e) {}
+      } catch (e) { }
     };
     loadSession();
 
@@ -96,7 +96,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -121,7 +121,7 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   const closeDrawerSafely = () => {
     try {
       (props.navigation as any).closeDrawer?.();
-    } catch (e) {}
+    } catch (e) { }
   };
 
   const goToDashboardTab = (screen: 'Home' | 'History') => {
@@ -159,6 +159,9 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
         await performHardSignOut({
           clerkSignOut: async () => {
             await clerkSignOut();
+          },
+          onProgress: (msg) => {
+            // Drawer could also show status if we added state for it.
           },
           navigateToAuth: () => {
             try {

@@ -20,8 +20,8 @@ import { useAuth as useClerkAuth } from '@clerk/clerk-expo';
 
 // Optional Haptics: prefer runtime require so builds without expo-haptics still work.
 let Haptics: any = {
-  impactAsync: async () => {},
-  notificationAsync: async () => {},
+  impactAsync: async () => { },
+  notificationAsync: async () => { },
   ImpactFeedbackStyle: { Medium: 'medium' },
   NotificationFeedbackType: { Warning: 'warning' },
 };
@@ -139,13 +139,13 @@ const SettingsScreen = () => {
         const d = new Date(last);
         setLastSyncTime(`${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`);
       }
-    } catch (e) {}
+    } catch (e) { }
 
     return () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, []);
 
@@ -175,7 +175,7 @@ const SettingsScreen = () => {
         showToast('Cloud sync is disabled in this build.', 'error');
         return;
       }
-    } catch (e) {}
+    } catch (e) { }
 
     // Haptic feedback
     if (Platform.OS !== 'web') {
@@ -246,10 +246,22 @@ const SettingsScreen = () => {
     const doSignOut = async () => {
       if (isSigningOut) return;
       setIsSigningOut(true);
+      showToast('Signing out...', 'info'); // Initial feedback
+
       try {
         await performHardSignOut({
           clerkSignOut: async () => {
             await clerkSignOut();
+          },
+          onProgress: (msg) => {
+            // Optional: Update a local state if you want a custom modal, 
+            // but here we can just update the toast or use the console/status.
+            // Given the limitations of the current Toast context (simple strings),
+            // we will stick to a loading overlay in future or just let it spin.
+            // Ideally we would set a state here to show in a custom UI.
+            // For now, let's keep it simple and just let the spinner run,
+            // maybe update a status text if we added one.
+            // actually, let's update the toast message if possible or valid.
           },
           navigateToAuth: () => {
             try {
@@ -263,7 +275,7 @@ const SettingsScreen = () => {
 
         try {
           query.clear();
-        } catch (e) {}
+        } catch (e) { }
 
         showToast('Signed out successfully');
       } catch (e) {
@@ -306,18 +318,18 @@ const SettingsScreen = () => {
             try {
               try {
                 cancelSyncWork();
-              } catch (e) {}
+              } catch (e) { }
 
               await wipeLocalData();
               await initDB();
 
               try {
                 query.clear();
-              } catch (e) {}
+              } catch (e) { }
               try {
                 const { notifyEntriesChanged } = require('../utils/dbEvents');
                 notifyEntriesChanged();
-              } catch (e) {}
+              } catch (e) { }
 
               // Resume sync safely and kick it off if we're online.
               setSyncSuspended(false);

@@ -66,7 +66,7 @@ class UpdateManager {
       const checkResult = await Promise.race([
         Updates.checkForUpdateAsync(),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout')), this.TIMEOUT_MS)
+          setTimeout(() => reject(new Error('Check Timeout')), this.TIMEOUT_MS)
         ),
       ]);
 
@@ -76,7 +76,7 @@ class UpdateManager {
         await Promise.race([
           Updates.fetchUpdateAsync(),
           new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('Timeout')), this.TIMEOUT_MS * 2)
+            setTimeout(() => reject(new Error('Download Timeout')), this.TIMEOUT_MS * 2)
           ),
         ]);
 
@@ -88,11 +88,11 @@ class UpdateManager {
       }
     } catch (error) {
       console.warn('[UpdateManager] Manual check failed', error);
+      // Show error state briefly, then reset to IDLE so user can retry immediately
       this.setState('ERROR');
-      // Reset to IDLE after a moment so user can try again
       setTimeout(() => {
-        if (this.state === 'ERROR') this.setState('IDLE');
-      }, 3000);
+         this.setState('IDLE');
+      }, 2000);
       return false;
     }
   }
