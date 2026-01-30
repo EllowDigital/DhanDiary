@@ -8,6 +8,13 @@ export type UpdateState = 'IDLE' | 'CHECKING' | 'DOWNLOADING' | 'READY' | 'ERROR
 type StateListener = (state: UpdateState) => void;
 
 class UpdateManager {
+  /**
+   * REGRESSION REMINDER:
+   * Any change touching UpdateManager must re-verify:
+   * 1. Startup speed (zero blocking)
+   * 2. Background download behavior (silent)
+   * 3. Manual reload flow (user-initiated only)
+   */
   private static instance: UpdateManager;
   private state: UpdateState = 'IDLE';
   private listeners: Set<StateListener> = new Set();
