@@ -1,5 +1,6 @@
 import * as Updates from 'expo-updates';
-import { Alert } from 'react-native';
+import { Alert, AppState, AppStateStatus } from 'react-native';
+import NetInfo from '@react-native-community/netinfo';
 import AsyncStorage from '../utils/AsyncStorageWrapper';
 
 export type UpdateState = 'IDLE' | 'CHECKING' | 'DOWNLOADING' | 'READY' | 'ERROR';
@@ -11,9 +12,12 @@ class UpdateManager {
   private state: UpdateState = 'IDLE';
   private listeners: Set<StateListener> = new Set();
   private lastCheck = 0;
+  private appStateSub: any = null;
 
-  private MIN_CHECK_INTERVAL = 30 * 60 * 1000; // 30 mins
+  // Configuration
+  private MIN_CHECK_INTERVAL = 6 * 60 * 60 * 1000; // 6 hours
   private STORAGE_KEY = 'last_update_check_ts';
+  private FAILED_UPDATE_KEY = 'failed_ota_update_id';
   private TIMEOUT_MS = 15000; // 15s timeout for checks
 
   private constructor() { }
@@ -25,6 +29,33 @@ class UpdateManager {
     return UpdateManager.instance;
   }
 
+  /**
+   * Initialize the UpdateManager.
+   * Sets up AppState listeners to check for updates on resume.
+   */
+  public setup() {
+    if (this.appStateSub) return; // Already setup
+
+    this.log('Setting up UpdateManager lifecycle listeners');
+    this.appStateSub = AppState.addEventListener('change', this.handleAppStateChange);
+
+    // Initial check on startup (throttled)
+    this.checkForUpdateBackground().catch(() => { });
+  }
+
+  public teardown() {
+    if (this.appStateSub) {
+      this.appStateSub.remove();
+      this.appStateSub = null;
+    }
+  }
+
+  private handleAppStateChange = (nextAppState: AppStateStatus) => {
+    if (nextAppState === 'active') {
+      this.checkForUpdateBackground().catch(() => { });
+    }
+  };
+
   public subscribe(listener: StateListener): () => void {
     this.listeners.add(listener);
     listener(this.state); // Emit current immediately
@@ -33,6 +64,7 @@ class UpdateManager {
 
   private setState(s: UpdateState) {
     if (this.state === s) return;
+    this.log(`State change: ${this.state} -> ${s}`);
     this.state = s;
     this.listeners.forEach((l) => {
       try {
@@ -45,6 +77,13 @@ class UpdateManager {
 
   public getState() {
     return this.state;
+  }
+
+  private log(msg: string, data?: any) {
+    if (__DEV__) {
+      if (data) console.log(`[UpdateManager] ${msg}`, data);
+      else console.log(`[UpdateManager] ${msg}`);
+    }
   }
 
   /**
@@ -87,7 +126,7 @@ class UpdateManager {
         return false;
       }
     } catch (error) {
-      console.warn('[UpdateManager] Manual check failed', error);
+      this.log('Manual check failed', error);
       // Show error state briefly, then reset to IDLE so user can retry immediately
       this.setState('ERROR');
       setTimeout(() => {
@@ -103,28 +142,37 @@ class UpdateManager {
    */
   public async checkForUpdateBackground() {
     if (__DEV__) return;
-    if (this.state !== 'IDLE' && this.state !== 'ERROR') return; // Don't interrupt
+    // Don't interrupt if already busy or in error state (wait for manual reset or next app launch)
+    if (this.state !== 'IDLE') return;
 
+    // 1. Network Check
+    const net = await NetInfo.fetch();
+    if (!net.isConnected || !net.isInternetReachable) {
+      this.log('Offline, skipping background check');
+      return;
+    }
+
+    // 2. Throttle Check
     const now = Date.now();
-
     try {
       const lastStr = await AsyncStorage.getItem(this.STORAGE_KEY);
       const last = lastStr ? Number(lastStr) : 0;
       if (now - last < this.MIN_CHECK_INTERVAL) {
-        if (__DEV__) console.log('[UpdateManager] Throttled background check');
+        // Silent throttle
         return;
       }
     } catch (e) {
       // ignore storage error, proceed cautiously
     }
 
-    // Prevent race condition if multiple calls happen quickly
+    // Update timestamp immediately to prevent rapid retries
     this.lastCheck = now;
     AsyncStorage.setItem(this.STORAGE_KEY, String(now)).catch(() => { });
 
     try {
       this.setState('CHECKING');
 
+      // 3. Check for Update
       const result = await Promise.race([
         Updates.checkForUpdateAsync(),
         new Promise<never>((_, reject) =>
@@ -133,21 +181,32 @@ class UpdateManager {
       ]);
 
       if ((result as any).isAvailable) {
+        const updateId = (result as any).manifest?.id || 'unknown';
+
+        // 4. Update Loop Guard
+        const failedId = await AsyncStorage.getItem(this.FAILED_UPDATE_KEY);
+        if (failedId === updateId) {
+          this.log('Skipping previously failed update', updateId);
+          this.setState('IDLE');
+          return;
+        }
+
         // Notify listeners so we can show "Updating..." toast
         this.setState('DOWNLOADING');
 
         await Promise.race([
           Updates.fetchUpdateAsync(),
           new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('Timeout')), this.TIMEOUT_MS * 4) // Longer timeout for background download
+            setTimeout(() => reject(new Error('Timeout')), this.TIMEOUT_MS * 4) // Longer timeout for download
           ),
         ]);
-        this.setState('READY'); // UI shows badge/toast, doesn't force reload
+
+        this.setState('READY'); // UI shows badge/toast
       } else {
         this.setState('IDLE');
       }
     } catch (e) {
-      if (__DEV__) console.warn('[UpdateManager] Background check failed', e);
+      this.log('Background check failed', e);
       // Reset to IDLE so we don't get stuck in CHECKING/DOWNLOADING
       this.setState('IDLE');
     }
@@ -161,10 +220,20 @@ class UpdateManager {
     if (this.state !== 'READY') return;
 
     try {
+      this.log('Reloading app to apply update...');
       await Updates.reloadAsync();
     } catch (e) {
       Alert.alert('Update Failed', 'Could not reload the app. Please restart manually.');
     }
+  }
+
+  /**
+   * Call this if the App detects a crash loop or similar (advanced).
+   */
+  public async reportBadUpdate(updateId: string) {
+    try {
+      await AsyncStorage.setItem(this.FAILED_UPDATE_KEY, updateId);
+    } catch (e) { }
   }
 }
 
