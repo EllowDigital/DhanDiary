@@ -724,16 +724,15 @@ function AppWithDb() {
       startBackgroundFetch().catch(() => { });
     }
 
-    // Background Expo Updates: fetch quietly, apply on next restart.
-    // Never block app launch.
-    InteractionManager.runAfterInteractions(() => {
-      UpdateManager.checkForUpdateBackground().catch(() => { });
-    });
-
+    // Background Expo Updates: Unified setup (check + lifecycle listeners)
+    UpdateManager.setup();
     return () => {
+      UpdateManager.teardown();
       stopForegroundSyncScheduler();
       stopBackgroundFetch();
     };
+
+
   }, [dbReady]);
 
   // App State Listener
