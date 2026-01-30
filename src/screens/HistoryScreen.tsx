@@ -63,6 +63,7 @@ interface EditModalProps {
   entryId: string | null;
   onClose: () => void;
   onSave: (id: string, updates: Partial<TransactionEntry>) => Promise<void>;
+  onDelete: (id: string) => void;
 }
 
 // --- SETUP ---
@@ -79,7 +80,7 @@ const resolveEntrySortKey = (entry: TransactionEntry) => {
 const inrFormatter = new Intl.NumberFormat('en-IN');
 
 // --- 1. SWIPEABLE LIST ITEM ---
-// Optimized: Computes derived state inside the item, not in the parent list
+// Modeled after CashInList.tsx
 const SwipeableHistoryItem = React.memo(
   ({
     item,
@@ -90,25 +91,18 @@ const SwipeableHistoryItem = React.memo(
     onEdit: (entry: TransactionEntry) => void;
     onDelete: (id: string) => void;
   }) => {
-    // Derived state (lightweight)
+    // Derived state
     const isInc = isIncome(item.type);
     const color = isInc ? colors.accentGreen || '#10B981' : colors.accentRed || '#EF4444';
     const catIcon = getIconForCategory(item.category);
     const iconName = catIcon || (isInc ? 'arrow-downward' : 'arrow-upward');
 
-    // Safety: ensure date format doesn't crash
-    const dateStr = useMemo(() => {
-      return formatDate(item.date || item.created_at);
-    }, [item.date, item.created_at]);
-
-    const amountStr = useMemo(() => {
-      const amount = Number(item.amount);
-      const safeAmount = Number.isFinite(amount) ? amount : 0;
-      return inrFormatter.format(safeAmount);
-    }, [item.amount]);
+    const dateStr = formatDate(item.date || item.created_at);
+    const amountStr = inrFormatter.format(Number(item.amount) || 0);
 
     const swipeableRef = useRef<Swipeable>(null);
 
+    // Swipe Left -> Edit (Blue)
     const renderRightActions = (
       _progress: Animated.AnimatedInterpolation<number>,
       dragX: Animated.AnimatedInterpolation<number>
@@ -123,17 +117,18 @@ const SwipeableHistoryItem = React.memo(
           style={styles.rightAction}
           onPress={() => {
             swipeableRef.current?.close();
-            onDelete(item.local_id);
+            onEdit(item);
           }}
         >
           <Animated.View style={{ transform: [{ scale }], alignItems: 'center' }}>
-            <MaterialIcon name="delete" size={24} color="white" />
-            <Text style={styles.actionText}>Delete</Text>
+            <MaterialIcon name="edit" size={24} color="white" />
+            <Text style={styles.actionText}>Edit</Text>
           </Animated.View>
         </TouchableOpacity>
       );
     };
 
+    // Swipe Right -> Delete (Red)
     const renderLeftActions = (
       _progress: Animated.AnimatedInterpolation<number>,
       dragX: Animated.AnimatedInterpolation<number>
@@ -148,12 +143,12 @@ const SwipeableHistoryItem = React.memo(
           style={styles.leftAction}
           onPress={() => {
             swipeableRef.current?.close();
-            onEdit(item);
+            onDelete(item.local_id);
           }}
         >
           <Animated.View style={{ transform: [{ scale }], alignItems: 'center' }}>
-            <MaterialIcon name="edit" size={24} color="white" />
-            <Text style={styles.actionText}>Edit</Text>
+            <MaterialIcon name="delete" size={24} color="white" />
+            <Text style={styles.actionText}>Delete</Text>
           </Animated.View>
         </TouchableOpacity>
       );
@@ -169,7 +164,11 @@ const SwipeableHistoryItem = React.memo(
         overshootRight={false}
         overshootLeft={false}
       >
-        <View style={styles.compactRow}>
+        <TouchableOpacity
+          activeOpacity={0.9}
+          onPress={() => onEdit(item)} // Keep tap-to-edit as a fallback/secondary
+          style={styles.compactRow}
+        >
           <View style={[styles.compactIcon, { backgroundColor: isInc ? '#ECFDF5' : '#FEF2F2' }]}>
             <MaterialIcon name={iconName as any} size={20} color={color} />
           </View>
@@ -200,14 +199,14 @@ const SwipeableHistoryItem = React.memo(
               <Text style={styles.compactDate}>{dateStr}</Text>
             </View>
           </View>
-        </View>
+        </TouchableOpacity>
       </Swipeable>
     );
   }
 );
 
 // --- 2. EDIT MODAL ---
-const EditTransactionModal = React.memo(({ visible, entryId, onClose, onSave }: EditModalProps) => {
+const EditTransactionModal = React.memo(({ visible, entryId, onClose, onSave, onDelete }: EditModalProps) => {
   const insets = useSafeAreaInsets();
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState(DEFAULT_CATEGORY);
@@ -449,6 +448,21 @@ const EditTransactionModal = React.memo(({ visible, entryId, onClose, onSave }: 
                   buttonStyle={styles.saveBtn}
                   containerStyle={{ marginTop: 20 }}
                 />
+
+                <Button
+                  title="Delete Entry"
+                  type="clear"
+                  icon={<MaterialIcon name="delete-outline" size={20} color={colors.accentRed || '#EF4444'} style={{ marginRight: 8 }} />}
+                  titleStyle={{ color: colors.accentRed || '#EF4444' }}
+                  onPress={() => {
+                    if (entryId) {
+                      onClose();
+                      // Small delay to allow modal to close before alert implies interaction
+                      setTimeout(() => onDelete(entryId), 200);
+                    }
+                  }}
+                  containerStyle={{ marginTop: 12 }}
+                />
               </ScrollView>
             </View>
           </View>
@@ -491,27 +505,6 @@ const HistoryScreen = () => {
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
 
   const closeEditModal = useCallback(() => setEditingEntryId(null), []);
-
-  useEffect(() => {
-    let mounted = true;
-    const key = `history_swipe_tip_dismissed:${user?.id || 'anon'}`;
-    AsyncStorage.getItem(key)
-      .then((v) => {
-        if (mounted) setSwipeTipVisible(v !== '1');
-      })
-      .catch(() => {
-        if (mounted) setSwipeTipVisible(true);
-      });
-    return () => {
-      mounted = false;
-    };
-  }, [user?.id]);
-
-  const dismissSwipeTip = useCallback(() => {
-    const key = `history_swipe_tip_dismissed:${user?.id || 'anon'}`;
-    setSwipeTipVisible(false);
-    AsyncStorage.setItem(key, '1').catch(() => { });
-  }, [user?.id]);
 
   const toggleFilter = useCallback((f: 'ALL' | 'WEEK' | 'MONTH') => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -649,24 +642,12 @@ const HistoryScreen = () => {
             </TouchableOpacity>
           ))}
         </ScrollView>
-
-        {swipeTipVisible && (
-          <View style={styles.swipeHintRow}>
-            <Text style={styles.swipeHintText}>
-              Tip: Swipe right to Edit · Swipe left to Delete
-            </Text>
-            <TouchableOpacity
-              onPress={dismissSwipeTip}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              style={styles.swipeHintDismiss}
-            >
-              <MaterialIcon name="close" size={18} color={colors.muted || '#64748B'} />
-            </TouchableOpacity>
-          </View>
+        {filtered.length > 0 && (
+          <Text style={styles.swipeHint}>Swipe left to edit, right to delete</Text>
         )}
       </View>
     ),
-    [dismissSwipeTip, quickFilter, summary, swipeTipVisible]
+    [quickFilter, summary, filtered.length]
   );
 
   return (
@@ -686,7 +667,13 @@ const HistoryScreen = () => {
         keyExtractor={(item) => item.local_id}
         renderItem={renderItem}
         ListHeaderComponent={renderHeader}
-        contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 80 }]}
+        contentContainerStyle={{
+          paddingBottom: insets.bottom + 80,
+          paddingHorizontal: width >= 768 ? 0 : 16,
+          width: '100%',
+          maxWidth: 700,
+          alignSelf: 'center',
+        }}
         initialNumToRender={10}
         windowSize={5}
         removeClippedSubviews={Platform.OS === 'android'}
@@ -710,6 +697,7 @@ const HistoryScreen = () => {
         entryId={editingEntryId}
         onClose={closeEditModal}
         onSave={handleSaveEdit}
+        onDelete={handleDelete}
       />
     </SafeAreaView>
   );
@@ -722,6 +710,15 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background || '#F8FAFC' },
   listContent: { paddingHorizontal: 16 },
   headerContainer: { marginBottom: 12, marginTop: 8 },
+
+  swipeHint: {
+    fontSize: 12,
+    color: colors.muted || '#94A3B8',
+    marginLeft: 4,
+    marginBottom: 8,
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
 
   swipeHintRow: {
     marginTop: 4,
@@ -784,7 +781,8 @@ const styles = StyleSheet.create({
   filterChipTextActive: { color: colors.background || '#FFFFFF' },
 
   // List Item
-  swipeContainer: { marginBottom: 8, borderRadius: 14, overflow: 'hidden' },
+  // List Item
+  historyItemContainer: { marginBottom: 8, borderRadius: 14, overflow: 'hidden' },
   compactRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -818,20 +816,31 @@ const styles = StyleSheet.create({
   compactNote: { fontSize: 13, color: colors.muted || '#64748B', flex: 1, marginRight: 8 },
   compactDate: { fontSize: 12, color: colors.muted || '#94A3B8' },
 
+  // List Item
+  swipeContainer: {
+    marginBottom: 8,
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+
   // Hidden Actions
   leftAction: {
-    backgroundColor: colors.primary || '#3B82F6',
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-    flex: 1,
-    paddingLeft: 20,
-  },
-  rightAction: {
     backgroundColor: colors.accentRed || '#EF4444',
     justifyContent: 'center',
-    alignItems: 'flex-end',
-    flex: 1,
-    paddingRight: 20,
+    alignItems: 'center',
+    width: 80,
+    height: '100%',
+    borderRadius: 14,
+    marginRight: 8,
+  },
+  rightAction: {
+    backgroundColor: colors.primary || '#3B82F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 80,
+    height: '100%',
+    borderRadius: 14,
+    marginLeft: 8,
   },
   actionText: {
     color: 'white',
