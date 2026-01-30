@@ -132,8 +132,8 @@ export async function ensureLocalSchemaUpgrades(): Promise<void> {
       // This will convert mixed numeric/string dates into ISO strings (for date/created_at)
       // and epoch ms for updated_at. This preserves the original moment while making
       // client-side grouping and sorting reliable across devices.
-      // Normalize existing date/created_at/updated_at formats for consistency.
-      // Optimazation: Run this ONLY once. We use a meta flag to track it.
+
+      // Optimization: Run this ONLY once. We use a meta flag to track it.
       try {
         const metaRows =
           (await getAllAsync("SELECT value FROM meta WHERE key = 'normalized_dates_v2'")) || [];
@@ -149,7 +149,6 @@ export async function ensureLocalSchemaUpgrades(): Promise<void> {
           await executeSqlAsync('BEGIN TRANSACTION;');
           try {
             for (const r of rows) {
-              // ... (logic remains same, just inside the loop)
               const toIso = (v: any, fallbackMs?: number) => {
                 if (v == null) return fallbackMs ? new Date(fallbackMs).toISOString() : null;
                 if (v instanceof Date) return v.toISOString();

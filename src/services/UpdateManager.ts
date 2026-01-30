@@ -11,7 +11,10 @@ class UpdateManager {
   private state: UpdateState = 'IDLE';
   private listeners: Set<StateListener> = new Set();
   private lastCheck = 0;
+
   private MIN_CHECK_INTERVAL = 30 * 60 * 1000; // 30 mins
+  private STORAGE_KEY = 'last_update_check_ts';
+  private TIMEOUT_MS = 15000; // 15s timeout for checks
 
   private constructor() {}
 
@@ -34,7 +37,9 @@ class UpdateManager {
     this.listeners.forEach((l) => {
       try {
         l(s);
-      } catch (e) {}
+      } catch (e) {
+        if (__DEV__) console.warn('[UpdateManager] Listener error:', e);
+      }
     });
   }
 
@@ -57,12 +62,24 @@ class UpdateManager {
 
     try {
       this.setState('CHECKING');
-      const result = await Updates.checkForUpdateAsync();
 
-      if (result.isAvailable) {
+      const checkResult = await Promise.race([
+        Updates.checkForUpdateAsync(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout')), this.TIMEOUT_MS)
+        ),
+      ]);
+
+      if ((checkResult as any).isAvailable) {
         // Found update -> Auto download
         this.setState('DOWNLOADING');
-        await Updates.fetchUpdateAsync();
+        await Promise.race([
+          Updates.fetchUpdateAsync(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Timeout')), this.TIMEOUT_MS * 2)
+          ),
+        ]);
+
         this.setState('READY');
         return true;
       } else {
@@ -72,6 +89,10 @@ class UpdateManager {
     } catch (error) {
       console.warn('[UpdateManager] Manual check failed', error);
       this.setState('ERROR');
+      // Reset to IDLE after a moment so user can try again
+      setTimeout(() => {
+        if (this.state === 'ERROR') this.setState('IDLE');
+      }, 3000);
       return false;
     }
   }
@@ -85,17 +106,49 @@ class UpdateManager {
     if (this.state !== 'IDLE' && this.state !== 'ERROR') return; // Don't interrupt
 
     const now = Date.now();
-    if (now - this.lastCheck < this.MIN_CHECK_INTERVAL) return;
 
     try {
-      this.lastCheck = now;
-      const result = await Updates.checkForUpdateAsync();
-      if (result.isAvailable) {
-        await Updates.fetchUpdateAsync();
-        this.setState('READY'); // UI shows badge, doesn't force reload
+      const lastStr = await AsyncStorage.getItem(this.STORAGE_KEY);
+      const last = lastStr ? Number(lastStr) : 0;
+      if (now - last < this.MIN_CHECK_INTERVAL) {
+        if (__DEV__) console.log('[UpdateManager] Throttled background check');
+        return;
       }
     } catch (e) {
-      // Silent fail
+      // ignore storage error, proceed cautiously
+    }
+
+    // Prevent race condition if multiple calls happen quickly
+    this.lastCheck = now;
+    AsyncStorage.setItem(this.STORAGE_KEY, String(now)).catch(() => {});
+
+    try {
+      const result = await Promise.race([
+        Updates.checkForUpdateAsync(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout')), this.TIMEOUT_MS)
+        ),
+      ]);
+
+      if ((result as any).isAvailable) {
+        await Promise.race([
+          Updates.fetchUpdateAsync(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Timeout')), this.TIMEOUT_MS * 2)
+          ),
+        ]);
+        this.setState('READY'); // UI shows badge, doesn't force reload
+      } else {
+        // Explicitly set IDLE to notify listeners if needed, though usually state is already IDLE/ERROR
+        this.setState('IDLE');
+      }
+    } catch (e) {
+      // Don't leave it in a potential unknown state, though here we didn't change state yet.
+      // If we want to allow retries sooner on error, we could reset lastCheck or just leave it.
+      // Setting state to ERROR allows UI to show error status if it wants to.
+      // But for background, better to just be quiet unless we want to show a warning badge.
+      // We'll set IDLE so we aren't stuck.
+      this.setState('IDLE');
     }
   }
 

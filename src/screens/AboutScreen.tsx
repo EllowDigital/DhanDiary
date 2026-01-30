@@ -243,7 +243,7 @@ const AboutScreen: React.FC = () => {
         return;
       }
       const found = await UpdateManager.checkForUpdateManual();
-      if (!found && updateState !== 'ERROR') {
+      if (!found) {
         showToast("You're up to date.", 'success');
       }
     }
