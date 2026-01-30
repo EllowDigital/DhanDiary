@@ -33,7 +33,7 @@ import Constants from 'expo-constants';
 // --- CUSTOM IMPORTS ---
 // Ensure these paths match your project structure
 import { syncClerkUserToNeon } from '../services/clerkUserSync';
-import { saveSession } from '../db/session';
+import { saveSession, getSession } from '../db/session';
 import { warmNeonConnection } from '../services/auth';
 import { colors } from '../utils/design';
 import { validateEmail } from '../utils/emailValidation';
@@ -173,7 +173,7 @@ const LoginScreen = () => {
       }),
     ]).start();
 
-    warmNeonConnection({ soft: true, timeoutMs: 3000 }).catch(() => {});
+    warmNeonConnection({ soft: true, timeoutMs: 3000 }).catch(() => { });
     return () => {
       clearTimeout(t);
       sub.remove();
@@ -212,7 +212,7 @@ const LoginScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) {}
+      } catch (e) { }
     };
   }, [loading, showToast]);
 
@@ -237,7 +237,7 @@ const LoginScreen = () => {
             return;
           }
         }
-      } catch (e) {}
+      } catch (e) { }
 
       setGate(null);
     } finally {
@@ -246,6 +246,7 @@ const LoginScreen = () => {
   };
 
   // --- AUTO SYNC LOGIC ---
+  // --- AUTO SYNC LOGIC ---
   useEffect(() => {
     if (!isSignedIn || !clerkLoaded || !clerkUser) return;
     const processSession = async () => {
@@ -253,6 +254,27 @@ const LoginScreen = () => {
       try {
         const id = clerkUser.id;
         const userEmail = clerkUser.primaryEmailAddress?.emailAddress || '';
+
+        let fastPath = false;
+        try {
+          const local = await getSession(); // check sync_session table
+          // if we already have a session for this exact clerk user, skip blocking network sync
+          if (local && (local as any).clerk_id === id) {
+            fastPath = true;
+          }
+        } catch (e) { }
+
+        if (fastPath) {
+          if (!didShowRedirectRef.current) {
+            didShowRedirectRef.current = true;
+            // Shorter toast for fast path
+            showToast('Welcome back!', 'success', 1500);
+          }
+          setSyncing(false);
+          navigation.reset({ index: 0, routes: [{ name: 'Announcement' }] });
+          return;
+        }
+
         if (id && userEmail) {
           await handleSyncAndNavigate(
             id,
@@ -544,7 +566,7 @@ const LoginScreen = () => {
         if (isNetOnline(net) && isLikelyServiceDownError(err)) {
           setGate('service');
         }
-      } catch (e) {}
+      } catch (e) { }
       setLoading(false);
     } finally {
       inFlightRef.current = false;
@@ -707,11 +729,11 @@ const LoginScreen = () => {
                   isCardStyle
                     ? { borderRadius: 24, padding: 32 } // Card Look
                     : {
-                        borderTopLeftRadius: 32,
-                        borderTopRightRadius: 32,
-                        padding: 32,
-                        paddingBottom: Math.max(insets.bottom + 20, 32),
-                      }, // Sheet Look
+                      borderTopLeftRadius: 32,
+                      borderTopRightRadius: 32,
+                      padding: 32,
+                      paddingBottom: Math.max(insets.bottom + 20, 32),
+                    }, // Sheet Look
                 ]}
               >
                 <Text style={styles.welcomeText}>Welcome Back!</Text>

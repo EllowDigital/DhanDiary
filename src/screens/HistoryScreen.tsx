@@ -820,13 +820,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
+    overflow: 'hidden',
     marginRight: 8,
   },
   compactCategory: {
     fontSize: 15,
     fontWeight: '600',
     color: colors.text || '#1E293B',
-    flexShrink: 1, // Allow text to shrink so icon fits
+    flexShrink: 1,
   },
   syncIcon: { marginLeft: 6 },
   compactAmount: { fontSize: 15, fontWeight: '700' },
