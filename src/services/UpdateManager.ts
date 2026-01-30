@@ -13,6 +13,8 @@ class UpdateManager {
   private listeners: Set<StateListener> = new Set();
   private lastCheck = 0;
   private appStateSub: any = null;
+  private netInfoSub: (() => void) | null = null;
+  private isBusy = false;
 
   // Configuration
   private MIN_CHECK_INTERVAL = 6 * 60 * 60 * 1000; // 6 hours
