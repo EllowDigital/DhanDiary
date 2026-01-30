@@ -174,17 +174,16 @@ const SwipeableHistoryItem = React.memo(
           </View>
           <View style={styles.compactContent}>
             <View style={styles.compactHeader}>
-              <Text style={styles.compactCategory} numberOfLines={1}>
-                {item.category}
-              </Text>
-
-              <View style={styles.syncIconWrapper}>
+              <View style={styles.categoryRow}>
+                <Text style={styles.compactCategory} numberOfLines={1}>
+                  {item.category}
+                </Text>
                 {item.sync_status === 1 ? (
-                  <MaterialIcon name="check-circle" size={14} color="#10B981" />
+                  <MaterialIcon name="check-circle" size={14} color="#10B981" style={styles.syncIcon} />
                 ) : item.sync_status === 0 ? (
-                  <MaterialIcon name="access-time" size={14} color="#F59E0B" />
+                  <MaterialIcon name="access-time" size={14} color="#F59E0B" style={styles.syncIcon} />
                 ) : item.sync_status === 2 ? (
-                  <MaterialIcon name="delete" size={14} color="#EF4444" />
+                  <MaterialIcon name="delete" size={14} color="#EF4444" style={styles.syncIcon} />
                 ) : null}
               </View>
 
@@ -817,13 +816,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 4,
   },
+  categoryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 8,
+  },
   compactCategory: {
     fontSize: 15,
     fontWeight: '600',
     color: colors.text || '#1E293B',
-    maxWidth: '65%',
+    flexShrink: 1, // Allow text to shrink so icon fits
   },
-  syncIconWrapper: { marginLeft: 6, justifyContent: 'center' },
+  syncIcon: { marginLeft: 6 },
   compactAmount: { fontSize: 15, fontWeight: '700' },
   compactSubRow: { flexDirection: 'row', justifyContent: 'space-between' },
   compactNote: { fontSize: 13, color: colors.muted || '#64748B', flex: 1, marginRight: 8 },
