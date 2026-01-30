@@ -361,8 +361,7 @@ const EditTransactionModal = React.memo(
     return (
       <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : insets.bottom}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1 }}
         >
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
@@ -378,7 +377,9 @@ const EditTransactionModal = React.memo(
                 </View>
 
                 <ScrollView
-                  showsVerticalScrollIndicator={false}
+                  showsVerticalScrollIndicator={true}
+                  persistentScrollbar={true}
+                  indicatorStyle="black"
                   keyboardShouldPersistTaps="handled"
                   contentContainerStyle={{ paddingBottom: Math.max(24, insets.bottom + 16) }}
                 >
@@ -471,6 +472,9 @@ const EditTransactionModal = React.memo(
                     }}
                     containerStyle={{ marginTop: 12 }}
                   />
+
+                  <Text style={styles.modalTip}>Tip: Scroll to see more options</Text>
+
                 </ScrollView>
               </View>
             </View>
@@ -869,7 +873,15 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,
-    maxHeight: '85%',
+    maxHeight: '90%',
+  },
+  modalTip: {
+    textAlign: 'center',
+    fontSize: 12,
+    color: colors.muted || '#94A3B8',
+    marginTop: 20,
+    marginBottom: 10,
+    fontStyle: 'italic',
   },
   sheetHandle: {
     width: 40,
