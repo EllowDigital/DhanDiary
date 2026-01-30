@@ -1,5 +1,6 @@
 import * as Updates from 'expo-updates';
-import { Alert } from 'react-native';
+import { Alert, AppState, AppStateStatus } from 'react-native';
+import NetInfo from '@react-native-community/netinfo';
 import AsyncStorage from '../utils/AsyncStorageWrapper';
 
 export type UpdateState = 'IDLE' | 'CHECKING' | 'DOWNLOADING' | 'READY' | 'ERROR';
@@ -7,13 +8,25 @@ export type UpdateState = 'IDLE' | 'CHECKING' | 'DOWNLOADING' | 'READY' | 'ERROR
 type StateListener = (state: UpdateState) => void;
 
 class UpdateManager {
+  /**
+   * REGRESSION REMINDER:
+   * Any change touching UpdateManager must re-verify:
+   * 1. Startup speed (zero blocking)
+   * 2. Background download behavior (silent)
+   * 3. Manual reload flow (user-initiated only)
+   */
   private static instance: UpdateManager;
   private state: UpdateState = 'IDLE';
   private listeners: Set<StateListener> = new Set();
   private lastCheck = 0;
+  private appStateSub: any = null;
+  private netInfoSub: (() => void) | null = null;
+  private isBusy = false;
 
-  private MIN_CHECK_INTERVAL = 30 * 60 * 1000; // 30 mins
+  // Configuration
+  private MIN_CHECK_INTERVAL = 6 * 60 * 60 * 1000; // 6 hours
   private STORAGE_KEY = 'last_update_check_ts';
+  private FAILED_UPDATE_KEY = 'failed_ota_update_id';
   private TIMEOUT_MS = 15000; // 15s timeout for checks
 
   private constructor() {}
@@ -25,6 +38,48 @@ class UpdateManager {
     return UpdateManager.instance;
   }
 
+  /**
+   * Initialize the UpdateManager.
+   * Sets up AppState listeners to check for updates on resume.
+   * Sets up NetInfo listeners to retry on connection restore.
+   */
+  public setup() {
+    if (this.appStateSub) return; // Already setup
+
+    this.log('Setting up UpdateManager lifecycle listeners');
+    this.appStateSub = AppState.addEventListener('change', this.handleAppStateChange);
+
+    // Listen for network recovery
+    this.netInfoSub = NetInfo.addEventListener(this.handleConnectivityChange);
+
+    // Initial check on startup (throttled)
+    this.checkForUpdateBackground().catch(() => {});
+  }
+
+  public teardown() {
+    if (this.appStateSub) {
+      this.appStateSub.remove();
+      this.appStateSub = null;
+    }
+    if (this.netInfoSub) {
+      this.netInfoSub();
+      this.netInfoSub = null;
+    }
+  }
+
+  private handleAppStateChange = (nextAppState: AppStateStatus) => {
+    if (nextAppState === 'active') {
+      this.checkForUpdateBackground().catch(() => {});
+    }
+  };
+
+  private handleConnectivityChange = (state: any) => {
+    if (state.isConnected && state.isInternetReachable) {
+      this.log('Network restored, attempting check...');
+      this.checkForUpdateBackground().catch(() => {});
+    }
+  };
+
   public subscribe(listener: StateListener): () => void {
     this.listeners.add(listener);
     listener(this.state); // Emit current immediately
@@ -33,6 +88,7 @@ class UpdateManager {
 
   private setState(s: UpdateState) {
     if (this.state === s) return;
+    this.log(`State change: ${this.state} -> ${s}`);
     this.state = s;
     this.listeners.forEach((l) => {
       try {
@@ -45,6 +101,13 @@ class UpdateManager {
 
   public getState() {
     return this.state;
+  }
+
+  private log(msg: string, data?: any) {
+    if (__DEV__) {
+      if (data) console.log(`[UpdateManager] ${msg}`, data);
+      else console.log(`[UpdateManager] ${msg}`);
+    }
   }
 
   /**
@@ -66,7 +129,7 @@ class UpdateManager {
       const checkResult = await Promise.race([
         Updates.checkForUpdateAsync(),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout')), this.TIMEOUT_MS)
+          setTimeout(() => reject(new Error('Check Timeout')), this.TIMEOUT_MS)
         ),
       ]);
 
@@ -76,7 +139,7 @@ class UpdateManager {
         await Promise.race([
           Updates.fetchUpdateAsync(),
           new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('Timeout')), this.TIMEOUT_MS * 2)
+            setTimeout(() => reject(new Error('Download Timeout')), this.TIMEOUT_MS * 2)
           ),
         ]);
 
@@ -87,12 +150,12 @@ class UpdateManager {
         return false;
       }
     } catch (error) {
-      console.warn('[UpdateManager] Manual check failed', error);
+      this.log('Manual check failed', error);
+      // Show error state briefly, then reset to IDLE so user can retry immediately
       this.setState('ERROR');
-      // Reset to IDLE after a moment so user can try again
       setTimeout(() => {
-        if (this.state === 'ERROR') this.setState('IDLE');
-      }, 3000);
+        this.setState('IDLE');
+      }, 2000);
       return false;
     }
   }
@@ -103,26 +166,44 @@ class UpdateManager {
    */
   public async checkForUpdateBackground() {
     if (__DEV__) return;
-    if (this.state !== 'IDLE' && this.state !== 'ERROR') return; // Don't interrupt
+    // Don't interrupt if already busy or in error state (wait for manual reset or next app launch)
+    if (this.state !== 'IDLE') return;
 
-    const now = Date.now();
+    // Strict concurrency lock
+    if (this.isBusy) {
+      if (__DEV__) console.log('[UpdateManager] Check already in progress (locked).');
+      return;
+    }
+    this.isBusy = true;
 
     try {
-      const lastStr = await AsyncStorage.getItem(this.STORAGE_KEY);
-      const last = lastStr ? Number(lastStr) : 0;
-      if (now - last < this.MIN_CHECK_INTERVAL) {
-        if (__DEV__) console.log('[UpdateManager] Throttled background check');
+      // 1. Network Check
+      const net = await NetInfo.fetch();
+      if (!net.isConnected || !net.isInternetReachable) {
+        this.log('Offline, skipping background check');
         return;
       }
-    } catch (e) {
-      // ignore storage error, proceed cautiously
-    }
 
-    // Prevent race condition if multiple calls happen quickly
-    this.lastCheck = now;
-    AsyncStorage.setItem(this.STORAGE_KEY, String(now)).catch(() => {});
+      // 2. Throttle Check
+      const now = Date.now();
+      try {
+        const lastStr = await AsyncStorage.getItem(this.STORAGE_KEY);
+        const last = lastStr ? Number(lastStr) : 0;
+        if (now - last < this.MIN_CHECK_INTERVAL) {
+          // Silent throttle
+          return;
+        }
+      } catch (e) {
+        // ignore storage error, proceed cautiously
+      }
 
-    try {
+      // Update timestamp immediately to prevent rapid retries
+      this.lastCheck = now;
+      AsyncStorage.setItem(this.STORAGE_KEY, String(now)).catch(() => {});
+
+      this.setState('CHECKING');
+
+      // 3. Check for Update
       const result = await Promise.race([
         Updates.checkForUpdateAsync(),
         new Promise<never>((_, reject) =>
@@ -131,24 +212,36 @@ class UpdateManager {
       ]);
 
       if ((result as any).isAvailable) {
+        const updateId = (result as any).manifest?.id || 'unknown';
+
+        // 4. Update Loop Guard
+        const failedId = await AsyncStorage.getItem(this.FAILED_UPDATE_KEY);
+        if (failedId === updateId) {
+          this.log('Skipping previously failed update', updateId);
+          this.setState('IDLE');
+          return;
+        }
+
+        // Notify listeners so we can show "Updating..." toast
+        this.setState('DOWNLOADING');
+
         await Promise.race([
           Updates.fetchUpdateAsync(),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('Timeout')), this.TIMEOUT_MS * 2)
+          new Promise<never>(
+            (_, reject) => setTimeout(() => reject(new Error('Timeout')), this.TIMEOUT_MS * 4) // Longer timeout for download
           ),
         ]);
-        this.setState('READY'); // UI shows badge, doesn't force reload
+
+        this.setState('READY'); // UI shows badge/toast
       } else {
-        // Explicitly set IDLE to notify listeners if needed, though usually state is already IDLE/ERROR
         this.setState('IDLE');
       }
     } catch (e) {
-      // Don't leave it in a potential unknown state, though here we didn't change state yet.
-      // If we want to allow retries sooner on error, we could reset lastCheck or just leave it.
-      // Setting state to ERROR allows UI to show error status if it wants to.
-      // But for background, better to just be quiet unless we want to show a warning badge.
-      // We'll set IDLE so we aren't stuck.
+      this.log('Background check failed', e);
+      // Reset to IDLE so we don't get stuck in CHECKING/DOWNLOADING
       this.setState('IDLE');
+    } finally {
+      this.isBusy = false;
     }
   }
 
@@ -160,10 +253,20 @@ class UpdateManager {
     if (this.state !== 'READY') return;
 
     try {
+      this.log('Reloading app to apply update...');
       await Updates.reloadAsync();
     } catch (e) {
       Alert.alert('Update Failed', 'Could not reload the app. Please restart manually.');
     }
+  }
+
+  /**
+   * Call this if the App detects a crash loop or similar (advanced).
+   */
+  public async reportBadUpdate(updateId: string) {
+    try {
+      await AsyncStorage.setItem(this.FAILED_UPDATE_KEY, updateId);
+    } catch (e) {}
   }
 }
 

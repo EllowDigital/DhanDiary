@@ -33,7 +33,7 @@ import Constants from 'expo-constants';
 // --- CUSTOM IMPORTS ---
 // Ensure these paths match your project structure
 import { syncClerkUserToNeon } from '../services/clerkUserSync';
-import { saveSession } from '../db/session';
+import { saveSession, getSession } from '../db/session';
 import { warmNeonConnection } from '../services/auth';
 import { colors } from '../utils/design';
 import { validateEmail } from '../utils/emailValidation';
@@ -246,6 +246,7 @@ const LoginScreen = () => {
   };
 
   // --- AUTO SYNC LOGIC ---
+  // --- AUTO SYNC LOGIC ---
   useEffect(() => {
     if (!isSignedIn || !clerkLoaded || !clerkUser) return;
     const processSession = async () => {
@@ -253,6 +254,37 @@ const LoginScreen = () => {
       try {
         const id = clerkUser.id;
         const userEmail = clerkUser.primaryEmailAddress?.emailAddress || '';
+
+        let fastPath = false;
+        try {
+          const local = await getSession(); // check sync_session table
+          // if we already have a session for this exact clerk user, skip blocking network sync
+          if (local && (local as any).clerk_id === id) {
+            fastPath = true;
+          }
+        } catch (e) {}
+
+        if (fastPath) {
+          if (!didShowRedirectRef.current) {
+            didShowRedirectRef.current = true;
+            // Shorter toast for fast path
+            showToast('Welcome back!', 'success', 1500);
+          }
+          // Explicitly trigger background sync so data refreshes immediately
+          try {
+            const syncManager = require('../services/syncManager');
+            if (syncManager && typeof syncManager.scheduleSync === 'function') {
+              syncManager.scheduleSync({ force: true, source: 'manual' });
+            }
+          } catch (e) {
+            // ignore
+          }
+
+          setSyncing(false);
+          navigation.reset({ index: 0, routes: [{ name: 'Announcement' }] });
+          return;
+        }
+
         if (id && userEmail) {
           await handleSyncAndNavigate(
             id,
@@ -305,6 +337,17 @@ const LoginScreen = () => {
 
     setSyncing(false);
     setLoading(false);
+
+    // Trigger sync immediately so home screen populates fast
+    try {
+      const syncManager = require('../services/syncManager');
+      if (syncManager && typeof syncManager.scheduleSync === 'function') {
+        syncManager.scheduleSync({ force: true, source: 'manual' });
+      }
+    } catch (e) {
+      // ignore
+    }
+
     if (!didShowRedirectRef.current) {
       didShowRedirectRef.current = true;
       showToast('Signed in successfully. Redirecting…', 'success', 2500);

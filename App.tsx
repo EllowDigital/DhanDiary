@@ -21,6 +21,7 @@ import Constants from 'expo-constants';
 import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 
 // --- Local Imports ---
+import ErrorBoundary from './src/components/ErrorBoundary';
 import SplashScreen from './src/screens/SplashScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import LoginScreen from './src/screens/LoginScreen';
@@ -459,7 +460,11 @@ const AppContent = () => {
   // Listener for Update Manager: Show toast when ready
   useEffect(() => {
     const unsub = UpdateManager.subscribe((state) => {
-      if (state === 'READY' && AppState.currentState === 'active') {
+      if (AppState.currentState !== 'active') return;
+
+      if (state === 'DOWNLOADING') {
+        showActionToast('Updating app in background...', '', () => {}, 'info', 3000);
+      } else if (state === 'READY') {
         showActionToast(
           'Update ready to install.',
           'Restart',
@@ -713,13 +718,10 @@ function AppWithDb() {
       startBackgroundFetch().catch(() => {});
     }
 
-    // Background Expo Updates: fetch quietly, apply on next restart.
-    // Never block app launch.
-    InteractionManager.runAfterInteractions(() => {
-      UpdateManager.checkForUpdateBackground().catch(() => {});
-    });
-
+    // Background Expo Updates: Unified setup (check + lifecycle listeners)
+    UpdateManager.setup();
     return () => {
+      UpdateManager.teardown();
       stopForegroundSyncScheduler();
       stopBackgroundFetch();
     };
@@ -847,7 +849,9 @@ export default function App() {
 
   return (
     <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY} tokenCache={tokenCache}>
-      <AppBootstrap />
+      <ErrorBoundary>
+        <AppBootstrap />
+      </ErrorBoundary>
     </ClerkProvider>
   );
 }

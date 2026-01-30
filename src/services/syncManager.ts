@@ -219,6 +219,36 @@ export const scheduleSync = (options?: { force?: boolean; source?: 'manual' | 'a
         : options?.source || _scheduledSyncOptions?.source;
     _scheduledSyncOptions = merged;
 
+    // --- THROTTLING LOGIC ---
+    // Optimizing for Neon DB compute hours: avoid separate syncs for every single insert/update
+    // if occurring in rapid succession. We enforce a minimum interval for 'auto' syncs.
+    const mergedOpts = _scheduledSyncOptions;
+    const isAuto = mergedOpts?.source !== 'manual';
+    const isForced = !!mergedOpts?.force;
+
+    if (isAuto && !isForced) {
+      const MIN_SS_INTERVAL = 20000; // 20s debounce for database writes
+      const now = Date.now();
+      const last = _lastSuccessfulSyncAt || 0;
+      const elapsed = now - last;
+
+      if (elapsed < MIN_SS_INTERVAL) {
+        // Throttled: schedule a trailing sync to ensure data is eventually pushed
+        // even if the user stops interacting.
+        if (_scheduledSyncTimer) clearTimeout(_scheduledSyncTimer);
+        _scheduledSyncTimer = setTimeout(
+          () => {
+            _scheduledSyncTimer = null;
+            _scheduledSyncOptions = { force: true, source: 'auto' }; // Force the trailing one
+            scheduleSync({ force: true, source: 'auto' }).catch(() => {});
+          },
+          MIN_SS_INTERVAL - elapsed + 100
+        );
+
+        return Promise.resolve({ ok: true, reason: 'throttled', upToDate: true } as any);
+      }
+    }
+
     if (_scheduledSyncPromise) return _scheduledSyncPromise;
 
     _scheduledSyncPromise = new Promise((resolve, reject) => {
@@ -864,7 +894,7 @@ export const startAutoSyncListener = () => {
     if (!wasOnline && isOnline) {
       // Kick off a sync when we come online, but respect recent successful syncs
       const now = Date.now();
-      const MIN_ONLINE_SYNC_MS = 30 * 1000; // don't run online sync more often than this
+      const MIN_ONLINE_SYNC_MS = 1000; // Run almost immediately on reconnect
       if (!_lastSuccessfulSyncAt || now - _lastSuccessfulSyncAt > MIN_ONLINE_SYNC_MS) {
         InteractionManager.runAfterInteractions(() => {
           if (_syncSuspended) return;

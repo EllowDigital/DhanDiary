@@ -174,17 +174,26 @@ const SwipeableHistoryItem = React.memo(
           </View>
           <View style={styles.compactContent}>
             <View style={styles.compactHeader}>
-              <Text style={styles.compactCategory} numberOfLines={1}>
-                {item.category}
-              </Text>
-
-              <View style={styles.syncIconWrapper}>
+              <View style={styles.categoryRow}>
+                <Text style={styles.compactCategory} numberOfLines={1}>
+                  {item.category}
+                </Text>
                 {item.sync_status === 1 ? (
-                  <MaterialIcon name="check-circle" size={14} color="#10B981" />
+                  <MaterialIcon
+                    name="check-circle"
+                    size={14}
+                    color="#10B981"
+                    style={styles.syncIcon}
+                  />
                 ) : item.sync_status === 0 ? (
-                  <MaterialIcon name="access-time" size={14} color="#F59E0B" />
+                  <MaterialIcon
+                    name="access-time"
+                    size={14}
+                    color="#F59E0B"
+                    style={styles.syncIcon}
+                  />
                 ) : item.sync_status === 2 ? (
-                  <MaterialIcon name="delete" size={14} color="#EF4444" />
+                  <MaterialIcon name="delete" size={14} color="#EF4444" style={styles.syncIcon} />
                 ) : null}
               </View>
 
@@ -361,8 +370,7 @@ const EditTransactionModal = React.memo(
     return (
       <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : insets.bottom}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1 }}
         >
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
@@ -378,7 +386,9 @@ const EditTransactionModal = React.memo(
                 </View>
 
                 <ScrollView
-                  showsVerticalScrollIndicator={false}
+                  showsVerticalScrollIndicator={true}
+                  persistentScrollbar={true}
+                  indicatorStyle="black"
                   keyboardShouldPersistTaps="handled"
                   contentContainerStyle={{ paddingBottom: Math.max(24, insets.bottom + 16) }}
                 >
@@ -471,6 +481,8 @@ const EditTransactionModal = React.memo(
                     }}
                     containerStyle={{ marginTop: 12 }}
                   />
+
+                  <Text style={styles.modalTip}>Tip: Scroll to see more options</Text>
                 </ScrollView>
               </View>
             </View>
@@ -813,13 +825,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 4,
   },
+  categoryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    overflow: 'hidden',
+    marginRight: 8,
+  },
   compactCategory: {
     fontSize: 15,
     fontWeight: '600',
     color: colors.text || '#1E293B',
-    maxWidth: '65%',
+    flexShrink: 1,
   },
-  syncIconWrapper: { marginLeft: 6, justifyContent: 'center' },
+  syncIcon: { marginLeft: 6 },
   compactAmount: { fontSize: 15, fontWeight: '700' },
   compactSubRow: { flexDirection: 'row', justifyContent: 'space-between' },
   compactNote: { fontSize: 13, color: colors.muted || '#64748B', flex: 1, marginRight: 8 },
@@ -869,7 +888,15 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,
-    maxHeight: '85%',
+    maxHeight: '90%',
+  },
+  modalTip: {
+    textAlign: 'center',
+    fontSize: 12,
+    color: colors.muted || '#94A3B8',
+    marginTop: 20,
+    marginBottom: 10,
+    fontStyle: 'italic',
   },
   sheetHandle: {
     width: 40,

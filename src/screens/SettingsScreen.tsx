@@ -246,10 +246,22 @@ const SettingsScreen = () => {
     const doSignOut = async () => {
       if (isSigningOut) return;
       setIsSigningOut(true);
+      showToast('Signing out...', 'info'); // Initial feedback
+
       try {
         await performHardSignOut({
           clerkSignOut: async () => {
             await clerkSignOut();
+          },
+          onProgress: (msg) => {
+            // Optional: Update a local state if you want a custom modal,
+            // but here we can just update the toast or use the console/status.
+            // Given the limitations of the current Toast context (simple strings),
+            // we will stick to a loading overlay in future or just let it spin.
+            // Ideally we would set a state here to show in a custom UI.
+            // For now, let's keep it simple and just let the spinner run,
+            // maybe update a status text if we added one.
+            // actually, let's update the toast message if possible or valid.
           },
           navigateToAuth: () => {
             try {

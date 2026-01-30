@@ -37,6 +37,8 @@ import UserAvatar from '../components/UserAvatar';
 import { enableLegacyLayoutAnimations } from '../utils/layoutAnimation';
 import { isNetOnline } from '../utils/netState';
 
+import { getNeonHealth, checkNeonConnection } from '../api/neonClient';
+
 enableLegacyLayoutAnimations();
 
 // --- TYPES ---
@@ -132,6 +134,7 @@ const AccountManagementScreen = () => {
   const navigation = useNavigation<any>();
   const { showToast } = useToast();
   const [isOnline, setIsOnline] = useState<boolean | null>(null);
+  const [isServiceAvailable, setIsServiceAvailable] = useState<boolean>(true);
 
   // State
   const [activeCard, setActiveCard] = useState<string | null>(null);
@@ -186,7 +189,13 @@ const AccountManagementScreen = () => {
 
     const unsub = NetInfo.addEventListener((s) => {
       if (!mounted) return;
-      setIsOnline(isNetOnline(s));
+      const online = isNetOnline(s);
+      setIsOnline(online);
+      if (online) {
+        checkNeonConnection().then((healthy) => {
+          if (mounted) setIsServiceAvailable(healthy);
+        });
+      }
     });
 
     return () => {
@@ -613,6 +622,25 @@ const AccountManagementScreen = () => {
                 </TouchableOpacity>
               </View>
             )}
+            {isOnline === true && !isServiceAvailable && (
+              <View
+                style={[
+                  styles.connectionBanner,
+                  { backgroundColor: '#FFF7ED', borderColor: '#FDBA74' },
+                ]}
+              >
+                <MaterialIcon name="cloud-off" size={16} color="#EA580C" />
+                <Text style={[styles.connectionBannerText, { color: '#C2410C' }]}>
+                  Service temporarily unavailable
+                </Text>
+                <TouchableOpacity
+                  onPress={() => checkNeonConnection().then(setIsServiceAvailable)}
+                  style={styles.connectionBannerBtn}
+                >
+                  <Text style={[styles.connectionBannerBtnText, { color: '#C2410C' }]}>Retry</Text>
+                </TouchableOpacity>
+              </View>
+            )}
             <Animated.View style={{ opacity: fadeAnim }}>
               {/* 1. HERO PROFILE ROW */}
               <View style={styles.heroRow}>
@@ -687,13 +715,19 @@ const AccountManagementScreen = () => {
                     ]}
                     activeOpacity={0.7}
                     onPress={handleChangeProfilePhoto}
-                    disabled={isUpdatingPhoto || isOnline !== true}
+                    disabled={isUpdatingPhoto || isOnline !== true || !isServiceAvailable}
                   >
                     {isUpdatingPhoto ? (
                       <ActivityIndicator size="small" color="#FFFFFF" />
                     ) : (
                       <Text style={styles.changePhotoButtonText}>
-                        {isOnline === null ? 'Checking connection…' : 'Change Photo'}
+                        {isOnline === null
+                          ? 'Checking...'
+                          : !isOnline
+                            ? 'Offline'
+                            : !isServiceAvailable
+                              ? 'Service Down'
+                              : 'Change Photo'}
                       </Text>
                     )}
                   </TouchableOpacity>
@@ -768,6 +802,8 @@ const AccountManagementScreen = () => {
                   onPress={handlePasswordSave}
                   buttonStyle={styles.primaryBtn}
                   titleStyle={styles.btnText}
+                  disabled={!isOnline || !isServiceAvailable}
+                  disabledStyle={{ backgroundColor: '#CBD5E1' }}
                 />
               </ExpandableCard>
 

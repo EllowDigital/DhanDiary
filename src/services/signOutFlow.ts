@@ -13,6 +13,7 @@ export type HardSignOutDeps = {
   clerkSignOut: () => Promise<any>;
   navigateToAuth: () => void;
   beforeNavigate?: () => void | Promise<void>;
+  onProgress?: (status: string) => void;
 };
 
 /**
@@ -25,9 +26,13 @@ export type HardSignOutDeps = {
  */
 export const performHardSignOut = async (deps: HardSignOutDeps) => {
   setIsSigningOut(true);
+  const report = (msg: string) => {
+    if (deps.onProgress) deps.onProgress(msg);
+  };
 
   try {
     // 1) STOP EVERYTHING
+    report('Stopping sync...');
     // Cancel sync, stop listeners/schedulers, clear debounced tasks.
     try {
       const sync = require('./syncManager');
@@ -45,54 +50,59 @@ export const performHardSignOut = async (deps: HardSignOutDeps) => {
       // best-effort
     }
 
-    // 2) CLEAR AUTH SESSION
-    // Clear Clerk session first so no background effect can re-auth.
-    try {
-      await deps.clerkSignOut();
-    } catch (e) {
-      // best-effort: continue cleanup even if Clerk session is already gone
-    }
+    report('Signing out...');
 
-    // Ensure Clerk token cache is cleared (extra safety)
-    await clearTokenCache();
+    // 2) CLEAR AUTH SESSION & 3) CLEAR LOCAL STATE (PARALLEL FOR SPEED)
+    // We run independent robust cleanup tasks in parallel to minimize "frozen" feel.
 
-    // 3) CLEAR LOCAL STATE
-    // Reset biometric session state immediately.
-    resetBiometricSessionAll();
-    resetBiometricSession();
-    setBiometricEnabledSession(false);
-
-    // Wipe SQLite content (keep schema intact).
-    try {
-      const db = await import('../db/sqlite');
-      if (typeof db.wipeLocalData === 'function') await db.wipeLocalData();
-      if (typeof db.initDB === 'function') await db.initDB();
-    } catch (e) {
-      // best-effort
-    }
-
-    // Clear persisted storage (both wrappers).
-    try {
-      await AsyncStorageNative.clear();
-    } catch (e) {
-      // best-effort
-    }
-    try {
-      await AsyncStorage.clear();
-    } catch (e) {
-      // best-effort
-    }
-
-    // Clear persisted biometric flags.
-    await clearBiometricSettings();
-
-    // Clear query cache
-    try {
-      const holder = require('../utils/queryClientHolder');
-      if (holder && typeof holder.clearQueryCache === 'function') {
-        await holder.clearQueryCache();
+    const signOutPromise = (async () => {
+      try {
+        await deps.clerkSignOut();
+      } catch (e) {
+        /* best effort */
       }
-    } catch (e) {}
+      await clearTokenCache();
+    })();
+
+    const cleanupPromise = (async () => {
+      // Reset biometric session state immediately.
+      resetBiometricSessionAll();
+      resetBiometricSession();
+      setBiometricEnabledSession(false);
+
+      // Wipe SQLite content (keep schema intact).
+      try {
+        const db = await import('../db/sqlite');
+        if (typeof db.wipeLocalData === 'function') await db.wipeLocalData();
+        if (typeof db.initDB === 'function') await db.initDB();
+      } catch (e) {
+        /* best-effort */
+      }
+
+      // Clear persisted storage.
+      try {
+        await AsyncStorageNative.clear();
+      } catch (e) {}
+      try {
+        await AsyncStorage.clear();
+      } catch (e) {}
+
+      // Clear persisted biometric flags.
+      await clearBiometricSettings();
+
+      // Clear query cache
+      try {
+        const holder = require('../utils/queryClientHolder');
+        if (holder && typeof holder.clearQueryCache === 'function') {
+          await holder.clearQueryCache();
+        }
+      } catch (e) {}
+    })();
+
+    // improved feedback: wait for both
+    await Promise.all([signOutPromise, cleanupPromise]);
+
+    report('Finalizing...');
 
     // Notify UI
     try {

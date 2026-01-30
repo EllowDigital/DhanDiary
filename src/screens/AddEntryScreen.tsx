@@ -34,6 +34,8 @@ import ScreenHeader from '../components/ScreenHeader';
 import { isIncome, toCanonical } from '../utils/transactionType';
 import { getTransactionByLocalId, TransactionRow } from '../db/transactions';
 import { enableLegacyLayoutAnimations } from '../utils/layoutAnimation';
+import { getSession } from '../db/session';
+import { subscribeSession } from '../utils/sessionEvents';
 
 enableLegacyLayoutAnimations();
 
@@ -70,7 +72,26 @@ const AddEntryScreen: React.FC = () => {
   const scrollRef = useRef<ScrollView>(null);
 
   const { user } = useAuth();
-  const { addEntry, updateEntry } = useEntries(user?.id);
+  const [fallbackSession, setFallbackSession] = useState<any>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    getSession().then((s) => {
+      if (mounted) setFallbackSession(s);
+    });
+    const unsub = subscribeSession((s) => {
+      if (mounted) setFallbackSession(s);
+    });
+    return () => {
+      mounted = false;
+      unsub();
+    };
+  }, []);
+
+  // Use Clerk ID if available, otherwise fallback to stored session ID (offline mode)
+  const effectiveUserId = user?.id || fallbackSession?.clerk_id || fallbackSession?.id;
+
+  const { addEntry, updateEntry } = useEntries(effectiveUserId);
   const { showToast } = useToast();
 
   // Params
@@ -284,7 +305,10 @@ const AddEntryScreen: React.FC = () => {
 
   const handleSave = () => {
     if (saving) return;
-    if (!user?.id) {
+
+    // Robustness: Allow save if we have ANY valid user identity (online or offline fallback).
+    // The useEntries hook will handle queueing it for sync.
+    if (!effectiveUserId) {
       showToast('Please sign in to save transactions.', 'error');
       return;
     }
