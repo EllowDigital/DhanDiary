@@ -22,7 +22,7 @@ class UpdateManager {
   private FAILED_UPDATE_KEY = 'failed_ota_update_id';
   private TIMEOUT_MS = 15000; // 15s timeout for checks
 
-  private constructor() { }
+  private constructor() {}
 
   public static getInstance(): UpdateManager {
     if (!UpdateManager.instance) {
@@ -46,7 +46,7 @@ class UpdateManager {
     this.netInfoSub = NetInfo.addEventListener(this.handleConnectivityChange);
 
     // Initial check on startup (throttled)
-    this.checkForUpdateBackground().catch(() => { });
+    this.checkForUpdateBackground().catch(() => {});
   }
 
   public teardown() {
@@ -62,14 +62,14 @@ class UpdateManager {
 
   private handleAppStateChange = (nextAppState: AppStateStatus) => {
     if (nextAppState === 'active') {
-      this.checkForUpdateBackground().catch(() => { });
+      this.checkForUpdateBackground().catch(() => {});
     }
   };
 
   private handleConnectivityChange = (state: any) => {
     if (state.isConnected && state.isInternetReachable) {
       this.log('Network restored, attempting check...');
-      this.checkForUpdateBackground().catch(() => { });
+      this.checkForUpdateBackground().catch(() => {});
     }
   };
 
@@ -192,7 +192,7 @@ class UpdateManager {
 
       // Update timestamp immediately to prevent rapid retries
       this.lastCheck = now;
-      AsyncStorage.setItem(this.STORAGE_KEY, String(now)).catch(() => { });
+      AsyncStorage.setItem(this.STORAGE_KEY, String(now)).catch(() => {});
 
       this.setState('CHECKING');
 
@@ -220,8 +220,8 @@ class UpdateManager {
 
         await Promise.race([
           Updates.fetchUpdateAsync(),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('Timeout')), this.TIMEOUT_MS * 4) // Longer timeout for download
+          new Promise<never>(
+            (_, reject) => setTimeout(() => reject(new Error('Timeout')), this.TIMEOUT_MS * 4) // Longer timeout for download
           ),
         ]);
 
@@ -259,7 +259,7 @@ class UpdateManager {
   public async reportBadUpdate(updateId: string) {
     try {
       await AsyncStorage.setItem(this.FAILED_UPDATE_KEY, updateId);
-    } catch (e) { }
+    } catch (e) {}
   }
 }
 
