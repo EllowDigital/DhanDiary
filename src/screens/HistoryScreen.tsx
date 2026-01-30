@@ -179,9 +179,19 @@ const SwipeableHistoryItem = React.memo(
                   {item.category}
                 </Text>
                 {item.sync_status === 1 ? (
-                  <MaterialIcon name="check-circle" size={14} color="#10B981" style={styles.syncIcon} />
+                  <MaterialIcon
+                    name="check-circle"
+                    size={14}
+                    color="#10B981"
+                    style={styles.syncIcon}
+                  />
                 ) : item.sync_status === 0 ? (
-                  <MaterialIcon name="access-time" size={14} color="#F59E0B" style={styles.syncIcon} />
+                  <MaterialIcon
+                    name="access-time"
+                    size={14}
+                    color="#F59E0B"
+                    style={styles.syncIcon}
+                  />
                 ) : item.sync_status === 2 ? (
                   <MaterialIcon name="delete" size={14} color="#EF4444" style={styles.syncIcon} />
                 ) : null}
@@ -473,7 +483,6 @@ const EditTransactionModal = React.memo(
                   />
 
                   <Text style={styles.modalTip}>Tip: Scroll to see more options</Text>
-
                 </ScrollView>
               </View>
             </View>

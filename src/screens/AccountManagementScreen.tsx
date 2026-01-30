@@ -202,7 +202,7 @@ const AccountManagementScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, []);
 
@@ -212,7 +212,7 @@ const AccountManagementScreen = () => {
       try {
         const s = await getSession();
         if (mounted) setFallbackSession(s);
-      } catch (e) { }
+      } catch (e) {}
     };
     load();
     const unsub = subscribeSession((s) => {
@@ -222,7 +222,7 @@ const AccountManagementScreen = () => {
       mounted = false;
       try {
         unsub();
-      } catch (e) { }
+      } catch (e) {}
     };
   }, []);
 
@@ -487,7 +487,7 @@ const AccountManagementScreen = () => {
               Alert.alert(
                 'Delete failed',
                 err?.message ||
-                'We could not delete your account from the cloud. Please check your internet connection and try again.'
+                  'We could not delete your account from the cloud. Please check your internet connection and try again.'
               );
             } finally {
               setDeletingAccount(false);
@@ -529,7 +529,7 @@ const AccountManagementScreen = () => {
                 onPress={() => {
                   try {
                     navigation.goBack();
-                  } catch (e) { }
+                  } catch (e) {}
                 }}
               >
                 <MaterialIcon name="arrow-back" size={18} color={colors.text || '#1E293B'} />
@@ -623,7 +623,12 @@ const AccountManagementScreen = () => {
               </View>
             )}
             {isOnline === true && !isServiceAvailable && (
-              <View style={[styles.connectionBanner, { backgroundColor: '#FFF7ED', borderColor: '#FDBA74' }]}>
+              <View
+                style={[
+                  styles.connectionBanner,
+                  { backgroundColor: '#FFF7ED', borderColor: '#FDBA74' },
+                ]}
+              >
                 <MaterialIcon name="cloud-off" size={16} color="#EA580C" />
                 <Text style={[styles.connectionBannerText, { color: '#C2410C' }]}>
                   Service temporarily unavailable
@@ -674,10 +679,10 @@ const AccountManagementScreen = () => {
                   {(user as any)?.emailAddresses?.some(
                     (e: any) => e.verification?.status === 'verified'
                   ) && (
-                      <View style={styles.verifiedBadge}>
-                        <MaterialIcon name="check" size={12} color="white" />
-                      </View>
-                    )}
+                    <View style={styles.verifiedBadge}>
+                      <MaterialIcon name="check" size={12} color="white" />
+                    </View>
+                  )}
                 </View>
 
                 <View style={styles.heroInfo}>
