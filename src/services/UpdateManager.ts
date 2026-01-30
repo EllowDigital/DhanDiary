@@ -34,12 +34,16 @@ class UpdateManager {
   /**
    * Initialize the UpdateManager.
    * Sets up AppState listeners to check for updates on resume.
+   * Sets up NetInfo listeners to retry on connection restore.
    */
   public setup() {
     if (this.appStateSub) return; // Already setup
 
     this.log('Setting up UpdateManager lifecycle listeners');
     this.appStateSub = AppState.addEventListener('change', this.handleAppStateChange);
+
+    // Listen for network recovery
+    this.netInfoSub = NetInfo.addEventListener(this.handleConnectivityChange);
 
     // Initial check on startup (throttled)
     this.checkForUpdateBackground().catch(() => { });
@@ -50,10 +54,21 @@ class UpdateManager {
       this.appStateSub.remove();
       this.appStateSub = null;
     }
+    if (this.netInfoSub) {
+      this.netInfoSub();
+      this.netInfoSub = null;
+    }
   }
 
   private handleAppStateChange = (nextAppState: AppStateStatus) => {
     if (nextAppState === 'active') {
+      this.checkForUpdateBackground().catch(() => { });
+    }
+  };
+
+  private handleConnectivityChange = (state: any) => {
+    if (state.isConnected && state.isInternetReachable) {
+      this.log('Network restored, attempting check...');
       this.checkForUpdateBackground().catch(() => { });
     }
   };
@@ -147,31 +162,38 @@ class UpdateManager {
     // Don't interrupt if already busy or in error state (wait for manual reset or next app launch)
     if (this.state !== 'IDLE') return;
 
-    // 1. Network Check
-    const net = await NetInfo.fetch();
-    if (!net.isConnected || !net.isInternetReachable) {
-      this.log('Offline, skipping background check');
+    // Strict concurrency lock
+    if (this.isBusy) {
+      if (__DEV__) console.log('[UpdateManager] Check already in progress (locked).');
       return;
     }
+    this.isBusy = true;
 
-    // 2. Throttle Check
-    const now = Date.now();
     try {
-      const lastStr = await AsyncStorage.getItem(this.STORAGE_KEY);
-      const last = lastStr ? Number(lastStr) : 0;
-      if (now - last < this.MIN_CHECK_INTERVAL) {
-        // Silent throttle
+      // 1. Network Check
+      const net = await NetInfo.fetch();
+      if (!net.isConnected || !net.isInternetReachable) {
+        this.log('Offline, skipping background check');
         return;
       }
-    } catch (e) {
-      // ignore storage error, proceed cautiously
-    }
 
-    // Update timestamp immediately to prevent rapid retries
-    this.lastCheck = now;
-    AsyncStorage.setItem(this.STORAGE_KEY, String(now)).catch(() => { });
+      // 2. Throttle Check
+      const now = Date.now();
+      try {
+        const lastStr = await AsyncStorage.getItem(this.STORAGE_KEY);
+        const last = lastStr ? Number(lastStr) : 0;
+        if (now - last < this.MIN_CHECK_INTERVAL) {
+          // Silent throttle
+          return;
+        }
+      } catch (e) {
+        // ignore storage error, proceed cautiously
+      }
 
-    try {
+      // Update timestamp immediately to prevent rapid retries
+      this.lastCheck = now;
+      AsyncStorage.setItem(this.STORAGE_KEY, String(now)).catch(() => { });
+
       this.setState('CHECKING');
 
       // 3. Check for Update
@@ -211,6 +233,8 @@ class UpdateManager {
       this.log('Background check failed', e);
       // Reset to IDLE so we don't get stuck in CHECKING/DOWNLOADING
       this.setState('IDLE');
+    } finally {
+      this.isBusy = false;
     }
   }
 
