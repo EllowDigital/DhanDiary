@@ -370,7 +370,8 @@ const EditTransactionModal = React.memo(
     return (
       <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior="padding"
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
           style={{ flex: 1 }}
         >
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
